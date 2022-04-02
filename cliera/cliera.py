@@ -2,8 +2,10 @@ import json
 import os
 import sys
 from argparse import ArgumentParser
+from datetime import date
 from inspect import Parameter, _empty, signature
 
+from dateutil import parser as date_parser
 from stdl.fs import File, json_load, pickle_load, yaml_load
 from stdl.str_utils import ANSI_Color, str_colored
 
@@ -11,32 +13,46 @@ if sys.platform == "win32":
     os.system('color')
 
 
+class UnparsableArgumentError(Exception):
+
+    def __init__(self, message: str = "Can't parse argument") -> None:
+        self.message = message
+        super().__init__(self.message)
+
+
 class Cliera:
-    EMPTY = _empty
-    SUPPORTED_TYPES = [str, int, float, dict, list, set]
-    COMPLEX_TYPES = [dict, list, set, tuple]
+    _EMPTY = _empty
+    COMPLEX_TYPES = [dict, list, set, tuple, date]
     SIMPLE_TYPES = [str, int, float, bool]
+    SUPPORTED_TYPES = [*COMPLEX_TYPES, *SIMPLE_TYPES]
 
     def __init__(self, func) -> None:
+        if not callable(func):
+            raise TypeError(type(func))
+
         self.parser = ArgumentParser()
         self.func = func
         self.args = signature(self.func)
         self.marked_special = {}
-        self.__run()
 
-    def __generate_help_str(self, arg: Parameter):
-        arg_type = arg.annotation if arg.annotation != self.EMPTY else ""
-        arg_default = arg.default if arg.default != self.EMPTY else ""
+    @staticmethod
+    def run(func):
+        cli = Cliera(func)
+        cli.__run()
+
+    def __get_help_str(self, arg: Parameter):
+        arg_type = arg.annotation if arg.annotation != self._EMPTY else ""
+        arg_default = arg.default if arg.default != self._EMPTY else ""
         # print(f"{var_type=}, {var_default=}")
         if arg_default == "" and arg_type == "":
             return ""
         if arg_type != "":
             if arg_type is None:
-                arg_type = f"type: {str_colored('None',ANSI_Color.LIGHT_YELLOW)}"
+                arg_type = f"type: {str_colored('None', ANSI_Color.LIGHT_YELLOW)}"
             else:
                 arg_type = str(arg_type).split("'")[1]
-                arg_type = f"type: { str_colored(arg_type,ANSI_Color.LIGHT_YELLOW)}"
-        arg_default = "" if arg_default == "" else f"default: {str_colored(arg_default,ANSI_Color.LIGHT_CYAN)}"
+                arg_type = f"type: { str_colored(arg_type, ANSI_Color.LIGHT_YELLOW)}"
+        arg_default = "" if arg_default == "" else f"default: {str_colored(arg_default, ANSI_Color.LIGHT_CYAN)}"
         if arg_type != "" and arg_default != "":
             return f"[{arg_type}, {arg_default}]"
         if arg_type != "" and arg_default == "":
@@ -53,12 +69,12 @@ class Cliera:
             var_name = f"-{arg.name}"
         else:
             var_name = f"--{arg.name}"
-        help_str = self.__generate_help_str(arg)
+        help_str = self.__get_help_str(arg)
 
-        if (arg.default == self.EMPTY and arg.annotation == self.EMPTY):  # Required, No Type Hint
+        if (arg.default == self._EMPTY and arg.annotation == self._EMPTY):  # Required, No Type Hint
             self.parser.add_argument(var_name, required=True, help=help_str)
 
-        elif (arg.default == self.EMPTY and arg.annotation != self.EMPTY):  # Required, Has Type Hint.
+        elif (arg.default == self._EMPTY and arg.annotation != self._EMPTY):  # Required, Has Type Hint.
             if arg.annotation is bool:
                 self.parser.add_argument(var_name, action="store_true", required=True, help=help_str)
             else:
@@ -68,24 +84,43 @@ class Cliera:
                 else:
                     self.parser.add_argument(var_name, type=arg.annotation, required=True, help=help_str)
 
-        elif (arg.default != self.EMPTY and arg.annotation == self.EMPTY):  # Optional, No Type Hint.
+        elif (arg.default != self._EMPTY and arg.annotation == self._EMPTY):  # Optional, No Type Hint.
             self.parser.add_argument(var_name, default=arg.default, required=False, help=help_str)
 
-        elif (arg.default != self.EMPTY and arg.annotation != self.EMPTY):  # Optional. Has Type Hint.
+        elif (arg.default != self._EMPTY and arg.annotation != self._EMPTY):  # Optional. Has Type Hint.
             if arg.annotation in self.COMPLEX_TYPES:
                 self.parser.add_argument(var_name, default=arg.default, required=False, help=help_str)
                 self.__mark_special(var_name, arg.annotation)
             self.parser.add_argument(var_name, default=arg.default, type=arg.annotation, required=False, help=help_str)
         else:
-            raise Exception(f"Unparsable Arguments: {arg}")
+            raise UnparsableArgumentError(f"Can't parse argument '{arg}'")
 
     def __parse(self):
         for arg in self.args.parameters.values():
             self.__add_arg(arg)
         args = self.parser.parse_args()
-        return args
+        args_dict = args.__dict__
+        for name, value in args_dict.items():
+            if name in self.marked_special:
+                actual_type = self.marked_special[name]
+                # print(f"{name=}, {value=}, {actual_type=}")
+                arg_val = self.__parse_special_arg(value, actual_type)
+                args_dict[name] = arg_val
+        return args_dict
 
     def __parse_special_arg(self, value: str, arg_type: str):
+        if arg_type == "date":
+            return date_parser.parse(value)
+
+        def parse_text(data, t: str):
+            if t == "list":
+                return data
+            elif t == "set":
+                return set(data)
+            elif t == "tuple":
+                return (*data,)
+            raise TypeError(t)
+
         is_file = os.path.exists(value)
         if arg_type in ["list", "set", "tuple"]:
             if is_file:
@@ -95,26 +130,15 @@ class Cliera:
                 else:
                     # Raw text
                     data = File.splitlines(value)
-                    if arg_type == "list":
-                        return data
-                    elif arg_type == "set":
-                        return set(data)
-                    elif arg_type == "tuple":
-                        return (*data,)
+                    return parse_text(data, arg_type)
             # Split value to list
-            data = value.split(",")
-            if arg_type == "list":
-                return data
-            elif arg_type == "set":
-                return set(data)
-            elif arg_type == "tuple":
-                return (*data,)
+            data = [i.strip() for i in value.split(",")]
+            return parse_text(data, arg_type)
+
         elif arg_type == "dict":
             if is_file:
-                # YAML
                 if value.lower().endswith((".yaml", ".yml")):
                     return yaml_load(value)
-                # Pickle
                 elif value.lower().endswith((".pickle", ".pkl")):
                     return pickle_load(value)
                 # Json
@@ -126,11 +150,4 @@ class Cliera:
 
     def __run(self):
         args = self.__parse()
-        args_dict = args.__dict__
-        for name, value in args_dict.items():
-            if name in self.marked_special:
-                actual_type = self.marked_special[name]
-                # print(f"{name=}, {value=}, {actual_type=}")
-                arg_val = self.__parse_special_arg(value, actual_type)
-                args_dict[name] = arg_val
-        return self.func(**args_dict)
+        return self.func(**args)
