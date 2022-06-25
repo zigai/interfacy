@@ -1,3 +1,2 @@
 python_dateutil==2.8.2
-setuptools==56.0.0
-stdl==0.0.2
+stdl==0.2.5
