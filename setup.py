@@ -1,14 +1,29 @@
-from setuptools import setup, find_packages
-with open('./requirements.txt') as f:
-    requirements = f.read().splitlines()
+import pathlib
+
+from setuptools import find_packages, setup
+
+HERE = pathlib.Path(__file__).parent
+README = (HERE / "README.md").read_text()
+REQUIREMENTS = (HERE / "requirements.txt").read_text()
 
 setup(
     name="cliera",
-    version="0.0.1",
+    version="0.1.1",
     description="",
+    long_description=README,
+    long_description_content_type="text/markdown",
     author="Ziga Ivansek",
-    install_requires=requirements,
-    #packages=find_packages(),
-    py_modules=["cliera"],
-    package_dir={'': 'cliera'},
+    author_email="ziga.ivansek@gmail.com",
+    url="https://github.com/zigai/cliera",
+    license="MIT",
+    classifiers=[
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3 :: Only",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+    ],
+    packages=find_packages(),
+    install_requires=REQUIREMENTS,
 )
