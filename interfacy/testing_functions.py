@@ -1,3 +1,10 @@
+from datetime import date
+from pprint import pp, pprint
+from typing import List, Union
+
+import pretty_errors
+
+
 class test_cls1:
     """class dostring"""
 
@@ -12,24 +19,22 @@ class test_cls1:
         print(f"{self.b=}")
 
 
-def test_func1(a: str, b: int, c: float):
-    print(f"{a=}")
-    print(f"{b=}")
-    print(f"{c=}")
+def test_func1(a: str, b: int, c=1, d: bool = False):
+    pp(vars())
 
 
-def test_func2(a: int | float, b: list[str], c: float | int | list[str] = 1, d: dict = {}):
+def test_func2(
+    a: int | float,
+    aa: date,
+    b: list[str],
+    c: float | int | list[str] = 1,
+    d: dict = {},
+):
     """
     func dostring
     """
-    print(f"{a=}")
-    print(f"{b=}")
-    print(f"{c=}")
-
-
-from typing import List, Union
+    pp(vars())
 
 
 def test_func3(a: List[str], b: Union[int, float]):
-    print(f"{a=}")
-    print(f"{b=}")
+    pp(vars())

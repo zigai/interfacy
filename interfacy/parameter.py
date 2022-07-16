@@ -1,6 +1,11 @@
 import inspect
 
+from stdl.str_util import ColorANSI, str_with_color
+
+from util import type_as_str
+
 EMPTY = inspect._empty
+DEFAULT_CLI_THEME = {"type": ColorANSI.LIGHT_YELLOW, "value": ColorANSI.LIGHT_BLUE}
 
 
 class InterfacyParameter:
@@ -28,3 +33,18 @@ class InterfacyParameter:
     @property
     def is_required(self) -> bool:
         return self.default == EMPTY
+
+    @property
+    def flag_name(self):
+        return f"--{self.name}"
+
+    def get_help_str(self, theme):
+        if self.is_required and not self.is_typed:
+            return ""
+        help_str = []
+        if self.is_typed:
+            help_str.append(str_with_color(type_as_str(self.type), theme['type']))
+        if not self.is_required:
+            help_str.append(f"default: {str_with_color(self.default, theme['value'])}")
+        help_str = ", ".join(help_str)
+        return help_str

@@ -7,8 +7,8 @@ README = (HERE / "README.md").read_text()
 REQUIREMENTS = (HERE / "requirements.txt").read_text()
 
 setup(
-    name="cliera",
-    version="0.1.1",
+    name="interfacy",
+    version="0.2.1",
     description="",
     long_description=README,
     long_description_content_type="text/markdown",

@@ -11,7 +11,7 @@ class InterfacyFunction:
         self.parameters = self._get_parameters()
 
     def __repr__(self) -> str:
-        return f""
+        return f"InterfacyFunction({id(self)})"
 
     def _get_parameters(self):
         func_args = inspect.signature(self.func)
