@@ -4,8 +4,8 @@ import types
 import typing
 
 from function import InterfacyFunction
+from interfacy.cli.parsers import CLI_TYPE_PARSER
 from parameter import DEFAULT_CLI_THEME, EMPTY, InterfacyParameter
-from parsers import CLI_TYPE_PARSER
 
 RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 SIMPLE_TYPES = [str, int, float, bool]
@@ -106,6 +106,5 @@ class CLI():
 
 if __name__ == '__main__':
     import pretty_errors
-
     from testing_functions import *
     CLI(test_func1).build()

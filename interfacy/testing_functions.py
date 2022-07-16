@@ -38,3 +38,14 @@ def test_func2(
 
 def test_func3(a: List[str], b: Union[int, float]):
     pp(vars())
+
+
+def main():
+    from interfacy import Interfacy
+    from interfacy.cli import CLI
+
+    CLI(test_func1).build()
+
+
+if __name__ == '__main__':
+    main()
