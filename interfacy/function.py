@@ -1,6 +1,6 @@
 import inspect
 
-from parameter import EMPTY, InterfacyParameter
+from interfacy.parameter import InterfacyParameter
 
 
 class InterfacyFunction:
@@ -8,6 +8,8 @@ class InterfacyFunction:
     def __init__(self, func) -> None:
         self.func = func
         self.docstr = inspect.getdoc(self.func)
+        if self.docstr is None:
+            self.docstr = ""
         self.parameters = self._get_parameters()
 
     def __repr__(self) -> str:
