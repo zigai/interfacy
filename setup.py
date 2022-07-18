@@ -14,7 +14,7 @@ setup(
     long_description_content_type="text/markdown",
     author="Ziga Ivansek",
     author_email="ziga.ivansek@gmail.com",
-    url="https://github.com/zigai/cliera",
+    url="https://github.com/zigai/interfacy",
     license="MIT",
     classifiers=[
         "Programming Language :: Python",
