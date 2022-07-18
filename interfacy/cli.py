@@ -1,31 +1,33 @@
 import argparse
 import inspect
+import textwrap
 import types
 import typing
 
-from function import InterfacyFunction
-from interfacy.cli.parsers import CLI_TYPE_PARSER
-from parameter import DEFAULT_CLI_THEME, EMPTY, InterfacyParameter
+from interfacy.cli_parsers import CLI_TYPE_PARSER
+from interfacy.function import InterfacyFunction
+from interfacy.parameter import DEFAULT_CLI_THEME, EMPTY, InterfacyParameter
 
 RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 SIMPLE_TYPES = [str, int, float, bool]
 
 
-class CLI():
+class CLI:
 
-    def __init__(self, func_or_class, class_methods=None, description=None, theme=None) -> None:
-        self.func_or_class = func_or_class
+    def __init__(self, func_or_cls, class_methods=None, description=None, theme=None) -> None:
+        self.func_or_cls = func_or_cls
         self.class_methods = class_methods
         self.description = description
         self.parser = argparse.ArgumentParser()
         self.theme = DEFAULT_CLI_THEME if theme is None else theme
         self.specials = {}
+        self.build()
 
     def build(self):
-        if inspect.isclass(self.func_or_class):  # class
-            return self._build_from_class(self.func_or_class, self.class_methods)
+        if inspect.isclass(self.func_or_cls):  # class
+            return self._build_from_class(self.func_or_cls, self.class_methods)
         else:  # function
-            return self._build_from_function(self.func_or_class)
+            return self._build_from_function(self.func_or_cls)
 
     def _build_from_class(self, cls, methods):
         pass
@@ -33,14 +35,13 @@ class CLI():
     def _build_from_function(self, func):
         func = InterfacyFunction(func)
         if self.description is None:
-            self.parser.description = func.docstr
+            self.parser.description = textwrap.dedent(func.docstr)
         for param in func.parameters:
             self.add_parameter(self.parser, param, self.theme)
         args = self.parser.parse_args()
         args_dict = args.__dict__
         for name, value in args_dict.items():
-            is_special = self.specials.get(name, False)
-            if not is_special:
+            if not self.specials.get(name, False):
                 continue
             var_type = self.specials[name]
             args_dict[name] = CLI_TYPE_PARSER[var_type](value)
@@ -53,14 +54,10 @@ class CLI():
             raise ValueError(param.name)
         param_name = f"--{param.name}"
 
-        if type(param.type) is types.GenericAlias:
+        if type(param.type) in [types.GenericAlias, typing._SpecialGenericAlias]:
             param.type = typing.get_origin(param.type)
 
-        extra = {
-            "help": param.get_help_str(self.theme),
-            "metavar": "",
-            "required": param.is_required
-        }
+        extra = {"help": param.get_help_str(theme), "metavar": "", "required": param.is_required}
 
         if param.is_typed and type(param.type) is bool:
             if param.is_required or param.default == False:
@@ -72,7 +69,7 @@ class CLI():
             extra["default"] = param.default
 
         # Handle alias types like int | float
-        if type(param.type) is types.UnionType:
+        if type(param.type) in [types.UnionType, typing._UnionGenericAlias]:
             types_list = typing.get_args(param.type)
             types_list = [
                 typing.get_origin(i) if type(i) is types.GenericAlias else i for i in types_list
@@ -106,5 +103,6 @@ class CLI():
 
 if __name__ == '__main__':
     import pretty_errors
+
     from testing_functions import *
     CLI(test_func1).build()

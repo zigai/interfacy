@@ -2,7 +2,7 @@ import inspect
 
 from stdl.str_util import ColorANSI, str_with_color
 
-from util import type_as_str
+from interfacy.util import type_as_str
 
 EMPTY = inspect._empty
 DEFAULT_CLI_THEME = {"type": ColorANSI.LIGHT_YELLOW, "value": ColorANSI.LIGHT_BLUE}
