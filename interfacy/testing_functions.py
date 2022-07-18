@@ -9,14 +9,37 @@ class test_cls1:
     """class dostring"""
 
     def __init__(self, a: str, b: int) -> None:
+        """init docstring"""
+
         self.a = a
         self.b = b
         print("init")
 
-    def test(self):
+    def method1(self):
+        """test docstring"""
         print("method test called")
         print(f"{self.a=}")
         print(f"{self.b=}")
+
+    def static_method1(self):
+        """test docstring"""
+        print("method test called")
+        print(f"{self.a=}")
+        print(f"{self.b=}")
+
+
+class test_cls2:
+    """class dostring"""
+
+    @staticmethod
+    def static_method1():
+        """static_method1 docstring"""
+        pass
+
+    @staticmethod
+    def static_method2():
+        """static_method1 docstring"""
+        pass
 
 
 def test_func1(a: str, b: int, c=1, d: bool = False):
@@ -41,7 +64,6 @@ def test_func3(a: List[str], b: Union[int, float]):
 
 
 def main():
-    from interfacy import Interfacy
     from interfacy.cli import CLI
 
     CLI(test_func1).build()
