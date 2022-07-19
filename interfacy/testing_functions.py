@@ -4,6 +4,9 @@ from typing import List, Union
 
 import pretty_errors
 
+from interfacy import CLI
+from interfacy.interfacy_class import InterfacyClass
+
 
 class test_cls1:
     """class dostring"""
@@ -64,8 +67,10 @@ def test_func3(a: List[str], b: Union[int, float]):
 
 
 def main():
-    from interfacy.cli import CLI
-
+    a = InterfacyClass(test_cls1)
+    print(a)
+    a = InterfacyClass(test_cls2)
+    print(a)
     CLI(test_func1).build()
 
 

@@ -35,10 +35,10 @@ class InterfacyParameter:
         return self.default == EMPTY
 
     @property
-    def flag_name(self):
+    def flag_name(self) -> str:
         return f"--{self.name}"
 
-    def get_help_str(self, theme):
+    def get_help_str(self, theme) -> str:
         if self.is_required and not self.is_typed:
             return ""
         help_str = []

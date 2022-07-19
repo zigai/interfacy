@@ -15,7 +15,7 @@ class InterfacyFunction:
         self.parameters = [InterfacyParameter(i) for i in func_args.parameters.values()]
 
     @property
-    def has_docstr(self):
+    def has_docstr(self) -> bool:
         return len(self.docstr) != 0
 
     def __repr__(self) -> str:

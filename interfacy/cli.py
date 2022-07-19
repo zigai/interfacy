@@ -5,11 +5,14 @@ import types
 import typing
 
 from interfacy.cli_parsers import CLI_TYPE_PARSER
-from interfacy.function import InterfacyFunction
-from interfacy.parameter import DEFAULT_CLI_THEME, EMPTY, InterfacyParameter
+from interfacy.interfacy_class import InterfacyClass
+from interfacy.interfacy_function import InterfacyFunction
+from interfacy.interfacy_parameter import (DEFAULT_CLI_THEME, EMPTY, InterfacyParameter)
 
 RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 SIMPLE_TYPES = [str, int, float, bool]
+SpecialGenericAlias = typing._SpecialGenericAlias
+UnionGenericAlias = typing._UnionGenericAlias
 
 
 class CLI:
@@ -35,7 +38,7 @@ class CLI:
     def _build_from_function(self, func):
         func = InterfacyFunction(func)
         if self.description is None:
-            self.parser.description = textwrap.dedent(func.docstr)
+            self.parser.description = func.docstr
         for param in func.parameters:
             self.add_parameter(self.parser, param, self.theme)
         args = self.parser.parse_args()
@@ -54,7 +57,7 @@ class CLI:
             raise ValueError(param.name)
         param_name = f"--{param.name}"
 
-        if type(param.type) in [types.GenericAlias, typing._SpecialGenericAlias]:
+        if type(param.type) in [types.GenericAlias, SpecialGenericAlias]:
             param.type = typing.get_origin(param.type)
 
         extra = {"help": param.get_help_str(theme), "metavar": "", "required": param.is_required}
@@ -69,7 +72,7 @@ class CLI:
             extra["default"] = param.default
 
         # Handle alias types like int | float
-        if type(param.type) in [types.UnionType, typing._UnionGenericAlias]:
+        if type(param.type) in [types.UnionType, UnionGenericAlias]:
             types_list = typing.get_args(param.type)
             types_list = [
                 typing.get_origin(i) if type(i) is types.GenericAlias else i for i in types_list

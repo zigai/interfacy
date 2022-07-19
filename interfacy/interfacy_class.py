@@ -16,7 +16,7 @@ class InterfacyClass:
         self.methods = [InterfacyFunction(i[1]) for i in members]
 
     @property
-    def has_docstr(self):
+    def has_docstr(self) -> bool:
         return len(self.docstr) != 0
 
     def __repr__(self) -> str:
