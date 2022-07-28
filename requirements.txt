@@ -1,2 +1,1 @@
-python_dateutil==2.8.2
-stdl==0.2.5
+stdl>=0.3.5
