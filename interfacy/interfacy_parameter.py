@@ -6,14 +6,12 @@ from typing import Any
 
 from stdl.str_util import Color, str_with_color
 
+from constants import EMPTY
 from interfacy.cli_parsers import CLI_PARSER
 from interfacy.util import type_as_str
 
-EMPTY = inspect._empty
 SIMPLE_TYPES = [str, int, float, bool]
 
-SpecialGenericAlias = typing._SpecialGenericAlias
-UnionGenericAlias = typing._UnionGenericAlias
 DEFAULT_CLI_THEME = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE}
 
 
@@ -33,11 +31,13 @@ class InterfacyParameter:
         type: Any = EMPTY,
         default: Any = EMPTY,
         description: str | None = None,
+        owner: str | None = None,
     ) -> None:
         self.name = name
         self.type = type
         self.default = default
         self.description = description
+        self.owner = owner
 
     @property
     def dict(self):
@@ -49,22 +49,8 @@ class InterfacyParameter:
         }
 
     def __repr__(self):
-        data = f"name={self.name}, type={self.type}, default={self.default}, description={self.description}"
+        data = f"name={self.name}, type={self.type}, default={self.default}, description={self.description}, owner={self.owner}"
         return f"Parameter({data})"
-
-    @property
-    def kind(self) -> ParameterKind:
-        if self.type == EMPTY:
-            return ParameterKind.BASIC
-        if self.type in SIMPLE_TYPES:
-            return ParameterKind.BASIC
-        if self.type in CLI_PARSER.keys():
-            return ParameterKind.SPECIAL
-        if type(self.type) in [types.UnionType, UnionGenericAlias]:
-            return ParameterKind.UNION
-        if type(self.type) in [types.GenericAlias, SpecialGenericAlias]:
-            return ParameterKind.ALIAS
-        return ParameterKind.UNSUPPORTED
 
     @property
     def is_typed(self) -> bool:
@@ -105,10 +91,16 @@ class InterfacyParameter:
         return help_str
 
     @classmethod
-    def from_inspect_param(cls, param: inspect.Parameter, description: str | None = None):
+    def from_inspect_param(
+        cls,
+        param: inspect.Parameter,
+        description: str | None = None,
+        owner: str | None = None,
+    ):
         return cls(
             name=param.name,
             type=param.annotation,
             default=param.default,
             description=description,
+            owner=owner,
         )
