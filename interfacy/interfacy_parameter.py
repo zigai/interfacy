@@ -2,6 +2,7 @@ import enum
 import inspect
 import types
 import typing
+from typing import Any
 
 from stdl.str_util import Color, str_with_color
 
@@ -13,7 +14,7 @@ SIMPLE_TYPES = [str, int, float, bool]
 
 SpecialGenericAlias = typing._SpecialGenericAlias
 UnionGenericAlias = typing._UnionGenericAlias
-from typing import Any
+DEFAULT_CLI_THEME = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE}
 
 
 class ParameterKind(enum.Enum):
@@ -25,7 +26,6 @@ class ParameterKind(enum.Enum):
 
 
 class InterfacyParameter:
-    DEFAULT_CLI_THEME = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE}
 
     def __init__(
         self,
