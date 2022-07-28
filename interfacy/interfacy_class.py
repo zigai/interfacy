@@ -8,16 +8,21 @@ class InterfacyClass:
     def __init__(self, cls) -> None:
         self.cls = cls
         self.name: str = self.cls.__name__
-        self.docstr = inspect.getdoc(self.cls)
-        if self.docstr is None:
-            self.docstr = ""
+        self.docstring = inspect.getdoc(self.cls)
+        self.has_docstring = self.__has_docstring()
         members = inspect.getmembers(self.cls, inspect.isfunction)
         self.has_init = members[0][0] == "__init__"
         self.methods = [InterfacyFunction(i[1]) for i in members]
 
+    def __has_docstring(self) -> bool:
+        if self.docstring is not None:
+            if len(self.docstring):
+                return True
+        return False
+
     @property
-    def has_docstr(self) -> bool:
-        return len(self.docstr) != 0
+    def dict(self):
+        return {"name": self.name, "methods": [i.dict for i in self.methods]}
 
     def __repr__(self) -> str:
-        return f"InterfacyClass(name={self.name}, methods={len(self.methods)}, has_init={self.has_init}, has_docstr={self.has_docstr})"
+        return f"Class(name={self.name}, methods={len(self.methods)}, has_init={self.has_init}, docstring={self.docstring})"
