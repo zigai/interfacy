@@ -13,7 +13,6 @@ class test_cls1:
 
     def __init__(self, a: str, b: int) -> None:
         """init docstring"""
-
         self.a = a
         self.b = b
         print("init")
@@ -67,11 +66,13 @@ def test_func3(a: List[str], b: Union[int, float]):
 
 
 def main():
+    """
     a = InterfacyClass(test_cls1)
     print(a)
     a = InterfacyClass(test_cls2)
     print(a)
-    CLI(test_func1).build()
+    """
+    CLI(test_func2).run()
 
 
 if __name__ == '__main__':

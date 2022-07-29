@@ -1,111 +1,213 @@
 import argparse
 import inspect
-import textwrap
 import types
 import typing
+from pprint import pp, pprint
+from typing import Any
 
-from interfacy.cli_parsers import CLI_TYPE_PARSER
+import pretty_errors
+
+from interfacy.cli_parsers import CLI_PARSER
+from interfacy.constants import SPECIAL_GENERIC_ALIAS, UNION_GENERIC_ALIAS
+from interfacy.exceptions import ReservedFlagError, UnsupportedParamError
 from interfacy.interfacy_class import InterfacyClass
 from interfacy.interfacy_function import InterfacyFunction
-from interfacy.interfacy_parameter import (DEFAULT_CLI_THEME, EMPTY, InterfacyParameter)
+from interfacy.interfacy_parameter import (CLI_SIMPLE_TYPES, CLI_THEME_DEFAULT,
+                                           EMPTY, InterfacyParameter,
+                                           ParameterKind, UnionTypeParameter)
 
 RESERVED_FLAGS = ["h", "help", "q", "quiet"]
-SIMPLE_TYPES = [str, int, float, bool]
-SpecialGenericAlias = typing._SpecialGenericAlias
-UnionGenericAlias = typing._UnionGenericAlias
+
+
+def simplify_type(t):
+    """
+    Simplify type if its not  'SIMPLE' or 'SPECIAL'
+    dict[str,str] -> dict 
+    int | float -> (int,float)
+    """
+    if t in CLI_PARSER.keys() or t in CLI_SIMPLE_TYPES:
+        return t
+    tp = typing.get_origin(t)
+    if type(tp) is types.NoneType:
+        return t
+    if tp is types.UnionType:
+        tp =  typing.get_args(t)
+        return UnionTypeParameter(tuple(simplify_type(i) for i in tp))
+    return simplify_type(tp)
+
+
+def get_parameter_kind(param: InterfacyParameter) -> ParameterKind:
+    if param.type == EMPTY:
+        return ParameterKind.BASIC
+    if param.type in CLI_SIMPLE_TYPES:
+        return ParameterKind.BASIC
+    if isinstance(param.type,UnionTypeParameter) or param.type in CLI_PARSER.keys():
+        return ParameterKind.SPECIAL
+    if type(param.type) in [types.UnionType, UNION_GENERIC_ALIAS]:
+        return ParameterKind.UNION
+    if type(param.type) in [types.GenericAlias, SPECIAL_GENERIC_ALIAS]:
+        return ParameterKind.ALIAS
+    return ParameterKind.UNSUPPORTED
 
 
 class CLI:
 
-    def __init__(self, func_or_cls, class_methods=None, description=None, theme=None) -> None:
+    def __init__(
+        self,
+        func_or_cls,
+        class_methods: list | None = None,
+        description: str | None = None,
+        theme: dict | None = None,
+        clear_metavar: bool = True,
+    ) -> None:
+        """
+        Build a command-line interface for a function or class.
+
+        Args:
+            func_or_cls: 
+            class_methods:
+            description: Description for the main parser. If not specified, Interfacy will attempt to use the docstring's description.
+            theme:
+            clear_metavar:
+        """
         self.func_or_cls = func_or_cls
         self.class_methods = class_methods
         self.description = description
-        self.parser = argparse.ArgumentParser()
-        self.theme = DEFAULT_CLI_THEME if theme is None else theme
-        self.specials = {}
-        self.build()
+        self.clear_metavar = clear_metavar
+        self.theme = CLI_THEME_DEFAULT if theme is None else theme
+        self.main_parser = argparse.ArgumentParser()
+        
+        self.specials: dict[str, dict[str,Any]] = {} # owner[name][type]
 
-    def build(self):
+    def run(self):
         if inspect.isclass(self.func_or_cls):  # class
-            return self._build_from_class(self.func_or_cls, self.class_methods)
+            return self.__build_from_class(self.func_or_cls, self.class_methods)
         else:  # function
-            return self._build_from_function(self.func_or_cls)
+            return self.__build_from_function(self.func_or_cls)
 
-    def _build_from_class(self, cls, methods):
-        pass
-
-    def _build_from_function(self, func):
-        func = InterfacyFunction(func)
+    def __build_from_class(self, cls, methods=None):
+        cls = InterfacyClass(cls)
         if self.description is None:
-            self.parser.description = func.docstr
-        for param in func.parameters:
-            self.add_parameter(self.parser, param, self.theme)
-        args = self.parser.parse_args()
+            self.main_parser.description = cls.docstring
+
+        for i in cls.methods:
+            print(i)
+            pprint(i.parameters)
+            print("_" * 64)
+
+    def make_parser(self, ifunc: InterfacyFunction):
+        """
+        Create an ArgumentParser from an InterfacyFunction
+        """
+        parser = argparse.ArgumentParser()
+        for param in ifunc.parameters:
+            self.add_parameter(parser, param)
+        if self.description is None:
+            parser.description = self.description
+        elif ifunc.has_docstring:
+            parser.description = ifunc.description
+        return parser
+
+    def __build_from_function(self, func):
+        func = InterfacyFunction(func)
+        self.specials[func.name] = {}
+        parser = self.make_parser(func)
+        args = parser.parse_args()
         args_dict = args.__dict__
+        specials = self.specials[func.name]
+
         for name, value in args_dict.items():
-            if not self.specials.get(name, False):
+            if not specials.get(name, False):
                 continue
-            var_type = self.specials[name]
-            args_dict[name] = CLI_TYPE_PARSER[var_type](value)
+            var_type = specials[name]
+            if isinstance(var_type,UnionTypeParameter):
+                val = EMPTY
+                for t in var_type.params:
+                    try:
+                        val = CLI_PARSER[t](value)
+                    except Exception:
+                        continue
+                if val == EMPTY:
+                    raise ValueError(f"{value} can't parsed as any of these types: {var_type.params}")
+                else:
+                    args_dict[name] = val
+            else:
+                args_dict[name] = CLI_PARSER[var_type](value)
         func.func(**args_dict)
 
-    def add_parameter(self, parser: argparse.ArgumentParser, param: InterfacyParameter,
-                      theme: dict):
-        """Add a parameter to an argument parser"""
-        if param.name in RESERVED_FLAGS:
-            raise ValueError(param.name)
-        param_name = f"--{param.name}"
 
-        if type(param.type) in [types.GenericAlias, SpecialGenericAlias]:
-            param.type = typing.get_origin(param.type)
+    def __extra_add_arg_params(self, param: InterfacyParameter):
+        """
+        Get a dictionary of extra arguments that will be passed to parser.add_argument.
+        """
+        param_kind = get_parameter_kind(param)
+        if param_kind == ParameterKind.UNSUPPORTED:
+            raise UnsupportedParamError(param.type)
 
-        extra = {"help": param.get_help_str(theme), "metavar": "", "required": param.is_required}
+        extra = {
+            "help": param.help_string(self.theme),
+            "required": param.is_required,
+        }
 
+        if self.clear_metavar:
+            extra["metavar"] = ""
+
+        # Handle boolean parameters
         if param.is_typed and type(param.type) is bool:
             if param.is_required or param.default == False:
                 extra["default"] = "store_true"
             else:
                 extra["default"] = "store_false"
+            return extra
 
+        # TODO
+        # Handle enum parameters
+
+        # Add default value
         if not param.is_required:
             extra["default"] = param.default
 
-        # Handle alias types like int | float
-        if type(param.type) in [types.UnionType, UnionGenericAlias]:
-            types_list = typing.get_args(param.type)
-            types_list = [
-                typing.get_origin(i) if type(i) is types.GenericAlias else i for i in types_list
-            ]
-            types_list = [i for i in types_list if i in SIMPLE_TYPES or i in CLI_TYPE_PARSER]
-            if len(types_list) == 0:
-                raise TypeError(f"{param.name}: {param.type}")
-            parser.add_argument(param_name, **extra)
-            self._mark_special(param.name, types_list)
-            return
+        # Untyped args
+        if not param.is_typed:
+            return extra
 
-        if param.is_typed:
-            extra["type"] = param.type
-        else:
-            parser.add_argument(param_name, **extra)
-            return
-        if param.type in SIMPLE_TYPES:
-            parser.add_argument(param_name, **extra)
-            return
-        if param.type in CLI_TYPE_PARSER.keys():
-            parser.add_argument(param_name, **extra)
-            self._mark_special(param.name, param.type)
-            return
-        raise TypeError(f"{param.name}: {param.type}")
+        if param_kind == ParameterKind.UNION or param_kind == ParameterKind.ALIAS:
+            param.type = simplify_type(param.type)
+        param_kind = get_parameter_kind(param)
 
-    def _mark_special(self, name, type):
-        if name in self.specials.keys():
-            raise ValueError(f"flag '{name}' already used")
-        self.specials[name] = type
+        match param_kind:
+            case ParameterKind.UNSUPPORTED:
+                raise UnsupportedParamError(param.type)
+            case ParameterKind.BASIC:  # Simple types (str, int, float, bool)
+                extra["type"] = param.type
+            case ParameterKind.SPECIAL: # Parsable Types (types in CLI_TYPE_PARSER)
+                self.specials[param.owner][param.name] = param.type
+            case ParameterKind.ALIAS: # Alias types like list[str]
+                raise ValueError("This should never happen")
+            case ParameterKind.UNION:
+                raise ValueError("This should never happen")
+            case _:
+                raise UnsupportedParamError(param.type) 
+
+
+        return extra
+
+    def add_parameter(self, parser: argparse.ArgumentParser, param: InterfacyParameter):
+        """
+        Add a parameter to an argument parser
+        
+        Args:
+            parser: ArgumentParser instance
+            owner: function or class name the parameter is from
+        Raises:
+            ReservedFlagError
+        """
+        if param.name in RESERVED_FLAGS:
+            raise ReservedFlagError(param.name)
+        extra = self.__extra_add_arg_params(param)
+        parser.add_argument(param.flag_name, **extra)
 
 
 if __name__ == '__main__':
-    import pretty_errors
-
     from testing_functions import *
-    CLI(test_func1).build()
+    CLI(test_cls1)

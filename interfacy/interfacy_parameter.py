@@ -7,12 +7,18 @@ from typing import Any
 from stdl.str_util import Color, str_with_color
 
 from constants import EMPTY
-from interfacy.cli_parsers import CLI_PARSER
 from interfacy.util import type_as_str
 
-SIMPLE_TYPES = [str, int, float, bool]
+CLI_SIMPLE_TYPES = (str, int, float, bool)
+CLI_THEME_OLD = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE, "sep": ", default: "}
+CLI_THEME_DEFAULT = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE, "sep": " = "}
+CLI_THEME_PLAIN = {"type": Color.WHITE, "default": Color.WHITE, "sep": " = "}
 
-DEFAULT_CLI_THEME = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE}
+
+class UnionTypeParameter:
+
+    def __init__(self, params: tuple) -> None:
+        self.params = params
 
 
 class ParameterKind(enum.Enum):
@@ -68,24 +74,19 @@ class InterfacyParameter:
     def flag_name(self) -> str:
         return f"--{self.name}"
 
-    def help_string(self, theme=DEFAULT_CLI_THEME) -> str:
+    def help_string(self, theme=CLI_THEME_DEFAULT) -> str:
         if self.is_required and not self.is_typed:
             return ""
         help_str = []
 
         if self.is_typed:
-            if theme is not None:
-                help_str.append(str_with_color(type_as_str(self.type), theme['type']))
-            else:
-                help_str.append(type_as_str(self.type))
-
+            help_str.append(str_with_color(type_as_str(self.type), theme['type']))
+        if self.is_typed and self.is_optional:
+            help_str.append(theme["sep"])
         if self.is_optional:
-            if theme is not None:
-                help_str.append(f"default: {str_with_color(self.default, theme['default'])}")
-            else:
-                help_str.append(f"default: {self.default}")
+            help_str.append(f"{str_with_color(self.default, theme['default'])}")
 
-        help_str = ", ".join(help_str)
+        help_str = "".join(help_str)
         if self.description is not None:
             help_str = f"{self.description} [{help_str}]"
         return help_str
