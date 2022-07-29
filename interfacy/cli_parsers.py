@@ -1,79 +1,77 @@
 import datetime
+import decimal
+import enum
+import fractions
 import json
 import pathlib
 
-from dateutil import parser as date_parser
+from stdl.datetime_util import parse_datetime
 from stdl.fs import File, json_load, pickle_load, yaml_load
 
-from interfacy.util import is_file
+from interfacy.interfacy_parameter import UnionTypeParameter
+from interfacy.util import (cast_dict_to, cast_iter_to, cast_to, is_file, parse_and_cast)
 
 SEP = ","
 
 
-def date_arg(arg: str):
-    return date_parser.parse(arg)
+def datetime_arg(val) -> datetime.datetime:
+    return parse_datetime(val)
 
 
-def dict_arg(arg: str):
-    if is_file(arg):
-        if arg.endswith(("yaml", "yml")):
-            return yaml_load(arg)
-        return json_load(arg)
-    return json.loads(arg)
+def date_arg(val) -> datetime.date:
+    return parse_datetime(val).date()
 
 
-def list_arg(arg: str):
-    if is_file(arg):
-        data = File.splitlines(arg)
+def dict_arg(val) -> dict:
+    # JSON string needs to be enclosed in single quotes
+    if is_file(val):
+        if val.endswith(("yaml", "yml")):
+            return yaml_load(val)
+        return json_load(val)
+    return json.loads(val)
+
+
+def list_arg(val) -> list:
+    if is_file(val):
+        data = File(val).splitlines()
         # if all data is in a single line
         if len(data) == 1 and SEP in data[0]:
             data = data[0].split(SEP)
         return data
-    return arg.split(SEP)
+    return val.split(SEP)
 
 
-def set_arg(arg: str):
-    if is_file(arg):
-        return set(File.splitlines(arg))
-    return set(arg.split(SEP))
+def set_arg(val) -> set:
+    if is_file(val):
+        return set(File(val).splitlines())
+    return set(val.split(SEP))
 
 
-def tuple_arg(arg: str):
-    if is_file(arg):
-        return (*File.splitlines(arg),)
-    return (*File.splitlines(arg),)
+def tuple_arg(val) -> tuple:
+    if is_file(val):
+        return (*File(val).splitlines(),)
+    return (*val.split(SEP),)
 
 
-def path_arg(arg):
-    return pathlib.Path(arg)
-
-
-def posix_path_arg(arg: str):
-    return pathlib.PosixPath(arg)
-
-
-def pure_windows_path_arg(arg: str):
-    return pathlib.PureWindowsPath(arg)
-
-
-def windows_path_arg(arg: str):
-    return pathlib.WindowsPath(arg)
-
-
-def pure_posix_path_arg(arg: str):
-    return pathlib.PurePosixPath(arg)
-
-
-CLI_TYPE_PARSER = {
+CLI_PARSER = {
     dict: dict_arg,
     list: list_arg,
     set: set_arg,
     tuple: tuple_arg,
     datetime.date: date_arg,
-    datetime.datetime: date_arg,
-    pathlib.Path: path_arg,
-    pathlib.PosixPath: posix_path_arg,
-    pathlib.WindowsPath: windows_path_arg,
-    pathlib.PureWindowsPath: pure_windows_path_arg,
-    pathlib.PurePosixPath: pure_posix_path_arg,
+    datetime.datetime: datetime_arg,
+    #
+    float: cast_to(float),
+    decimal.Decimal: cast_to(decimal.Decimal),
+    fractions.Fraction: cast_to(fractions.Fraction),
+    pathlib.Path: cast_to(pathlib.Path),
+    pathlib.PosixPath: cast_to(pathlib.PosixPath),
+    pathlib.WindowsPath: cast_to(pathlib.WindowsPath),
+    pathlib.PureWindowsPath: cast_to(pathlib.PureWindowsPath),
+    pathlib.PurePosixPath: cast_to(pathlib.PurePosixPath),
+    #
+    list[int]: parse_and_cast(list_arg, cast_iter_to(list, int)),
+    list[float]: parse_and_cast(list_arg, cast_iter_to(list, float)),
+    list[decimal.Decimal]: parse_and_cast(list_arg, cast_iter_to(list, decimal.Decimal)),
+    list[fractions.Fraction]: parse_and_cast(list_arg, cast_iter_to(list, fractions.Fraction)),
 }
