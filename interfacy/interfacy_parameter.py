@@ -43,6 +43,9 @@ class InterfacyParameter:
         self.description = description
         self.owner = owner
 
+        if not self.is_typed and self.is_optional:
+            self.type = type(self.default)
+
     @property
     def dict(self):
         return {
