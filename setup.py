@@ -8,7 +8,7 @@ REQUIREMENTS = (HERE / "requirements.txt").read_text()
 
 setup(
     name="interfacy",
-    version="0.2.1",
+    version="0.2.3",
     description="",
     long_description=README,
     long_description_content_type="text/markdown",

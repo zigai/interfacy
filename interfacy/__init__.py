@@ -1,1 +1,1 @@
-from interfacy.cli import CLI
+from interfacy.cli.cli import CLI

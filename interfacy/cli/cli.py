@@ -8,6 +8,7 @@ from typing import Any
 
 import interfacy.cli.themes as CLI_THEMES
 import pretty_errors
+from interfacy.cli.helpstr_theme import HelpStringTheme
 from interfacy.cli.parsers import CLI_PARSER
 from interfacy.constants import SPECIAL_GENERIC_ALIAS, UNION_GENERIC_ALIAS
 from interfacy.exceptions import ReservedFlagError, UnsupportedParamError
@@ -22,9 +23,11 @@ RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 
 def simplify_type(t):
     """
-    Simplify type if its not  'SIMPLE' or 'SPECIAL'
-    dict[str,str] -> dict 
-    int | float -> (int,float)
+    Simplify type if its not a 'SIMPLE' or 'SPECIAL' type.
+    
+    dict[str,str] -> dict
+    int | float -> UnionTypeParameter(int,float)
+    list[float] -> list[float], since it's CLI_PARSER
     """
     if t in CLI_PARSER.keys() or t in CLI_SIMPLE_TYPES:
         return t
@@ -51,6 +54,22 @@ def get_parameter_kind(param: InterfacyParameter) -> ParameterKind:
     return ParameterKind.UNSUPPORTED
 
 
+def parse_union_param(param:UnionTypeParameter,val:str|Any):
+    """
+    Try and parse value as every type of an UnionTypeParameter instance
+    Return the first one that succedes
+    Raises:
+        ValueError ... TODO 
+    """
+    parsed_val = EMPTY
+    for t in param.params:
+        try:
+            parsed_val = CLI_PARSER[t](val)
+            return parsed_val
+        except Exception:
+            continue
+    raise ValueError(f"{val} can't parsed as any of these types: {param.params}")
+
 class CLI:
 
     def __init__(
@@ -58,7 +77,7 @@ class CLI:
         func_or_cls,
         class_methods: list | None = None,
         description: str | None = None,
-        theme: dict | None = None,
+        theme: HelpStringTheme | None = None,
         clear_metavar: bool = True,
     ) -> None:
         """
@@ -115,24 +134,16 @@ class CLI:
         parser = self.make_parser(func)
         args = parser.parse_args()
         args_dict = args.__dict__
-        specials = self.specials[func.name]
 
+        specials = self.specials[func.name]
         for name, value in args_dict.items():
             if not specials.get(name, False):
                 continue
             var_type = specials[name]
             if isinstance(var_type,UnionTypeParameter):
-                val = EMPTY
-                for t in var_type.params:
-                    try:
-                        val = CLI_PARSER[t](value)
-                    except Exception:
-                        continue
-                if val == EMPTY:
-                    raise ValueError(f"{value} can't parsed as any of these types: {var_type.params}")
-                else:
-                    args_dict[name] = val
-            if issubclass(var_type,enum.Enum):
+                val = parse_union_param(var_type,value)
+                args_dict[name] = val
+            if inspect.isclass(var_type) and issubclass(var_type,enum.Enum):
                 val = var_type[value]
             else:
                 args_dict[name] = CLI_PARSER[var_type](value)
@@ -168,7 +179,6 @@ class CLI:
             extra["default"] = param.default
         
         # Handle enum parameters
-
         if inspect.isclass(param.type) and issubclass(param.type,enum.Enum):
             self.specials[param.owner][param.name] = param.type
             extra["choices"] = list(param.type.__members__.keys())
@@ -217,5 +227,5 @@ class CLI:
 
 
 if __name__ == '__main__':
-    from testing_functions import *
+    from interfacy.testing_functions import *
     CLI(test_cls1)

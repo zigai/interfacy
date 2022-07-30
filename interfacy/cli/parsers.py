@@ -1,15 +1,13 @@
 import datetime
 import decimal
-import enum
 import fractions
 import json
 import pathlib
 
+from interfacy.interfacy_parameter import UnionTypeParameter
+from interfacy.util import cast_dict_to, cast_iter_to, cast_to, parse_then_cast
 from stdl.datetime_util import parse_datetime
 from stdl.fs import File, json_load, pickle_load, yaml_load
-
-from interfacy.interfacy_parameter import UnionTypeParameter
-from interfacy.util import (cast_dict_to, cast_iter_to, cast_to, is_file, parse_and_cast)
 
 SEP = ","
 
@@ -30,7 +28,7 @@ def dict_arg(val) -> dict:
     if type(val) is dict:
         return val
     # JSON string needs to be enclosed in single quotes
-    if is_file(val):
+    if File(val).exists:
         if val.endswith(("yaml", "yml")):
             return yaml_load(val)
         return json_load(val)
@@ -82,8 +80,8 @@ CLI_PARSER = {
     pathlib.PureWindowsPath: cast_to(pathlib.PureWindowsPath),
     pathlib.PurePosixPath: cast_to(pathlib.PurePosixPath),
     #
-    list[int]: parse_and_cast(list_arg, cast_iter_to(list, int)),
-    list[float]: parse_and_cast(list_arg, cast_iter_to(list, float)),
-    list[decimal.Decimal]: parse_and_cast(list_arg, cast_iter_to(list, decimal.Decimal)),
-    list[fractions.Fraction]: parse_and_cast(list_arg, cast_iter_to(list, fractions.Fraction)),
+    list[int]: parse_then_cast(list_arg, cast_iter_to(list, int)),
+    list[float]: parse_then_cast(list_arg, cast_iter_to(list, float)),
+    list[decimal.Decimal]: parse_then_cast(list_arg, cast_iter_to(list, decimal.Decimal)),
+    list[fractions.Fraction]: parse_then_cast(list_arg, cast_iter_to(list, fractions.Fraction)),
 }

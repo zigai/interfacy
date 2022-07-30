@@ -23,12 +23,6 @@ class test_cls1:
         print(f"{self.a=}")
         print(f"{self.b=}")
 
-    def static_method1(self):
-        """test docstring"""
-        print("method test called")
-        print(f"{self.a=}")
-        print(f"{self.b=}")
-
 
 class test_cls2:
     """class dostring"""

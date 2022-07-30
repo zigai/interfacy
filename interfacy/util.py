@@ -8,10 +8,6 @@ def type_as_str(t):
     return type_str
 
 
-def is_file(s):
-    return os.path.isfile(s)
-
-
 def cast_to(t):
     """
     Returns a functions that casts a string to type 't'
@@ -42,7 +38,7 @@ def cast_dict_to(k, v):
     return inner
 
 
-def parse_and_cast(parser, caster):
+def parse_then_cast(parser, caster):
 
     def inner(val: str):
         return caster(parser(val))
