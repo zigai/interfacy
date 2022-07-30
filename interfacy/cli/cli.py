@@ -1,20 +1,21 @@
 import argparse
+import enum
 import inspect
 import types
 import typing
 from pprint import pp, pprint
 from typing import Any
 
+import interfacy.cli.themes as CLI_THEMES
 import pretty_errors
-
-from interfacy.cli_parsers import CLI_PARSER
+from interfacy.cli.parsers import CLI_PARSER
 from interfacy.constants import SPECIAL_GENERIC_ALIAS, UNION_GENERIC_ALIAS
 from interfacy.exceptions import ReservedFlagError, UnsupportedParamError
 from interfacy.interfacy_class import InterfacyClass
 from interfacy.interfacy_function import InterfacyFunction
-from interfacy.interfacy_parameter import (CLI_SIMPLE_TYPES, CLI_THEME_DEFAULT,
-                                           EMPTY, InterfacyParameter,
-                                           ParameterKind, UnionTypeParameter)
+from interfacy.interfacy_parameter import (CLI_SIMPLE_TYPES, EMPTY,
+                                           InterfacyParameter, ParameterKind,
+                                           UnionTypeParameter)
 
 RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 
@@ -74,7 +75,7 @@ class CLI:
         self.class_methods = class_methods
         self.description = description
         self.clear_metavar = clear_metavar
-        self.theme = CLI_THEME_DEFAULT if theme is None else theme
+        self.theme = CLI_THEMES.DEFAULT if theme is None else theme
         self.main_parser = argparse.ArgumentParser()
         
         self.specials: dict[str, dict[str,Any]] = {} # owner[name][type]
@@ -131,6 +132,8 @@ class CLI:
                     raise ValueError(f"{value} can't parsed as any of these types: {var_type.params}")
                 else:
                     args_dict[name] = val
+            if issubclass(var_type,enum.Enum):
+                val = var_type[value]
             else:
                 args_dict[name] = CLI_PARSER[var_type](value)
         func.func(**args_dict)
@@ -160,12 +163,17 @@ class CLI:
                 extra["default"] = "store_false"
             return extra
 
-        # TODO
-        # Handle enum parameters
-
         # Add default value
         if not param.is_required:
             extra["default"] = param.default
+        
+        # Handle enum parameters
+
+        if inspect.isclass(param.type) and issubclass(param.type,enum.Enum):
+            self.specials[param.owner][param.name] = param.type
+            extra["choices"] = list(param.type.__members__.keys())
+            extra["type"] = str
+            return extra
 
         # Untyped args
         if not param.is_typed:
@@ -181,6 +189,7 @@ class CLI:
             case ParameterKind.BASIC:  # Simple types (str, int, float, bool)
                 extra["type"] = param.type
             case ParameterKind.SPECIAL: # Parsable Types (types in CLI_TYPE_PARSER)
+                extra["type"] = str
                 self.specials[param.owner][param.name] = param.type
             case ParameterKind.ALIAS: # Alias types like list[str]
                 raise ValueError("This should never happen")
@@ -188,7 +197,6 @@ class CLI:
                 raise ValueError("This should never happen")
             case _:
                 raise UnsupportedParamError(param.type) 
-
 
         return extra
 

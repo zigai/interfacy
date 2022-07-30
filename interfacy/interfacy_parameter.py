@@ -6,13 +6,11 @@ from typing import Any
 
 from stdl.str_util import Color, str_with_color
 
-from constants import EMPTY
+from interfacy.cli.helpstr_theme import HelpStringTheme
+from interfacy.constants import EMPTY
 from interfacy.util import type_as_str
 
-CLI_SIMPLE_TYPES = (str, int, float, bool)
-CLI_THEME_OLD = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE, "sep": ", default: "}
-CLI_THEME_DEFAULT = {"type": Color.LIGHT_YELLOW, "default": Color.LIGHT_BLUE, "sep": " = "}
-CLI_THEME_PLAIN = {"type": Color.WHITE, "default": Color.WHITE, "sep": " = "}
+CLI_SIMPLE_TYPES = (str, int, bool)
 
 
 class UnionTypeParameter:
@@ -74,17 +72,20 @@ class InterfacyParameter:
     def flag_name(self) -> str:
         return f"--{self.name}"
 
-    def help_string(self, theme=CLI_THEME_DEFAULT) -> str:
+    def help_string(self, theme: HelpStringTheme) -> str:
         if self.is_required and not self.is_typed:
             return ""
         help_str = []
 
         if self.is_typed:
-            help_str.append(str_with_color(type_as_str(self.type), theme['type']))
+            typestr = type_as_str(self.type)
+            if theme.slice_typename:
+                typestr = typestr.split(".")[-1]
+            help_str.append(str_with_color(typestr, theme.type))
         if self.is_typed and self.is_optional:
-            help_str.append(theme["sep"])
+            help_str.append(theme.sep)
         if self.is_optional:
-            help_str.append(f"{str_with_color(self.default, theme['default'])}")
+            help_str.append(f"{str_with_color(self.default, theme.default)}")
 
         help_str = "".join(help_str)
         if self.description is not None:

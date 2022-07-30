@@ -15,14 +15,20 @@ SEP = ","
 
 
 def datetime_arg(val) -> datetime.datetime:
+    if type(val) is datetime.datetime:
+        return val
     return parse_datetime(val)
 
 
 def date_arg(val) -> datetime.date:
+    if type(val) is datetime.date:
+        return val
     return parse_datetime(val).date()
 
 
 def dict_arg(val) -> dict:
+    if type(val) is dict:
+        return val
     # JSON string needs to be enclosed in single quotes
     if is_file(val):
         if val.endswith(("yaml", "yml")):
@@ -32,6 +38,8 @@ def dict_arg(val) -> dict:
 
 
 def list_arg(val) -> list:
+    if type(val) is list:
+        return val
     if is_file(val):
         data = File(val).splitlines()
         # if all data is in a single line
@@ -42,12 +50,16 @@ def list_arg(val) -> list:
 
 
 def set_arg(val) -> set:
+    if type(val) is set:
+        return val
     if is_file(val):
         return set(File(val).splitlines())
     return set(val.split(SEP))
 
 
 def tuple_arg(val) -> tuple:
+    if type(val) is tuple:
+        return val
     if is_file(val):
         return (*File(val).splitlines(),)
     return (*val.split(SEP),)
@@ -60,7 +72,7 @@ CLI_PARSER = {
     tuple: tuple_arg,
     datetime.date: date_arg,
     datetime.datetime: datetime_arg,
-    #
+    # These types can be casted to from a string
     float: cast_to(float),
     decimal.Decimal: cast_to(decimal.Decimal),
     fractions.Fraction: cast_to(fractions.Fraction),

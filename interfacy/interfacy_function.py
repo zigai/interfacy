@@ -13,10 +13,8 @@ class InterfacyFunction:
         self.owner = owner
         self.docstring = inspect.getdoc(self.func)
         self.has_docstring = self.__has_docstring()
-        if self.has_docstring:
-            self.__parsed_docstr = docstring_parser.parse(self.docstring)
-        else:
-            self.__parsed_docstr = None
+        self.__parsed_docstr = docstring_parser.parse(
+            self.docstring) if self.has_docstring else None
         self.parameters = self.__get_parameters()
         self.description = self.__get_description()
 
