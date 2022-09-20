@@ -4,8 +4,8 @@ from typing import List, Union
 
 import pretty_errors
 
-from interfacy import CLI
-from interfacy.interfacy_class import InterfacyClass
+from interfacy_cli import CLI
+from interfacy_cli.interfacy_class import InterfacyClass
 
 
 class test_cls1:

@@ -1,10 +1,9 @@
 import inspect
 
-from interfacy.interfacy_function import InterfacyFunction
+from interfacy_cli.interfacy_function import InterfacyFunction
 
 
 class InterfacyClass:
-
     def __init__(self, cls) -> None:
         self.cls = cls
         self.name: str = self.cls.__name__

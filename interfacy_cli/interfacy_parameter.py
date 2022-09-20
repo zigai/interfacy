@@ -6,9 +6,9 @@ from typing import Any
 
 from stdl.str_util import Color, str_with_color
 
-from interfacy.cli.helpstr_theme import HelpStringTheme
-from interfacy.constants import EMPTY
-from interfacy.util import type_as_str
+from interfacy_cli.cli.helpstr_theme import HelpStringTheme
+from interfacy_cli.constants import EMPTY
+from interfacy_cli.util import type_as_str
 
 CLI_SIMPLE_TYPES = (str, int, bool)
 

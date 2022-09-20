@@ -1,4 +1,4 @@
-from interfacy.cli.helpstr_theme import HelpStringTheme
+from interfacy_cli.cli.helpstr_theme import HelpStringTheme
 from stdl.str_util import Color
 
 PLAIN = HelpStringTheme(type=Color.WHITE, default=Color.WHITE, sep=" = ", slice_typename=False)

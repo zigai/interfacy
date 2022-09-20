@@ -7,15 +7,15 @@ README = (HERE / "README.md").read_text()
 REQUIREMENTS = (HERE / "requirements.txt").read_text()
 
 setup(
-    name="interfacy",
+    name="interfacy-cli",
     version="0.2.3",
     description="",
     long_description=README,
     long_description_content_type="text/markdown",
-    author="Ziga Ivansek",
+    author="Žiga Ivanšek",
     author_email="ziga.ivansek@gmail.com",
     url="https://github.com/zigai/interfacy",
-    license="MIT",
+    license="",
     classifiers=[
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.10",

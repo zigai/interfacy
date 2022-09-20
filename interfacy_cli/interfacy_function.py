@@ -2,19 +2,19 @@ import inspect
 
 import docstring_parser
 
-from interfacy.interfacy_parameter import InterfacyParameter
+from interfacy_cli.interfacy_parameter import InterfacyParameter
 
 
 class InterfacyFunction:
-
     def __init__(self, func, owner: str | None = None) -> None:
         self.func = func
         self.name: str = self.func.__name__
         self.owner = owner
         self.docstring = inspect.getdoc(self.func)
         self.has_docstring = self.__has_docstring()
-        self.__parsed_docstr = docstring_parser.parse(
-            self.docstring) if self.has_docstring else None
+        self.__parsed_docstr = (
+            docstring_parser.parse(self.docstring) if self.has_docstring else None
+        )
         self.parameters = self.__get_parameters()
         self.description = self.__get_description()
 

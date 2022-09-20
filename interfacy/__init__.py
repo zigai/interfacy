@@ -1,1 +1,0 @@
-from interfacy.cli.cli import CLI

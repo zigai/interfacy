@@ -4,8 +4,9 @@ import fractions
 import json
 import pathlib
 
-from interfacy.interfacy_parameter import UnionTypeParameter
-from interfacy.util import cast_dict_to, cast_iter_to, cast_to, parse_then_cast
+from interfacy_cli.interfacy_parameter import UnionTypeParameter
+from interfacy_cli.util import (cast_dict_to, cast_iter_to, cast_to,
+                                parse_then_cast)
 from stdl.datetime_util import parse_datetime
 from stdl.fs import File, json_load, pickle_load, yaml_load
 

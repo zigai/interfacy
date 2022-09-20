@@ -1,5 +1,5 @@
 import pytest
-from interfacy.cli_parsers import *
+from interfacy_cli.cli_parsers import *
 
 str_abcd = "a,b,c,d"
 str_nums = "1,2,3,4,5"

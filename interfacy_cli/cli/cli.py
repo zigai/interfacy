@@ -6,18 +6,19 @@ import typing
 from pprint import pp, pprint
 from typing import Any
 
-import interfacy.cli.themes as CLI_THEMES
+import interfacy_cli.cli.themes as CLI_THEMES
 import pretty_errors
-from interfacy.cli.helpstr_theme import HelpStringTheme
-from interfacy.cli.parsers import CLI_PARSER
-from interfacy.constants import SPECIAL_GENERIC_ALIAS, UNION_GENERIC_ALIAS
-from interfacy.exceptions import ReservedFlagError, UnsupportedParamError
-from interfacy.interfacy_class import InterfacyClass
-from interfacy.interfacy_function import InterfacyFunction
-from interfacy.interfacy_parameter import (CLI_SIMPLE_TYPES, EMPTY,
-                                           InterfacyParameter, ParameterKind,
-                                           UnionTypeParameter)
-from interfacy.util import extract_enum_options
+from interfacy_cli.cli.helpstr_theme import HelpStringTheme
+from interfacy_cli.cli.parsers import CLI_PARSER
+from interfacy_cli.constants import SPECIAL_GENERIC_ALIAS, UNION_GENERIC_ALIAS
+from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
+from interfacy_cli.interfacy_class import InterfacyClass
+from interfacy_cli.interfacy_function import InterfacyFunction
+from interfacy_cli.interfacy_parameter import (CLI_SIMPLE_TYPES, EMPTY,
+                                               InterfacyParameter,
+                                               ParameterKind,
+                                               UnionTypeParameter)
+from interfacy_cli.util import extract_enum_options
 
 RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 
@@ -229,6 +230,6 @@ class CLI:
 
 
 if __name__ == '__main__':
-    from interfacy.testing_functions import *
+    from interfacy_cli.testing_functions import *
     CLI(test_cls1).run()
 
