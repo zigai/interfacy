@@ -12,7 +12,7 @@ class InterfacyClass:
         self.has_docstring = self.__has_docstring()
         members = inspect.getmembers(self.cls, inspect.isfunction)
         self.has_init = members[0][0] == "__init__"
-        self.methods = [InterfacyFunction(i[1]) for i in members]
+        self.methods = [InterfacyFunction(i[1], self.name) for i in members]
 
     def __has_docstring(self) -> bool:
         if self.docstring is not None:

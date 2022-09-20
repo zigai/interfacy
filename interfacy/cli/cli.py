@@ -17,6 +17,7 @@ from interfacy.interfacy_function import InterfacyFunction
 from interfacy.interfacy_parameter import (CLI_SIMPLE_TYPES, EMPTY,
                                            InterfacyParameter, ParameterKind,
                                            UnionTypeParameter)
+from interfacy.util import extract_enum_options
 
 RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 
@@ -96,7 +97,6 @@ class CLI:
         self.clear_metavar = clear_metavar
         self.theme = CLI_THEMES.DEFAULT if theme is None else theme
         self.main_parser = argparse.ArgumentParser()
-        
         self.specials: dict[str, dict[str,Any]] = {} # owner[name][type]
 
     def run(self):
@@ -110,16 +110,18 @@ class CLI:
         if self.description is None:
             self.main_parser.description = cls.docstring
 
-        for i in cls.methods:
-            print(i)
-            pprint(i.parameters)
+        subparser = self.main_parser.add_subparsers()
+        for method in cls.methods:
+            print(method)
+            pprint(method.parameters)
             print("_" * 64)
 
-    def make_parser(self, ifunc: InterfacyFunction):
+    def make_parser(self, ifunc: InterfacyFunction,parser:argparse.ArgumentParser|None=None):
         """
         Create an ArgumentParser from an InterfacyFunction
         """
-        parser = argparse.ArgumentParser()
+        if parser is None:
+            parser = argparse.ArgumentParser()
         for param in ifunc.parameters:
             self.add_parameter(parser, param)
         if self.description is None:
@@ -132,7 +134,7 @@ class CLI:
         func = InterfacyFunction(func)
         self.specials[func.name] = {}
         parser = self.make_parser(func)
-        args = parser.parse_args()
+        args = parser.parse_known_args()
         args_dict = args.__dict__
 
         specials = self.specials[func.name]
@@ -147,7 +149,7 @@ class CLI:
                 val = var_type[value]
             else:
                 args_dict[name] = CLI_PARSER[var_type](value)
-        func.func(**args_dict)
+        return func.func(**args_dict)
 
 
     def __extra_add_arg_params(self, param: InterfacyParameter):
@@ -181,7 +183,7 @@ class CLI:
         # Handle enum parameters
         if inspect.isclass(param.type) and issubclass(param.type,enum.Enum):
             self.specials[param.owner][param.name] = param.type
-            extra["choices"] = list(param.type.__members__.keys())
+            extra["choices"] = extract_enum_options(param.type)
             extra["type"] = str
             return extra
 
@@ -228,4 +230,5 @@ class CLI:
 
 if __name__ == '__main__':
     from interfacy.testing_functions import *
-    CLI(test_cls1)
+    CLI(test_cls1).run()
+

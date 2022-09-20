@@ -14,7 +14,6 @@ CLI_SIMPLE_TYPES = (str, int, bool)
 
 
 class UnionTypeParameter:
-
     def __init__(self, params: tuple) -> None:
         self.params = params
 
@@ -28,7 +27,6 @@ class ParameterKind(enum.Enum):
 
 
 class InterfacyParameter:
-
     def __init__(
         self,
         name: str,
@@ -58,6 +56,7 @@ class InterfacyParameter:
     def __repr__(self):
         data = f"name={self.name}, type={self.type}, default={self.default}, description={self.description}, owner={self.owner}"
         return f"Parameter({data})"
+        self.__class__.__name__
 
     @property
     def is_typed(self) -> bool:

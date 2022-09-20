@@ -22,7 +22,6 @@ def cast_to(t):
 
 
 def cast_iter_to(iterable, t):
-
     def inner(arg) -> iterable[t]:
         l = [t(i) for i in arg]
         return iterable(l)
@@ -31,7 +30,6 @@ def cast_iter_to(iterable, t):
 
 
 def cast_dict_to(k, v):
-
     def inner(arg: dict) -> dict[k, v]:
         return {k(key): v(val) for key, val in arg.items()}
 
@@ -39,8 +37,11 @@ def cast_dict_to(k, v):
 
 
 def parse_then_cast(parser, caster):
-
     def inner(val: str):
         return caster(parser(val))
 
     return inner
+
+
+def extract_enum_options(e):
+    return tuple(e.__members__.keys())
