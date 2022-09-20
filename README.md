@@ -1,1 +1,1 @@
-# Interfacy
+# Interfacy CLI
