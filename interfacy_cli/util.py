@@ -1,13 +1,6 @@
 import os
 
 
-def type_as_str(t):
-    type_str = repr(t)
-    if "<class '" in type_str:
-        type_str = type_str.split("'")[1]
-    return type_str
-
-
 def cast_to(t):
     """
     Returns a functions that casts a string to type 't'
@@ -41,7 +34,3 @@ def parse_then_cast(parser, caster):
         return caster(parser(val))
 
     return inner
-
-
-def extract_enum_options(e):
-    return tuple(e.__members__.keys())

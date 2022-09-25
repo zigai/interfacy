@@ -6,27 +6,29 @@ import typing
 from pprint import pp, pprint
 from typing import Any
 
-import interfacy_cli.cli.themes as CLI_THEMES
 import pretty_errors
+
+import interfacy_cli.cli.themes as CLI_THEMES
 from interfacy_cli.cli.helpstr_theme import HelpStringTheme
 from interfacy_cli.cli.parsers import CLI_PARSER
 from interfacy_cli.constants import SPECIAL_GENERIC_ALIAS, UNION_GENERIC_ALIAS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
 from interfacy_cli.interfacy_class import InterfacyClass
 from interfacy_cli.interfacy_function import InterfacyFunction
-from interfacy_cli.interfacy_parameter import (CLI_SIMPLE_TYPES, EMPTY,
-                                               InterfacyParameter,
-                                               ParameterKind,
-                                               UnionTypeParameter)
+from interfacy_cli.interfacy_parameter import (
+    CLI_SIMPLE_TYPES,
+    EMPTY,
+    InterfacyParameter,
+    ParameterKind,
+    UnionTypeParameter,
+)
 from interfacy_cli.util import extract_enum_options
-
-RESERVED_FLAGS = ["h", "help", "q", "quiet"]
 
 
 def simplify_type(t):
     """
     Simplify type if its not a 'SIMPLE' or 'SPECIAL' type.
-    
+
     dict[str,str] -> dict
     int | float -> UnionTypeParameter(int,float)
     list[float] -> list[float], since it's CLI_PARSER
@@ -37,7 +39,7 @@ def simplify_type(t):
     if type(tp) is types.NoneType:
         return t
     if tp is types.UnionType:
-        tp =  typing.get_args(t)
+        tp = typing.get_args(t)
         return UnionTypeParameter(tuple(simplify_type(i) for i in tp))
     return simplify_type(tp)
 
@@ -47,7 +49,7 @@ def get_parameter_kind(param: InterfacyParameter) -> ParameterKind:
         return ParameterKind.BASIC
     if param.type in CLI_SIMPLE_TYPES:
         return ParameterKind.BASIC
-    if isinstance(param.type,UnionTypeParameter) or param.type in CLI_PARSER.keys():
+    if isinstance(param.type, UnionTypeParameter) or param.type in CLI_PARSER.keys():
         return ParameterKind.SPECIAL
     if type(param.type) in [types.UnionType, UNION_GENERIC_ALIAS]:
         return ParameterKind.UNION
@@ -56,12 +58,12 @@ def get_parameter_kind(param: InterfacyParameter) -> ParameterKind:
     return ParameterKind.UNSUPPORTED
 
 
-def parse_union_param(param:UnionTypeParameter,val:str|Any):
+def parse_union_param(param: UnionTypeParameter, val: str | Any):
     """
     Try and parse value as every type of an UnionTypeParameter instance
     Return the first one that succedes
     Raises:
-        ValueError ... TODO 
+        ValueError ... TODO
     """
     parsed_val = EMPTY
     for t in param.params:
@@ -72,8 +74,8 @@ def parse_union_param(param:UnionTypeParameter,val:str|Any):
             continue
     raise ValueError(f"{val} can't parsed as any of these types: {param.params}")
 
-class CLI:
 
+class CLI:
     def __init__(
         self,
         func_or_cls,
@@ -86,7 +88,7 @@ class CLI:
         Build a command-line interface for a function or class.
 
         Args:
-            func_or_cls: 
+            func_or_cls:
             class_methods:
             description: Description for the main parser. If not specified, Interfacy will attempt to use the docstring's description.
             theme:
@@ -98,7 +100,7 @@ class CLI:
         self.clear_metavar = clear_metavar
         self.theme = CLI_THEMES.DEFAULT if theme is None else theme
         self.main_parser = argparse.ArgumentParser()
-        self.specials: dict[str, dict[str,Any]] = {} # owner[name][type]
+        self.specials: dict[str, dict[str, Any]] = {}  # owner[name][type]
 
     def run(self):
         if inspect.isclass(self.func_or_cls):  # class
@@ -117,7 +119,7 @@ class CLI:
             pprint(method.parameters)
             print("_" * 64)
 
-    def make_parser(self, ifunc: InterfacyFunction,parser:argparse.ArgumentParser|None=None):
+    def make_parser(self, ifunc: InterfacyFunction, parser: argparse.ArgumentParser | None = None):
         """
         Create an ArgumentParser from an InterfacyFunction
         """
@@ -143,15 +145,14 @@ class CLI:
             if not specials.get(name, False):
                 continue
             var_type = specials[name]
-            if isinstance(var_type,UnionTypeParameter):
-                val = parse_union_param(var_type,value)
+            if isinstance(var_type, UnionTypeParameter):
+                val = parse_union_param(var_type, value)
                 args_dict[name] = val
-            if inspect.isclass(var_type) and issubclass(var_type,enum.Enum):
+            if inspect.isclass(var_type) and issubclass(var_type, enum.Enum):
                 val = var_type[value]
             else:
                 args_dict[name] = CLI_PARSER[var_type](value)
         return func.func(**args_dict)
-
 
     def __extra_add_arg_params(self, param: InterfacyParameter):
         """
@@ -180,9 +181,9 @@ class CLI:
         # Add default value
         if not param.is_required:
             extra["default"] = param.default
-        
+
         # Handle enum parameters
-        if inspect.isclass(param.type) and issubclass(param.type,enum.Enum):
+        if inspect.isclass(param.type) and issubclass(param.type, enum.Enum):
             self.specials[param.owner][param.name] = param.type
             extra["choices"] = extract_enum_options(param.type)
             extra["type"] = str
@@ -201,22 +202,22 @@ class CLI:
                 raise UnsupportedParamError(param.type)
             case ParameterKind.BASIC:  # Simple types (str, int, float, bool)
                 extra["type"] = param.type
-            case ParameterKind.SPECIAL: # Parsable Types (types in CLI_TYPE_PARSER)
+            case ParameterKind.SPECIAL:  # Parsable Types (types in CLI_TYPE_PARSER)
                 extra["type"] = str
                 self.specials[param.owner][param.name] = param.type
-            case ParameterKind.ALIAS: # Alias types like list[str]
+            case ParameterKind.ALIAS:  # Alias types like list[str]
                 raise ValueError("This should never happen")
             case ParameterKind.UNION:
                 raise ValueError("This should never happen")
             case _:
-                raise UnsupportedParamError(param.type) 
+                raise UnsupportedParamError(param.type)
 
         return extra
 
     def add_parameter(self, parser: argparse.ArgumentParser, param: InterfacyParameter):
         """
         Add a parameter to an argument parser
-        
+
         Args:
             parser: ArgumentParser instance
             owner: function or class name the parameter is from
@@ -229,7 +230,7 @@ class CLI:
         parser.add_argument(param.flag_name, **extra)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from interfacy_cli.testing_functions import *
-    CLI(test_cls1).run()
 
+    CLI(test_cls1).run()
