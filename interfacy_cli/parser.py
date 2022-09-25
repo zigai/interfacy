@@ -3,86 +3,119 @@ import decimal
 import fractions
 import json
 import pathlib
+from typing import Any, Callable, get_args, get_origin, get_type_hints
 
-from interfacy_cli.interfacy_parameter import UnionTypeParameter
-from interfacy_cli.util import (cast_dict_to, cast_iter_to, cast_to,
-                                parse_then_cast)
-from stdl.datetime_util import parse_datetime
+from interfacy_core.constants import ALIAS_TYPE, UNION_TYPE
+from interfacy_core.exceptions import UnsupportedParamError
+from interfacy_core.util import UnionTypeParameter, is_file
+from stdl.datetime_u import parse_datetime as dt_parse
 from stdl.fs import File, json_load, pickle_load, yaml_load
 
-SEP = ","
+from interfacy_cli.constants import ITEM_SEP
+from interfacy_cli.util import cast_dict_to, cast_iter_to, cast_to, parse_then_cast
 
 
-def datetime_arg(val) -> datetime.datetime:
+class Parser:
+    def __init__(self) -> None:
+        self.parsers = {
+            # These types can be casted to from a string
+            int: int,
+            float: float,
+            decimal.Decimal: decimal.Decimal,
+            fractions.Fraction: fractions.Fraction,
+            pathlib.Path: pathlib.Path,
+            pathlib.PosixPath: pathlib.PosixPath,
+            pathlib.WindowsPath: pathlib.WindowsPath,
+            pathlib.PureWindowsPath: pathlib.PureWindowsPath,
+            pathlib.PurePosixPath: pathlib.PurePosixPath,
+            datetime.date: parse_date,
+            datetime.datetime: parse_datetime,
+            # ---
+            dict: parse_dict,
+            list: parse_list,
+            set: parse_set,
+            list[dict]: parse_dict,
+        }
+
+    def add_parser(self, t, func: Callable):
+        self.parsers[t] = func
+
+    def extend(self, parsers: dict[Any, Callable]):
+        self.parsers = self.parsers | parsers
+
+    def get_parser(self, t):
+        return self.parsers[t]
+
+    def parse(self, val: str, t) -> Any:
+        if t in self.parsers:
+            return self.parsers[t](val)
+        if type(t) in ALIAS_TYPE:
+            orig = get_origin(t)
+            args = get_args(t)
+            ls = self.parse(val, list)
+            for i in args:
+                try:
+                    return orig(map(i, ls))
+                except Exception as e:
+                    print(e)
+
+
+def parse_datetime(val) -> datetime.datetime:
     if type(val) is datetime.datetime:
         return val
-    return parse_datetime(val)
+    return dt_parse(val)
 
 
-def date_arg(val) -> datetime.date:
+def parse_date(val) -> datetime.date:
     if type(val) is datetime.date:
         return val
-    return parse_datetime(val).date()
+    return dt_parse(val).date()
 
 
-def dict_arg(val) -> dict:
+def parse_list(val: str):
+    if isinstance(val, list):
+        return val
+    return split_iter_arg(val)
+
+
+def parse_dict(val: str) -> dict:
     if type(val) is dict:
         return val
     # JSON string needs to be enclosed in single quotes
-    if File(val).exists:
+    if is_file(val):
         if val.endswith(("yaml", "yml")):
             return yaml_load(val)
         return json_load(val)
     return json.loads(val)
 
 
-def list_arg(val) -> list:
-    if type(val) is list:
-        return val
+def split_iter_arg(val: str):
     if is_file(val):
-        data = File(val).splitlines()
-        # if all data is in a single line
-        if len(data) == 1 and SEP in data[0]:
-            data = data[0].split(SEP)
-        return data
-    return val.split(SEP)
+        file_data = File(val).splitlines()
+        file_data = [i.strip() for i in file_data]
+        if len(file_data) == 1 and ITEM_SEP in file_data[0]:
+            file_data = file_data[0].split(ITEM_SEP)
+        return [i.strip() for i in file_data]
+    data = val.split(ITEM_SEP)
+    return [i.strip() for i in data]
 
 
-def set_arg(val) -> set:
+def parse_set(val) -> set:
     if type(val) is set:
         return val
-    if is_file(val):
-        return set(File(val).splitlines())
-    return set(val.split(SEP))
+    return set(split_iter_arg(val))
 
 
+PARSER = Parser()
+
+
+# -----
 def tuple_arg(val) -> tuple:
     if type(val) is tuple:
         return val
     if is_file(val):
         return (*File(val).splitlines(),)
-    return (*val.split(SEP),)
+    return (*val.split(ITEM_SEP),)
 
 
-CLI_PARSER = {
-    dict: dict_arg,
-    list: list_arg,
-    set: set_arg,
-    tuple: tuple_arg,
-    datetime.date: date_arg,
-    datetime.datetime: datetime_arg,
-    # These types can be casted to from a string
-    float: cast_to(float),
-    decimal.Decimal: cast_to(decimal.Decimal),
-    fractions.Fraction: cast_to(fractions.Fraction),
-    pathlib.Path: cast_to(pathlib.Path),
-    pathlib.PosixPath: cast_to(pathlib.PosixPath),
-    pathlib.WindowsPath: cast_to(pathlib.WindowsPath),
-    pathlib.PureWindowsPath: cast_to(pathlib.PureWindowsPath),
-    pathlib.PurePosixPath: cast_to(pathlib.PurePosixPath),
-    #
-    list[int]: parse_then_cast(list_arg, cast_iter_to(list, int)),
-    list[float]: parse_then_cast(list_arg, cast_iter_to(list, float)),
-    list[decimal.Decimal]: parse_then_cast(list_arg, cast_iter_to(list, decimal.Decimal)),
-    list[fractions.Fraction]: parse_then_cast(list_arg, cast_iter_to(list, fractions.Fraction)),
-}
+__all__ = ["PARSER"]
