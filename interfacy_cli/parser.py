@@ -1,17 +1,19 @@
 import datetime
 import decimal
+import enum
 import fractions
+import functools
 import json
 import pathlib
 from typing import Any, Callable, get_args, get_origin, get_type_hints
 
-from interfacy_core.constants import ALIAS_TYPE, UNION_TYPE
+from interfacy_core.constants import ALIAS_TYPE, EMPTY, UNION_TYPE
 from interfacy_core.exceptions import UnsupportedParamError
-from interfacy_core.util import UnionTypeParameter, is_file
-from stdl.datetime_u import parse_datetime as dt_parse
+from interfacy_core.util import UnionParameter, is_file, split_type_hint
+from stdl import datetime_u
 from stdl.fs import File, json_load, pickle_load, yaml_load
 
-from interfacy_cli.constants import ITEM_SEP
+from interfacy_cli.constants import ITEM_SEP, SIMPLE_TYPE
 from interfacy_cli.util import cast_dict_to, cast_iter_to, cast_to, parse_then_cast
 
 
@@ -19,6 +21,7 @@ class Parser:
     def __init__(self) -> None:
         self.parsers = {
             # These types can be casted to from a string
+            str: str,
             int: int,
             float: float,
             decimal.Decimal: decimal.Decimal,
@@ -34,8 +37,31 @@ class Parser:
             dict: parse_dict,
             list: parse_list,
             set: parse_set,
+            tuple: parse_tuple,
             list[dict]: parse_dict,
         }
+
+    @functools.lru_cache(maxsize=128)
+    def is_supported(self, t):
+        if t in SIMPLE_TYPE:
+            return True
+        if t is EMPTY:
+            return True
+        if t in self.parsers:
+            return True
+
+        if type(t) in ALIAS_TYPE:
+            base, sub = split_type_hint(t)
+            if self.is_supported(base):
+                for i in sub:
+                    if not self.is_supported(i):
+                        return False
+                return True
+            return False
+
+        if issubclass(t, enum.Enum):
+            return True
+        return False
 
     def add_parser(self, t, func: Callable):
         self.parsers[t] = func
@@ -50,26 +76,29 @@ class Parser:
         if t in self.parsers:
             return self.parsers[t](val)
         if type(t) in ALIAS_TYPE:
-            orig = get_origin(t)
-            args = get_args(t)
-            ls = self.parse(val, list)
-            for i in args:
+            base_type = get_origin(t)
+            subtype = get_args(t)
+            as_base = self.parse(val, base_type)
+            for i in subtype:
                 try:
-                    return orig(map(i, ls))
+                    return base_type(map(i, as_base))
                 except Exception as e:
                     print(e)
+            raise UnsupportedParamError(t)
+        if issubclass(t, enum.Enum):
+            return parse_enum(val, t)
 
 
 def parse_datetime(val) -> datetime.datetime:
     if type(val) is datetime.datetime:
         return val
-    return dt_parse(val)
+    return datetime_u.parse_datetime(val)
 
 
 def parse_date(val) -> datetime.date:
     if type(val) is datetime.date:
         return val
-    return dt_parse(val).date()
+    return datetime_u.parse_datetime(val).date()
 
 
 def parse_list(val: str):
@@ -106,16 +135,19 @@ def parse_set(val) -> set:
     return set(split_iter_arg(val))
 
 
-PARSER = Parser()
-
-
-# -----
-def tuple_arg(val) -> tuple:
+def parse_tuple(val):
     if type(val) is tuple:
         return val
-    if is_file(val):
-        return (*File(val).splitlines(),)
-    return (*val.split(ITEM_SEP),)
+    return (*split_type_hint(val),)
+
+
+def parse_enum(val: str, t):
+    if type(val) is t:
+        return val
+    return t[val]
+
+
+PARSER = Parser()
 
 
 __all__ = ["PARSER"]
