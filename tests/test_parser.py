@@ -1,5 +1,6 @@
 import datetime
 import decimal
+import enum
 import fractions
 import json
 import pathlib
@@ -7,6 +8,17 @@ from typing import Any, Callable
 
 import pytest
 from interfacy_cli.parser import *
+
+
+class DummyType:
+    ...
+
+
+class MyEnum(enum.Enum):
+    a = 1
+    b = 2
+    c = 3
+
 
 STR_ABCD = "a, b,c,d"
 LIST_ABCD = ["a", "b", "c", "d"]
@@ -64,3 +76,20 @@ def test_set():
     assert PARSER.parse(STR_ABCD, set) == set(LIST_ABCD)
     assert PARSER.parse(STR_NUMS, set[int]) == set(LIST_NUMS)
     assert PARSER.parse(STR_ABCD, set[str]) == set(LIST_ABCD)
+
+
+def test_enum():
+    assert PARSER.parse("a", MyEnum) == MyEnum.a
+    with pytest.raises(KeyError):
+        PARSER.parse("d", MyEnum)
+
+
+def test_supported():
+    assert PARSER.is_supported(int) == True
+    assert PARSER.is_supported(float) == True
+    assert PARSER.is_supported(list) == True
+    assert PARSER.is_supported(list[int]) == True
+    assert PARSER.is_supported(list[float]) == True
+    assert PARSER.is_supported(DummyType) == False
+    assert PARSER.is_supported(list[DummyType]) == False
+    assert PARSER.is_supported(list[list[int]]) == True
