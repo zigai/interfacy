@@ -3,6 +3,7 @@ import decimal
 import enum
 import fractions
 import functools
+import inspect
 import json
 import pathlib
 from typing import Any, Callable, get_args, get_origin, get_type_hints
@@ -58,9 +59,9 @@ class Parser:
                         return False
                 return True
             return False
-
-        if issubclass(t, enum.Enum):
-            return True
+        if inspect.isclass(t):
+            if issubclass(t, enum.Enum):
+                return True
         return False
 
     def add_parser(self, t, func: Callable):
@@ -85,8 +86,11 @@ class Parser:
                 except Exception as e:
                     print(e)
             raise UnsupportedParamError(t)
-        if issubclass(t, enum.Enum):
-            return parse_enum(val, t)
+        print(val)
+        print(type(val))
+        if inspect.isclass(val):
+            if issubclass(t, enum.Enum):
+                return parse_enum(val, t)
 
 
 def parse_datetime(val) -> datetime.datetime:

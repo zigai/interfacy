@@ -54,7 +54,7 @@ class CLI:
         for method in c:
             if method.name == "__init__":
                 continue
-            p = subparsers.add_parser(method.name)
+            p = subparsers.add_parser(method.name, description=method.description)
 
             x = self.make_parser(method, p)
         args = parser.parse_args()
