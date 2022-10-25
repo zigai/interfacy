@@ -1,5 +1,5 @@
-from interfacy_core.interfacy_param import InterfacyParameter
-from interfacy_core.util import type_as_str
+from py_inspect import Parameter
+from py_inspect.util import type_to_str
 from stdl.str_u import colored
 
 
@@ -29,12 +29,12 @@ class HelpStringTheme:
         }
 
 
-def param_helpstring(param: InterfacyParameter, theme: HelpStringTheme) -> str:
+def param_helpstring(param: Parameter, theme: HelpStringTheme) -> str:
     if param.is_required and not param.is_typed:
         return ""
     help_str = []
     if param.is_typed:
-        typestr = type_as_str(param.type)
+        typestr = type_to_str(param.type)
         if theme.simplify_type:
             typestr = typestr.split(".")[-1]
         help_str.append(colored(typestr, theme.type_clr))

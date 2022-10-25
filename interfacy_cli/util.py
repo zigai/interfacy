@@ -1,6 +1,9 @@
 import os
 
 
+def is_file(path:str):
+    return os.path.isfile(path)
+
 def cast_to(t):
     """
     Returns a functions that casts a string to type 't'

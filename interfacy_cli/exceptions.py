@@ -1,4 +1,14 @@
-from interfacy_core.exceptions import InterfacyException
+from py_inspect.util import type_to_str
+
+
+class InterfacyException(Exception):
+    pass
+
+
+class UnsupportedParamError(InterfacyException):
+    def __init__(self, t):
+        self.msg = f"Parameter of type '{type_to_str(t)}' is not supported"
+        super().__init__(self.msg)
 
 
 class ReservedFlagError(InterfacyException):

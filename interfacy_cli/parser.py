@@ -8,14 +8,19 @@ import json
 import pathlib
 from typing import Any, Callable, get_args, get_origin, get_type_hints
 
-from interfacy_core.constants import ALIAS_TYPE, EMPTY, UNION_TYPE
-from interfacy_core.exceptions import UnsupportedParamError
-from interfacy_core.util import UnionParameter, is_file, split_type_hint
+from py_inspect.util import type_args, type_origin
 from stdl import datetime_u
 from stdl.fs import File, json_load, pickle_load, yaml_load
 
-from interfacy_cli.constants import ITEM_SEP, SIMPLE_TYPE
-from interfacy_cli.util import cast_dict_to, cast_iter_to, cast_to, parse_then_cast
+from interfacy_cli.constants import ALIAS_TYPE, EMPTY, ITEM_SEP, SIMPLE_TYPE, UNION_TYPE
+from interfacy_cli.exceptions import UnsupportedParamError
+from interfacy_cli.util import (
+    cast_dict_to,
+    cast_iter_to,
+    cast_to,
+    is_file,
+    parse_then_cast,
+)
 
 
 class Parser:
@@ -52,7 +57,8 @@ class Parser:
             return True
 
         if type(t) in ALIAS_TYPE:
-            base, sub = split_type_hint(t)
+            base = type_origin(t)
+            sub = type_args(t)
             if self.is_supported(base):
                 for i in sub:
                     if not self.is_supported(i):

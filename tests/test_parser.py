@@ -7,7 +7,7 @@ import pathlib
 from typing import Any, Callable
 
 import pytest
-from interfacy_cli.parser import *
+from interfacy_cli.parser import PARSER
 
 
 class DummyType:
