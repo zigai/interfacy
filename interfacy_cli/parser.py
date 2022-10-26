@@ -8,19 +8,13 @@ import json
 import pathlib
 from typing import Any, Callable, get_args, get_origin, get_type_hints
 
-from py_inspect.util import type_args, type_origin
+from py_inspect.util import UnionParameter, type_args, type_origin
 from stdl import datetime_u
 from stdl.fs import File, json_load, pickle_load, yaml_load
 
 from interfacy_cli.constants import ALIAS_TYPE, EMPTY, ITEM_SEP, SIMPLE_TYPE, UNION_TYPE
 from interfacy_cli.exceptions import UnsupportedParamError
-from interfacy_cli.util import (
-    cast_dict_to,
-    cast_iter_to,
-    cast_to,
-    is_file,
-    parse_then_cast,
-)
+from interfacy_cli.util import cast_dict_to, cast_iter_to, cast_to, is_file, parse_then_cast
 
 
 class Parser:
@@ -64,7 +58,12 @@ class Parser:
                     if not self.is_supported(i):
                         return False
                 return True
+        if type(t) in UNION_TYPE:
+            for i in UnionParameter.from_type(t):
+                if self.is_supported(i):
+                    return True
             return False
+
         if inspect.isclass(t):
             if issubclass(t, enum.Enum):
                 return True

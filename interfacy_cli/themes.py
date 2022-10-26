@@ -13,10 +13,10 @@ class Theme:
         ...
 
     def get_parameter_help(self, param: Parameter) -> str:
-        ...
+        raise NotImplementedError
 
     def get_commands_desc(self, *args: Class | Function) -> str:
-        ...
+        raise NotImplementedError
 
 
 class Default(Theme):
