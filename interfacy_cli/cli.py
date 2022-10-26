@@ -1,74 +1,69 @@
 import argparse
+import sys
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
+from pprint import pp, pprint
 from typing import Any, Callable
 
+from nested_argparse import NestedArgumentParser
 from py_inspect import Class, Function, Parameter, inspect
 
 from interfacy_cli.constants import RESERVED_FLAGS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
-from interfacy_cli.param_helpstring import (
-    HelpStringTheme,
-    SafeHelpFormatter,
-    param_helpstring,
-)
 from interfacy_cli.parser import PARSER
-from interfacy_cli.themes import DEFAULT
+from interfacy_cli.themes import Default, Theme
 
 
 class CLI:
     def __init__(
         self,
-        func_or_cls,
+        obj,
+        *args,
         methods: list[str] | None = None,
         description: str | None = None,
-        theme: HelpStringTheme | None = None,
+        theme: Theme | None = None,
     ) -> None:
 
-        self.func_or_cls = func_or_cls
+        self.commands: list = [obj]
+        self.commands.extend(args)
         self.methods = methods
         self.description = description
-        self.theme = DEFAULT if theme is None else theme
-        self.main_parser = argparse.ArgumentParser(formatter_class=SafeHelpFormatter)
-        self.specials: dict[str, dict[str, Any]] = {}  # owner[name][type]
+        self.theme = Default() if theme is None else theme
+
+    def get_args(self):
+        return sys.argv
+
+    def _get_new_parser(self):
+        return ArgumentParser(formatter_class=self.theme.formatter_class)
 
     def run(self):
-        obj = inspect(self.func_or_cls)
-        if isinstance(obj, Function):
-            return self.__from_func(obj)
-        if isinstance(obj, Class):
-            return self.__from_class(obj)
+        commands = [inspect(i, False) for i in self.commands]
+        if len(commands) == 1:
+            command = commands[0]
+            if isinstance(command, Function):
+                return self._single_command(command)
+            if isinstance(command, Class):
+                return self.parser_from_class(command, methods=self.methods).parse_args()
+            raise ValueError
 
-    def __from_func(self, f: Function):
-        parser = self.make_parser(f, parser=self.main_parser)
+    def _single_command(self, func: Function):
+        """
+        Called when a single function or method is passed to CLI
+        """
+        ap = self.parser_from_func(func)
         if self.description:
-            parser.description = self.description
-        args = parser.parse_args()
+            ap.description = self.description
+        args = ap.parse_args(self.get_args())
         args_dict = args.__dict__
         for name, value in args_dict.items():
-            args_dict[name] = PARSER.parse(val=value, t=f.get_param(name).type)
-        return f.func(**args_dict)
+            args_dict[name] = PARSER.parse(val=value, t=func.get_param(name).type)
+        return func.func(**args_dict)
 
-    def __from_class(self, c: Class):
-        if c.has_init:
-            parser = self.make_parser(f=c.get_method("__init__"))
-            print("!!!")
-        else:
-            parser = argparse.ArgumentParser(formatter_class=SafeHelpFormatter)
-        subparsers = parser.add_subparsers(dest="command")
-        for method in c.methods:
-            if method.name == "__init__":
-                continue
-            p = subparsers.add_parser(method.name, description=method.description)
-
-            x = self.make_parser(method, p)
-        args = parser.parse_args()
-        print(args)
-
-    def make_parser(self, f: Function, parser: argparse.ArgumentParser | None = None):
+    def parser_from_func(self, f: Function, parser: ArgumentParser | None = None) -> ArgumentParser:
         """
-        Create an ArgumentParser from an InterfacyFunction
+        Create an ArgumentParser from a Function
         """
         if parser is None:
-            parser = argparse.ArgumentParser(formatter_class=SafeHelpFormatter)
+            parser = self._get_new_parser()
 
         for param in f.params:
             self.add_parameter(parser, param)
@@ -76,9 +71,32 @@ class CLI:
             parser.description = f.description
         return parser
 
+    def parser_from_class(
+        self, c: Class, parser: ArgumentParser | None = None, methods: list[str] | None = None
+    ):
+        if parser is None:
+            parser = self._get_new_parser()
+
+        if c.has_init and not c.initialized:
+            init = c.get_method("__init__")
+            parser = self.parser_from_func(init, parser)
+
+        parser.epilog = self.theme.get_commands_desc(c)
+
+        cls_methods = c.methods
+        if methods:
+            cls_methods = [i for i in cls_methods if i.name in methods]
+        subparsers = parser.add_subparsers(dest="command")
+        for method in cls_methods:
+            if method.name == "__init__":
+                continue
+            p = subparsers.add_parser(method.name, description=method.description)
+            p = self.parser_from_func(method, p)
+        return parser
+
     def add_parameter(
         self,
-        parser: argparse.ArgumentParser,
+        parser: ArgumentParser,
         param: Parameter,
         flag_name_prefix: str = "-",
     ):
@@ -91,7 +109,7 @@ class CLI:
 
     def __extra_add_arg_params(self, param: Parameter) -> dict:
         extra = {
-            "help": param_helpstring(param, self.theme),
+            "help": self.theme.get_parameter_help(param),
             "required": param.is_required,
         }
 
