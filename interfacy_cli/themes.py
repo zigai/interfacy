@@ -15,7 +15,10 @@ class Theme:
     def get_parameter_help(self, param: Parameter) -> str:
         raise NotImplementedError
 
-    def get_commands_desc(self, *args: Class | Function) -> str:
+    def get_commands_epilog(self, *args: Class | Function) -> str:
+        raise NotImplementedError
+
+    def format_description(self, desc: str):
         raise NotImplementedError
 
 
@@ -26,6 +29,7 @@ class Default(Theme):
     param_default_color = FG.LIGHT_BLUE
     description_color = FG.GRAY
     type_default_sep = " = "
+    min_ljust = 16
 
     def get_parameter_help(self, param: Parameter) -> str:
         """
@@ -49,35 +53,28 @@ class Default(Theme):
             help_str = f"[{help_str}] {desc}"
         return help_str
 
-    def get_commands_desc(self, *args: Class | Function) -> str:
-        def get_max_param_len(args, mn: int = 12):
-            mx = mn
-            for i in args:
-                if isinstance(i, Class):
-                    for j in i.methods:
-                        if j.name == "__init__":
-                            continue
-                        mx = max(mx, len(j.name))
-                else:
-                    mx = max(mx, len(i.name))
-            return mx
+    def command_desc(self, val: Function | Class, ljust: int):
+        name = f"  {val.name}".ljust(ljust)
+        return f"{name} {colored(val.description,self.description_color)}"
 
-        mx = get_max_param_len(args)
-
-        def command_desc(val: Function | Class):
-            name = f"  {val.name}".ljust(mx)
-            return f"{name}  {colored(val.description,self.description_color)}"
-
+    def get_top_level_epilog(self, *args: Class | Function):
+        ljust = max(self.min_ljust, max([len(i.name) for i in args]))
         s = ["commands:"]
         for i in args:
-            if isinstance(i, Class):
-                for j in i.methods:
-                    if j.name == "__init__":
-                        continue
-                    s.append(command_desc(j))
-            else:
-                s.append(command_desc(i))
+            s.append(self.command_desc(i, ljust))
         return "\n".join(s)
+
+    def get_class_commands_epilog(self, cmd: Class):
+        ljust = max(self.min_ljust, max([len(i.name) for i in cmd.methods]))
+        s = ["commands:"]
+        for i in cmd.methods:
+            if i.name == "__init__":
+                continue
+            s.append(self.command_desc(i, ljust))
+        return "\n".join(s)
+
+    def format_description(self, desc: str):
+        return desc
 
 
 class Plain(Default):
