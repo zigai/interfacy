@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from nested_argparse import NestedArgumentParser
 from py_inspect import Class, Function, Parameter, inspect
+from py_inspect.util import call_method
 
 from interfacy_cli.constants import RESERVED_FLAGS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
@@ -30,33 +31,73 @@ class CLI:
         self.theme = Default() if theme is None else theme
 
     def get_args(self):
-        return sys.argv
+        return sys.argv[1:]
 
     def _get_new_parser(self):
-        return ArgumentParser(formatter_class=self.theme.formatter_class)
+        return NestedArgumentParser(formatter_class=self.theme.formatter_class)
 
-    def run(self):
-        commands = [inspect(i, False) for i in self.commands]
+    def run(self) -> Any:
+        commands: dict[str, Function | Class] = {}
+        for i in self.commands:
+            c = inspect(i, include_inherited=False)
+            if c.name in commands:
+                raise KeyError(f"Duplicate command '{i.name}'")
+            commands[c.name] = c
+
         if len(commands) == 1:
-            command = commands[0]
-            if isinstance(command, Function):
-                return self._single_command(command)
-            if isinstance(command, Class):
-                return self.parser_from_class(command, methods=self.methods).parse_args()
-            raise ValueError
+            cmd = list(commands.values())[0]
+            if isinstance(cmd, Function):
+                return self._single_func_command(cmd)
+            if isinstance(cmd, Class):
+                return self._single_class_command(cmd)
 
-    def _single_command(self, func: Function):
+            raise ValueError(cmd)
+
+        parser = self._get_new_parser()
+        parser.epilog = self.theme.get_top_level_epilog(*commands.values())
+        subparsers = parser.add_subparsers(dest="command")
+
+        for cmd in commands.values():
+            p = subparsers.add_parser(cmd.name, description=cmd.description)
+            if isinstance(cmd, Function):
+                p = self.parser_from_func(cmd, p)
+            elif isinstance(cmd, Class):
+                p = self.parser_from_class(cmd, p)
+            else:
+                raise TypeError(cmd)
+        args = parser.parse_args()
+        print(self.get_args())
+        print(commands)
+        print(args)
+        method = args.command
+        obj_args = args.__dict__
+        del obj_args["command"]
+
+    def _single_func_command(self, func: Function):
         """
         Called when a single function or method is passed to CLI
         """
         ap = self.parser_from_func(func)
         if self.description:
-            ap.description = self.description
+            ap.description = self.theme.format_description(self.description)
         args = ap.parse_args(self.get_args())
         args_dict = args.__dict__
         for name, value in args_dict.items():
             args_dict[name] = PARSER.parse(val=value, t=func.get_param(name).type)
         return func.func(**args_dict)
+
+    def _single_class_command(self, cls: Class):
+        parser = self.parser_from_class(cls, methods=self.methods)
+        if self.description:
+            parser.description = self.theme.format_description(self.description)
+        args = parser.parse_args(self.get_args())
+        obj_args = args.__dict__
+        method = args.command
+        method_args = obj_args[method].__dict__
+        del obj_args[method]
+        del obj_args["command"]
+        obj = cls.cls(**obj_args)
+        return call_method(obj, method, kwargs=method_args)
 
     def parser_from_func(self, f: Function, parser: ArgumentParser | None = None) -> ArgumentParser:
         """
@@ -81,7 +122,7 @@ class CLI:
             init = c.get_method("__init__")
             parser = self.parser_from_func(init, parser)
 
-        parser.epilog = self.theme.get_commands_desc(c)
+        parser.epilog = self.theme.get_class_commands_epilog(c)
 
         cls_methods = c.methods
         if methods:
