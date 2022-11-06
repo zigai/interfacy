@@ -21,6 +21,9 @@ class Theme:
     def format_description(self, desc: str):
         raise NotImplementedError
 
+    def get_top_level_epilog(self, *args: Class | Function):
+        raise NotImplementedError
+
 
 class Default(Theme):
     simplify_typename = True
