@@ -6,44 +6,69 @@ import functools
 import inspect
 import json
 import pathlib
+from typing import *
 from typing import Any, Callable, get_args, get_origin, get_type_hints
 
 from py_inspect.util import UnionParameter, type_args, type_origin
-from stdl import datetime_u
+from stdl import dt
 from stdl.fs import File, json_load, pickle_load, yaml_load
 
-from interfacy_cli.constants import ALIAS_TYPE, EMPTY, ITEM_SEP, SIMPLE_TYPE, UNION_TYPE
+from interfacy_cli.constants import ALIAS_TYPE, EMPTY, ITEM_SEP, SIMPLE_TYPES, UNION_TYPE
 from interfacy_cli.exceptions import UnsupportedParamError
 from interfacy_cli.util import cast_dict_to, cast_iter_to, cast_to, is_file, parse_then_cast
 
 
+def cast(value: Any, t: Any):
+    if isinstance(value, t):
+        return value
+    return t(value)
+
+
+ITER_SEP = ","
+RANGE_SEP = ":"
+# These types can be casted to directly from a string
+DIRECT_TYPES = [
+    bool,
+    str,
+    int,
+    float,
+    decimal.Decimal,
+    fractions.Fraction,
+    pathlib.Path,
+    pathlib.PosixPath,
+    pathlib.WindowsPath,
+    pathlib.PureWindowsPath,
+    pathlib.PurePosixPath,
+]
+
+
 class Parser:
     def __init__(self) -> None:
-        self.parsers = {
-            # These types can be casted to from a string
-            str: str,
-            int: int,
-            float: float,
-            decimal.Decimal: decimal.Decimal,
-            fractions.Fraction: fractions.Fraction,
-            pathlib.Path: pathlib.Path,
-            pathlib.PosixPath: pathlib.PosixPath,
-            pathlib.WindowsPath: pathlib.WindowsPath,
-            pathlib.PureWindowsPath: pathlib.PureWindowsPath,
-            pathlib.PurePosixPath: pathlib.PurePosixPath,
-            datetime.date: parse_date,
-            datetime.datetime: parse_datetime,
-            # ---
-            dict: parse_dict,
-            list: parse_list,
-            set: parse_set,
-            tuple: parse_tuple,
-            list[dict]: parse_dict,
+        # type[parser]
+        self.parsers: dict[Any, Callable] = {
+            datetime.datetime: to_datetime,
+            datetime.date: to_date,
+            set: to_set,
+            tuple: to_tuple,
+            range: to_range,
+            slice: to_slice,
         }
 
-    @functools.lru_cache(maxsize=128)
+        for i in DIRECT_TYPES:
+            self.add_parser(i, cast_to)
+
+    def add_parser(self, t: Any, func: Callable):
+        self.parsers[t] = func
+
+    def extend(self, parsers: dict[Any, Callable]):
+        self.parsers = self.parsers | parsers
+
+    def get_parser(self, t: Any):
+        return self.parsers[t]
+
+    @functools.lru_cache(maxsize=256)
     def is_supported(self, t):
-        if t in SIMPLE_TYPE:
+        if t in SIMPLE_TYPES:
             return True
         if t is EMPTY:
             return True
@@ -69,94 +94,114 @@ class Parser:
                 return True
         return False
 
-    def add_parser(self, t, func: Callable):
-        self.parsers[t] = func
-
-    def extend(self, parsers: dict[Any, Callable]):
-        self.parsers = self.parsers | parsers
-
-    def get_parser(self, t):
-        return self.parsers[t]
-
-    def parse(self, val: str, t) -> Any:
-        if t in self.parsers:
-            return self.parsers[t](val)
+    def parse(self, value: str, t: Any) -> Any:
+        if parser := self.parsers.get(t, None):
+            return parser(value)
         if type(t) in ALIAS_TYPE:
             base_type = get_origin(t)
             subtype = get_args(t)
-            as_base = self.parse(val, base_type)
+            as_base = self.parse(value, base_type)
             for i in subtype:
                 try:
                     return base_type(map(i, as_base))
                 except Exception as e:
                     print(e)
             raise UnsupportedParamError(t)
-        print(val)
-        print(type(val))
-        if inspect.isclass(val):
+        print(value)
+        print(type(value))
+        if inspect.isclass(value):
             if issubclass(t, enum.Enum):
-                return parse_enum(val, t)
+                return to_enum_value(value, t)
 
 
-def parse_datetime(val) -> datetime.datetime:
-    if type(val) is datetime.datetime:
-        return val
-    return datetime_u.parse_datetime(val)
+def to_iter(value) -> Iterable:
+    if isinstance(value, str):
+        if is_file(value):
+            data = File(value).splitlines()
+            data = [i.strip() for i in data]
+            if len(data) == 1 and ITER_SEP in data[0]:
+                data = data[0].split(ITER_SEP)
+            return [i.strip() for i in data]
+        return [i.strip() for i in value.split(ITER_SEP)]
+    if isinstance(value, Iterable):
+        return [i.split(ITER_SEP) for i in value]
+    raise TypeError(f"Cannot convert {value} to an iterable")
 
 
-def parse_date(val) -> datetime.date:
-    if type(val) is datetime.date:
-        return val
-    return datetime_u.parse_datetime(val).date()
+def to_mapping(value) -> Mapping:
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str):
+        if is_file(value):
+            if value.endswith(("yaml", "yml")):
+                return yaml_load(value)  # type:ignore
+            return json_load(value)  # type:ignore
+        return json.loads(value)
+    raise TypeError(f"Cannot convert {value} to a mapping")
 
 
-def parse_list(val: str):
-    if isinstance(val, list):
-        return val
-    return split_iter_arg(val)
+def to_enum_value(value: str, enum_cls: Type[enum.Enum]) -> enum.Enum:
+    if type(value) is enum_cls:
+        return value
+    return enum_cls[value]
 
 
-def parse_dict(val: str) -> dict:
-    if type(val) is dict:
-        return val
-    # JSON string needs to be enclosed in single quotes
-    if is_file(val):
-        if val.endswith(("yaml", "yml")):
-            return yaml_load(val)
-        return json_load(val)
-    return json.loads(val)
+def to_datetime(value) -> datetime.datetime:
+    if type(value) is datetime.datetime:
+        return value
+    return dt.parse_datetime_str(value)
 
 
-def split_iter_arg(val: str):
-    if is_file(val):
-        file_data = File(val).splitlines()
-        file_data = [i.strip() for i in file_data]
-        if len(file_data) == 1 and ITEM_SEP in file_data[0]:
-            file_data = file_data[0].split(ITEM_SEP)
-        return [i.strip() for i in file_data]
-    data = val.split(ITEM_SEP)
-    return [i.strip() for i in data]
+def to_date(value) -> datetime.date:
+    if type(value) is datetime.date:
+        return value
+    return dt.parse_datetime_str(value).date()
 
 
-def parse_set(val) -> set:
-    if type(val) is set:
-        return val
-    return set(split_iter_arg(val))
+def to_set(value) -> set:
+    if isinstance(value, set):
+        return value
+    return cast(to_iter(value), set)
 
 
-def parse_tuple(val):
-    if type(val) is tuple:
-        return val
-    return (*split_type_hint(val),)
+def to_tuple(value) -> tuple:
+    if isinstance(value, tuple):
+        return value
+    return (*to_iter(value),)
 
 
-def parse_enum(val: str, t):
-    if type(val) is t:
-        return val
-    return t[val]
+"""
+def to_list(value: str):
+    if isinstance(value, list):
+        return value
+    return to_iter(value)
+"""
+
+
+def to_range(value) -> range:
+    if isinstance(value, range):
+        return value
+    nums = value.split(RANGE_SEP)
+    nums = [int(i) for i in nums]
+    if not len(nums) == 3:
+        raise ValueError(
+            f"Too many values for range: {value}. Must be 1-3 values separated by {RANGE_SEP}"
+        )
+    return range(*nums)
+
+
+def to_slice(value) -> slice:
+    if isinstance(value, slice):
+        return value
+    nums = value.split(RANGE_SEP)
+    nums = [int(i) for i in nums]
+    if not len(nums) == 3:
+        raise ValueError(
+            f"Too many values for slice: {value}. Must be 1-3 values separated by {RANGE_SEP}"
+        )
+    return slice(*nums)
 
 
 PARSER = Parser()
-
 
 __all__ = ["PARSER"]

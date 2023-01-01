@@ -83,7 +83,7 @@ class CLI:
         args = ap.parse_args(self.get_args())
         args_dict = args.__dict__
         for name, value in args_dict.items():
-            args_dict[name] = PARSER.parse(val=value, t=func.get_param(name).type)
+            args_dict[name] = PARSER.parse(value=value, t=func.get_param(name).type)
         return func.func(**args_dict)
 
     def _single_class_command(self, cls: Class):

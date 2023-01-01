@@ -7,10 +7,11 @@ import pathlib
 from typing import Any, Callable
 
 import pytest
+
 from interfacy_cli.parser import PARSER
 
 
-class DummyType:
+class MyType:
     ...
 
 
@@ -90,6 +91,6 @@ def test_supported():
     assert PARSER.is_supported(list) == True
     assert PARSER.is_supported(list[int]) == True
     assert PARSER.is_supported(list[float]) == True
-    assert PARSER.is_supported(DummyType) == False
-    assert PARSER.is_supported(list[DummyType]) == False
+    assert PARSER.is_supported(MyType) == False
+    assert PARSER.is_supported(list[MyType]) == False
     assert PARSER.is_supported(list[list[int]]) == True
