@@ -17,13 +17,6 @@ from interfacy_cli.constants import ALIAS_TYPE, EMPTY, ITEM_SEP, SIMPLE_TYPES, U
 from interfacy_cli.exceptions import UnsupportedParamError
 from interfacy_cli.util import cast_dict_to, cast_iter_to, cast_to, is_file, parse_then_cast
 
-
-def cast(value: Any, t: Any):
-    if isinstance(value, t):
-        return value
-    return t(value)
-
-
 ITER_SEP = ","
 RANGE_SEP = ":"
 # These types can be casted to directly from a string
@@ -52,6 +45,7 @@ class Parser:
             tuple: to_tuple,
             range: to_range,
             slice: to_slice,
+            list: to_list,
         }
 
         for i in DIRECT_TYPES:
@@ -97,18 +91,37 @@ class Parser:
     def parse(self, value: str, t: Any) -> Any:
         if parser := self.parsers.get(t, None):
             return parser(value)
+        if value is None:
+            return None
+        if t is None:
+            raise ValueError("None is not a valid type")
         if type(t) in ALIAS_TYPE:
-            base_type = get_origin(t)
-            subtype = get_args(t)
-            as_base = self.parse(value, base_type)
-            for i in subtype:
-                try:
-                    return base_type(map(i, as_base))
-                except Exception as e:
-                    print(e)
-            raise UnsupportedParamError(t)
-        print(value)
-        print(type(value))
+            return self._parse_alias(value, t)
+        if type(t) in UNION_TYPE:
+            return self._parse_union(value, t)
+        return self._parse_special(value, t)
+
+    def _parse_alias(self, value: str, t: Any):
+        t_origin = type_origin(t)
+        t_sub = type_args(t)
+        print(t_origin)
+        print(t_sub)
+        return self.get_parser(t_origin)(value, t_sub[0])
+        if isinstance(
+            t_origin,
+        ):
+            ...
+        for i in t_sub:
+            try:
+                return t_origin(map(i, origin_parsed))
+            except Exception as e:
+                print(e)
+        raise UnsupportedParamError(t)
+
+    def _parse_union(self, value: str, t: Any):
+        ...
+
+    def _parse_special(self, value: str, t: Any):
         if inspect.isclass(value):
             if issubclass(t, enum.Enum):
                 return to_enum_value(value, t)
@@ -124,8 +137,12 @@ def to_iter(value) -> Iterable:
             return [i.strip() for i in data]
         return [i.strip() for i in value.split(ITER_SEP)]
     if isinstance(value, Iterable):
-        return [i.split(ITER_SEP) for i in value]
+        return list_split(value)
     raise TypeError(f"Cannot convert {value} to an iterable")
+
+
+def list_split(value: list[str]) -> list[list]:
+    return [i.split(ITER_SEP) for i in value]
 
 
 def to_mapping(value) -> Mapping:
@@ -158,24 +175,38 @@ def to_date(value) -> datetime.date:
     return dt.parse_datetime_str(value).date()
 
 
-def to_set(value) -> set:
-    if isinstance(value, set):
-        return value
-    return cast(to_iter(value), set)
-
-
 def to_tuple(value) -> tuple:
     if isinstance(value, tuple):
         return value
     return (*to_iter(value),)
 
 
-"""
-def to_list(value: str):
-    if isinstance(value, list):
+def cast(value: Any, t: Any):
+    if isinstance(value, t):
         return value
-    return to_iter(value)
-"""
+    return t(value)
+
+
+def to_set(value, t=None) -> set:
+    if isinstance(value, set):
+        if t is None:
+            return value
+        return {cast(i, t) for i in value}
+    vals = to_iter(value)
+    if t is not None:
+        vals = [cast(i, t) for i in vals]
+    return cast(vals, set)
+
+
+def to_list(value, t=None):
+    if isinstance(value, list):
+        if t is None:
+            return value
+        return [cast(i, t) for i in value]
+    vals = to_iter(value)
+    if t is not None:
+        vals = [cast(i, t) for i in vals]
+    return vals
 
 
 def to_range(value) -> range:
@@ -203,5 +234,14 @@ def to_slice(value) -> slice:
 
 
 PARSER = Parser()
+
+x = PARSER.parse("1,2,3,4,5", list[int])
+print("x:", x)
+
+x = PARSER.parse("1,2,3,4,5", set[int])
+print("x:", x)
+
+x = PARSER.parse("./nested_list.txt", list[list[int]])
+print("x:", x)
 
 __all__ = ["PARSER"]
