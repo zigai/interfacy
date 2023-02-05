@@ -1,8 +1,10 @@
 import os
+from typing import Any, Callable, Iterable, Mapping
 
 
-def is_file(path:str):
+def is_file(path: str) -> bool:
     return os.path.isfile(path)
+
 
 def cast_to(t):
     """
@@ -17,7 +19,13 @@ def cast_to(t):
     return inner
 
 
-def cast_iter_to(iterable, t):
+def cast(value: Any, t: Any):
+    if isinstance(value, t):
+        return value
+    return t(value)
+
+
+def cast_iter_to(iterable: Iterable, t: Any):
     def inner(arg) -> iterable[t]:
         l = [t(i) for i in arg]
         return iterable(l)
@@ -25,15 +33,17 @@ def cast_iter_to(iterable, t):
     return inner
 
 
-def cast_dict_to(k, v):
+def cast_dict_to(k: Any, v: Any):
     def inner(arg: dict) -> dict[k, v]:
         return {k(key): v(val) for key, val in arg.items()}
 
     return inner
 
 
-def parse_then_cast(parser, caster):
-    def inner(val: str):
+def parse_and_cast(parser: Callable, caster: Any):
+    def inner(val):
+        if isinstance(val, caster):
+            return val
         return caster(parser(val))
 
     return inner
