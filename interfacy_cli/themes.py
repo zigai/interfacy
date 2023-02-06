@@ -5,6 +5,10 @@ from stdl.str_u import FG, colored
 from interfacy_cli.safe_help_formatter import SafeRawHelpFormatter
 
 
+def with_style(text: str, style: dict) -> str:
+    return colored(text, **style)
+
+
 class Theme:
     clear_metavar: bool
     formatter_class = SafeRawHelpFormatter
@@ -18,20 +22,20 @@ class Theme:
     def get_commands_epilog(self, *args: Class | Function) -> str:
         raise NotImplementedError
 
-    def format_description(self, desc: str):
+    def format_description(self, desc: str) -> str:
+        return desc
+
+    def get_top_level_epilog(self, *args: Class | Function) -> str:
         raise NotImplementedError
 
-    def get_top_level_epilog(self, *args: Class | Function):
-        raise NotImplementedError
 
-
-class Default(Theme):
-    simplify_typename = True
+class DefaultTheme(Theme):
+    simplify_typenames = True
     clear_metavar = True
-    type_color = FG.GREEN
-    param_default_color = FG.LIGHT_BLUE
-    description_color = FG.GRAY
-    type_default_sep = " = "
+    style_type = dict(color=FG.GREEN)
+    style_default = dict(color=FG.LIGHT_BLUE)
+    style_description = dict(color=FG.GRAY)
+    sep = " = "
     min_ljust = 16
 
     def get_parameter_help(self, param: Parameter) -> str:
@@ -43,28 +47,27 @@ class Default(Theme):
         help_str = []
         if param.is_typed:
             typestr = type_to_str(param.type)
-            if self.simplify_typename:
+            if self.simplify_typenames:
                 typestr = typestr.split(".")[-1]
-            help_str.append(colored(typestr, self.type_color))
+            help_str.append(with_style(typestr, self.style_type))
         if param.is_typed and param.is_optional:
-            help_str.append(self.type_default_sep)
+            help_str.append(self.sep)
         if param.is_optional:
-            help_str.append(f"{colored(param.default, self.param_default_color)}")
+            help_str.append(with_style(param.default, self.style_default))
         help_str = "".join(help_str)
         if param.description is not None:
-            desc = colored(param.description, self.description_color)
-            help_str = f"[{help_str}] {desc}"
+            help_str = f"[{help_str}] {with_style(param.description, self.style_description)}"
         return help_str
 
-    def command_desc(self, val: Function | Class, ljust: int):
+    def _command_desc(self, val: Function | Class, ljust: int):
         name = f"  {val.name}".ljust(ljust)
-        return f"{name} {colored(val.description,self.description_color)}"
+        return f"{name} {with_style(val.description, self.style_description)}"
 
     def get_top_level_epilog(self, *args: Class | Function):
         ljust = max(self.min_ljust, max([len(i.name) for i in args]))
         s = ["commands:"]
         for i in args:
-            s.append(self.command_desc(i, ljust))
+            s.append(self._command_desc(i, ljust))
         return "\n".join(s)
 
     def get_class_commands_epilog(self, cmd: Class):
@@ -73,32 +76,29 @@ class Default(Theme):
         for i in cmd.methods:
             if i.name == "__init__":
                 continue
-            s.append(self.command_desc(i, ljust))
+            s.append(self._command_desc(i, ljust))
         return "\n".join(s)
 
-    def format_description(self, desc: str):
-        return desc
+
+class PlainTheme(DefaultTheme):
+    simplify_typenames = True
+    clear_metavar = True
+    style_type = dict(color=FG.WHITE)
+    style_default = dict(color=FG.WHITE)
+    style_description = dict(color=FG.WHITE)
 
 
-class Plain(Default):
-    simplify_typename = False
-    clear_metavar = False
-    type_color = FG.WHITE
-    param_default_color = FG.WHITE
-    description_color = FG.WHITE
-    type_default_sep = " = "
-
-
-class Legacy(Default):
-    simplify_typename = False
-    type_default_sep = ", default: "
+class LegacyTheme(DefaultTheme):
+    simplify_typenames = False
+    sep = ", default: "
     type_color = FG.LIGHT_YELLOW
-    param_default_color = FG.LIGHT_BLUE
+    style_type = dict(color=FG.LIGHT_YELLOW)
+    param_default_color = dict(color=FG.LIGHT_BLUE)
 
 
 __all__ = [
     "Theme",
-    "Default",
-    "Plain",
-    "Legacy",
+    "DefaultTheme",
+    "PlainTheme",
+    "LegacyTheme",
 ]
