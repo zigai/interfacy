@@ -5,13 +5,16 @@ from pprint import pp, pprint
 from typing import Any, Callable
 
 from nested_argparse import NestedArgumentParser
-from py_inspect import Class, Function, Parameter, inspect
-from py_inspect.util import call_method
+from objinspect import Class, Function, Parameter, objinspect
+from objinspect.util import call_method
 
 from interfacy_cli.constants import RESERVED_FLAGS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
 from interfacy_cli.parser import PARSER
-from interfacy_cli.themes import Default, Theme
+from interfacy_cli.themes import DefaultTheme, Theme
+
+# from py_inspect import Class, Function, Parameter, inspect
+# from py_inspect.util import call_method
 
 
 class CLI:
@@ -28,7 +31,7 @@ class CLI:
         self.commands.extend(args)
         self.methods = methods
         self.description = description
-        self.theme = Default() if theme is None else theme
+        self.theme = theme or DefaultTheme()
 
     def get_args(self):
         return sys.argv[1:]
@@ -39,7 +42,7 @@ class CLI:
     def run(self) -> Any:
         commands: dict[str, Function | Class] = {}
         for i in self.commands:
-            c = inspect(i, include_inherited=False)
+            c = objinspect(i, include_inherited=False)
             if c.name in commands:
                 raise KeyError(f"Duplicate command '{i.name}'")
             commands[c.name] = c
@@ -50,7 +53,6 @@ class CLI:
                 return self._single_func_command(cmd)
             if isinstance(cmd, Class):
                 return self._single_class_command(cmd)
-
             raise ValueError(cmd)
 
         parser = self._get_new_parser()
