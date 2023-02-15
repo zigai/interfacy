@@ -1,42 +1,19 @@
-from py_inspect import Class, Function, Parameter
-from py_inspect.util import type_to_str
+from objinspect import Class, Function, Parameter
+from objinspect.util import type_to_str
 from stdl.str_u import FG, colored
 
-from interfacy_cli.safe_help_formatter import SafeRawHelpFormatter
-
-
-def with_style(text: str, style: dict) -> str:
-    return colored(text, **style)
-
-
-class Theme:
-    clear_metavar: bool
-    formatter_class = SafeRawHelpFormatter
-
-    def __init__(self) -> None:
-        ...
-
-    def get_parameter_help(self, param: Parameter) -> str:
-        raise NotImplementedError
-
-    def get_commands_epilog(self, *args: Class | Function) -> str:
-        raise NotImplementedError
-
-    def format_description(self, desc: str) -> str:
-        return desc
-
-    def get_top_level_epilog(self, *args: Class | Function) -> str:
-        raise NotImplementedError
+from interfacy_cli.theme import Theme, with_style
 
 
 class DefaultTheme(Theme):
-    simplify_typenames = True
+    simplify_types = True
     clear_metavar = True
     style_type = dict(color=FG.GREEN)
     style_default = dict(color=FG.LIGHT_BLUE)
     style_description = dict(color=FG.GRAY)
     sep = " = "
     min_ljust = 16
+    required_indicator = colored("* ", color=FG.RED)
 
     def get_parameter_help(self, param: Parameter) -> str:
         """
@@ -45,18 +22,37 @@ class DefaultTheme(Theme):
         if param.is_required and not param.is_typed:
             return ""
         help_str = []
+
         if param.is_typed:
             typestr = type_to_str(param.type)
-            if self.simplify_typenames:
+            if self.simplify_types:
                 typestr = typestr.split(".")[-1]
+                typestr = typestr.replace("| None", "").strip()
             help_str.append(with_style(typestr, self.style_type))
-        if param.is_typed and param.is_optional:
+
+        if param.is_typed and param.is_optional and param.default is not None:
             help_str.append(self.sep)
-        if param.is_optional:
+
+        if param.is_optional and param.default is not None:
             help_str.append(with_style(param.default, self.style_default))
+
         help_str = "".join(help_str)
+
         if param.description is not None:
-            help_str = f"[{help_str}] {with_style(param.description, self.style_description)}"
+            """
+            current_len = len(help_str)
+            if current_len < 24:
+                fill = " " * (24 - current_len)
+            else:
+                fill = " "
+            """
+            fill = " "
+            help_str = f"[{help_str}]{fill}{with_style(param.description, self.style_description)}"
+        if param.is_required:
+            help_str = f"{self.required_indicator}{help_str}"
+        else:
+            help_str = "  " + help_str
+
         return help_str
 
     def _command_desc(self, val: Function | Class, ljust: int):
@@ -81,15 +77,14 @@ class DefaultTheme(Theme):
 
 
 class PlainTheme(DefaultTheme):
-    simplify_typenames = True
-    clear_metavar = True
     style_type = dict(color=FG.WHITE)
     style_default = dict(color=FG.WHITE)
     style_description = dict(color=FG.WHITE)
+    required_indicator = "* "
 
 
 class LegacyTheme(DefaultTheme):
-    simplify_typenames = False
+    simplify_types = False
     sep = ", default: "
     type_color = FG.LIGHT_YELLOW
     style_type = dict(color=FG.LIGHT_YELLOW)
