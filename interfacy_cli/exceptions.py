@@ -1,4 +1,4 @@
-from py_inspect.util import type_to_str
+from objinspect.util import type_to_str
 
 
 class InterfacyException(Exception):
