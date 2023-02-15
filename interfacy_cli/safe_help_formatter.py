@@ -1,4 +1,5 @@
 import re
+import textwrap
 from argparse import HelpFormatter
 
 try:
@@ -62,7 +63,8 @@ class SafeHelpFormatter(HelpFormatter):
                 pos_usage = format(positionals, groups)
                 opt_parts = re.findall(part_regexp, opt_usage)
                 pos_parts = re.findall(part_regexp, pos_usage)
-                # XXX
+
+                # Only change from original code is commenting out the assert statements:
                 # assert " ".join(opt_parts) == opt_usage
                 # assert " ".join(pos_parts) == pos_usage
 
@@ -118,7 +120,21 @@ class SafeHelpFormatter(HelpFormatter):
 
 class SafeRawHelpFormatter(SafeHelpFormatter):
     def _fill_text(self, text, width, indent):
-        return "".join(indent + line for line in text.splitlines(keepends=True))
+        """
+        Doesn't strip whitespace from the beginning of the line when formatting help text.
+
+        Code from: https://stackoverflow.com/a/74368128/18588657
+        """
+        # Strip the indent from the original python definition that plagues most of us.
+        text = textwrap.dedent(text)
+        text = textwrap.indent(text, indent)  # Apply any requested indent.
+        text = text.splitlines()  # Make a list of lines
+        text = [textwrap.fill(line, width) for line in text]  # Wrap each line
+        text = "\n".join(text)  # Join the lines again
+        return text
+
+    def _split_lines(self, text, width):
+        return text.splitlines()
 
 
 __all__ = ["SafeHelpFormatter", "SafeRawHelpFormatter"]
