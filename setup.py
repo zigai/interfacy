@@ -8,14 +8,14 @@ REQUIREMENTS = (HERE / "requirements.txt").read_text()
 
 setup(
     name="interfacy-cli",
-    version="0.3.0",
+    version="0.1.0",
     description="",
     long_description=README,
     long_description_content_type="text/markdown",
     author="Žiga Ivanšek",
     author_email="ziga.ivansek@gmail.com",
     url="https://github.com/zigai/interfacy",
-    license="",
+    license="MIT",
     classifiers=[
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.10",
