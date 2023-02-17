@@ -15,51 +15,17 @@ from interfacy_cli.converters import *
 from interfacy_cli.exceptions import UnsupportedParamError
 from interfacy_cli.util import cast_dict_to, cast_iter_to, parse_and_cast
 
-# These types can be casted to directly from a string
-DIRECTLY_CASTABLE_TYPES = [
-    bool,
-    str,
-    int,
-    float,
-    decimal.Decimal,
-    fractions.Fraction,
-    pathlib.Path,
-    pathlib.PosixPath,
-    pathlib.WindowsPath,
-    pathlib.PureWindowsPath,
-    pathlib.PurePosixPath,
-]
-MAPPING_CONTAINER_TYPES = [dict, OrderedDict, defaultdict, ChainMap, Counter]
-ITER_CONTAINER_TYPES = [frozenset, deque]
-
 
 class Parser:
     def __init__(self) -> None:
-        # type[parser]
-        self.parsers: dict[Any, Callable] = {
-            datetime.datetime: to_datetime,
-            datetime.date: to_date,
-            set: to_set,
-            tuple: to_tuple,
-            range: to_range,
-            slice: to_slice,
-            list: to_list,
-            dict: to_dict,
-            list[dict]: to_mapping,  # TEMP
-        }
-
-        for i in DIRECTLY_CASTABLE_TYPES:
-            self.add_parser(i, i)
-        for i in MAPPING_CONTAINER_TYPES:
-            self.add_parser(i, parse_and_cast(to_mapping, i))
-        for i in ITER_CONTAINER_TYPES:
-            self.add_parser(i, parse_and_cast(to_iter, i))
+        # type[parse_func]
+        self.parsers: dict[Any, Callable] = {}
 
     def __len__(self):
         return len(self.parsers)
 
     def __getitem__(self, t: Any):
-        return self.get_parser(t)
+        return self.get(t)
 
     def add_parser(self, t: Any, func: Callable):
         self.parsers[t] = func
@@ -67,37 +33,12 @@ class Parser:
     def extend(self, parsers: dict[Any, Callable]):
         self.parsers = self.parsers | parsers
 
-    def get_parser(self, t: Any):
+    def get(self, t: Any):
         return self.parsers[t]
 
     @functools.lru_cache(maxsize=256)
     def is_supported(self, t):
         return True  # TODO
-        if t in SIMPLE_TYPES:
-            return True
-        if t is EMPTY:
-            return True
-        if t in self.parsers:
-            return True
-
-        if type(t) in ALIAS_TYPE:
-            base = type_origin(t)
-            sub = type_args(t)
-            if self.is_supported(base):
-                for i in sub:
-                    if not self.is_supported(i):
-                        return False
-                return True
-        if type(t) in UNION_TYPE:
-            for i in UnionParameter.from_type(t):
-                if self.is_supported(i):
-                    return True
-            return False
-
-        if inspect.isclass(t):
-            if issubclass(t, enum.Enum):
-                return True
-        return False
 
     def parse(self, value: str, t: Any) -> Any:
         if parser := self.parsers.get(t, None):
@@ -121,7 +62,7 @@ class Parser:
             return cast_iter_to(parsed_as_origin, _sub_type[0])
         if isinstance(_origin_type, Mapping):
             return cast_dict_to(parsed_as_origin, _sub_type[0], _sub_type[1])
-        return self.get_parser(_origin_type)(value, _sub_type[0])  # TEMP
+        return self.get(_origin_type)(value, _sub_type[0])  # TEMP
 
     def _parse_union(self, value: str, t: Any):
         """float | int"""
@@ -141,6 +82,43 @@ class Parser:
 
 
 PARSER = Parser()
+PARSER.extend(
+    {
+        datetime.datetime: to_datetime,
+        datetime.date: to_date,
+        set: to_set,
+        tuple: to_tuple,
+        range: to_range,
+        slice: to_slice,
+        list: to_list,
+        dict: to_dict,
+        list[dict]: to_mapping,  # TEMP
+    }
+)
 
+
+# These types can be casted to directly from a string
+DIRECTLY_CASTABLE_TYPES = [
+    bool,
+    str,
+    int,
+    float,
+    decimal.Decimal,
+    fractions.Fraction,
+    pathlib.Path,
+    pathlib.PosixPath,
+    pathlib.WindowsPath,
+    pathlib.PureWindowsPath,
+    pathlib.PurePosixPath,
+]
+MAPPING_CONTAINER_TYPES = [dict, OrderedDict, defaultdict, ChainMap, Counter]
+ITER_CONTAINER_TYPES = [frozenset, deque]
+
+for i in DIRECTLY_CASTABLE_TYPES:
+    PARSER.add_parser(i, i)
+for i in MAPPING_CONTAINER_TYPES:
+    PARSER.add_parser(i, parse_and_cast(to_mapping, i))
+for i in ITER_CONTAINER_TYPES:
+    PARSER.add_parser(i, parse_and_cast(to_iter, i))
 
 __all__ = ["PARSER"]
