@@ -27,7 +27,7 @@ def to_iter(value) -> Iterable:
     raise TypeError(f"Cannot convert {value} to an iterable")
 
 
-def list_split(value: list[str]) -> list[list]:
+def list_split(value: list | Iterable) -> list[list]:
     return [i.split(ITER_SEP) for i in value]
 
 
