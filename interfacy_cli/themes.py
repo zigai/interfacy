@@ -12,8 +12,8 @@ class DefaultTheme(Theme):
     style_default = dict(color=FG.LIGHT_BLUE)
     style_description = dict(color=FG.GRAY)
     sep = " = "
-    min_ljust = 16
-    required_indicator = colored("* ", color=FG.RED)
+    min_ljust = 19
+    required_indicator = "(" + colored("*", color=FG.RED) + ") "
 
     def get_parameter_help(self, param: Parameter) -> str:
         """
@@ -49,10 +49,7 @@ class DefaultTheme(Theme):
             fill = " "
             help_str = f"[{help_str}]{fill}{with_style(param.description, self.style_description)}"
         if param.is_required:
-            help_str = f"{self.required_indicator}{help_str}"
-        else:
-            help_str = "  " + help_str
-
+            help_str = f"{help_str} {self.required_indicator}"
         return help_str
 
     def _command_desc(self, val: Function | Class, ljust: int):
@@ -80,7 +77,7 @@ class PlainTheme(DefaultTheme):
     style_type = dict(color=FG.WHITE)
     style_default = dict(color=FG.WHITE)
     style_description = dict(color=FG.WHITE)
-    required_indicator = "* "
+    required_indicator = "(required)"
 
 
 class LegacyTheme(DefaultTheme):
