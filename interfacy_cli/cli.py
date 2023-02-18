@@ -5,7 +5,7 @@ from pprint import pp, pprint
 from typing import Any, Callable
 
 from nested_argparse import NestedArgumentParser
-from objinspect import Class, Function, Parameter, objinspect
+from objinspect import Class, Function, Method, Parameter, objinspect
 from objinspect.util import call_method
 
 from interfacy_cli.constants import RESERVED_FLAGS
@@ -55,17 +55,25 @@ class CLI:
     def __init__(
         self,
         *commands: Callable,
-        shorten_command_names: bool = True,
+        shorten_cmd_names: bool = True,
         theme: Theme | None = None,
         run: bool = True,
         print_result: bool = False,
         description: str | None = None,
     ) -> None:
+        """
+        Args:
+            *commands (Callable): The commands to add to the CLI (functions or classes).
+            shorten_cmd_names (bool): Whether to shorten command names.
+            theme (Theme | None): The theme to use for the CLI help. If None, the default theme will be used.
+            run (bool): Whether automaticaly to run the CLI. If False, you will have to call the run method manually.
+            print_result (bool): Whether to display the results of the command.
+            description (str | None): Override the description of the CLI. If not not provided, the description will be the docstring of the top level command.
+        """
         self.commands: list = []
         for i in commands:
             self.commands.append(i)
-
-        self.shorten_command_names = shorten_command_names
+        self.shorten_command_names = shorten_cmd_names
         self.description = description
         self.theme = theme or DefaultTheme()
         self.print_result = print_result
@@ -89,9 +97,9 @@ class CLI:
         if len(commands) == 1:
             cmd = list(commands.values())[0]
             if isinstance(cmd, Function):
-                return self._single_func_command(cmd)
+                return self._run_single_func_command(cmd)
             if isinstance(cmd, Class):
-                return self._single_class_command(cmd)
+                return self._run_single_class_command(cmd)
             raise ValueError(cmd)
 
         parser = self._get_new_parser()
@@ -100,7 +108,7 @@ class CLI:
 
         for cmd in commands.values():
             p = subparsers.add_parser(cmd.name, description=cmd.description)
-            if isinstance(cmd, Function):
+            if isinstance(cmd, (Function, Method)):
                 p = self.parser_from_func(cmd, p)
             elif isinstance(cmd, Class):
                 p = self.parser_from_class(cmd, p)
@@ -119,65 +127,81 @@ class CLI:
         if self.print_result:
             pprint(res)
 
-    def _single_func_command(self, func: Function):
+    def _run_single_func_command(self, func: Function):
         """
         Called when a single function or method is passed to CLI
         """
-        ap = self.parser_from_func(func)
+        ap = self.parser_from_func(func, [*RESERVED_FLAGS])
         if self.description:
             ap.description = self.theme.format_description(self.description)
         args = ap.parse_args(self.get_args())
         args_dict = args.__dict__
         for name, value in args_dict.items():
-            args_dict[name] = PARSER.parse(value=value, t=func.get_param(name).type)
-        return func.func(**args_dict)
+            args_dict[name] = PARSER.parse(value, func.get_param(name).type)
+        return func.call(**args_dict)
 
-    def _single_class_command(self, cls: Class):
+    def _run_single_class_command(self, cls: Class):
+        """
+        Called when a single class is passed to CLI
+        """
         parser = self.parser_from_class(cls)
         if self.description:
             parser.description = self.theme.format_description(self.description)
         args = parser.parse_args(self.get_args())
         obj_args = args.__dict__
+        if args.command is None:
+            parser.print_help()
+            exit(1)
         method = args.command
-        method_args = obj_args[method].__dict__
-        del obj_args[method]
-        del obj_args["command"]
-        obj = cls.cls(**obj_args)
-        return call_method(obj, method, kwargs=method_args)
+        all_args: dict = obj_args[method].__dict__
+        init_func = cls.get_method("__init__")
+        init_arg_names = [i.name for i in init_func.params]
+        init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
+        for name, value in init_args.items():
+            init_args[name] = PARSER.parse(value, init_func.get_param(name).type)
+        method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
+        command_func = cls.get_method(method)
+        for name, value in method_args.items():
+            method_args[name] = PARSER.parse(value, command_func.get_param(name).type)
+        cls.init(**init_args)
+        return cls.call_method(method, **method_args)
 
-    def parser_from_func(self, f: Function, parser: ArgumentParser | None = None) -> ArgumentParser:
+    def parser_from_func(
+        self, f: Function, taken_names: list[str], parser: ArgumentParser | None = None
+    ) -> ArgumentParser:
         """
         Create an ArgumentParser from a Function
         """
         if parser is None:
             parser = self._get_new_parser()
-        taken_names = [*RESERVED_FLAGS]
-
         for param in f.params:
             self.add_parameter(parser, param, taken_names)
         if f.has_docstring:
-            parser.description = f.description
+            parser.description = self.theme.format_description(f.description)
         return parser
 
     def parser_from_class(self, c: Class, parser: ArgumentParser | None = None):
+        """
+        Create an ArgumentParser from a Class
+        """
+        taken_names = [*RESERVED_FLAGS]
         if parser is None:
             parser = self._get_new_parser()
-
         if c.has_init and not c.is_initialized:
             init = c.get_method("__init__")
-            parser = self.parser_from_func(init, parser)
-
-        parser.epilog = self.theme.get_class_commands_epilog(c)
-
+        if c.has_docstring:
+            parser.description = self.theme.format_description(c.description)
+        parser.epilog = self.theme.get_class_commands_epilog(c)  # type: ignore
         cls_methods = c.methods
-        # if methods:
-        #    cls_methods = [i for i in cls_methods if i.name in methods]
         subparsers = parser.add_subparsers(dest="command")
         for method in cls_methods:
             if method.name == "__init__":
                 continue
             p = subparsers.add_parser(method.name, description=method.description)
-            p = self.parser_from_func(method, p)
+            if c.has_init and not c.is_initialized:
+                for param in init.params:  # type: ignore
+                    self.add_parameter(p, param, taken_names=taken_names)
+            p = self.parser_from_func(method, taken_names, p)
         return parser
 
     def add_parameter(
@@ -196,13 +220,12 @@ class CLI:
         if self.shorten_command_names:
             short_name = get_command_short_name(param.name, taken_names)
             if short_name is not None:
-                cmd_names = (long_name, f"-{short_name}".strip())
                 cmd_names = (f"-{short_name}".strip(), long_name)
 
         extra_args = self._extra_add_arg_params(param)
         parser.add_argument(*cmd_names, **extra_args)
 
-    def _extra_add_arg_params(self, param: Parameter) -> dict:
+    def _extra_add_arg_params(self, param: Parameter) -> dict[str, Any]:
         extra = {
             "help": self.theme.get_parameter_help(param),
             "required": param.is_required,
