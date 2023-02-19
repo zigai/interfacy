@@ -105,11 +105,10 @@ class CLI:
         parser = self._get_new_parser()
         parser.epilog = self.theme.get_top_level_epilog(*commands.values())
         subparsers = parser.add_subparsers(dest="command")
-
         for cmd in commands.values():
             p = subparsers.add_parser(cmd.name, description=cmd.description)
             if isinstance(cmd, (Function, Method)):
-                p = self.parser_from_func(cmd, p)
+                p = self.parser_from_func(cmd, [*RESERVED_FLAGS], p)
             elif isinstance(cmd, Class):
                 p = self.parser_from_class(cmd, p)
             else:
@@ -118,9 +117,22 @@ class CLI:
         print(self.get_args())
         print(commands)
         print(args)
-        method = args.command
+        if args.command is None:
+            parser.print_help()
+            exit(1)
+        command = args.command
         obj_args = args.__dict__
+        all_args: dict = obj_args[command].__dict__
         del obj_args["command"]
+        cmd = commands[command]
+        if isinstance(cmd, (Function, Method)):
+            for name, value in all_args.items():
+                all_args[name] = PARSER.parse(value, cmd.get_param(name).type)
+            return cmd.call(**all_args)
+        elif isinstance(cmd, Class):
+            ...
+        else:
+            raise TypeError(cmd)
 
     def run(self) -> Any:
         res = self._run()
