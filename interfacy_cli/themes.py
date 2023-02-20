@@ -47,7 +47,7 @@ class DefaultTheme(Theme):
                 fill = " "
             """
             fill = " "
-            help_str = f"[{help_str}]{fill}{with_style(param.description, self.style_description)}"
+            help_str = f"{help_str} | {fill}{with_style(param.description, self.style_description)}"
         if param.is_required:
             help_str = f"{help_str} {self.required_indicator}"
         return help_str
