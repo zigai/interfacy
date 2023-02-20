@@ -95,28 +95,25 @@ class CLI:
             commands[c.name] = c
 
         if len(commands) == 1:
-            cmd = list(commands.values())[0]
-            if isinstance(cmd, Function):
-                return self._run_single_func_command(cmd)
-            if isinstance(cmd, Class):
-                return self._run_single_class_command(cmd)
-            raise ValueError(cmd)
+            command_outer = list(commands.values())[0]
+            if isinstance(command_outer, Function):
+                return self._run_single_func_command(command_outer)
+            if isinstance(command_outer, Class):
+                return self._run_single_class_command(command_outer)
+            raise ValueError(command_outer)
 
         parser = self._get_new_parser()
         parser.epilog = self.theme.get_top_level_epilog(*commands.values())
         subparsers = parser.add_subparsers(dest="command")
-        for cmd in commands.values():
-            p = subparsers.add_parser(cmd.name, description=cmd.description)
-            if isinstance(cmd, (Function, Method)):
-                p = self.parser_from_func(cmd, [*RESERVED_FLAGS], p)
-            elif isinstance(cmd, Class):
-                p = self.parser_from_class(cmd, p)
+        for command_outer in commands.values():
+            p = subparsers.add_parser(command_outer.name, description=command_outer.description)
+            if isinstance(command_outer, (Function, Method)):
+                p = self.parser_from_func(command_outer, [*RESERVED_FLAGS], p)
+            elif isinstance(command_outer, Class):
+                p = self.parser_from_class(command_outer, p)
             else:
-                raise TypeError(cmd)
+                raise TypeError(command_outer)
         args = parser.parse_args()
-        print(self.get_args())
-        print(commands)
-        print(args)
         if args.command is None:
             parser.print_help()
             exit(1)
@@ -124,15 +121,33 @@ class CLI:
         obj_args = args.__dict__
         all_args: dict = obj_args[command].__dict__
         del obj_args["command"]
-        cmd = commands[command]
-        if isinstance(cmd, (Function, Method)):
+        command_outer = commands[command]
+        if isinstance(command_outer, (Function, Method)):
             for name, value in all_args.items():
-                all_args[name] = PARSER.parse(value, cmd.get_param(name).type)
-            return cmd.call(**all_args)
-        elif isinstance(cmd, Class):
-            ...
+                all_args[name] = PARSER.parse(value, command_outer.get_param(name).type)
+            return command_outer.call(**all_args)
+        elif isinstance(command_outer, Class):
+            all_args: dict = obj_args[command].__dict__
+            if not all_args.get("command", False):
+                subparsers.choices[command].print_help()
+                exit(1)
+            inner_cmd = all_args["command"]
+            all_args = all_args[inner_cmd].__dict__
+            init_func = command_outer.get_method("__init__")
+            init_arg_names = [i.name for i in init_func.params]
+            init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
+            for name, value in init_args.items():
+                init_args[name] = PARSER.parse(value, init_func.get_param(name).type)
+            method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
+            command_method = command_outer.get_method(inner_cmd)
+            for name, value in method_args.items():
+                method_args[name] = PARSER.parse(value, command_method.get_param(name).type)
+            method = command_outer.get_method(inner_cmd)
+            if command_outer.has_init and not method.is_static:
+                command_outer.init(**init_args)
+            return command_outer.call_method(inner_cmd, **method_args)
         else:
-            raise TypeError(cmd)
+            raise TypeError(command_outer)
 
     def run(self) -> Any:
         res = self._run()
@@ -175,8 +190,10 @@ class CLI:
         command_func = cls.get_method(method)
         for name, value in method_args.items():
             method_args[name] = PARSER.parse(value, command_func.get_param(name).type)
-        cls.init(**init_args)
-        return cls.call_method(method, **method_args)
+        method = cls.get_method(method)
+        if cls.has_init and not method.is_static:
+            cls.init(**init_args)
+        return method.call(**method_args)
 
     def parser_from_func(
         self, f: Function, taken_names: list[str], parser: ArgumentParser | None = None
@@ -196,7 +213,6 @@ class CLI:
         """
         Create an ArgumentParser from a Class
         """
-        taken_names = [*RESERVED_FLAGS]
         if parser is None:
             parser = self._get_new_parser()
         if c.has_init and not c.is_initialized:
@@ -209,8 +225,9 @@ class CLI:
         for method in cls_methods:
             if method.name == "__init__":
                 continue
+            taken_names = [*RESERVED_FLAGS]
             p = subparsers.add_parser(method.name, description=method.description)
-            if c.has_init and not c.is_initialized:
+            if c.has_init and not c.is_initialized and not method.is_static:
                 for param in init.params:  # type: ignore
                     self.add_parameter(p, param, taken_names=taken_names)
             p = self.parser_from_func(method, taken_names, p)
