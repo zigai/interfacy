@@ -16,9 +16,9 @@ class MyType:
 
 
 class MyEnum(enum.Enum):
-    a = 1
-    b = 2
-    c = 3
+    A = 1
+    B = 2
+    C = 3
 
 
 STR_ABCD = "a, b,c,d"
@@ -31,7 +31,7 @@ def test_basic_types():
     assert PARSER.parse("1.5", float) == 1.5
     assert PARSER.parse("5", int) == 5
     assert PARSER.parse("1/3", fractions.Fraction) == fractions.Fraction("1/3")
-    assert PARSER.parse("./here.txt", pathlib.Path) == pathlib.Path("./here.txt")
+    assert PARSER.parse("./data/here.txt", pathlib.Path) == pathlib.Path("./data/here.txt")
 
 
 def test_datetime():
@@ -53,12 +53,12 @@ def test_date():
 def test_list_basic():
     assert PARSER.parse(STR_ABCD, list) == LIST_ABCD
     assert PARSER.parse(STR_ABCD, list) == LIST_ABCD
-    assert PARSER.parse("./abcd_lines.txt", list) == LIST_ABCD
-    assert PARSER.parse("./abcd_one_line.txt", list) == LIST_ABCD
+    assert PARSER.parse("./data/abcd_lines.txt", list) == LIST_ABCD
+    assert PARSER.parse("./data/abcd_one_line.txt", list) == LIST_ABCD
 
 
 def test_list_advanced():
-    assert PARSER.parse("./12345_lines.txt", list[int]) == LIST_NUMS
+    assert PARSER.parse("./data/12345_lines.txt", list[int]) == LIST_NUMS
     assert PARSER.parse(STR_NUMS, list[int]) == LIST_NUMS
     assert PARSER.parse("1/2,1/8,  1/3", list[fractions.Fraction]) == [
         fractions.Fraction("1/2"),
@@ -70,7 +70,7 @@ def test_list_advanced():
 def test_dict():
     d = {"a": 1, "b": 2, "c": 3}
     assert PARSER.parse('{"a":1,"b":2,"c":3}', dict) == d
-    assert PARSER.parse("./abc.json", dict) == d
+    assert PARSER.parse("./data/abc.json", dict) == d
 
 
 def test_set():
@@ -80,7 +80,7 @@ def test_set():
 
 
 def test_enum():
-    assert PARSER.parse("a", MyEnum) == MyEnum.a
+    assert PARSER.parse("a", MyEnum) == MyEnum.A
     with pytest.raises(KeyError):
         PARSER.parse("d", MyEnum)
 
@@ -101,11 +101,11 @@ def test_slice():
 
 def test_alias_types():
     d = {"a": 1, "b": 2, "c": 3}
-    assert PARSER.parse("./abc_list.json", list[dict]) == [d, d, d]
+    assert PARSER.parse("./data/abc_list.json", list[dict]) == [d, d, d]
     assert PARSER.parse("1,2,3,4,5", list[int]) == [1, 2, 3, 4, 5]
     assert PARSER.parse("1,2,3,4,5", set[int]) == set([1, 2, 3, 4, 5])
     """
-    assert PARSER.parse("./nested_list.txt", list[list[int]]) == [
+    assert PARSER.parse("./data/nested_list.txt", list[list[int]]) == [
         [1, 2, 3, 4, 5],
         [1, 2, 3, 4, 5],
         [1, 2, 3, 4, 5],
