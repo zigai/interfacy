@@ -17,7 +17,7 @@ class Theme:
     def format_description(self, desc: str) -> str:
         return desc
 
-    def get_top_level_epilog(self, *args: Class | Function) -> str:
+    def get_commands_help(self, *args: Class | Function) -> str:
         raise NotImplementedError
 
 

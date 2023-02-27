@@ -1,17 +1,17 @@
-import argparse
 import sys
 from argparse import ArgumentParser
-from pprint import pp, pprint
+from pprint import pprint
 from typing import Any, Callable
 
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, objinspect
-from objinspect.util import call_method
 
 from interfacy_cli.constants import RESERVED_FLAGS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
 from interfacy_cli.parser import PARSER
 from interfacy_cli.themes import DefaultTheme, Theme
+
+COMMAND_KEY = "command"
 
 
 def get_command_short_name(name: str, taken: list[str]) -> str | None:
@@ -51,6 +51,11 @@ def get_command_short_name(name: str, taken: list[str]) -> str | None:
         return None
 
 
+def parse_args(args: dict, func: Function | Method):
+    for name, value in args.items():
+        args[name] = PARSER.parse(value, func.get_param(name).type)
+
+
 class CLI:
     def __init__(
         self,
@@ -83,6 +88,11 @@ class CLI:
     def get_args(self):
         return sys.argv[1:]
 
+    def run(self) -> Any:
+        res = self._run()
+        if self.print_result:
+            pprint(res)
+
     def _get_new_parser(self):
         return NestedArgumentParser(formatter_class=self.theme.formatter_class)
 
@@ -101,58 +111,61 @@ class CLI:
             if isinstance(command_outer, Class):
                 return self._run_single_class_command(command_outer)
             raise ValueError(command_outer)
+        return self._run_multi_command(commands)
 
+    def _run_multi_command(self, commands: dict[str, Function | Class]):
         parser = self._get_new_parser()
-        parser.epilog = self.theme.get_top_level_epilog(*commands.values())
-        subparsers = parser.add_subparsers(dest="command")
-        for command_outer in commands.values():
-            p = subparsers.add_parser(command_outer.name, description=command_outer.description)
-            if isinstance(command_outer, (Function, Method)):
-                p = self.parser_from_func(command_outer, [*RESERVED_FLAGS], p)
-            elif isinstance(command_outer, Class):
-                p = self.parser_from_class(command_outer, p)
+        parser.epilog = self.theme.get_commands_help(*commands.values())
+        subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)  # !!!
+
+        for outer_cmd in commands.values():
+            subparser = subparsers.add_parser(outer_cmd.name, description=outer_cmd.description)
+            if isinstance(outer_cmd, (Function, Method)):
+                subparser = self.parser_from_func(outer_cmd, [*RESERVED_FLAGS], subparser)
+            elif isinstance(outer_cmd, Class):
+                subparser = self.parser_from_class(outer_cmd, subparser)
             else:
-                raise TypeError(command_outer)
-        args = parser.parse_args()
-        if args.command is None:
+                raise TypeError(outer_cmd)
+
+        args = parser.parse_args(self.get_args())
+        obj_args = vars(args)
+        if COMMAND_KEY not in obj_args:
             parser.print_help()
             exit(1)
-        command = args.command
-        obj_args = args.__dict__
-        all_args: dict = obj_args[command].__dict__
-        del obj_args["command"]
-        command_outer = commands[command]
-        if isinstance(command_outer, (Function, Method)):
-            for name, value in all_args.items():
-                all_args[name] = PARSER.parse(value, command_outer.get_param(name).type)
-            return command_outer.call(**all_args)
-        elif isinstance(command_outer, Class):
+
+        command = obj_args[COMMAND_KEY]
+        all_args: dict = vars(obj_args[command])
+        del obj_args[COMMAND_KEY]
+        cmd_outer = commands[command]
+
+        if isinstance(cmd_outer, (Function, Method)):
+            parse_args(all_args, cmd_outer)
+            return cmd_outer.call(**all_args)
+        elif isinstance(cmd_outer, Class):
             all_args: dict = obj_args[command].__dict__
-            if not all_args.get("command", False):
+            if not all_args.get(COMMAND_KEY, False):
                 subparsers.choices[command].print_help()
                 exit(1)
-            inner_cmd = all_args["command"]
-            all_args = all_args[inner_cmd].__dict__
-            init_func = command_outer.get_method("__init__")
-            init_arg_names = [i.name for i in init_func.params]
-            init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-            for name, value in init_args.items():
-                init_args[name] = PARSER.parse(value, init_func.get_param(name).type)
-            method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
-            command_method = command_outer.get_method(inner_cmd)
-            for name, value in method_args.items():
-                method_args[name] = PARSER.parse(value, command_method.get_param(name).type)
-            method = command_outer.get_method(inner_cmd)
-            if command_outer.has_init and not method.is_static:
-                command_outer.init(**init_args)
-            return command_outer.call_method(inner_cmd, **method_args)
-        else:
-            raise TypeError(command_outer)
+            inner_cmd_name = all_args[COMMAND_KEY]
+            all_args = vars(all_args[COMMAND_KEY])
+            cmd_inner = cmd_outer.get_method(inner_cmd_name)
 
-    def run(self) -> Any:
-        res = self._run()
-        if self.print_result:
-            pprint(res)
+            if not cmd_inner.is_static and cmd_outer.has_init:
+                init_func = cmd_outer.get_method("__init__")
+                init_arg_names = [i.name for i in init_func.params]
+                init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
+                parse_args(init_args, init_func)
+                method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
+            else:
+                init_args = {}
+                method_args = all_args
+            parse_args(method_args, cmd_inner)
+
+            if cmd_outer.has_init and not cmd_inner.is_static:
+                cmd_outer.init(**init_args)
+            return cmd_inner.call(**method_args)
+        else:
+            raise TypeError(cmd_outer)
 
     def _run_single_func_command(self, func: Function):
         """
@@ -162,9 +175,8 @@ class CLI:
         if self.description:
             ap.description = self.theme.format_description(self.description)
         args = ap.parse_args(self.get_args())
-        args_dict = args.__dict__
-        for name, value in args_dict.items():
-            args_dict[name] = PARSER.parse(value, func.get_param(name).type)
+        args_dict = vars(args)
+        parse_args(args_dict, func)
         return func.call(**args_dict)
 
     def _run_single_class_command(self, cls: Class):
@@ -174,23 +186,29 @@ class CLI:
         parser = self.parser_from_class(cls)
         if self.description:
             parser.description = self.theme.format_description(self.description)
+
         args = parser.parse_args(self.get_args())
-        obj_args = args.__dict__
-        if args.command is None:
+        obj_args = vars(args)
+        if COMMAND_KEY not in obj_args:
             parser.print_help()
             exit(1)
-        method = args.command
-        all_args: dict = obj_args[method].__dict__
-        init_func = cls.get_method("__init__")
-        init_arg_names = [i.name for i in init_func.params]
-        init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-        for name, value in init_args.items():
-            init_args[name] = PARSER.parse(value, init_func.get_param(name).type)
-        method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
-        command_func = cls.get_method(method)
-        for name, value in method_args.items():
-            method_args[name] = PARSER.parse(value, command_func.get_param(name).type)
-        method = cls.get_method(method)
+
+        method_name = obj_args[COMMAND_KEY]
+        all_args: dict = vars(obj_args[method_name])
+        method = cls.get_method(method_name)
+
+        if not method.is_static and cls.has_init:
+            init_func = cls.get_method("__init__")
+            init_arg_names = [i.name for i in init_func.params]
+            init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
+            parse_args(init_args, init_func)
+            method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
+        else:
+            init_args = {}
+            method_args = all_args
+
+        parse_args(method_args, method)
+
         if cls.has_init and not method.is_static:
             cls.init(**init_args)
         return method.call(**method_args)
@@ -219,9 +237,10 @@ class CLI:
             init = c.get_method("__init__")
         if c.has_docstring:
             parser.description = self.theme.format_description(c.description)
-        parser.epilog = self.theme.get_class_commands_epilog(c)  # type: ignore
+        parser.epilog = self.theme.get_class_commands_help(c)  # type: ignore
+
         cls_methods = c.methods
-        subparsers = parser.add_subparsers(dest="command")
+        subparsers = parser.add_subparsers(dest=COMMAND_KEY)
         for method in cls_methods:
             if method.name == "__init__":
                 continue

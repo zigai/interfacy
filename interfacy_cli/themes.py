@@ -56,14 +56,14 @@ class DefaultTheme(Theme):
         name = f"  {val.name}".ljust(ljust)
         return f"{name} {with_style(val.description, self.style_description)}"
 
-    def get_top_level_epilog(self, *args: Class | Function):
+    def get_commands_help(self, *args: Class | Function):
         ljust = max(self.min_ljust, max([len(i.name) for i in args]))
         s = ["commands:"]
         for i in args:
             s.append(self._command_desc(i, ljust))
         return "\n".join(s)
 
-    def get_class_commands_epilog(self, cmd: Class):
+    def get_class_commands_help(self, cmd: Class):
         ljust = max(self.min_ljust, max([len(i.name) for i in cmd.methods]))
         s = ["commands:"]
         for i in cmd.methods:

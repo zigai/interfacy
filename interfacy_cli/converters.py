@@ -1,8 +1,7 @@
 import datetime
 import enum
 import json
-from typing import *
-from typing import Any
+from typing import Iterable, Mapping, Type
 
 from stdl import dt
 from stdl.fs import File, json_load, yaml_load

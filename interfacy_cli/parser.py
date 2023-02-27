@@ -6,7 +6,7 @@ import functools
 import inspect
 import pathlib
 from collections import ChainMap, Counter, OrderedDict, defaultdict, deque
-from typing import *
+from typing import Any, Callable, Iterable, Mapping, Type
 
 from objinspect.util import UnionParameter, type_args, type_origin
 
