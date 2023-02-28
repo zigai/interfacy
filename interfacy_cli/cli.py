@@ -8,50 +8,14 @@ from objinspect import Class, Function, Method, Parameter, objinspect
 
 from interfacy_cli.constants import RESERVED_FLAGS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
-from interfacy_cli.parser import PARSER
 from interfacy_cli.themes import DefaultTheme, Theme
+from interfacy_cli.type_parser import PARSER
+from interfacy_cli.util import get_args, get_command_abbrev
 
 COMMAND_KEY = "command"
 
 
-def get_command_short_name(name: str, taken: list[str]) -> str | None:
-    """
-    Tries to return a short name for a command.
-    Returns None if it cannot find a short name.
-
-    Example:
-        >>> get_command_short_name("hello_world", [])
-        >>> "h"
-        >>> get_command_short_name("hello_world", ["h"])
-        >>> "hw"
-        >>> get_command_short_name("hello_world", ["hw", "h"])
-        >>> "he"
-        >>> get_command_short_name("hello_world", ["hw", "h", "he"])
-        >>> None
-    """
-    if name in taken:
-        raise ValueError(f"Command name '{name}' already taken")
-    if len(name) < 3:
-        return name
-    name_split = name.split("_")
-    if name_split[0][0] not in taken:
-        taken.append(name_split[0][0])
-        return name_split[0][0]
-    short_name = "".join([i[0] for i in name_split])
-    if short_name not in taken:
-        taken.append(short_name)
-        return short_name
-    try:
-        short_name = name_split[0][:2]
-        if short_name not in taken:
-            taken.append(short_name)
-            return short_name
-        return None
-    except IndexError:
-        return None
-
-
-def parse_args(args: dict, func: Function | Method):
+def _parse_args(args: dict, func: Function | Method):
     for name, value in args.items():
         args[name] = PARSER.parse(value, func.get_param(name).type)
 
@@ -60,16 +24,18 @@ class CLI:
     def __init__(
         self,
         *commands: Callable,
-        shorten_cmd_names: bool = True,
+        add_abbrevs: bool = True,
         theme: Theme | None = None,
         run: bool = True,
         print_result: bool = False,
         description: str | None = None,
+        from_file_prefix: str = "@F",
+        allow_args_from_file: bool = True,
     ) -> None:
         """
         Args:
             *commands (Callable): The commands to add to the CLI (functions or classes).
-            shorten_cmd_names (bool): Whether to shorten command names.
+            add_abbrevs (bool): Whether to shorten command names.
             theme (Theme | None): The theme to use for the CLI help. If None, the default theme will be used.
             run (bool): Whether automaticaly to run the CLI. If False, you will have to call the run method manually.
             print_result (bool): Whether to display the results of the command.
@@ -78,14 +44,18 @@ class CLI:
         self.commands: list = []
         for i in commands:
             self.commands.append(i)
-        self.shorten_command_names = shorten_cmd_names
+        self.add_abbrevs = add_abbrevs
         self.description = description
         self.theme = theme or DefaultTheme()
         self.print_result = print_result
+        self.from_file_prefix = from_file_prefix
+        self.allow_args_from_file = allow_args_from_file
         if run:
             self.run()
 
     def get_args(self):
+        if self.allow_args_from_file:
+            return get_args(sys.argv, from_file_prefix=self.from_file_prefix)
         return sys.argv[1:]
 
     def run(self) -> Any:
@@ -105,12 +75,12 @@ class CLI:
             commands[c.name] = c
 
         if len(commands) == 1:
-            command_outer = list(commands.values())[0]
-            if isinstance(command_outer, Function):
-                return self._run_single_func_command(command_outer)
-            if isinstance(command_outer, Class):
-                return self._run_single_class_command(command_outer)
-            raise ValueError(command_outer)
+            command = list(commands.values())[0]
+            if isinstance(command, Function):
+                return self._run_single_func_command(command)
+            if isinstance(command, Class):
+                return self._run_single_class_command(command)
+            raise ValueError(command)
         return self._run_multi_command(commands)
 
     def _run_multi_command(self, commands: dict[str, Function | Class]):
@@ -139,7 +109,7 @@ class CLI:
         cmd_outer = commands[command]
 
         if isinstance(cmd_outer, (Function, Method)):
-            parse_args(all_args, cmd_outer)
+            _parse_args(all_args, cmd_outer)
             return cmd_outer.call(**all_args)
         elif isinstance(cmd_outer, Class):
             all_args: dict = obj_args[command].__dict__
@@ -154,12 +124,12 @@ class CLI:
                 init_func = cmd_outer.get_method("__init__")
                 init_arg_names = [i.name for i in init_func.params]
                 init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-                parse_args(init_args, init_func)
+                _parse_args(init_args, init_func)
                 method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
             else:
                 init_args = {}
                 method_args = all_args
-            parse_args(method_args, cmd_inner)
+            _parse_args(method_args, cmd_inner)
 
             if cmd_outer.has_init and not cmd_inner.is_static:
                 cmd_outer.init(**init_args)
@@ -176,7 +146,7 @@ class CLI:
             ap.description = self.theme.format_description(self.description)
         args = ap.parse_args(self.get_args())
         args_dict = vars(args)
-        parse_args(args_dict, func)
+        _parse_args(args_dict, func)
         return func.call(**args_dict)
 
     def _run_single_class_command(self, cls: Class):
@@ -201,13 +171,13 @@ class CLI:
             init_func = cls.get_method("__init__")
             init_arg_names = [i.name for i in init_func.params]
             init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-            parse_args(init_args, init_func)
+            _parse_args(init_args, init_func)
             method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
         else:
             init_args = {}
             method_args = all_args
 
-        parse_args(method_args, method)
+        _parse_args(method_args, method)
 
         if cls.has_init and not method.is_static:
             cls.init(**init_args)
@@ -240,7 +210,7 @@ class CLI:
         parser.epilog = self.theme.get_class_commands_help(c)  # type: ignore
 
         cls_methods = c.methods
-        subparsers = parser.add_subparsers(dest=COMMAND_KEY)
+        subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
         for method in cls_methods:
             if method.name == "__init__":
                 continue
@@ -265,8 +235,8 @@ class CLI:
 
         long_name = f"--{param.name}".strip()
         cmd_names = (long_name,)
-        if self.shorten_command_names:
-            short_name = get_command_short_name(param.name, taken_names)
+        if self.add_abbrevs:
+            short_name = get_command_abbrev(param.name, taken_names)
             if short_name is not None:
                 cmd_names = (f"-{short_name}".strip(), long_name)
 
