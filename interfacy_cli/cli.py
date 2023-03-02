@@ -6,8 +6,14 @@ from typing import Any, Callable
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, objinspect
 
-from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS
-from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
+from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, InterfacyExitCode
+from interfacy_cli.exceptions import (
+    DupicateCommandError,
+    InterfacyException,
+    InvalidCommandError,
+    ReservedFlagError,
+    UnsupportedParamError,
+)
 from interfacy_cli.themes import DefaultTheme, Theme
 from interfacy_cli.type_parser import PARSER, Parser
 from interfacy_cli.util import get_args, get_command_abbrev
@@ -61,29 +67,42 @@ class CLI:
             return get_args(sys.argv, from_file_prefix=self.from_file_prefix)
         return sys.argv[1:]
 
-    def run(self) -> Any:
-        res = self._run()
-        if self.print_result:
-            pprint(res)
+    def run(self):
+        try:
+            res = self._run()
+            if self.print_result:
+                pprint(res)
+        except InterfacyException as e:
+            print(f"Error has occured while building parser: {e}")
+            sys.exit(InterfacyExitCode.PARSING_ERR)
+        except Exception as e:
+            print(f"Error has occured while running command: {e}")
+            sys.exit(InterfacyExitCode.RUNTIME_ERR)
+        sys.exit(InterfacyExitCode.SUCCESS)
 
     def _get_new_parser(self):
         return NestedArgumentParser(formatter_class=self.theme.formatter_class)
 
-    def _run(self) -> Any:
+    def _collect_commands(self):
         commands: dict[str, Function | Class] = {}
         for i in self.commands:
             c = objinspect(i, inherited=False)
             if c.name in commands:
-                raise KeyError(f"Duplicate command '{c.name}'")
+                raise DupicateCommandError(c.name)
             commands[c.name] = c
+        return commands
 
+    def _run(self) -> Any:
+        commands = self._collect_commands()
+        if len(commands) == 0:
+            raise InvalidCommandError("No commands were provided.")
         if len(commands) == 1:
             command = list(commands.values())[0]
             if isinstance(command, Function):
                 return self._run_single_func_command(command)
             if isinstance(command, Class):
                 return self._run_single_class_command(command)
-            raise ValueError(command)
+            raise InvalidCommandError(f"Not a valid command: {command}")
         return self._run_multi_command(commands)
 
     def _run_multi_command(self, commands: dict[str, Function | Class]):
@@ -98,14 +117,15 @@ class CLI:
             elif isinstance(outer_cmd, Class):
                 subparser = self.parser_from_class(outer_cmd, subparser)
             else:
-                raise TypeError(outer_cmd)
+                raise InvalidCommandError(f"Not a valid command: {outer_cmd}")
+
         if self.install_tab_completion:
             self._install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
         obj_args = vars(args)
         if COMMAND_KEY not in obj_args:
             parser.print_help()
-            exit(1)
+            sys.exit(InterfacyExitCode.INVALID_ARGS)
 
         command = obj_args[COMMAND_KEY]
         all_args: dict = vars(obj_args[command])
@@ -119,7 +139,7 @@ class CLI:
             all_args: dict = obj_args[command].__dict__
             if not all_args.get(COMMAND_KEY, False):
                 subparsers.choices[command].print_help()
-                exit(1)
+                sys.exit(InterfacyExitCode.INVALID_ARGS)
             inner_cmd_name = all_args[COMMAND_KEY]
             all_args = vars(all_args[COMMAND_KEY])
             cmd_inner = cmd_outer.get_method(inner_cmd_name)
@@ -139,7 +159,7 @@ class CLI:
                 cmd_outer.init(**init_args)
             return cmd_inner.call(**method_args)
         else:
-            raise TypeError(cmd_outer)
+            raise InvalidCommandError(f"Not a valid command: {cmd_outer}")
 
     def _run_single_func_command(self, func: Function):
         """
@@ -168,7 +188,7 @@ class CLI:
         obj_args = vars(args)
         if COMMAND_KEY not in obj_args:
             parser.print_help()
-            exit(1)
+            sys.exit(InterfacyExitCode.INVALID_ARGS)
 
         method_name = obj_args[COMMAND_KEY]
         all_args: dict = vars(obj_args[method_name])
