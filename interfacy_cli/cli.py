@@ -31,6 +31,7 @@ class CLI:
         description: str | None = None,
         from_file_prefix: str = "@F",
         allow_args_from_file: bool = True,
+        install_tab_completion: bool = False,
     ) -> None:
         """
         Args:
@@ -40,6 +41,9 @@ class CLI:
             run (bool): Whether automaticaly to run the CLI. If False, you will have to call the run method manually.
             print_result (bool): Whether to display the results of the command.
             description (str | None): Override the description of the CLI. If not not provided, the description will be the docstring of the top level command.
+            from_file_prefix (str): The prefix to use for loading arguments from a file.
+            allow_args_from_file (bool): Whether to allow loading arguments from a file.
+            install_tab_completion (bool): Whether to install tab completion for the CLI.
         """
         self.commands: list = []
         for i in commands:
@@ -50,6 +54,7 @@ class CLI:
         self.print_result = print_result
         self.from_file_prefix = from_file_prefix
         self.allow_args_from_file = allow_args_from_file
+        self.install_tab_completion = install_tab_completion
         if run:
             self.run()
 
@@ -96,7 +101,8 @@ class CLI:
                 subparser = self.parser_from_class(outer_cmd, subparser)
             else:
                 raise TypeError(outer_cmd)
-
+        if self.install_tab_completion:
+            self._install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
         obj_args = vars(args)
         if COMMAND_KEY not in obj_args:
@@ -141,10 +147,12 @@ class CLI:
         """
         Called when a single function or method is passed to CLI
         """
-        ap = self.parser_from_func(func, [*RESERVED_FLAGS])
+        parser = self.parser_from_func(func, [*RESERVED_FLAGS])
         if self.description:
-            ap.description = self.theme.format_description(self.description)
-        args = ap.parse_args(self.get_args())
+            parser.description = self.theme.format_description(self.description)
+        if self.install_tab_completion:
+            self._install_tab_completion(parser)
+        args = parser.parse_args(self.get_args())
         args_dict = vars(args)
         _parse_args(args_dict, func)
         return func.call(**args_dict)
@@ -156,7 +164,8 @@ class CLI:
         parser = self.parser_from_class(cls)
         if self.description:
             parser.description = self.theme.format_description(self.description)
-
+        if self.install_tab_completion:
+            self._install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
         obj_args = vars(args)
         if COMMAND_KEY not in obj_args:
@@ -265,6 +274,11 @@ class CLI:
             extra["default"] = param.default
 
         return extra
+
+    def _install_tab_completion(self, parser: ArgumentParser):
+        import argcomplete
+
+        argcomplete.autocomplete(parser)
 
 
 __all__ = ["CLI"]
