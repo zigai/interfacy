@@ -80,7 +80,7 @@ def test_set():
 
 
 def test_enum():
-    assert PARSER.parse("a", MyEnum) == MyEnum.A
+    assert PARSER.parse("A", MyEnum) == MyEnum.A
     with pytest.raises(KeyError):
         PARSER.parse("d", MyEnum)
 
