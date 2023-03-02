@@ -6,11 +6,11 @@ import functools
 import inspect
 import pathlib
 from collections import ChainMap, Counter, OrderedDict, defaultdict, deque
-from typing import Any, Callable, Iterable, Mapping, Type
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
 from objinspect.util import UnionParameter, type_args, type_origin
 
-from interfacy_cli.constants import ALIAS_TYPE, EMPTY, ITEM_SEP, SIMPLE_TYPES, UNION_TYPE
+from interfacy_cli.constants import ALIAS_TYPE, UNION_TYPE
 from interfacy_cli.converters import *
 from interfacy_cli.exceptions import UnsupportedParamError
 from interfacy_cli.util import cast_dict_to, cast_iter_to, parse_and_cast
@@ -18,7 +18,6 @@ from interfacy_cli.util import cast_dict_to, cast_iter_to, parse_and_cast
 
 class Parser:
     def __init__(self) -> None:
-        # type[parse_func]
         self.parsers: dict[Any, Callable] = {}
 
     def __len__(self):
@@ -92,7 +91,11 @@ PARSER.extend(
         slice: to_slice,
         list: to_list,
         dict: to_dict,
+        Dict: to_dict,
+        List: to_list,
+        Tuple: to_tuple,
         list[dict]: to_mapping,  # TEMP
+        bytes: to_bytes,
     }
 )
 
@@ -110,6 +113,7 @@ DIRECTLY_CASTABLE_TYPES = [
     pathlib.WindowsPath,
     pathlib.PureWindowsPath,
     pathlib.PurePosixPath,
+    bytearray,
 ]
 MAPPING_CONTAINER_TYPES = [dict, OrderedDict, defaultdict, ChainMap, Counter]
 ITER_CONTAINER_TYPES = [frozenset, deque]

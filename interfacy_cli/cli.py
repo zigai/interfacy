@@ -9,15 +9,10 @@ from objinspect import Class, Function, Method, Parameter, objinspect
 from interfacy_cli.constants import RESERVED_FLAGS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
 from interfacy_cli.themes import DefaultTheme, Theme
-from interfacy_cli.type_parser import PARSER
+from interfacy_cli.type_parser import PARSER, Parser
 from interfacy_cli.util import get_args, get_command_abbrev
 
 COMMAND_KEY = "command"
-
-
-def _parse_args(args: dict, func: Function | Method):
-    for name, value in args.items():
-        args[name] = PARSER.parse(value, func.get_param(name).type)
 
 
 class CLI:
@@ -32,6 +27,8 @@ class CLI:
         from_file_prefix: str = "@F",
         allow_args_from_file: bool = True,
         install_tab_completion: bool = False,
+        type_parser: Parser = PARSER,
+        parser_extensions: dict[Any, Callable] = None,  # type: ignore
     ) -> None:
         """
         Args:
@@ -55,6 +52,9 @@ class CLI:
         self.from_file_prefix = from_file_prefix
         self.allow_args_from_file = allow_args_from_file
         self.install_tab_completion = install_tab_completion
+        self.type_parser = type_parser
+        if parser_extensions:
+            self.type_parser.extend(parser_extensions)
         if run:
             self.run()
 
@@ -115,7 +115,7 @@ class CLI:
         cmd_outer = commands[command]
 
         if isinstance(cmd_outer, (Function, Method)):
-            _parse_args(all_args, cmd_outer)
+            self._parse_args(all_args, cmd_outer)
             return cmd_outer.call(**all_args)
         elif isinstance(cmd_outer, Class):
             all_args: dict = obj_args[command].__dict__
@@ -130,12 +130,12 @@ class CLI:
                 init_func = cmd_outer.get_method("__init__")
                 init_arg_names = [i.name for i in init_func.params]
                 init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-                _parse_args(init_args, init_func)
+                self._parse_args(init_args, init_func)
                 method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
             else:
                 init_args = {}
                 method_args = all_args
-            _parse_args(method_args, cmd_inner)
+            self._parse_args(method_args, cmd_inner)
 
             if cmd_outer.has_init and not cmd_inner.is_static:
                 cmd_outer.init(**init_args)
@@ -154,7 +154,7 @@ class CLI:
             self._install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
         args_dict = vars(args)
-        _parse_args(args_dict, func)
+        self._parse_args(args_dict, func)
         return func.call(**args_dict)
 
     def _run_single_class_command(self, cls: Class):
@@ -180,13 +180,13 @@ class CLI:
             init_func = cls.get_method("__init__")
             init_arg_names = [i.name for i in init_func.params]
             init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-            _parse_args(init_args, init_func)
+            self._parse_args(init_args, init_func)
             method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
         else:
             init_args = {}
             method_args = all_args
 
-        _parse_args(method_args, method)
+        self._parse_args(method_args, method)
 
         if cls.has_init and not method.is_static:
             cls.init(**init_args)
@@ -279,6 +279,13 @@ class CLI:
         import argcomplete
 
         argcomplete.autocomplete(parser)
+
+    def extend_type_parser(self, ext: dict[Any, Callable]):
+        self.type_parser.extend(ext)
+
+    def _parse_args(self, args: dict, func: Function | Method):
+        for name, value in args.items():
+            args[name] = self.type_parser.parse(value, func.get_param(name).type)
 
 
 __all__ = ["CLI"]

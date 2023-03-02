@@ -112,3 +112,9 @@ def to_dict(value) -> dict:
     if isinstance(value, dict):
         return value
     return dict(**to_mapping(value))
+
+
+def to_bytes(value) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    return value.encode()
