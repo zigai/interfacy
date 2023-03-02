@@ -6,10 +6,8 @@ from typing import Iterable, Mapping, Type
 from stdl import dt
 from stdl.fs import File, json_load, yaml_load
 
+from interfacy_cli.constants import ITER_SEP, RANGE_SEP
 from interfacy_cli.util import cast, is_file
-
-ITER_SEP = ","
-RANGE_SEP = ":"
 
 
 def to_iter(value) -> Iterable:

@@ -6,13 +6,11 @@ from typing import Any, Callable
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, objinspect
 
-from interfacy_cli.constants import RESERVED_FLAGS
+from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS
 from interfacy_cli.exceptions import ReservedFlagError, UnsupportedParamError
 from interfacy_cli.themes import DefaultTheme, Theme
 from interfacy_cli.type_parser import PARSER, Parser
 from interfacy_cli.util import get_args, get_command_abbrev
-
-COMMAND_KEY = "command"
 
 
 class CLI:
