@@ -6,7 +6,7 @@ from typing import Any, Callable
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, objinspect
 
-from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, InterfacyExitCode
+from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, ExitCode
 from interfacy_cli.exceptions import (
     DupicateCommandError,
     InterfacyException,
@@ -18,6 +18,10 @@ from interfacy_cli.themes import DefaultTheme, Theme
 from interfacy_cli.type_parser import PARSER, Parser
 from interfacy_cli.util import get_args, get_command_abbrev
 
+
+def _install_tab_completion(parser: ArgumentParser):
+    import argcomplete
+    argcomplete.autocomplete(parser)
 
 class CLI:
     def __init__(
@@ -39,9 +43,9 @@ class CLI:
             *commands (Callable): The commands to add to the CLI (functions or classes).
             add_abbrevs (bool): Whether to shorten command names.
             theme (Theme | None): The theme to use for the CLI help. If None, the default theme will be used.
-            run (bool): Whether automaticaly to run the CLI. If False, you will have to call the run method manually.
+            run (bool): Whether automatically to run the CLI. If False, you will have to call the run method manually.
             print_result (bool): Whether to display the results of the command.
-            description (str | None): Override the description of the CLI. If not not provided, the description will be the docstring of the top level command.
+            description (str | None): Override the description of the CLI. If not provided, the description will be the docstring of the top level command.
             from_file_prefix (str): The prefix to use for loading arguments from a file.
             allow_args_from_file (bool): Whether to allow loading arguments from a file.
             install_tab_completion (bool): Whether to install tab completion for the CLI.
@@ -73,12 +77,12 @@ class CLI:
             if self.print_result:
                 pprint(res)
         except InterfacyException as e:
-            print(f"Error has occured while building parser: {e}")
-            sys.exit(InterfacyExitCode.PARSING_ERR)
+            print(f"[interfacy] Error has occurred while building parser: {e}")
+            sys.exit(ExitCode.PARSING_ERR)
         except Exception as e:
-            print(f"Error has occured while running command: {e}")
-            sys.exit(InterfacyExitCode.RUNTIME_ERR)
-        sys.exit(InterfacyExitCode.SUCCESS)
+            print(f"[interfacy] Error has occurred while running command: {e}")
+            sys.exit(ExitCode.RUNTIME_ERR)
+        sys.exit(ExitCode.SUCCESS)
 
     def _get_new_parser(self):
         return NestedArgumentParser(formatter_class=self.theme.formatter_class)
@@ -120,12 +124,12 @@ class CLI:
                 raise InvalidCommandError(f"Not a valid command: {outer_cmd}")
 
         if self.install_tab_completion:
-            self._install_tab_completion(parser)
+            _install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
         obj_args = vars(args)
         if COMMAND_KEY not in obj_args:
             parser.print_help()
-            sys.exit(InterfacyExitCode.INVALID_ARGS)
+            sys.exit(ExitCode.INVALID_ARGS)
 
         command = obj_args[COMMAND_KEY]
         all_args: dict = vars(obj_args[command])
@@ -139,7 +143,7 @@ class CLI:
             all_args: dict = obj_args[command].__dict__
             if not all_args.get(COMMAND_KEY, False):
                 subparsers.choices[command].print_help()
-                sys.exit(InterfacyExitCode.INVALID_ARGS)
+                sys.exit(ExitCode.INVALID_ARGS)
             inner_cmd_name = all_args[COMMAND_KEY]
             all_args = vars(all_args[COMMAND_KEY])
             cmd_inner = cmd_outer.get_method(inner_cmd_name)
@@ -169,7 +173,7 @@ class CLI:
         if self.description:
             parser.description = self.theme.format_description(self.description)
         if self.install_tab_completion:
-            self._install_tab_completion(parser)
+            _install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
         args_dict = vars(args)
         self._parse_args(args_dict, func)
@@ -183,12 +187,12 @@ class CLI:
         if self.description:
             parser.description = self.theme.format_description(self.description)
         if self.install_tab_completion:
-            self._install_tab_completion(parser)
+            _install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
         obj_args = vars(args)
         if COMMAND_KEY not in obj_args:
             parser.print_help()
-            sys.exit(InterfacyExitCode.INVALID_ARGS)
+            sys.exit(ExitCode.INVALID_ARGS)
 
         method_name = obj_args[COMMAND_KEY]
         all_args: dict = vars(obj_args[method_name])
@@ -292,11 +296,6 @@ class CLI:
             extra["default"] = param.default
 
         return extra
-
-    def _install_tab_completion(self, parser: ArgumentParser):
-        import argcomplete
-
-        argcomplete.autocomplete(parser)
 
     def extend_type_parser(self, ext: dict[Any, Callable]):
         self.type_parser.extend(ext)

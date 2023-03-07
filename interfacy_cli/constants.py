@@ -8,7 +8,7 @@ ITER_SEP = ","
 RANGE_SEP = ":"
 
 
-class InterfacyExitCode:
+class ExitCode:
     SUCCESS = 0
     RUNTIME_ERR = 1
     INVALID_ARGS = 2
