@@ -77,8 +77,8 @@ class Parser:
         if inspect.isclass(t):
             if issubclass(t, enum.Enum):
                 return to_enum_value(value, t)
-            if type_origin(t) == Literal:
-                return to_literal_value(value, t)
+            # if type_origin(t) == Literal:
+            #    return to_literal_value(value, t)
         raise UnsupportedParamError(t)
 
 
@@ -98,6 +98,7 @@ PARSER.extend(
         Tuple: to_tuple,
         list[dict]: to_mapping,  # TEMP
         bytes: to_bytes,
+        Literal: to_literal_value,
     }
 )
 
