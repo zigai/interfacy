@@ -21,7 +21,9 @@ from interfacy_cli.util import get_args, get_command_abbrev
 
 def _install_tab_completion(parser: ArgumentParser):
     import argcomplete
+
     argcomplete.autocomplete(parser)
+
 
 class CLI:
     def __init__(
@@ -101,12 +103,12 @@ class CLI:
         if len(commands) == 0:
             raise InvalidCommandError("No commands were provided.")
         if len(commands) == 1:
-            command = list(commands.values())[0]
-            if isinstance(command, Function):
-                return self._run_single_func_command(command)
-            if isinstance(command, Class):
-                return self._run_single_class_command(command)
-            raise InvalidCommandError(f"Not a valid command: {command}")
+            cmd = list(commands.values())[0]
+            if isinstance(cmd, Function):
+                return self._run_single_func_command(cmd)
+            if isinstance(cmd, Class):
+                return self._run_single_class_command(cmd)
+            raise InvalidCommandError(f"Not a valid command: {cmd}")
         return self._run_multi_command(commands)
 
     def _run_multi_command(self, commands: dict[str, Function | Class]):
