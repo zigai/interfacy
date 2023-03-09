@@ -1,7 +1,7 @@
 import datetime
 import enum
 import json
-from typing import Iterable, Mapping, Type
+from typing import Iterable, Literal, Mapping, Type, get_args
 
 from stdl import dt
 from stdl.fs import File, json_load, yaml_load
@@ -44,6 +44,13 @@ def to_enum_value(value: str, enum_cls: Type[enum.Enum]) -> enum.Enum:
     if type(value) is enum_cls:
         return value
     return enum_cls[value]
+
+
+def to_literal_value(value: str, literal_cls: Type[Literal]):
+    choices = get_args(literal_cls)
+    if value not in choices:
+        raise ValueError(f"'{value}' is not a valid value for {literal_cls}")
+    return value
 
 
 def to_datetime(value) -> datetime.datetime:

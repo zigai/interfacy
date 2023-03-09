@@ -53,18 +53,18 @@ class Parser:
         return self._parse_special(value, t)
 
     def _parse_alias(self, value: str, t: Any):
-        """list[int]"""
-        _origin_type = type_origin(t)
-        _sub_type = type_args(t)
-        parsed_as_origin = self.parse(value, _origin_type)
-        if isinstance(_origin_type, Iterable):
-            return cast_iter_to(parsed_as_origin, _sub_type[0])
-        if isinstance(_origin_type, Mapping):
-            return cast_dict_to(parsed_as_origin, _sub_type[0], _sub_type[1])
-        return self.get(_origin_type)(value, _sub_type[0])  # TEMP
+        """eg. list[int]"""
+        base_type = type_origin(t)
+        sub_types = type_args(t)
+        parsed_as_origin = self.parse(value, base_type)
+        if isinstance(base_type, Iterable):
+            return cast_iter_to(parsed_as_origin, sub_types[0])
+        if isinstance(base_type, Mapping):
+            return cast_dict_to(parsed_as_origin, sub_types[0], sub_types[1])
+        return self.get(base_type)(value, sub_types[0])  # TEMP
 
     def _parse_union(self, value: str, t: Any):
-        """float | int"""
+        """eg. float | int"""
         param = UnionParameter.from_type(t)
         for i in param:
             try:
@@ -77,6 +77,8 @@ class Parser:
         if inspect.isclass(t):
             if issubclass(t, enum.Enum):
                 return to_enum_value(value, t)
+            if type_origin(t) == Literal:
+                return to_literal_value(value, t)
         raise UnsupportedParamError(t)
 
 
