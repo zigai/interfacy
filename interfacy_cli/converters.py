@@ -46,7 +46,7 @@ def to_enum_value(value: str, enum_cls: Type[enum.Enum]) -> enum.Enum:
     return enum_cls[value]
 
 
-def to_literal_value(value: str, literal_cls: Type[Literal]):
+def to_literal_value(value: str, literal_cls):
     choices = get_args(literal_cls)
     if value not in choices:
         raise ValueError(f"'{value}' is not a valid value for {literal_cls}")

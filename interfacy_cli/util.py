@@ -79,12 +79,11 @@ def args_from_file(path: str) -> list[str]:
     return args
 
 
-def get_args(args: list[str] | None, from_file_prefix="@F") -> list[str]:
+def get_args(args: list[str] | None = None, from_file_prefix="@F") -> list[str]:
     args = args or sys.argv
     parsed_args = []
     i = 1
     while i < len(args):
-        print(sys.argv[i])
         if args[i] == from_file_prefix:
             i += 1
             parsed_args.extend(args_from_file(args[i]))
