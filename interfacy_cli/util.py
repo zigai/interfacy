@@ -112,18 +112,19 @@ def get_command_abbrev(name: str, taken: list[str]) -> str | None:
     if name in taken:
         raise ValueError(f"Command name '{name}' already taken")
     if len(name) < 3:
-        return name
+        return None
     name_split = name.split("_")
-    if name_split[0][0] not in taken:
-        taken.append(name_split[0][0])
-        return name_split[0][0]
+    abbrev = name_split[0][0]
+    if abbrev not in taken and abbrev != name:
+        taken.append(abbrev)
+        return abbrev
     short_name = "".join([i[0] for i in name_split])
-    if short_name not in taken:
+    if short_name not in taken and short_name != name:
         taken.append(short_name)
         return short_name
     try:
         short_name = name_split[0][:2]
-        if short_name not in taken:
+        if short_name not in taken and short_name != name:
             taken.append(short_name)
             return short_name
         return None
