@@ -1,6 +1,5 @@
 import sys
 from argparse import ArgumentParser
-from pprint import pprint
 from typing import Any, Callable
 
 from nested_argparse import NestedArgumentParser
@@ -29,28 +28,30 @@ class CLI:
     def __init__(
         self,
         *commands: Callable,
+        run: bool = True,
         add_abbrevs: bool = True,
         theme: Theme | None = None,
-        run: bool = True,
         print_result: bool = False,
         description: str | None = None,
-        from_file_prefix: str = "@F",
+        arg_parser: Parser = PARSER,
         allow_args_from_file: bool = True,
+        from_file_prefix: str = "@F",
         install_tab_completion: bool = False,
-        type_parser: Parser = PARSER,
         parser_extensions: dict[Any, Callable] = None,  # type: ignore
     ) -> None:
         """
         Args:
             *commands (Callable): The commands to add to the CLI (functions or classes).
+            run (bool): Whether automatically to run the CLI. If False, you will have to call the run method manually.
             add_abbrevs (bool): Whether to shorten command names.
             theme (Theme | None): The theme to use for the CLI help. If None, the default theme will be used.
-            run (bool): Whether automatically to run the CLI. If False, you will have to call the run method manually.
             print_result (bool): Whether to display the results of the command.
             description (str | None): Override the description of the CLI. If not provided, the description will be the docstring of the top level command.
-            from_file_prefix (str): The prefix to use for loading arguments from a file.
+            arg_parser (Parser): The parser to use for parsing arguments.
             allow_args_from_file (bool): Whether to allow loading arguments from a file.
+            from_file_prefix (str): The prefix to use for loading arguments from a file.
             install_tab_completion (bool): Whether to install tab completion for the CLI.
+            parser_extensions (dict[Any, Callable]): A dictionary of extensions to add to the parser to support custom types or override existing functionality.
         """
         self.commands: list = []
         for i in commands:
@@ -62,9 +63,9 @@ class CLI:
         self.from_file_prefix = from_file_prefix
         self.allow_args_from_file = allow_args_from_file
         self.install_tab_completion = install_tab_completion
-        self.type_parser = type_parser
+        self.arg_parser = arg_parser
         if parser_extensions:
-            self.type_parser.extend(parser_extensions)
+            self.arg_parser.extend(parser_extensions)
         if run:
             self.run()
 
@@ -77,6 +78,8 @@ class CLI:
         try:
             res = self._run()
             if self.print_result:
+                from pprint import pprint
+
                 pprint(res)
         except InterfacyException as e:
             print(f"[interfacy] Error has occurred while building parser: {e}")
@@ -103,30 +106,31 @@ class CLI:
         if len(commands) == 0:
             raise InvalidCommandError("No commands were provided.")
         if len(commands) == 1:
-            cmd = list(commands.values())[0]
-            if isinstance(cmd, Function):
-                return self._run_single_func_command(cmd)
-            if isinstance(cmd, Class):
-                return self._run_single_class_command(cmd)
-            raise InvalidCommandError(f"Not a valid command: {cmd}")
-        return self._run_multi_command(commands)
+            command = list(commands.values())[0]
+            if isinstance(command, Function):
+                return self._run_single_func_command(command)
+            if isinstance(command, Class):
+                return self._run_single_class_command(command)
+            raise InvalidCommandError(f"Not a valid command: {command}")
+        return self._run_multiple_commands(commands)
 
-    def _run_multi_command(self, commands: dict[str, Function | Class]):
+    def _run_multiple_commands(self, commands: dict[str, Function | Class]):
         parser = self._get_new_parser()
         parser.epilog = self.theme.get_commands_help(*commands.values())
         subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)  # !!!
 
-        for outer_cmd in commands.values():
-            subparser = subparsers.add_parser(outer_cmd.name, description=outer_cmd.description)
-            if isinstance(outer_cmd, (Function, Method)):
-                subparser = self.parser_from_func(outer_cmd, [*RESERVED_FLAGS], subparser)
-            elif isinstance(outer_cmd, Class):
-                subparser = self.parser_from_class(outer_cmd, subparser)
+        for cmd_inner in commands.values():
+            sp = subparsers.add_parser(cmd_inner.name, description=cmd_inner.description)
+            if isinstance(cmd_inner, (Function, Method)):
+                sp = self.parser_from_func(fn=cmd_inner, taken_names=[*RESERVED_FLAGS], parser=sp)
+            elif isinstance(cmd_inner, Class):
+                sp = self.parser_from_class(cmd_inner, sp)
             else:
-                raise InvalidCommandError(f"Not a valid command: {outer_cmd}")
+                raise InvalidCommandError(f"Not a valid command: {cmd_inner}")
 
         if self.install_tab_completion:
             _install_tab_completion(parser)
+
         args = parser.parse_args(self.get_args())
         obj_args = vars(args)
         if COMMAND_KEY not in obj_args:
@@ -134,38 +138,17 @@ class CLI:
             sys.exit(ExitCode.INVALID_ARGS)
 
         command = obj_args[COMMAND_KEY]
-        all_args: dict = vars(obj_args[command])
         del obj_args[COMMAND_KEY]
-        cmd_outer = commands[command]
+        args_all: dict = vars(obj_args[command])
+        cmd = commands[command]
 
-        if isinstance(cmd_outer, (Function, Method)):
-            self._parse_args(all_args, cmd_outer)
-            return cmd_outer.call(**all_args)
-        elif isinstance(cmd_outer, Class):
-            all_args: dict = obj_args[command].__dict__
-            if not all_args.get(COMMAND_KEY, False):
-                subparsers.choices[command].print_help()
-                sys.exit(ExitCode.INVALID_ARGS)
-            inner_cmd_name = all_args[COMMAND_KEY]
-            all_args = vars(all_args[COMMAND_KEY])
-            cmd_inner = cmd_outer.get_method(inner_cmd_name)
-
-            if not cmd_inner.is_static and cmd_outer.has_init:
-                init_func = cmd_outer.get_method("__init__")
-                init_arg_names = [i.name for i in init_func.params]
-                init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-                self._parse_args(init_args, init_func)
-                method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
-            else:
-                init_args = {}
-                method_args = all_args
-            self._parse_args(method_args, cmd_inner)
-
-            if cmd_outer.has_init and not cmd_inner.is_static:
-                cmd_outer.init(**init_args)
-            return cmd_inner.call(**method_args)
+        if isinstance(cmd, (Function, Method)):
+            self._parse_args(args_all, cmd)
+            return cmd.call(**args_all)
+        elif isinstance(cmd, Class):
+            return self._run_cls(cmd, args_all, parser)
         else:
-            raise InvalidCommandError(f"Not a valid command: {cmd_outer}")
+            raise InvalidCommandError(f"Not a valid command: {cmd}")
 
     def _run_single_func_command(self, func: Function):
         """
@@ -191,68 +174,44 @@ class CLI:
         if self.install_tab_completion:
             _install_tab_completion(parser)
         args = parser.parse_args(self.get_args())
-        obj_args = vars(args)
-        if COMMAND_KEY not in obj_args:
-            parser.print_help()
-            sys.exit(ExitCode.INVALID_ARGS)
-
-        method_name = obj_args[COMMAND_KEY]
-        all_args: dict = vars(obj_args[method_name])
-        method = cls.get_method(method_name)
-
-        if not method.is_static and cls.has_init:
-            init_func = cls.get_method("__init__")
-            init_arg_names = [i.name for i in init_func.params]
-            init_args = {k: v for k, v in all_args.items() if k in init_arg_names}
-            self._parse_args(init_args, init_func)
-            method_args = {k: v for k, v in all_args.items() if k not in init_arg_names}
-        else:
-            init_args = {}
-            method_args = all_args
-
-        self._parse_args(method_args, method)
-
-        if cls.has_init and not method.is_static:
-            cls.init(**init_args)
-        return method.call(**method_args)
+        return self._run_cls(cls, vars(args), parser)
 
     def parser_from_func(
-        self, f: Function, taken_names: list[str], parser: ArgumentParser | None = None
+        self, fn: Function, taken_names: list[str], parser: ArgumentParser | None = None
     ) -> ArgumentParser:
         """
         Create an ArgumentParser from a Function
         """
         if parser is None:
             parser = self._get_new_parser()
-        for param in f.params:
+        for param in fn.params:
             self.add_parameter(parser, param, taken_names)
-        if f.has_docstring:
-            parser.description = self.theme.format_description(f.description)
+        if fn.has_docstring:
+            parser.description = self.theme.format_description(fn.description)
         return parser
 
-    def parser_from_class(self, c: Class, parser: ArgumentParser | None = None):
+    def parser_from_class(self, cls: Class, parser: ArgumentParser | None = None):
         """
         Create an ArgumentParser from a Class
         """
         if parser is None:
             parser = self._get_new_parser()
-        if c.has_init and not c.is_initialized:
-            init = c.get_method("__init__")
-        if c.has_docstring:
-            parser.description = self.theme.format_description(c.description)
-        parser.epilog = self.theme.get_class_commands_help(c)  # type: ignore
+        if cls.has_init and not cls.is_initialized:
+            init = cls.get_method("__init__")
+        if cls.has_docstring:
+            parser.description = self.theme.format_description(cls.description)
+        parser.epilog = self.theme.get_class_commands_help(cls)  # type: ignore
 
-        cls_methods = c.methods
         subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
-        for method in cls_methods:
+        for method in cls.methods:
             if method.name == "__init__":
                 continue
             taken_names = [*RESERVED_FLAGS]
-            p = subparsers.add_parser(method.name, description=method.description)
-            if c.has_init and not c.is_initialized and not method.is_static:
+            sp = subparsers.add_parser(method.name, description=method.description)
+            if cls.has_init and not cls.is_initialized and not method.is_static:
                 for param in init.params:  # type: ignore
-                    self.add_parameter(p, param, taken_names=taken_names)
-            p = self.parser_from_func(method, taken_names, p)
+                    self.add_parameter(sp, param, taken_names=taken_names)
+            sp = self.parser_from_func(method, taken_names, sp)
         return parser
 
     def add_parameter(
@@ -266,15 +225,14 @@ class CLI:
         if not PARSER.is_supported(param.type):
             raise UnsupportedParamError(param.type)
 
-        long_name = f"--{param.name}".strip()
-        cmd_names = (long_name,)
+        flag_long = f"--{param.name}".strip()
+        flags = (flag_long,)
         if self.add_abbrevs:
-            short_name = get_command_abbrev(param.name, taken_names)
-            if short_name is not None:
-                cmd_names = (f"-{short_name}".strip(), long_name)
+            if flag_short := get_command_abbrev(param.name, taken_names):
+                flags = (f"-{flag_short}".strip(), flag_long)
 
         extra_args = self._extra_add_arg_params(param)
-        parser.add_argument(*cmd_names, **extra_args)
+        parser.add_argument(*flags, **extra_args)
 
     def _extra_add_arg_params(self, param: Parameter) -> dict[str, Any]:
         extra = {
@@ -299,12 +257,38 @@ class CLI:
 
         return extra
 
-    def extend_type_parser(self, ext: dict[Any, Callable]):
-        self.type_parser.extend(ext)
+    def extend_arg_parser(self, ext: dict[Any, Callable]):
+        self.arg_parser.extend(ext)
 
-    def _parse_args(self, args: dict, func: Function | Method):
+    def _parse_args(self, args: dict, fn: Function | Method):
         for name, value in args.items():
-            args[name] = self.type_parser.parse(value, func.get_param(name).type)
+            args[name] = self.arg_parser.parse(value, fn.get_param(name).type)
+
+    def _split_args(self, args: dict, cls: Class, method: Method):
+        if not method.is_static and cls.has_init:
+            init_method = cls.get_method("__init__")
+            init_arg_names = [i.name for i in init_method.params]
+            args_init = {k: v for k, v in args.items() if k in init_arg_names}
+            self._parse_args(args_init, init_method)
+            args_method = {k: v for k, v in args.items() if k not in init_arg_names}
+            self._parse_args(args_method, method)
+            return args_init, args_method
+        self._parse_args(args, method)
+        return {}, args
+
+    def _run_cls(self, cls: Class, args: dict, parser: ArgumentParser):
+        if COMMAND_KEY not in args:
+            parser.print_help()
+            sys.exit(ExitCode.INVALID_ARGS)
+
+        command = args[COMMAND_KEY]
+        args_all: dict = vars(args[command])
+        method = cls.get_method(command)
+        args_init, args_method = self._split_args(args_all, cls, method)
+
+        if cls.has_init and not method.is_static:
+            cls.init(**args_init)
+        return method.call(**args_method)
 
 
 __all__ = ["CLI"]
