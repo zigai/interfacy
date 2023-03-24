@@ -1,4 +1,5 @@
 import os
+import select
 import sys
 from typing import Any, Callable, Iterable, Mapping
 
@@ -129,3 +130,9 @@ def get_command_abbrev(name: str, taken: list[str]) -> str | None:
         return None
     except IndexError:
         return None
+
+
+def read_stdin():
+    if select.select([sys.stdin], [], [], 0.3)[0]:
+        return sys.stdin.read().strip().splitlines()
+    return []
