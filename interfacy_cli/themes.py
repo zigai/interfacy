@@ -63,7 +63,7 @@ class DefaultTheme(Theme):
             s.append(self._command_desc(i, ljust))
         return "\n".join(s)
 
-    def get_class_commands_help(self, cmd: Class):
+    def get_commands_help_for_class(self, cmd: Class):
         ljust = max(self.min_ljust, max([len(i.name) for i in cmd.methods]))
         s = ["commands:"]
         for i in cmd.methods:
