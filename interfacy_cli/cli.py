@@ -15,7 +15,7 @@ from interfacy_cli.exceptions import (
 )
 from interfacy_cli.themes import DefaultTheme, Theme
 from interfacy_cli.type_parser import PARSER, Parser
-from interfacy_cli.util import get_args, get_command_abbrev
+from interfacy_cli.util import get_args, get_command_abbrevation
 
 
 def _install_tab_completion(parser: ArgumentParser):
@@ -228,7 +228,7 @@ class CLI:
         flag_long = f"--{param.name}".strip()
         flags = (flag_long,)
         if self.add_abbrevs:
-            if flag_short := get_command_abbrev(param.name, taken_names):
+            if flag_short := get_command_abbrevation(param.name, taken_names):
                 flags = (f"-{flag_short}".strip(), flag_long)
 
         extra_args = self._extra_add_arg_params(param)

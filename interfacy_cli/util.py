@@ -94,7 +94,7 @@ def get_args(args: list[str] | None = None, from_file_prefix="@F") -> list[str]:
     return parsed_args
 
 
-def get_command_abbrev(name: str, taken: list[str]) -> str | None:
+def get_command_abbrevation(name: str, taken: list[str]) -> str | None:
     """
     Tries to return a short name for a command.
     Returns None if it cannot find a short name.
@@ -130,9 +130,3 @@ def get_command_abbrev(name: str, taken: list[str]) -> str | None:
         return None
     except IndexError:
         return None
-
-
-def read_stdin():
-    if select.select([sys.stdin], [], [], 0.3)[0]:
-        return sys.stdin.read().strip().splitlines()
-    return []
