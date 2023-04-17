@@ -1,19 +1,31 @@
-from objinspect import Class, Function, Parameter
+from objinspect import Class, Function, Method, Parameter
 from objinspect.util import type_to_str
 from stdl.str_u import FG, colored
 
-from interfacy_cli.theme import Theme, with_style
+from interfacy_cli.util import simplify_type
 
 
-class DefaultTheme(Theme):
+def with_style(text: str, style: dict) -> str:
+    return colored(text, **style)
+
+
+class InterfacyTheme:
+    clear_metavar: bool
     simplify_types = True
-    clear_metavar = True
-    style_type = dict(color=FG.GREEN)
-    style_default = dict(color=FG.LIGHT_BLUE)
-    style_description = dict(color=FG.GRAY)
-    sep = " = "
     min_ljust = 19
+    style_type: dict
+    style_default: dict
+    style_description: dict
+    sep = " = "
+    command_skips = ["__init__"]
+    commands_title = "commands:"
     required_indicator = "(" + colored("*", color=FG.RED) + ") "
+
+    def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
+        return max(self.min_ljust, max([len(i.name) for i in commands]))
+
+    def format_description(self, desc: str) -> str:
+        return desc
 
     def get_parameter_help(self, param: Parameter) -> str:
         """
@@ -21,66 +33,58 @@ class DefaultTheme(Theme):
         """
         if param.is_required and not param.is_typed:
             return ""
-        help_str = []
+        h = []
 
         if param.is_typed:
-            typestr = type_to_str(param.type)
+            type_str = type_to_str(param.type)
             if self.simplify_types:
-                typestr = typestr.split(".")[-1]
-                typestr = typestr.replace("| None", "").strip()
-            help_str.append(with_style(typestr, self.style_type))
+                type_str = simplify_type(type_str)
+            h.append(with_style(type_str, self.style_type))
 
         if param.is_typed and param.is_optional and param.default is not None:
-            help_str.append(self.sep)
+            h.append(self.sep)
 
         if param.is_optional and param.default is not None:
-            help_str.append(with_style(param.default, self.style_default))
+            h.append(with_style(param.default, self.style_default))
 
-        help_str = "".join(help_str)
+        h = "".join(h)
 
         if param.description is not None:
-            """
-            current_len = len(help_str)
-            if current_len < 24:
-                fill = " " * (24 - current_len)
-            else:
-                fill = " "
-            """
             fill = " "
-            help_str = f"{help_str} | {fill}{with_style(param.description, self.style_description)}"
+            h = f"{h} | {fill}{with_style(param.description, self.style_description)}"
         if param.is_required:
-            help_str = f"{help_str} {self.required_indicator}"
-        return help_str
+            h = f"{h} {self.required_indicator}"
+        return h
 
-    def _command_desc(self, val: Function | Class, ljust: int):
-        name = f"  {val.name}".ljust(ljust)
-        return f"{name} {with_style(val.description, self.style_description)}"
+    def get_command_description(self, command: Class | Function | Method, ljust: int) -> str:
+        name = f"  {command.name}".ljust(ljust)
+        return f"{name} {with_style(command.description, self.style_description)}"
 
-    def get_commands_help(self, *args: Class | Function):
-        ljust = max(self.min_ljust, max([len(i.name) for i in args]))
-        s = ["commands:"]
-        for i in args:
-            s.append(self._command_desc(i, ljust))
-        return "\n".join(s)
-
-    def get_commands_help_for_class(self, cmd: Class):
-        ljust = max(self.min_ljust, max([len(i.name) for i in cmd.methods]))
-        s = ["commands:"]
-        for i in cmd.methods:
-            if i.name == "__init__":
+    def get_commands_help_class(self, command: Class) -> str:
+        ljust = self._get_ljust(command.methods)  # type: ignore
+        h = [self.commands_title]
+        for method in command.methods:
+            if method.name in self.command_skips:
                 continue
-            s.append(self._command_desc(i, ljust))
-        return "\n".join(s)
+            h.append(self.get_command_description(method, ljust))
+        return "\n".join(h)
+
+    def get_commands_help_multi(self, commands: list[Class | Function | Method]) -> str:
+        ljust = self._get_ljust(commands)  # type: ignore
+        h = [self.commands_title]
+        for command in commands:
+            h.append(self.get_command_description(command, ljust))
+        return "\n".join(h)
 
 
-class PlainTheme(DefaultTheme):
+class PlainTheme(InterfacyTheme):
     style_type = dict(color=FG.WHITE)
     style_default = dict(color=FG.WHITE)
     style_description = dict(color=FG.WHITE)
     required_indicator = "(required)"
 
 
-class LegacyTheme(DefaultTheme):
+class LegacyTheme(InterfacyTheme):
     simplify_types = False
     sep = ", default: "
     type_color = FG.LIGHT_YELLOW
@@ -89,8 +93,7 @@ class LegacyTheme(DefaultTheme):
 
 
 __all__ = [
-    "Theme",
-    "DefaultTheme",
+    "InterfacyTheme",
     "PlainTheme",
     "LegacyTheme",
 ]
