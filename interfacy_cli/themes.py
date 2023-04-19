@@ -10,12 +10,12 @@ def with_style(text: str, style: dict) -> str:
 
 
 class InterfacyTheme:
-    clear_metavar: bool
+    clear_metavar: bool = True
     simplify_types = True
     min_ljust = 19
-    style_type: dict
-    style_default: dict
-    style_description: dict
+    style_type: dict = dict(color=FG.GREEN)
+    style_default: dict = dict(color=FG.LIGHT_BLUE)
+    style_description: dict = dict(color=FG.GRAY)
     sep = " = "
     command_skips = ["__init__"]
     commands_title = "commands:"
@@ -24,8 +24,8 @@ class InterfacyTheme:
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))
 
-    def format_description(self, desc: str) -> str:
-        return desc
+    def format_description(self, description: str) -> str:
+        return description
 
     def get_parameter_help(self, param: Parameter) -> str:
         """

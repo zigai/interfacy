@@ -1,62 +1,13 @@
-import os
-import select
 import sys
-from typing import Any, Callable, Iterable, Mapping
 
-from stdl.fs import File, assert_paths_exist, json_dump, json_load, yaml_load
-
-
-def is_file(path: str) -> bool:
-    return os.path.isfile(path)
+from stdl.fs import File, assert_paths_exist, json_load, yaml_load
 
 
-def cast_to(t):
-    """
-    Returns a functions that casts a string to type 't'
-    """
-
-    def inner(arg: str) -> t:
-        if isinstance(arg, t):
-            return arg
-        return t(arg)
-
-    return inner
-
-
-def cast(value: Any, t: Any):
-    if isinstance(value, t):
-        return value
-    return t(value)
-
-
-def cast_iter_to(iterable: Iterable, t: Any):
-    def inner(arg) -> iterable[t]:
-        l = [t(i) for i in arg]
-        return iterable(l)
-
-    return inner
-
-
-def cast_dict_to(k: Any, v: Any):
-    def inner(arg: dict) -> dict[k, v]:
-        return {k(key): v(val) for key, val in arg.items()}
-
-    return inner
-
-
-def parse_and_cast(parser: Callable, caster: Any):
-    def inner(val):
-        if isinstance(val, caster):
-            return val
-        return caster(parser(val))
-
-    return inner
-
-
-def args_from_file(path: str) -> list[str]:
+def read_args_from_file(path: str) -> list[str]:
     """
     Get arguments from a file.
     """
+    assert_paths_exist(path)
 
     def dict_extract(d: dict):
         args = []
@@ -65,7 +16,6 @@ def args_from_file(path: str) -> list[str]:
             args.append(v)
         return args
 
-    assert_paths_exist(path)
     if path.endswith(".json"):
         return dict_extract(json_load(path))
     if path.endswith(".yaml"):
@@ -87,26 +37,26 @@ def get_args(args: list[str] | None = None, from_file_prefix="@F") -> list[str]:
     while i < len(args):
         if args[i] == from_file_prefix:
             i += 1
-            parsed_args.extend(args_from_file(args[i]))
+            parsed_args.extend(read_args_from_file(args[i]))
         else:
             parsed_args.append(args[i])
         i += 1
     return parsed_args
 
 
-def get_command_abbrevation(name: str, taken: list[str]) -> str | None:
+def get_abbrevation(name: str, taken: list[str]) -> str | None:
     """
     Tries to return a short name for a command.
     Returns None if it cannot find a short name.
 
     Example:
-        >>> get_command_short_name("hello_world", [])
+        >>> get_abbrevation("hello_world", [])
         >>> "h"
-        >>> get_command_short_name("hello_world", ["h"])
+        >>> get_abbrevation("hello_world", ["h"])
         >>> "hw"
-        >>> get_command_short_name("hello_world", ["hw", "h"])
+        >>> get_abbrevation("hello_world", ["hw", "h"])
         >>> "he"
-        >>> get_command_short_name("hello_world", ["hw", "h", "he"])
+        >>> get_abbrevation("hello_world", ["hw", "h", "he"])
         >>> None
     """
     if name in taken:
@@ -130,3 +80,9 @@ def get_command_abbrevation(name: str, taken: list[str]) -> str | None:
         return None
     except IndexError:
         return None
+
+
+def simplify_type(t: str) -> str:
+    t = t.split(".")[-1]
+    t = t.replace("| None", "").strip()
+    return t

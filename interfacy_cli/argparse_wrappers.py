@@ -1,6 +1,10 @@
 import re
+import sys
 import textwrap
-from argparse import HelpFormatter
+from argparse import ArgumentError, ArgumentTypeError, HelpFormatter
+
+from nested_argparse import NestedArgumentParser
+from strto.util import type_to_str
 
 try:
     from gettext import gettext as _
@@ -15,6 +19,29 @@ except ImportError:
             return singular
         else:
             return plural
+
+
+class _ArgumentParser(NestedArgumentParser):
+    def _get_value(self, action, arg_string):
+        parse_func = self._registry_get("type", action.type, action.type)
+        if not callable(parse_func):
+            msg = _("%r is not callable")
+            raise ArgumentError(action, msg % parse_func)
+        try:
+            result = parse_func(arg_string)
+
+        # ArgumentTypeErrors indicate errors
+        except ArgumentTypeError:
+            name = getattr(action.type, "__name__", repr(action.type))
+            msg = str(sys.exc_info()[1])
+            raise ArgumentError(action, msg)
+
+        # TypeErrors or ValueErrors also indicate errors
+        except (TypeError, ValueError):
+            t = type_to_str(str(parse_func.keywords["t"]))
+            msg = _(f"invalid {t} value: '{arg_string}'")
+            raise ArgumentError(action, msg)
+        return result
 
 
 class SafeHelpFormatter(HelpFormatter):
@@ -137,4 +164,4 @@ class SafeRawHelpFormatter(SafeHelpFormatter):
         return text.splitlines()
 
 
-__all__ = ["SafeHelpFormatter", "SafeRawHelpFormatter"]
+__all__ = ["SafeHelpFormatter", "SafeRawHelpFormatter", "_ArgumentParser"]
