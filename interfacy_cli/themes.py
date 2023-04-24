@@ -35,23 +35,23 @@ class InterfacyTheme:
             return ""
         h = []
 
+        if param.description is not None:
+            fill = " "
+            h.append(f"{with_style(param.description, self.style_description)} | {fill}")
+
         if param.is_typed:
             type_str = type_to_str(param.type)
             if self.simplify_types:
                 type_str = simplify_type(type_str)
             h.append(with_style(type_str, self.style_type))
 
-        if param.is_typed and param.is_optional and param.default is not None:
-            h.append(self.sep)
-
         if param.is_optional and param.default is not None:
+            if param.is_typed:
+                h.append(self.sep)
             h.append(with_style(param.default, self.style_default))
 
         h = "".join(h)
 
-        if param.description is not None:
-            fill = " "
-            h = f"{h} | {fill}{with_style(param.description, self.style_description)}"
         if param.is_required:
             h = f"{h} {self.required_indicator}"
         return h
