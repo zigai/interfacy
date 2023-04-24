@@ -11,6 +11,7 @@ from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, ExitCode
 from interfacy_cli.exceptions import DupicateCommandError, InterfacyException, InvalidCommandError
 from interfacy_cli.parser import AutoArgumentParser
 from interfacy_cli.themes import InterfacyTheme
+from interfacy_cli.util import install_tab_completion
 
 
 class CLI(AutoArgumentParser):
