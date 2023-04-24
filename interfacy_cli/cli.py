@@ -1,5 +1,6 @@
 import sys
 from argparse import ArgumentParser
+from inspect import _ParameterKind
 from typing import Any, Callable
 
 import strto
@@ -87,8 +88,14 @@ class CLI(AutoArgumentParser):
 
         pprint(res)
 
-    def _split_args_kwargs(self, args: dict, func: Function | Method) -> tuple[tuple, dict]:
-        return (), args  # TODO
+    def _split_args_kwargs(self, func_args: dict, func: Function | Method) -> tuple[tuple, dict]:
+        args, kwargs = [], {}
+        for param in func.params:
+            if param.kind == _ParameterKind.POSITIONAL_ONLY:
+                args.append(func_args[param.name])
+            else:
+                kwargs[param.name] = func_args[param.name]
+        return tuple(args), kwargs
 
     def _split_init_method_args(self, args: dict, cls: Class, method: Method):
         if not method.is_static and cls.has_init:
