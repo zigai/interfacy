@@ -13,22 +13,6 @@ from interfacy_cli.parser import AutoArgumentParser
 from interfacy_cli.themes import InterfacyTheme
 
 
-def install_tab_completion(parser: ArgumentParser) -> None:
-    """Install tab completion for the given parser"""
-    try:
-        import argcomplete
-
-    except ImportError:
-        print(
-            "argcomplete not installed. Tab completion not available."
-            " Install with 'pip install argcomplete'",
-            file=sys.stderr,
-        )
-        return
-
-    argcomplete.autocomplete(parser)
-
-
 class CLI(AutoArgumentParser):
     def __init__(
         self,

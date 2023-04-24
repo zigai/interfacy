@@ -86,3 +86,19 @@ def simplify_type(t: str) -> str:
     t = t.split(".")[-1]
     t = t.replace("| None", "").strip()
     return t
+
+
+def install_tab_completion(parser: ArgumentParser) -> None:
+    """Install tab completion for the given parser"""
+    try:
+        import argcomplete
+
+    except ImportError:
+        print(
+            "argcomplete not installed. Tab completion not available."
+            " Install with 'pip install argcomplete'",
+            file=sys.stderr,
+        )
+        return
+
+    argcomplete.autocomplete(parser)
