@@ -1,3 +1,5 @@
+from typing import Callable
+
 from objinspect import Class, Function, Method, Parameter
 from objinspect.util import type_to_str
 from stdl.str_u import FG, colored
@@ -20,9 +22,13 @@ class InterfacyTheme:
     command_skips = ["__init__"]
     commands_title = "commands:"
     required_indicator = "(" + colored("*", color=FG.RED) + ") "
+    name_translate_func: Callable = None
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))
+
+    def _translate_name(self, name: str) -> str:
+        return self.name_translate_func(name) if self.name_translate_func else name
 
     def format_description(self, description: str) -> str:
         return description
@@ -57,7 +63,8 @@ class InterfacyTheme:
         return h
 
     def get_command_description(self, command: Class | Function | Method, ljust: int) -> str:
-        name = f"  {command.name}".ljust(ljust)
+        command_name = self._translate_name(command.name)
+        name = f"  {command_name}".ljust(ljust)
         return f"{name} {with_style(command.description, self.style_description)}"
 
     def get_commands_help_class(self, command: Class) -> str:

@@ -64,7 +64,7 @@ class CLI(AutoArgumentParser):
             self._log(f"Error has occurred while building parser: {e}")
             sys.exit(ExitCode.PARSING_ERR)
         except Exception as e:
-            self._log(f"Error has occurred while running command: {e}")
+            self._log(f"Error has occurred while running command: {e.with_traceback(None)}")
             sys.exit(ExitCode.RUNTIME_ERR)
         sys.exit(ExitCode.SUCCESS)
 
@@ -154,13 +154,17 @@ class CLI(AutoArgumentParser):
 
         args = parser.parse_args(self.get_args())
         obj_args = vars(args)
+        obj_args = self.revese_name_translations(obj_args)
+
         if COMMAND_KEY not in obj_args:
             parser.print_help()
             sys.exit(ExitCode.INVALID_ARGS)
 
         command = obj_args[COMMAND_KEY]
+        command = self.translator.get_original(command)
         del obj_args[COMMAND_KEY]
         args_all: dict = vars(obj_args[command])
+        args_all = self.revese_name_translations(args_all)
         cmd = commands[command]
 
         if isinstance(cmd, (Function, Method)):
@@ -170,6 +174,13 @@ class CLI(AutoArgumentParser):
         else:
             raise InvalidCommandError(f"Not a valid command: {cmd}")
 
+    def revese_name_translations(self, args: dict) -> dict:
+        reversed = {}
+        for k, v in args.items():
+            k = self.translator.get_original(k)
+            reversed[k] = v
+        return reversed
+
     def _run_class_inner(self, cls: Class, args: dict, parser: ArgumentParser):
         if COMMAND_KEY not in args:
             parser.print_help()
@@ -177,6 +188,8 @@ class CLI(AutoArgumentParser):
 
         command = args[COMMAND_KEY]
         args_all: dict = vars(args[command])
+        args_all = self.revese_name_translations(args_all)
+
         method = cls.get_method(command)
         args_init, args_method = self._split_init_method_args(args_all, cls, method)
 

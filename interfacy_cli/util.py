@@ -1,4 +1,6 @@
 import sys
+from argparse import ArgumentParser
+from typing import Callable
 
 from stdl.fs import File, assert_paths_exist, json_load, yaml_load
 
@@ -102,3 +104,19 @@ def install_tab_completion(parser: ArgumentParser) -> None:
         return
 
     argcomplete.autocomplete(parser)
+
+
+class Translator:
+    def __init__(self, translate_func: Callable) -> None:
+        self.translate_func = translate_func
+        self.translations: dict[str, str] = {}
+
+    def translate(self, name: str, mode: str):
+        translated_name = self.translate_func(name)
+        self.translations[translated_name] = name
+        return translated_name
+
+    def get_original(self, translated_name: str) -> str:
+        if original := self.translations.get(translated_name):
+            return original
+        return translated_name

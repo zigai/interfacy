@@ -1,19 +1,20 @@
 import sys
 from argparse import ArgumentParser
 from functools import partial
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import strto
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, objinspect
 from stdl import fs
+from stdl.str_u import kebab_case, snake_case
 from strto.converters import Converter
 
 from interfacy_cli.argparse_wrappers import SafeRawHelpFormatter, _ArgumentParser
 from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, ExitCode
 from interfacy_cli.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import get_abbrevation, get_args
+from interfacy_cli.util import Translator, get_abbrevation, get_args
 
 
 class InterfacyArgumentParser:
@@ -81,6 +82,9 @@ class InterfacyArgumentParser:
 
 
 class AutoArgumentParser(InterfacyArgumentParser):
+    translation_funcs = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
+    method_skips = ["__init__"]
+
     def __init__(
         self,
         desciption: str | None = None,
@@ -93,6 +97,7 @@ class AutoArgumentParser(InterfacyArgumentParser):
         read_stdin: bool = False,
         theme: InterfacyTheme | None = None,
         add_abbrevs: bool = True,
+        translation_mode: Literal["none", "kebab", "snake"] = "kebab",
     ):
         super().__init__(
             desciption=desciption,
@@ -103,9 +108,12 @@ class AutoArgumentParser(InterfacyArgumentParser):
             formatter_class=formatter_class,
             parser_extensions=parser_extensions,
         )
+        self.theme = theme or InterfacyTheme()
+        self.translator = Translator(self.translation_funcs[translation_mode])
+        self.name_translate_func = partial(self.translator.translate, mode=translation_mode)
+        self.theme.name_translate_func = self.name_translate_func
         self.read_stdin = read_stdin
         self.stdin = fs.read_stdin() if self.read_stdin else None
-        self.theme = theme or InterfacyTheme()
         self.add_abbrevs = add_abbrevs
 
     def _log(self, msg: str) -> None:
@@ -119,7 +127,8 @@ class AutoArgumentParser(InterfacyArgumentParser):
     ):
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
-        flags = self._get_arg_flags(param.name, taken_flags)
+        name = self.name_translate_func(param.name)
+        flags = self._get_arg_flags(name, taken_flags)
         extra_args = self._extra_add_arg_params(param)
         return parser.add_argument(*flags, **extra_args)
 
@@ -159,10 +168,12 @@ class AutoArgumentParser(InterfacyArgumentParser):
 
         subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
         for method in cls.methods:
-            if method.name == "__init__":
+            if method.name in self.method_skips:
                 continue
             taken_names = [*RESERVED_FLAGS]
-            sp = subparsers.add_parser(method.name, description=method.description)
+            method_name = self.name_translate_func(method.name)
+
+            sp = subparsers.add_parser(method_name, description=method.description)
             if cls.has_init and not cls.is_initialized and not method.is_static:
                 for param in init.params:  # type: ignore
                     self.add_parameter(sp, param, taken_flags=taken_names)
@@ -178,7 +189,8 @@ class AutoArgumentParser(InterfacyArgumentParser):
         subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
 
         for cmd in commands:
-            sp = subparsers.add_parser(cmd.name, description=cmd.description)
+            command_name = self.name_translate_func(cmd.name)
+            sp = subparsers.add_parser(command_name, description=cmd.description)
             if isinstance(cmd, (Function, Method)):
                 sp = self.parser_from_func(fn=cmd, taken_names=[*RESERVED_FLAGS], parser=sp)
             elif isinstance(cmd, Class):
