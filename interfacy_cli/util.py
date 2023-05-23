@@ -46,7 +46,7 @@ def get_args(args: list[str] | None = None, from_file_prefix="@F") -> list[str]:
     return parsed_args
 
 
-def get_abbrevation(name: str, taken: list[str]) -> str | None:
+def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | None:
     """
     Tries to return a short name for a command.
     Returns None if it cannot find a short name.
@@ -61,22 +61,22 @@ def get_abbrevation(name: str, taken: list[str]) -> str | None:
         >>> get_abbrevation("hello_world", ["hw", "h", "he"])
         >>> None
     """
-    if name in taken:
-        raise ValueError(f"Command name '{name}' already taken")
-    if len(name) < 3:
+    if value in taken:
+        raise ValueError(f"Command name '{value}' already taken")
+    if len(value) < min_len:
         return None
-    name_split = name.split("_")
+    name_split = value.split("_")
     abbrev = name_split[0][0]
-    if abbrev not in taken and abbrev != name:
+    if abbrev not in taken and abbrev != value:
         taken.append(abbrev)
         return abbrev
     short_name = "".join([i[0] for i in name_split])
-    if short_name not in taken and short_name != name:
+    if short_name not in taken and short_name != value:
         taken.append(short_name)
         return short_name
     try:
         short_name = name_split[0][:2]
-        if short_name not in taken and short_name != name:
+        if short_name not in taken and short_name != value:
             taken.append(short_name)
             return short_name
         return None
@@ -111,7 +111,7 @@ class Translator:
         self.translate_func = translate_func
         self.translations: dict[str, str] = {}
 
-    def translate(self, name: str, mode: str):
+    def translate(self, name: str) -> str:
         translated_name = self.translate_func(name)
         self.translations[translated_name] = name
         return translated_name

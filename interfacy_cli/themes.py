@@ -76,7 +76,7 @@ class InterfacyTheme:
             h.append(self.get_command_description(method, ljust))
         return "\n".join(h)
 
-    def get_commands_help_multi(self, commands: list[Class | Function | Method]) -> str:
+    def get_commands_help_multiple(self, commands: list[Class | Function | Method]) -> str:
         ljust = self._get_ljust(commands)  # type: ignore
         h = [self.commands_title]
         for command in commands:

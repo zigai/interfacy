@@ -57,9 +57,7 @@ class CLI(AutoArgumentParser):
         try:
             res = self._run()
             if self.print_result:
-                from pprint import pprint
-
-                pprint(res)
+                self._print_result(res)
         except InterfacyException as e:
             self._log(f"Error has occurred while building parser: {e}")
             sys.exit(ExitCode.PARSING_ERR)
@@ -68,10 +66,10 @@ class CLI(AutoArgumentParser):
             sys.exit(ExitCode.RUNTIME_ERR)
         sys.exit(ExitCode.SUCCESS)
 
-    def _print_result(self, res) -> None:
+    def _print_result(self, value: Any) -> None:
         from pprint import pprint
 
-        pprint(res)
+        pprint(value)
 
     def _split_args_kwargs(self, func_args: dict, func: Function | Method) -> tuple[tuple, dict]:
         args, kwargs = [], {}
@@ -111,7 +109,7 @@ class CLI(AutoArgumentParser):
             elif isinstance(command, Class):
                 return self._run_class(command)
             raise InvalidCommandError(f"Not a valid command: {command}")
-        return self._run_multi(commands)
+        return self._run_multiple(commands)
 
     def _run_callable(self, func: Function | Method) -> Any:
         """
@@ -146,8 +144,8 @@ class CLI(AutoArgumentParser):
         args_dict = vars(args)
         return self._run_class_inner(cls, args_dict, parser)
 
-    def _run_multi(self, commands: dict[str, Function | Class]) -> Any:
-        parser = self.parser_from_multi(commands.values())  # type: ignore
+    def _run_multiple(self, commands: dict[str, Function | Class]) -> Any:
+        parser = self.parser_from_multiple(commands.values())  # type: ignore
 
         if self.tab_completion:
             self.install_tab_completion(parser)
@@ -161,7 +159,7 @@ class CLI(AutoArgumentParser):
             sys.exit(ExitCode.INVALID_ARGS)
 
         command = obj_args[COMMAND_KEY]
-        command = self.translator.get_original(command)
+        command = self.flag_translator.get_original(command)
         del obj_args[COMMAND_KEY]
         args_all: dict = vars(obj_args[command])
         args_all = self.revese_name_translations(args_all)
@@ -177,7 +175,7 @@ class CLI(AutoArgumentParser):
     def revese_name_translations(self, args: dict) -> dict:
         reversed = {}
         for k, v in args.items():
-            k = self.translator.get_original(k)
+            k = self.flag_translator.get_original(k)
             reversed[k] = v
         return reversed
 

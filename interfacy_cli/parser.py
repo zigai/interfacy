@@ -82,7 +82,7 @@ class InterfacyArgumentParser:
 
 
 class AutoArgumentParser(InterfacyArgumentParser):
-    translation_funcs = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
+    flag_translate_funcs = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
     method_skips = ["__init__"]
 
     def __init__(
@@ -97,7 +97,7 @@ class AutoArgumentParser(InterfacyArgumentParser):
         read_stdin: bool = False,
         theme: InterfacyTheme | None = None,
         add_abbrevs: bool = True,
-        translation_mode: Literal["none", "kebab", "snake"] = "kebab",
+        flag_translation_mode: Literal["none", "kebab", "snake"] = "kebab",
     ):
         super().__init__(
             desciption=desciption,
@@ -109,8 +109,10 @@ class AutoArgumentParser(InterfacyArgumentParser):
             parser_extensions=parser_extensions,
         )
         self.theme = theme or InterfacyTheme()
-        self.translator = Translator(self.translation_funcs[translation_mode])
-        self.name_translate_func = partial(self.translator.translate, mode=translation_mode)
+        self.flag_translator = Translator(self.flag_translate_funcs[flag_translation_mode])
+        self.name_translate_func = partial(
+            self.flag_translator.translate, mode=flag_translation_mode
+        )
         self.theme.name_translate_func = self.name_translate_func
         self.read_stdin = read_stdin
         self.stdin = fs.read_stdin() if self.read_stdin else None
@@ -180,12 +182,12 @@ class AutoArgumentParser(InterfacyArgumentParser):
             sp = self.parser_from_func(method, taken_names, sp)
         return parser
 
-    def parser_from_multi(
+    def parser_from_multiple(
         self,
         commands: list[Function | Class],
     ) -> ArgumentParser:
         parser = self._new_parser()
-        parser.epilog = self.theme.get_commands_help_multi(commands)
+        parser.epilog = self.theme.get_commands_help_multiple(commands)
         subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
 
         for cmd in commands:

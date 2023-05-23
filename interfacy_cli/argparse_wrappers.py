@@ -83,7 +83,6 @@ class SafeHelpFormatter(HelpFormatter):
             # wrap the usage parts if it's too long
             text_width = self._width - self._current_indent
             if len(prefix) + len(usage) > text_width:
-
                 # break usage into wrappable parts
                 part_regexp = r"\(.*?\)+(?=\s|$)|" r"\[.*?\]+(?=\s|$)|" r"\S+"
                 opt_usage = format(optionals, groups)
