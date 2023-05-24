@@ -11,7 +11,7 @@ def read_args_from_file(path: str) -> list[str]:
     """
     assert_paths_exist(path)
 
-    def dict_extract(d: dict):
+    def extract_args(d: dict):
         args = []
         for k, v in d.items():
             args.append(k)
@@ -19,16 +19,17 @@ def read_args_from_file(path: str) -> list[str]:
         return args
 
     if path.endswith(".json"):
-        return dict_extract(json_load(path))
+        return extract_args(json_load(path))  # type:ignore
     if path.endswith(".yaml"):
-        return dict_extract(yaml_load(path))
+        return extract_args(yaml_load(path))  # type:ignore
+
     args = []
     for line in File(path).splitlines():
         line = line.strip().split(" ")
         arg_name = line[0]
-        arg_val = " ".join(line[1:])
+        arg_value = " ".join(line[1:])
         args.append(arg_name)
-        args.append(arg_val)
+        args.append(arg_value)
     return args
 
 
@@ -63,13 +64,16 @@ def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | Non
     """
     if value in taken:
         raise ValueError(f"Command name '{value}' already taken")
+
     if len(value) < min_len:
         return None
+
     name_split = value.split("_")
     abbrev = name_split[0][0]
     if abbrev not in taken and abbrev != value:
         taken.append(abbrev)
         return abbrev
+
     short_name = "".join([i[0] for i in name_split])
     if short_name not in taken and short_name != value:
         taken.append(short_name)
@@ -111,7 +115,7 @@ class Translator:
         self.translate_func = translate_func
         self.translations: dict[str, str] = {}
 
-    def translate(self, name: str) -> str:
+    def get_translation(self, name: str) -> str:
         translated_name = self.translate_func(name)
         self.translations[translated_name] = name
         return translated_name

@@ -10,8 +10,8 @@ from stdl import fs
 from stdl.str_u import kebab_case, snake_case
 from strto.converters import Converter
 
-from interfacy_cli.argparse_wrappers import SafeRawHelpFormatter, _ArgumentParser
-from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, ExitCode
+from interfacy_cli.argparse_wrappers import ArgumentParserWrapper, SafeRawHelpFormatter
+from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS
 from interfacy_cli.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import Translator, get_abbrevation, get_args
@@ -35,7 +35,6 @@ class InterfacyArgumentParser:
         if parser_extensions:
             self.type_parser.extend(parser_extensions)  # type: ignore
         self.parser_extensions = parser_extensions or {}
-
         self._parser = self._new_parser()
         self.set_description(desciption)
         self.set_epilog(epilog)
@@ -53,7 +52,7 @@ class InterfacyArgumentParser:
         return self._parser
 
     def _new_parser(self):
-        return _ArgumentParser(formatter_class=self.formatter_class)
+        return ArgumentParserWrapper(formatter_class=self.formatter_class)
 
     def set_description(self, description: str | None = None) -> None:
         self._parser.description = description
@@ -84,6 +83,7 @@ class InterfacyArgumentParser:
 class AutoArgumentParser(InterfacyArgumentParser):
     flag_translate_funcs = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
     method_skips = ["__init__"]
+    log_msg_tag = "interfacy"
 
     def __init__(
         self,
@@ -110,16 +110,14 @@ class AutoArgumentParser(InterfacyArgumentParser):
         )
         self.theme = theme or InterfacyTheme()
         self.flag_translator = Translator(self.flag_translate_funcs[flag_translation_mode])
-        self.name_translate_func = partial(
-            self.flag_translator.translate, mode=flag_translation_mode
-        )
+        self.name_translate_func = partial(self.flag_translator.get_translation)
         self.theme.name_translate_func = self.name_translate_func
         self.read_stdin = read_stdin
         self.stdin = fs.read_stdin() if self.read_stdin else None
         self.add_abbrevs = add_abbrevs
 
     def _log(self, msg: str) -> None:
-        print(f"[interfacy] {msg}", file=sys.stdout)
+        print(f"[{self.log_msg_tag}] {msg}", file=sys.stdout)
 
     def add_parameter(
         self,
@@ -137,7 +135,7 @@ class AutoArgumentParser(InterfacyArgumentParser):
     def parser_from_func(
         self,
         fn: Function,
-        taken_names: list[str],
+        taken_flags: list[str],
         parser: ArgumentParser | None = None,
     ) -> ArgumentParser:
         """
@@ -146,7 +144,7 @@ class AutoArgumentParser(InterfacyArgumentParser):
         if parser is None:
             parser = self._new_parser()
         for param in fn.params:
-            self.add_parameter(parser, param, taken_names)
+            self.add_parameter(parser, param, taken_flags)
         if fn.has_docstring:
             parser.description = self.theme.format_description(fn.description)
         return parser
@@ -172,14 +170,14 @@ class AutoArgumentParser(InterfacyArgumentParser):
         for method in cls.methods:
             if method.name in self.method_skips:
                 continue
-            taken_names = [*RESERVED_FLAGS]
+            taken_flags = [*RESERVED_FLAGS]
             method_name = self.name_translate_func(method.name)
 
             sp = subparsers.add_parser(method_name, description=method.description)
             if cls.has_init and not cls.is_initialized and not method.is_static:
                 for param in init.params:  # type: ignore
-                    self.add_parameter(sp, param, taken_flags=taken_names)
-            sp = self.parser_from_func(method, taken_names, sp)
+                    self.add_parameter(sp, param, taken_flags=taken_flags)
+            sp = self.parser_from_func(method, taken_flags, sp)
         return parser
 
     def parser_from_multiple(
@@ -194,7 +192,7 @@ class AutoArgumentParser(InterfacyArgumentParser):
             command_name = self.name_translate_func(cmd.name)
             sp = subparsers.add_parser(command_name, description=cmd.description)
             if isinstance(cmd, (Function, Method)):
-                sp = self.parser_from_func(fn=cmd, taken_names=[*RESERVED_FLAGS], parser=sp)
+                sp = self.parser_from_func(fn=cmd, taken_flags=[*RESERVED_FLAGS], parser=sp)
             elif isinstance(cmd, Class):
                 sp = self.parser_from_class(cmd, sp)
             else:

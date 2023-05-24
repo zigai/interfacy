@@ -8,20 +8,13 @@ from strto.util import type_to_str
 
 try:
     from gettext import gettext as _
-    from gettext import ngettext
 except ImportError:
 
     def _(message):
         return message
 
-    def ngettext(singular, plural, n):
-        if n == 1:
-            return singular
-        else:
-            return plural
 
-
-class _ArgumentParser(NestedArgumentParser):
+class ArgumentParserWrapper(NestedArgumentParser):
     def _get_value(self, action, arg_string):
         parse_func = self._registry_get("type", action.type, action.type)
         if not callable(parse_func):
@@ -53,19 +46,15 @@ class SafeHelpFormatter(HelpFormatter):
     def _format_usage(self, usage, actions, groups, prefix):
         if prefix is None:
             prefix = _("usage: ")
-
         # if usage is specified, use that
         if usage is not None:
             usage = usage % dict(prog=self._prog)
-
         # if no optionals or positionals are available, usage is just prog
         elif usage is None and not actions:
             usage = "%(prog)s" % dict(prog=self._prog)
-
         # if optionals and positionals are available, calculate usage
         elif usage is None:
             prog = "%(prog)s" % dict(prog=self._prog)
-
             # split optionals from positionals
             optionals = []
             positionals = []
@@ -90,14 +79,13 @@ class SafeHelpFormatter(HelpFormatter):
                 opt_parts = re.findall(part_regexp, opt_usage)
                 pos_parts = re.findall(part_regexp, pos_usage)
 
-                # Only change from original code is commenting out the assert statements:
+                # NOTE: only change from original code is commenting out the assert statements
                 # assert " ".join(opt_parts) == opt_usage
                 # assert " ".join(pos_parts) == pos_usage
 
                 # helper for wrapping lines
                 def get_lines(parts, indent, prefix=None):
-                    lines = []
-                    line = []
+                    lines, line = [], []
                     if prefix is not None:
                         line_len = len(prefix) - 1
                     else:
@@ -163,4 +151,4 @@ class SafeRawHelpFormatter(SafeHelpFormatter):
         return text.splitlines()
 
 
-__all__ = ["SafeHelpFormatter", "SafeRawHelpFormatter", "_ArgumentParser"]
+__all__ = ["SafeHelpFormatter", "SafeRawHelpFormatter", "ArgumentParserWrapper"]

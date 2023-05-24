@@ -55,9 +55,9 @@ class CLI(AutoArgumentParser):
 
     def run(self) -> None:
         try:
-            res = self._run()
+            result = self._run()
             if self.print_result:
-                self._print_result(res)
+                self.display_result(result)
         except InterfacyException as e:
             self._log(f"Error has occurred while building parser: {e}")
             sys.exit(ExitCode.PARSING_ERR)
@@ -66,7 +66,7 @@ class CLI(AutoArgumentParser):
             sys.exit(ExitCode.RUNTIME_ERR)
         sys.exit(ExitCode.SUCCESS)
 
-    def _print_result(self, value: Any) -> None:
+    def display_result(self, value: Any) -> None:
         from pprint import pprint
 
         pprint(value)
