@@ -1,4 +1,0 @@
-nested_argparse==0.1.2
-objinspect==0.2.0
-stdl>=0.4.1
-argcomplete==2.0.0
