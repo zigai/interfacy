@@ -7,7 +7,7 @@ import strto
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, objinspect
 from stdl import fs
-from stdl.str_u import kebab_case, snake_case
+from stdl.st import kebab_case, snake_case
 from strto.converters import Converter
 
 from interfacy_cli.argparse_wrappers import ArgumentParserWrapper, SafeRawHelpFormatter

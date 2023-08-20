@@ -2,7 +2,7 @@ from typing import Callable
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.util import type_to_str
-from stdl.str_u import FG, colored
+from stdl.st import FG, colored
 
 from interfacy_cli.util import simplify_type
 

@@ -19,7 +19,7 @@ class CLI(AutoArgumentParser):
         self,
         *commands: Callable,
         run: bool = True,
-        desciption: str | None = None,
+        description: str | None = None,
         epilog: str | None = None,
         from_file_prefix: str = "@F",
         allow_args_from_file: bool = True,
@@ -33,7 +33,7 @@ class CLI(AutoArgumentParser):
         print_result: bool = False,
     ):
         super().__init__(
-            desciption,
+            description,
             epilog,
             from_file_prefix,
             allow_args_from_file,
@@ -89,8 +89,8 @@ class CLI(AutoArgumentParser):
             return args_init, args_method
         return {}, args
 
-    def _collect_commands(self) -> dict[str, Function | Class]:
-        commands: dict[str, Function | Class] = {}
+    def _collect_commands(self) -> dict[str, Function | Class | Method]:
+        commands = {}
         for command in self.commands:
             cmd = objinspect(command, inherited=False)
             if cmd.name in commands:
