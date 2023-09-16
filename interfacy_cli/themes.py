@@ -4,7 +4,7 @@ from objinspect import Class, Function, Method, Parameter
 from objinspect.util import type_to_str
 from stdl.st import FG, colored
 
-from interfacy_cli.util import simplify_type
+from interfacy_cli.util import simplify_type_name
 
 
 def with_style(text: str, style: dict) -> str:
@@ -22,13 +22,13 @@ class InterfacyTheme:
     command_skips = ["__init__"]
     commands_title = "commands:"
     required_indicator = "(" + colored("*", color=FG.RED) + ") "
-    name_translate_func: Callable = None
+    name_translator: Callable = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))
 
     def _translate_name(self, name: str) -> str:
-        return self.name_translate_func(name) if self.name_translate_func else name
+        return self.name_translator(name) if self.name_translator else name
 
     def format_description(self, description: str) -> str:
         return description
@@ -48,7 +48,7 @@ class InterfacyTheme:
         if param.is_typed:
             type_str = type_to_str(param.type)
             if self.simplify_types:
-                type_str = simplify_type(type_str)
+                type_str = simplify_type_name(type_str)
             h.append(with_style(type_str, self.style_type))
 
         if param.is_optional and param.default is not None:

@@ -9,12 +9,12 @@ from objinspect import Class, Function, Method, objinspect
 from interfacy_cli.argparse_wrappers import SafeRawHelpFormatter
 from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, ExitCode
 from interfacy_cli.exceptions import DupicateCommandError, InterfacyException, InvalidCommandError
-from interfacy_cli.parser import AutoArgumentParser
+from interfacy_cli.parser import AutoArgparseParser
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import install_tab_completion
 
 
-class CLI(AutoArgumentParser):
+class CLI(AutoArgparseParser):
     def __init__(
         self,
         *commands: Callable,
@@ -108,6 +108,8 @@ class CLI(AutoArgumentParser):
                 return self._run_callable(command)
             elif isinstance(command, Class):
                 return self._run_class(command)
+            elif isinstance(command, Method):
+                return self._run_method(command)
             raise InvalidCommandError(f"Not a valid command: {command}")
         return self._run_multiple(commands)
 
@@ -143,6 +145,26 @@ class CLI(AutoArgumentParser):
         args = parser.parse_args(self.get_args())
         args_dict = vars(args)
         return self._run_class_inner(cls, args_dict, parser)
+
+    def _run_method(self, method: Method) -> Any:
+        """
+        Called when a single method is passed to CLI
+        """
+        parser = self.parser_from_method(method, [*RESERVED_FLAGS])
+
+        if self.description:
+            parser.description = self.theme.format_description(self.description)
+
+        if self.tab_completion:
+            self.install_tab_completion(parser)
+
+        args = parser.parse_args(self.get_args())
+        args_dict = vars(args)
+        args_all = self.revese_name_translations(args_dict)
+        obj = Class(method.cls)
+        args_init, args_method = self._split_init_method_args(args_all, obj, method)
+        obj.init(**args_init)
+        return obj.call_method(method.name, **args_method)
 
     def _run_multiple(self, commands: dict[str, Function | Class]) -> Any:
         parser = self.parser_from_multiple(commands.values())  # type: ignore
