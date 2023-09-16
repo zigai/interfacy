@@ -52,6 +52,12 @@ def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | Non
     Tries to return a short name for a command.
     Returns None if it cannot find a short name.
 
+    Args:
+        value (str): The value to abbreviate.
+        taken (list[str]): List of taken abbreviations.
+        min_len (int, optional): Minimum length of the value to abbreviate. Defaults to 3.
+            If the value is shorter than this, None will be returned.
+
     Example:
         >>> get_abbrevation("hello_world", [])
         >>> "h"
@@ -88,14 +94,22 @@ def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | Non
         return None
 
 
-def simplify_type(t: str) -> str:
-    t = t.split(".")[-1]
-    t = t.replace("| None", "").strip()
-    return t
+def simplify_type_name(name: str) -> str:
+    """
+    Simplifies the type name by removing module paths and optional "None" union.
+    """
+    name = name.split(".")[-1]
+    name = name.replace("| None", "").strip()
+    return name
 
 
 def install_tab_completion(parser: ArgumentParser) -> None:
-    """Install tab completion for the given parser"""
+    """
+    Install tab completion for the given parser.
+    Requires the argcomplete package to be installed.
+
+    'pip install argcomplete'
+    """
     try:
         import argcomplete
 
@@ -111,16 +125,49 @@ def install_tab_completion(parser: ArgumentParser) -> None:
 
 
 class Translator:
-    def __init__(self, translate_func: Callable) -> None:
-        self.translate_func = translate_func
+    """
+    Handles translation of strings through a provided function and keeps a record of translations.
+
+    Attributes:
+        translation_func (Callable): Function to translate a string.
+        translations (dict[str, str]): Dictionary to store translated names and their originals.
+
+    """
+
+    def __init__(self, translation_func: Callable) -> None:
+        """
+        Initialize the Translator instance.
+
+        Args:
+            translate_func (Callable): Function to use for translating strings.
+        """
+        self.translation_func = translation_func
         self.translations: dict[str, str] = {}
 
     def get_translation(self, name: str) -> str:
-        translated_name = self.translate_func(name)
+        """
+        Translate a string and save the translation.
+
+        Args:
+            name (str): The original name to be translated.
+
+        Returns:
+            str: The translated name.
+        """
+        translated_name = self.translation_func(name)
         self.translations[translated_name] = name
         return translated_name
 
-    def get_original(self, translated_name: str) -> str:
-        if original := self.translations.get(translated_name):
+    def get_original(self, translated: str) -> str:
+        """
+        Retrieve the original name based on the translated name.
+
+        Args:
+            translated (str): The translated name whose original name needs to be found.
+
+        Returns:
+            str: The original name if it exists, otherwise returns the same translated name.
+        """
+        if original := self.translations.get(translated):
             return original
-        return translated_name
+        return translated
