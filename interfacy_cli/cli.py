@@ -1,15 +1,15 @@
 import sys
 from argparse import ArgumentParser
 from inspect import _ParameterKind
+from pprint import pprint
 from typing import Any, Callable
 
 import strto
 from objinspect import Class, Function, Method, objinspect
 
-from interfacy_cli.argparse_wrappers import SafeRawHelpFormatter
+from interfacy_cli.auto_argparse_parser import AutoArgparseParser, SafeRawHelpFormatter
 from interfacy_cli.constants import COMMAND_KEY, RESERVED_FLAGS, ExitCode
 from interfacy_cli.exceptions import DupicateCommandError, InterfacyException, InvalidCommandError
-from interfacy_cli.parser import AutoArgparseParser
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import install_tab_completion
 
@@ -67,8 +67,6 @@ class CLI(AutoArgparseParser):
         sys.exit(ExitCode.SUCCESS)
 
     def display_result(self, value: Any) -> None:
-        from pprint import pprint
-
         pprint(value)
 
     def _split_args_kwargs(self, func_args: dict, func: Function | Method) -> tuple[tuple, dict]:

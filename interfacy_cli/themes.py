@@ -1,4 +1,4 @@
-from typing import Callable
+import typing as T
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.util import type_to_str
@@ -22,7 +22,7 @@ class InterfacyTheme:
     command_skips = ["__init__"]
     commands_title = "commands:"
     required_indicator = "(" + colored("*", color=FG.RED) + ") "
-    name_translator: Callable = None  # type:ignore
+    name_translator: T.Callable = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))

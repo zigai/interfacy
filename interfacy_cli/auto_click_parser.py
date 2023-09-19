@@ -3,9 +3,9 @@ from os import get_terminal_size
 
 import click
 import strto
-from objinspect import Class, Function, Method, Parameter, objinspect
+from objinspect import Class, Function, Method, Parameter
 
-from interfacy_cli.auto_parser_core import AutoParserCore, FlagsStrategy
+from interfacy_cli.auto_parser_core import AutoParserCore
 from interfacy_cli.constants import RESERVED_FLAGS
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
@@ -83,7 +83,7 @@ class AutoClickParser(AutoParserCore):
         theme: InterfacyTheme | None = None,
         value_parser: strto.Parser | None = None,
         *,
-        flag_strategy: T.Literal["keyword_only", "required_positinal"] = "required_positinal",
+        flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
         flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
         from_file_prefix: str = "@F",
         display_result: bool = True,
@@ -248,35 +248,4 @@ class AutoClickParser(AutoParserCore):
         return main_parser
 
 
-def tetete(s: str):
-    return 123
-
-
-def main():
-    from example import Math, pow
-    from objinspect import Class, Function, objinspect
-
-    """
-    parser = AutoClickParser(   )
-    fn = Function(pow)
-    x = parser.parser_from_func(fn)
-    r = x()
-    print(r)
-    """
-    import sys
-
-    c = Class(Math)
-    print(c)
-    command = AutoClickParser().parser_from_multiple([c, Function(tetete)])
-    lol = command()
-    # x = parse_args_for_group(command, sys.argv[1:])
-    """
-    context = click.Context(command, info_name=command.name)
-    command.invoke(context)
-    # p = command.make_parser(context)
-    # p.parse_args(sys.argv[1:])
-    """
-
-
-if __name__ == "__main__":
-    main()
+__all__ = ["AutoClickParser"]

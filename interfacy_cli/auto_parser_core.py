@@ -1,16 +1,15 @@
 import sys
 import typing as T
-from argparse import ArgumentParser
-from enum import Enum
 from typing import Literal
 
 import strto
-from objinspect import Class, Function, Method, Parameter
+from objinspect import Class, Function, Parameter
 from stdl import fs
 from stdl.st import kebab_case, snake_case
+from strto.converters import Converter
 
 from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import Translator, get_abbrevation
+from interfacy_cli.util import Translator, get_abbrevation, get_args
 
 
 class FlagsStrategy:
@@ -30,16 +29,15 @@ class AutoParserCore:
     method_skips = ["__init__"]
     log_msg_tag = "interfacy"
     flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
-    output_sink = sys.stdout.write
 
     def __init__(
         self,
-        desciption: str | None = None,
+        description: str | None = None,
         epilog: str | None = None,
         theme: InterfacyTheme | None = None,
         value_parser: strto.Parser | None = None,
         *,
-        flag_strategy: T.Literal["keyword_only", "required_positinal"] = "required_positinal",
+        flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
         flag_translation_mode: Literal["none", "kebab", "snake"] = "kebab",
         from_file_prefix: str = "@F",
         display_result: bool = True,
@@ -47,27 +45,52 @@ class AutoParserCore:
         read_stdin: bool = False,
         allow_args_from_file: bool = True,
     ) -> None:
-        self.desciption = desciption
+        self.read_stdin = read_stdin
+        self.stdin = fs.read_stdin() if self.read_stdin else None
+        self.description = description
         self.epilog = epilog
         self.flag_strategy = flag_strategy
         self.from_file_prefix = from_file_prefix
         self.allow_args_from_file = allow_args_from_file
-        self.read_stdin = read_stdin
         self.add_abbrevs = add_abbrevs
         self.display_result = display_result
         self.flag_translation_mode = flag_translation_mode
         self.value_parser = value_parser or strto.get_parser()
-        self.theme = theme or InterfacyTheme()
-        self.stdin = fs.read_stdin() if self.read_stdin else None
-        self.flag_translator = Translator(self.flag_translate_fn[flag_translation_mode])
+        self.flag_translator = self._get_flag_translator()
         self.name_translator = self.flag_translator.get_translation
+        self.theme = theme or InterfacyTheme()
         self.theme.name_translator = self.name_translator
 
+    def get_args(self) -> list[str]:
+        if self.allow_args_from_file:
+            return get_args(sys.argv, from_file_prefix=self.from_file_prefix)
+        return sys.argv[1:]
+
+    def parser_from_func(self, fn: Function, taken_flags: list[str] | None = None, parser=None):
+        raise NotImplementedError
+
+    def parser_from_class(self, cls: Class, parser=None):
+        raise NotImplementedError
+
+    def parser_from_multiple(self, commands: list[Function | Class]):
+        raise NotImplementedError
+
+    def extend_value_parser(self, ext: dict[T.Any, Converter]):
+        self.value_parser.extend(ext)
+
     def _log(self, msg: str) -> None:
-        print(f"[{self.log_msg_tag}] {msg}")
+        print(f"[{self.log_msg_tag}] {msg}", file=sys.stdout)
 
     def _display_result(self, value: T.Any) -> None:
         print(value)
+
+    def _get_flag_translator(self) -> Translator:
+        if self.flag_translation_mode not in self.flag_translate_fn:
+            raise ValueError(
+                f"Invalid flag translation mode: {self.flag_translation_mode}. "
+                f"Valid modes are: {', '.join(self.flag_translate_fn.keys())}"
+            )
+        return Translator(self.flag_translate_fn[self.flag_translation_mode])
 
     def _get_arg_flags(
         self,
@@ -99,32 +122,6 @@ class AutoParserCore:
             if flag_short := get_abbrevation(param_name, taken_flags):
                 flags = (f"-{flag_short}".strip(), flag_long)
         return flags
-
-    def set_description(self, description: str | None = None) -> None:
-        raise NotImplementedError
-
-    def set_epilog(self, epilog: str | None = None) -> None:
-        raise NotImplementedError
-
-    def add_parameter(self, parser, param: Parameter, taken_flags: list[str]) -> None:
-        raise NotImplementedError
-
-    def parser_from_method(
-        self,
-        method: Method,
-        taken_flags: list[str],
-        parser: ArgumentParser | None = None,
-    ):
-        raise NotImplementedError
-
-    def parser_from_func(self, fn: Function, taken_flags: list[str] | None = None, parser=None):
-        raise NotImplementedError
-
-    def parser_from_class(self, cls: Class, parser=None):
-        raise NotImplementedError
-
-    def parser_from_multiple(self, commands: list[Function | Class]):
-        raise NotImplementedError
 
 
 __all__ = ["AutoParserCore", "FlagsStrategy"]
