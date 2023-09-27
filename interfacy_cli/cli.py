@@ -11,13 +11,12 @@ from interfacy_cli.themes import InterfacyTheme
 class CLI:
     def __init__(
         self,
-        commands: list[T.Callable],
+        *commands: T.Callable,
         run: bool = True,
         description: str | None = None,
         epilog: str | None = None,
-        backend: T.Literal["argparse", "click"] = "click",
+        backend: T.Literal["argparse", "click"] = "argparse",
         value_parser: strto.Parser | None = None,
-        *,
         theme: InterfacyTheme | None = None,
         flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
         flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
@@ -61,7 +60,3 @@ class CLI:
 
 
 __all__ = ["CLI"]
-
-from example import Math
-
-CLI([Math], backend="argparse")

@@ -6,7 +6,7 @@ import strto
 from objinspect import Class, Function, Method, Parameter
 
 from interfacy_cli.auto_parser_core import AutoParserCore
-from interfacy_cli.constants import ARGPARSE_RESERVED_FLAGS, CLICK_RESERVED_FLAGS
+from interfacy_cli.constants import CLICK_RESERVED_FLAGS
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
 
