@@ -103,27 +103,6 @@ def simplify_type_name(name: str) -> str:
     return name
 
 
-def install_tab_completion(parser: ArgumentParser) -> None:
-    """
-    Install tab completion for the given parser.
-    Requires the argcomplete package to be installed.
-
-    'pip install argcomplete'
-    """
-    try:
-        import argcomplete
-
-    except ImportError:
-        print(
-            "argcomplete not installed. Tab completion not available."
-            " Install with 'pip install argcomplete'",
-            file=sys.stderr,
-        )
-        return
-
-    argcomplete.autocomplete(parser)
-
-
 class Translator:
     """
     Handles translation of strings through a provided function and keeps a record of translations.

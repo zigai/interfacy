@@ -1,13 +1,13 @@
 import sys
 import typing as T
-from typing import Literal
 
 import strto
-from objinspect import Class, Function, Parameter
+from objinspect import Class, Function, Method, Parameter, inspect
 from stdl import fs
 from stdl.st import kebab_case, snake_case
 from strto.converters import Converter
 
+from interfacy_cli.exceptions import DupicateCommandError
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import Translator, get_abbrevation, get_args
 
@@ -38,12 +38,13 @@ class AutoParserCore:
         value_parser: strto.Parser | None = None,
         *,
         flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
-        flag_translation_mode: Literal["none", "kebab", "snake"] = "kebab",
+        flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
         from_file_prefix: str = "@F",
-        display_result: bool = True,
+        print_result: bool = True,
         add_abbrevs: bool = True,
         read_stdin: bool = False,
         allow_args_from_file: bool = True,
+        tab_completion: bool = False,
     ) -> None:
         self.read_stdin = read_stdin
         self.stdin = fs.read_stdin() if self.read_stdin else None
@@ -53,13 +54,14 @@ class AutoParserCore:
         self.from_file_prefix = from_file_prefix
         self.allow_args_from_file = allow_args_from_file
         self.add_abbrevs = add_abbrevs
-        self.display_result = display_result
+        self.tab_completion = tab_completion
+        self.print_result = print_result
         self.flag_translation_mode = flag_translation_mode
         self.value_parser = value_parser or strto.get_parser()
         self.flag_translator = self._get_flag_translator()
-        self.name_translator = self.flag_translator.get_translation
+        self.translate_name = self.flag_translator.get_translation
         self.theme = theme or InterfacyTheme()
-        self.theme.name_translator = self.name_translator
+        self.theme.translate_name = self.translate_name
 
     def get_args(self) -> list[str]:
         if self.allow_args_from_file:
@@ -81,7 +83,7 @@ class AutoParserCore:
     def _log(self, msg: str) -> None:
         print(f"[{self.log_msg_tag}] {msg}", file=sys.stdout)
 
-    def _display_result(self, value: T.Any) -> None:
+    def display_result(self, value: T.Any) -> None:
         print(value)
 
     def _get_flag_translator(self) -> Translator:
@@ -122,6 +124,21 @@ class AutoParserCore:
             if flag_short := get_abbrevation(param_name, taken_flags):
                 flags = (f"-{flag_short}".strip(), flag_long)
         return flags
+
+    def collect_commands(self, *commands: T.Callable) -> dict[str, Function | Class | Method]:
+        commands_dict = {}
+        for i in commands:
+            command = inspect(i, inherited=False)
+            if command.name in commands:
+                raise DupicateCommandError(command.name)
+            commands_dict[command.name] = command
+        return commands_dict
+
+    def install_tab_completion(self) -> None:
+        raise NotImplementedError
+
+    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
+        raise NotImplementedError
 
 
 __all__ = ["AutoParserCore", "FlagsStrategy"]

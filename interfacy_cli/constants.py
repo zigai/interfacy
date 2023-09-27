@@ -1,7 +1,8 @@
 from objinspect.constants import *
 
 ITEM_SEP = ","
-RESERVED_FLAGS = ["h", "help"]
+ARGPARSE_RESERVED_FLAGS = ["h", "help"]
+CLICK_RESERVED_FLAGS = ["help"]
 SIMPLE_TYPES = [str, bool]
 COMMAND_KEY = "command"
 ITER_SEP = ","

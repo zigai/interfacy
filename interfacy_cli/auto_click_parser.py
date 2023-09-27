@@ -6,7 +6,7 @@ import strto
 from objinspect import Class, Function, Method, Parameter
 
 from interfacy_cli.auto_parser_core import AutoParserCore
-from interfacy_cli.constants import RESERVED_FLAGS
+from interfacy_cli.constants import ARGPARSE_RESERVED_FLAGS, CLICK_RESERVED_FLAGS
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
 
@@ -15,7 +15,10 @@ class ClickHelpFormatter(click.HelpFormatter):
     def __init__(
         self, indent_increment: int = 2, width: int | None = None, max_width: int | None = None
     ) -> None:
-        terminal_width = get_terminal_size()[0]
+        try:
+            terminal_width = get_terminal_size()[0]
+        except OSError:
+            terminal_width = 80
         super().__init__(indent_increment, width, terminal_width)
 
 
@@ -78,7 +81,7 @@ class ClickCommand(click.Command):
 class AutoClickParser(AutoParserCore):
     def __init__(
         self,
-        desciption: str | None = None,
+        description: str | None = None,
         epilog: str | None = None,
         theme: InterfacyTheme | None = None,
         value_parser: strto.Parser | None = None,
@@ -86,13 +89,14 @@ class AutoClickParser(AutoParserCore):
         flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
         flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
         from_file_prefix: str = "@F",
-        display_result: bool = True,
+        print_result: bool = True,
         add_abbrevs: bool = True,
         read_stdin: bool = False,
+        tab_completion: bool = False,
         allow_args_from_file: bool = True,
     ) -> None:
         super().__init__(
-            desciption,
+            description,
             epilog,
             theme,
             value_parser,
@@ -101,11 +105,12 @@ class AutoClickParser(AutoParserCore):
             from_file_prefix=from_file_prefix,
             add_abbrevs=add_abbrevs,
             read_stdin=read_stdin,
-            display_result=display_result,
+            print_result=print_result,
             allow_args_from_file=allow_args_from_file,
+            tab_completion=tab_completion,
         )
 
-    def _display_result(self, value: T.Any) -> None:
+    def display_result(self, value: T.Any) -> None:
         click.echo(value)
 
     def generate_instance_callback(self, cls: Class) -> T.Callable:
@@ -130,7 +135,7 @@ class AutoClickParser(AutoParserCore):
                 result = fn(instance_callback(), *args, **kwargs)
             else:
                 result = fn(*args, **kwargs)
-            self._display_result(result)
+            self.display_result(result)
             return result
 
         return callback
@@ -147,7 +152,7 @@ class AutoClickParser(AutoParserCore):
             ClickOption | ClickArgument: The generated option or argument. Optional parameters are converted to options, required parameters are converted to arguments.
 
         """
-        name = self.name_translator(param.name)
+        name = self.translate_name(param.name)
 
         extras = {}
         extras["help"] = self.theme.get_parameter_help(param)
@@ -182,7 +187,7 @@ class AutoClickParser(AutoParserCore):
         instance_callback: T.Callable | None = None,
     ) -> ClickCommand:
         if taken_flags is None:
-            taken_flags = [*RESERVED_FLAGS]
+            taken_flags = [*CLICK_RESERVED_FLAGS]
 
         if fn.has_docstring:
             description = self.theme.format_description(fn.description)
@@ -200,7 +205,7 @@ class AutoClickParser(AutoParserCore):
         return command
 
     def parser_from_class(self, cls: Class):
-        taken_flags = [*RESERVED_FLAGS]
+        taken_flags = [*CLICK_RESERVED_FLAGS]
         if cls.has_docstring:
             description = self.theme.format_description(cls.description)
         else:
@@ -235,17 +240,39 @@ class AutoClickParser(AutoParserCore):
     ) -> click.Group:
         main_parser = click.Group(name="main")
         for cmd in commands:
-            command_name = self.name_translator(cmd.name)
+            command_name = self.translate_name(cmd.name)
             if isinstance(cmd, Function):
-                parser = self.parser_from_func(fn=cmd, taken_flags=[*RESERVED_FLAGS])
+                parser = self.parser_from_func(fn=cmd, taken_flags=[*CLICK_RESERVED_FLAGS])
             elif isinstance(cmd, Class):
                 parser = self.parser_from_class(cmd)
             elif isinstance(cmd, Method):
-                parser = self.parser_from_func(cmd, taken_flags=[*RESERVED_FLAGS])
+                parser = self.parser_from_func(cmd, taken_flags=[*CLICK_RESERVED_FLAGS])
             else:
                 raise InvalidCommandError(f"Not a valid command: {cmd}")
             main_parser.add_command(parser, name=command_name)
         return main_parser
+
+    def run(
+        self,
+        *commands: T.Callable,
+        args: list[str] | None = None,
+    ):
+        args = args or self.get_args()
+        commands_dict = self.collect_commands(*commands)
+        if len(commands_dict) == 0:
+            raise InvalidCommandError("No commands were provided.")
+
+        if len(commands_dict) > 1:
+            parser = self.parser_from_multiple([*commands_dict.values()])
+        else:
+            command = list(commands_dict.values()).pop()
+            if isinstance(command, (Function, Method)):
+                parser = self.parser_from_func(command, taken_flags=[*CLICK_RESERVED_FLAGS])
+            elif isinstance(command, Class):
+                parser = self.parser_from_class(command)
+            else:
+                raise InvalidCommandError(f"Not a valid command: {command}")
+        parser.main(args=args)
 
 
 __all__ = ["AutoClickParser"]

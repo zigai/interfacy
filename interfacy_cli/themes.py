@@ -7,7 +7,7 @@ from stdl.st import FG, colored
 from interfacy_cli.util import simplify_type_name
 
 
-def with_style(text: str, style: dict) -> str:
+def with_style(text: str, style: dict[str, str]) -> str:
     return colored(text, **style)
 
 
@@ -22,13 +22,13 @@ class InterfacyTheme:
     command_skips = ["__init__"]
     commands_title = "commands:"
     required_indicator = "(" + colored("*", color=FG.RED) + ") "
-    name_translator: T.Callable = None  # type:ignore
+    translate_name: T.Callable = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))
 
     def _translate_name(self, name: str) -> str:
-        return self.name_translator(name) if self.name_translator else name
+        return self.translate_name(name) if self.translate_name else name
 
     def format_description(self, description: str) -> str:
         return description
