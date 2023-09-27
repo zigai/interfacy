@@ -1,7 +1,7 @@
 
 [project]
 name = "interfacy-cli"
-version = "0.0.1"
+version = "0.0.2"
 description = ""
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE.txt" }
@@ -9,8 +9,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "nested_argparse==0.1.2",
-    "stdl>=0.4.6",
-    "objinspect==0.2.5",
+    "stdl>=0.4.7",
+    "objinspect==0.2.6",
     "strto==0.1.0",
 ]
 

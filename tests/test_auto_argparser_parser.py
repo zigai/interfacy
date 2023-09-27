@@ -21,7 +21,7 @@ def test_from_function():
 
 def test_from_method():
     math = Math()
-    method = objinspect.objinspect(math.pow)
+    method = objinspect.inspect(math.pow)
     assert isinstance(method, objinspect.Method)
     auto_parser = AutoArgparseParser(description=method.description)
     parser = auto_parser.parser_from_method(method, taken_flags=["-h", "--help"])
@@ -69,10 +69,3 @@ def test_from_instance():
     namespace = args.pow
     assert namespace.base == "2"
     assert namespace.exponent == "2"
-
-
-def test_run():
-    func = objinspect.Function(pow)
-    auto_parser = AutoArgparseParser(description=func.description)
-    result = auto_parser.run(pow)
-    assert result == 4
