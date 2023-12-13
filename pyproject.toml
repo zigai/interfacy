@@ -9,9 +9,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "nested_argparse==0.1.2",
-    "stdl>=0.4.7",
+    "stdl>=0.5.1",
     "objinspect==0.2.6",
-    "strto==0.1.0",
+    "strto==0.1.2",
 ]
 
 classifiers = [
