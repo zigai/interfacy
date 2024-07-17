@@ -1,6 +1,6 @@
 import typing as T
 
-import strto
+from strto import StrToTypeParser
 
 from interfacy_cli.auto_argparse_parser import AutoArgparseParser
 from interfacy_cli.auto_click_parser import AutoClickParser
@@ -16,7 +16,7 @@ class CLI:
         description: str | None = None,
         epilog: str | None = None,
         backend: T.Literal["argparse", "click"] = "argparse",
-        value_parser: strto.Parser | None = None,
+        value_parser: StrToTypeParser | None = None,
         theme: InterfacyTheme | None = None,
         flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
         flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",

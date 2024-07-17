@@ -5,7 +5,8 @@ import strto
 from objinspect import Class, Function, Method, Parameter, inspect
 from stdl import fs
 from stdl.st import kebab_case, snake_case
-from strto.converters import Converter
+from strto import StrToTypeParser, get_base_parser
+from strto.parsers import ParserBase
 
 from interfacy_cli.exceptions import DupicateCommandError
 from interfacy_cli.themes import InterfacyTheme
@@ -35,7 +36,7 @@ class AutoParserCore:
         description: str | None = None,
         epilog: str | None = None,
         theme: InterfacyTheme | None = None,
-        value_parser: strto.Parser | None = None,
+        value_parser: StrToTypeParser | None = None,
         *,
         flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
         flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
@@ -57,7 +58,7 @@ class AutoParserCore:
         self.tab_completion = tab_completion
         self.print_result = print_result
         self.flag_translation_mode = flag_translation_mode
-        self.value_parser = value_parser or strto.get_parser()
+        self.value_parser = value_parser or get_base_parser()
         self.flag_translator = self._get_flag_translator()
         self.translate_name = self.flag_translator.get_translation
         self.theme = theme or InterfacyTheme()
@@ -77,7 +78,7 @@ class AutoParserCore:
     def parser_from_multiple(self, commands: list[Function | Class]):
         raise NotImplementedError
 
-    def extend_value_parser(self, ext: dict[T.Any, Converter]):
+    def extend_value_parser(self, ext: dict[T.Any, ParserBase]):
         self.value_parser.extend(ext)
 
     def _log(self, msg: str) -> None:

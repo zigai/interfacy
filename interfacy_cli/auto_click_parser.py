@@ -2,8 +2,8 @@ import typing as T
 from os import get_terminal_size
 
 import click
-import strto
 from objinspect import Class, Function, Method, Parameter
+from strto import StrToTypeParser
 
 from interfacy_cli.auto_parser_core import AutoParserCore
 from interfacy_cli.constants import CLICK_RESERVED_FLAGS
@@ -35,8 +35,7 @@ class ClickFuncParamType(click.types.FuncParamType):
 click.types.FuncParamType = ClickFuncParamType
 
 
-class ClickOption(click.Option):
-    ...
+class ClickOption(click.Option): ...
 
 
 class ClickGroup(click.Group):
@@ -84,7 +83,7 @@ class AutoClickParser(AutoParserCore):
         description: str | None = None,
         epilog: str | None = None,
         theme: InterfacyTheme | None = None,
-        value_parser: strto.Parser | None = None,
+        value_parser: StrToTypeParser | None = None,
         *,
         flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
         flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
@@ -160,7 +159,7 @@ class AutoClickParser(AutoParserCore):
             extras["metavar"] = ""
 
         if param.is_typed:
-            parse_fn = self.value_parser.get_parse_fn(param.type)
+            parse_fn = self.value_parser.get_parse_func(param.type)
             parse_fn = ClickFuncParamType(parse_fn, f"parse_{name}")
             extras["type"] = parse_fn
 

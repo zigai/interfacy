@@ -1,5 +1,3 @@
-from objinspect.constants import *
-
 ITEM_SEP = ","
 ARGPARSE_RESERVED_FLAGS = ["h", "help"]
 CLICK_RESERVED_FLAGS = ["help"]

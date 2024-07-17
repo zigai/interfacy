@@ -4,13 +4,13 @@ import textwrap
 import typing as T
 from argparse import ArgumentError, ArgumentParser, ArgumentTypeError, HelpFormatter
 
-import strto
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
+from objinspect.typing import type_name
 from stdl.st import kebab_case, snake_case
-from strto.util import type_to_str
+from strto import StrToTypeParser
 
 from interfacy_cli.auto_parser_core import AutoParserCore, FlagsStrategy
 from interfacy_cli.constants import ARGPARSE_RESERVED_FLAGS, COMMAND_KEY, ExitCode
@@ -42,7 +42,7 @@ class ArgumentParserWrapper(NestedArgumentParser):
 
         # TypeErrors or ValueErrors also indicate errors
         except (TypeError, ValueError):
-            t = type_to_str(str(parse_func.keywords["t"]))
+            t = type_name(str(parse_func.keywords["t"]))
             msg = _(f"invalid {t} value: '{arg_string}'")
             raise ArgumentError(action, msg)
         return result
@@ -172,7 +172,7 @@ class AutoArgparseParser(AutoParserCore):
         description: str | None = None,
         epilog: str | None = None,
         theme: InterfacyTheme | None = None,
-        value_parser: strto.Parser | None = None,
+        value_parser: StrToTypeParser | None = None,
         formatter_class=SafeRawHelpFormatter,
         *,
         flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
@@ -334,7 +334,7 @@ class AutoArgparseParser(AutoParserCore):
         extra: dict[str, T.Any] = {"help": self.theme.get_parameter_help(param)}
 
         if param.is_typed:
-            extra["type"] = self.value_parser.get_parse_fn(param.type)
+            extra["type"] = self.value_parser.get_parse_func(param.type)
 
         if self.theme.clear_metavar:
             extra["metavar"] = "\b"

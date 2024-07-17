@@ -2,14 +2,14 @@ import sys
 from argparse import ArgumentParser
 from typing import Callable
 
-from stdl.fs import File, assert_paths_exist, json_load, yaml_load
+from stdl.fs import File, ensure_paths_exist, json_load, yaml_load
 
 
 def read_args_from_file(path: str) -> list[str]:
     """
     Get arguments from a file.
     """
-    assert_paths_exist(path)
+    ensure_paths_exist(path)
 
     def extract_args(d: dict):
         args = []
@@ -94,7 +94,7 @@ def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | Non
         return None
 
 
-def simplify_type_name(name: str) -> str:
+def simplified_type_name(name: str) -> str:
     """
     Simplifies the type name by removing module paths and optional "None" union.
     """

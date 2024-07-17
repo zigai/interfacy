@@ -1,10 +1,10 @@
 import typing as T
 
 from objinspect import Class, Function, Method, Parameter
-from objinspect.util import type_to_str
+from objinspect.typing import type_name
 from stdl.st import FG, colored
 
-from interfacy_cli.util import simplify_type_name
+from interfacy_cli.util import simplified_type_name
 
 
 def with_style(text: str, style: dict[str, str]) -> str:
@@ -13,15 +13,15 @@ def with_style(text: str, style: dict[str, str]) -> str:
 
 class InterfacyTheme:
     clear_metavar: bool = True
-    simplify_types = True
-    min_ljust = 19
+    simplify_types: bool = True
+    min_ljust: int = 19
     style_type: dict = dict(color=FG.GREEN)
     style_default: dict = dict(color=FG.LIGHT_BLUE)
     style_description: dict = dict(color=FG.GRAY)
-    sep = " = "
-    command_skips = ["__init__"]
-    commands_title = "commands:"
-    required_indicator = "(" + colored("*", color=FG.RED) + ") "
+    sep: str = " = "
+    command_skips: list[str] = ["__init__"]
+    commands_title: str = "commands:"
+    required_indicator: str = "(" + colored("*", color=FG.RED) + ") "
     translate_name: T.Callable = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
@@ -46,9 +46,9 @@ class InterfacyTheme:
             h.append(f"{with_style(param.description, self.style_description)} | {fill}")
 
         if param.is_typed:
-            type_str = type_to_str(param.type)
+            type_str = type_name(param.type)
             if self.simplify_types:
-                type_str = simplify_type_name(type_str)
+                type_str = simplified_type_name(type_str)
             h.append(with_style(type_str, self.style_type))
 
         if param.is_optional and param.default is not None:
@@ -69,19 +69,19 @@ class InterfacyTheme:
 
     def get_commands_help_class(self, command: Class) -> str:
         ljust = self._get_ljust(command.methods)  # type: ignore
-        h = [self.commands_title]
+        lines = [self.commands_title]
         for method in command.methods:
             if method.name in self.command_skips:
                 continue
-            h.append(self.get_command_description(method, ljust))
-        return "\n".join(h)
+            lines.append(self.get_command_description(method, ljust))
+        return "\n".join(lines)
 
     def get_commands_help_multiple(self, commands: list[Class | Function | Method]) -> str:
         ljust = self._get_ljust(commands)  # type: ignore
-        h = [self.commands_title]
+        lines = [self.commands_title]
         for command in commands:
-            h.append(self.get_command_description(command, ljust))
-        return "\n".join(h)
+            lines.append(self.get_command_description(command, ljust))
+        return "\n".join(lines)
 
 
 class PlainTheme(InterfacyTheme):
