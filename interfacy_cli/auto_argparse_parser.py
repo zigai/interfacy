@@ -481,7 +481,7 @@ class AutoArgparseRunner:
             sys.exit(ExitCode.INVALID_ARGS)
 
         command = obj_args[COMMAND_KEY]
-        command = builder.flag_translator.get_original(command)
+        command = builder.flag_translator.reverse(command)
         del obj_args[COMMAND_KEY]
         args_all: dict = vars(obj_args[command])
         args_all = self.revese_arg_translations(args_all)
@@ -515,7 +515,7 @@ class AutoArgparseRunner:
     def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
         reversed = {}
         for k, v in args.items():
-            k = self.builder.flag_translator.get_original(k)
+            k = self.builder.flag_translator.reverse(k)
             reversed[k] = v
         return reversed
 

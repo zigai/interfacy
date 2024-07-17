@@ -10,7 +10,7 @@ from strto.parsers import ParserBase
 
 from interfacy_cli.exceptions import DupicateCommandError
 from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import Translator, get_abbrevation, get_args
+from interfacy_cli.util import TranslationMapper, get_abbrevation
 
 
 class FlagsStrategy:
@@ -60,13 +60,11 @@ class AutoParserCore:
         self.flag_translation_mode = flag_translation_mode
         self.value_parser = value_parser or get_base_parser()
         self.flag_translator = self._get_flag_translator()
-        self.translate_name = self.flag_translator.get_translation
+        self.translate_name = self.flag_translator.translate
         self.theme = theme or InterfacyTheme()
         self.theme.translate_name = self.translate_name
 
     def get_args(self) -> list[str]:
-        if self.allow_args_from_file:
-            return get_args(sys.argv, from_file_prefix=self.from_file_prefix)
         return sys.argv[1:]
 
     def parser_from_func(self, fn: Function, taken_flags: list[str] | None = None, parser=None):
@@ -87,13 +85,13 @@ class AutoParserCore:
     def display_result(self, value: T.Any) -> None:
         print(value)
 
-    def _get_flag_translator(self) -> Translator:
+    def _get_flag_translator(self) -> TranslationMapper:
         if self.flag_translation_mode not in self.flag_translate_fn:
             raise ValueError(
                 f"Invalid flag translation mode: {self.flag_translation_mode}. "
                 f"Valid modes are: {', '.join(self.flag_translate_fn.keys())}"
             )
-        return Translator(self.flag_translate_fn[self.flag_translation_mode])
+        return TranslationMapper(self.flag_translate_fn[self.flag_translation_mode])
 
     def _get_arg_flags(
         self,

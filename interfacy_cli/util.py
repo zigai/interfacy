@@ -4,47 +4,63 @@ from typing import Callable
 
 from stdl.fs import File, ensure_paths_exist, json_load, yaml_load
 
-
-def read_args_from_file(path: str) -> list[str]:
+def simplified_type_name(name: str) -> str:
     """
-    Get arguments from a file.
+    Simplifies the type name by removing module paths and optional "None" union.
     """
-    ensure_paths_exist(path)
+    name = name.split(".")[-1]
+    name = name.replace("| None", "").strip()
+    return name
 
-    def extract_args(d: dict):
-        args = []
-        for k, v in d.items():
-            args.append(k)
-            args.append(v)
-        return args
-
-    if path.endswith(".json"):
-        return extract_args(json_load(path))  # type:ignore
-    if path.endswith(".yaml"):
-        return extract_args(yaml_load(path))  # type:ignore
-
-    args = []
-    for line in File(path).splitlines():
-        line = line.strip().split(" ")
-        arg_name = line[0]
-        arg_value = " ".join(line[1:])
-        args.append(arg_name)
-        args.append(arg_value)
-    return args
+class AbbrevationGeneratorProtocol:
+    def generate(self, value: str) -> str | None: ...
 
 
-def get_args(args: list[str] | None = None, from_file_prefix="@F") -> list[str]:
-    args = args or sys.argv
-    parsed_args = []
-    i = 1
-    while i < len(args):
-        if args[i] == from_file_prefix:
-            i += 1
-            parsed_args.extend(read_args_from_file(args[i]))
-        else:
-            parsed_args.append(args[i])
-        i += 1
-    return parsed_args
+class AbbrevationGenerator(AbbrevationGeneratorProtocol):
+    """
+    Simple abbrevation generator that tries to return a short name for a command.
+    Returns None if it cannot find a short name.
+
+        Args:
+        taken (list[str]): List of taken abbreviations.
+        min_len (int, optional): Minimum length of the value to abbreviate. If the value is shorter than this, None will be returned.
+    
+    Example:
+        >>> AbbrevationGenerator(taken=[]).generate("hello_word")
+        "h"
+        >>> AbbrevationGenerator(taken=["h"]).generate("hello_word")
+        "hw"
+        >>> AbbrevationGenerator(taken=["hw", "h"]).generate("hello_word")
+        "he"
+        >>> AbbrevationGenerator(taken=["hw", "h", "he"]).generate("hello_word")
+        None
+    
+    """
+    def __init__(self, taken: list[str] | None = None, min_len: int = 3) -> None:
+        self.min_len = min_len
+        self.taken = taken or []
+
+    def generate(self, value: str) -> str | None:
+        if value in self.taken:
+            raise ValueError(f"'{value}' is already an abbervation")
+
+        name_split = value.split("_")
+        abbrev = name_split[0][0]
+        if abbrev not in self.taken and abbrev != value:
+            self.taken.append(abbrev)
+            return abbrev
+        short_name = "".join([i[0] for i in name_split])
+        if short_name not in self.taken and short_name != value:
+            self.taken.append(short_name)
+            return short_name
+        try:
+            short_name = name_split[0][:2]
+            if short_name not in self.taken and short_name != value:
+                self.taken.append(short_name)
+                return short_name
+            return None
+        except IndexError:
+            return None
 
 
 def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | None:
@@ -67,7 +83,18 @@ def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | Non
         >>> "he"
         >>> get_abbrevation("hello_world", ["hw", "h", "he"])
         >>> None
-    """
+
+    Example:
+        >>> AbbrevationGenerator(taken=[]).generate("hello_word")
+        "h"
+        >>> AbbrevationGenerator(taken=["h"]).generate("hello_word")
+        "hw"
+        >>> AbbrevationGenerator(taken=["hw", "h"]).generate("hello_word")
+        "he"
+        >>> AbbrevationGenerator(taken=["hw", "h", "he"]).generate("hello_word")
+        None
+        
+    """        
     if value in taken:
         raise ValueError(f"Command name '{value}' already taken")
 
@@ -94,16 +121,9 @@ def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | Non
         return None
 
 
-def simplified_type_name(name: str) -> str:
-    """
-    Simplifies the type name by removing module paths and optional "None" union.
-    """
-    name = name.split(".")[-1]
-    name = name.replace("| None", "").strip()
-    return name
 
 
-class Translator:
+class TranslationMapper:
     """
     Handles translation of strings through a provided function and keeps a record of translations.
 
@@ -123,7 +143,7 @@ class Translator:
         self.translation_func = translation_func
         self.translations: dict[str, str] = {}
 
-    def get_translation(self, name: str) -> str:
+    def translate(self, name: str) -> str:
         """
         Translate a string and save the translation.
 
@@ -137,7 +157,7 @@ class Translator:
         self.translations[translated_name] = name
         return translated_name
 
-    def get_original(self, translated: str) -> str:
+    def reverse(self, translated: str) -> str | None:
         """
         Retrieve the original name based on the translated name.
 
@@ -147,6 +167,4 @@ class Translator:
         Returns:
             str: The original name if it exists, otherwise returns the same translated name.
         """
-        if original := self.translations.get(translated):
-            return original
-        return translated
+        return self.translations.get(translated,None):
