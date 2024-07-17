@@ -56,7 +56,7 @@ class CLI:
         try:
             return self.parser.run(*self.commands, args=args)
         except InterfacyException as e:
-            self.parser._log(str(e))
+            self.parser.log(str(e))
 
 
 __all__ = ["CLI"]

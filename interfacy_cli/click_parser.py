@@ -5,10 +5,11 @@ import click
 from objinspect import Class, Function, Method, Parameter
 from strto import StrToTypeParser
 
-from interfacy_cli.auto_parser_core import AutoParserCore
-from interfacy_cli.constants import CLICK_RESERVED_FLAGS
+from interfacy_cli.core import InterfacyParserCore
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
+
+CLICK_RESERVED_FLAGS = ["help"]
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -27,7 +28,7 @@ click.Context.formatter_class = ClickHelpFormatter
 
 class ClickFuncParamType(click.types.FuncParamType):
     def __init__(self, func: T.Callable[[T.Any], T.Any], name: str | None = None) -> None:
-        self.name = name or "XD"
+        self.name = name or "NO_NAME"
         self.func = func
 
 
@@ -77,7 +78,7 @@ class ClickCommand(click.Command):
         return description + extra_help + options
 
 
-class AutoClickParser(AutoParserCore):
+class AutoClickParser(InterfacyParserCore):
     def __init__(
         self,
         description: str | None = None,

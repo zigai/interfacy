@@ -26,9 +26,16 @@ class FlagsStrategy:
     REQUIRED_POSITIONAL = "required_positional"
 
 
-class AutoParserCore:
+def display_result(value: T.Any) -> None:
+    print(value)
+
+
+FlagStrategy = T.Literal["keyword_only", "required_positional"]
+
+
+class InterfacyParserCore:
     method_skips = ["__init__"]
-    log_msg_tag = "interfacy"
+    logger_message_tag = "interfacy"
     flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
 
     def __init__(
@@ -43,12 +50,10 @@ class AutoParserCore:
         from_file_prefix: str = "@F",
         print_result: bool = True,
         add_abbrevs: bool = True,
-        read_stdin: bool = False,
         allow_args_from_file: bool = True,
         tab_completion: bool = False,
     ) -> None:
-        self.read_stdin = read_stdin
-        self.stdin = fs.read_stdin() if self.read_stdin else None
+
         self.description = description
         self.epilog = epilog
         self.flag_strategy = flag_strategy
@@ -67,23 +72,23 @@ class AutoParserCore:
     def get_args(self) -> list[str]:
         return sys.argv[1:]
 
-    def parser_from_func(self, fn: Function, taken_flags: list[str] | None = None, parser=None):
-        raise NotImplementedError
-
-    def parser_from_class(self, cls: Class, parser=None):
-        raise NotImplementedError
-
-    def parser_from_multiple(self, commands: list[Function | Class]):
-        raise NotImplementedError
-
     def extend_value_parser(self, ext: dict[T.Any, ParserBase]):
         self.value_parser.extend(ext)
 
-    def _log(self, msg: str) -> None:
-        print(f"[{self.log_msg_tag}] {msg}", file=sys.stdout)
+    def log(self, msg: str) -> None:
+        print(f"[{self.logger_message_tag}] {msg}", file=sys.stdout)
 
     def display_result(self, value: T.Any) -> None:
         print(value)
+
+    def collect_commands(self, *commands: T.Callable) -> dict[str, Function | Class | Method]:
+        commands_dict = {}
+        for i in commands:
+            command = inspect(i, inherited=False)
+            if command.name in commands:
+                raise DupicateCommandError(command.name)
+            commands_dict[command.name] = command
+        return commands_dict
 
     def _get_flag_translator(self) -> TranslationMapper:
         if self.flag_translation_mode not in self.flag_translate_fn:
@@ -124,20 +129,20 @@ class AutoParserCore:
                 flags = (f"-{flag_short}".strip(), flag_long)
         return flags
 
-    def collect_commands(self, *commands: T.Callable) -> dict[str, Function | Class | Method]:
-        commands_dict = {}
-        for i in commands:
-            command = inspect(i, inherited=False)
-            if command.name in commands:
-                raise DupicateCommandError(command.name)
-            commands_dict[command.name] = command
-        return commands_dict
+    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
+        raise NotImplementedError
+
+    def parser_from_func(self, fn: Function, taken_flags: list[str] | None = None, parser=None):
+        raise NotImplementedError
+
+    def parser_from_class(self, cls: Class, parser=None):
+        raise NotImplementedError
+
+    def parser_from_multiple(self, commands: list[Function | Class]):
+        raise NotImplementedError
 
     def install_tab_completion(self) -> None:
         raise NotImplementedError
 
-    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
-        raise NotImplementedError
 
-
-__all__ = ["AutoParserCore", "FlagsStrategy"]
+__all__ = ["InterfacyParserCore", "FlagsStrategy"]

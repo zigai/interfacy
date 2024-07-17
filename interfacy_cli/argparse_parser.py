@@ -12,8 +12,8 @@ from objinspect.typing import type_name
 from stdl.st import kebab_case, snake_case
 from strto import StrToTypeParser
 
-from interfacy_cli.auto_parser_core import AutoParserCore, FlagsStrategy
 from interfacy_cli.constants import ARGPARSE_RESERVED_FLAGS, COMMAND_KEY, ExitCode
+from interfacy_cli.core import FlagsStrategy, InterfacyParserCore
 from interfacy_cli.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy_cli.themes import InterfacyTheme
 
@@ -162,7 +162,7 @@ class SafeRawHelpFormatter(SafeHelpFormatter):
         return text.splitlines()
 
 
-class AutoArgparseParser(AutoParserCore):
+class AutoArgparseParser(InterfacyParserCore):
     flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
     method_skips = ["__init__"]
     log_msg_tag = "interfacy"
@@ -478,7 +478,7 @@ class AutoArgparseRunner:
 
         if COMMAND_KEY not in obj_args:
             parser.print_help()
-            sys.exit(ExitCode.INVALID_ARGS)
+            sys.exit(ExitCode.INVALID_ARGS_ERR)
 
         command = obj_args[COMMAND_KEY]
         command = builder.flag_translator.reverse(command)
@@ -497,7 +497,7 @@ class AutoArgparseRunner:
     def _run_class_inner(self, cls: Class, args: dict, parser: ArgumentParser):
         if COMMAND_KEY not in args:
             parser.print_help()
-            sys.exit(ExitCode.INVALID_ARGS)
+            sys.exit(ExitCode.INVALID_ARGS_ERR)
 
         command_name = args[COMMAND_KEY]
         args_all = self.revese_arg_translations(vars(args[command_name]))

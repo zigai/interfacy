@@ -7,7 +7,7 @@ from stdl.st import FG, colored
 from interfacy_cli.util import simplified_type_name
 
 
-def with_style(text: str, style: dict[str, str]) -> str:
+def with_style(text: str, style: dict[T.Literal["color", "background", "style"], str]) -> str:
     return colored(text, **style)
 
 
