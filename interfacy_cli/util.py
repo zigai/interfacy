@@ -1,8 +1,5 @@
-import sys
-from argparse import ArgumentParser
 from typing import Callable
 
-from stdl.fs import File, ensure_paths_exist, json_load, yaml_load
 
 def simplified_type_name(name: str) -> str:
     """
@@ -12,11 +9,12 @@ def simplified_type_name(name: str) -> str:
     name = name.replace("| None", "").strip()
     return name
 
+
 class AbbrevationGeneratorProtocol:
-    def generate(self, value: str) -> str | None: ...
+    def generate(self, value: str, taken: list[str]) -> str | None: ...
 
 
-class AbbrevationGenerator(AbbrevationGeneratorProtocol):
+class DefaultAbbrevationGenerator(AbbrevationGeneratorProtocol):
     """
     Simple abbrevation generator that tries to return a short name for a command.
     Returns None if it cannot find a short name.
@@ -24,7 +22,7 @@ class AbbrevationGenerator(AbbrevationGeneratorProtocol):
         Args:
         taken (list[str]): List of taken abbreviations.
         min_len (int, optional): Minimum length of the value to abbreviate. If the value is shorter than this, None will be returned.
-    
+
     Example:
         >>> AbbrevationGenerator(taken=[]).generate("hello_word")
         "h"
@@ -34,93 +32,38 @@ class AbbrevationGenerator(AbbrevationGeneratorProtocol):
         "he"
         >>> AbbrevationGenerator(taken=["hw", "h", "he"]).generate("hello_word")
         None
-    
-    """
-    def __init__(self, taken: list[str] | None = None, min_len: int = 3) -> None:
-        self.min_len = min_len
-        self.taken = taken or []
 
-    def generate(self, value: str) -> str | None:
-        if value in self.taken:
+    """
+
+    def __init__(self, min_len: int = 3) -> None:
+        self.min_len = min_len
+
+    def generate(self, value: str, taken: list[str]) -> str | None:
+        if value in taken:
             raise ValueError(f"'{value}' is already an abbervation")
 
         name_split = value.split("_")
         abbrev = name_split[0][0]
-        if abbrev not in self.taken and abbrev != value:
-            self.taken.append(abbrev)
+        if abbrev not in taken and abbrev != value:
+            taken.append(abbrev)
             return abbrev
         short_name = "".join([i[0] for i in name_split])
-        if short_name not in self.taken and short_name != value:
-            self.taken.append(short_name)
+        if short_name not in taken and short_name != value:
+            taken.append(short_name)
             return short_name
         try:
             short_name = name_split[0][:2]
-            if short_name not in self.taken and short_name != value:
-                self.taken.append(short_name)
+            if short_name not in taken and short_name != value:
+                taken.append(short_name)
                 return short_name
             return None
         except IndexError:
             return None
 
 
-def get_abbrevation(value: str, taken: list[str], min_len: int = 3) -> str | None:
-    """
-    Tries to return a short name for a command.
-    Returns None if it cannot find a short name.
-
-    Args:
-        value (str): The value to abbreviate.
-        taken (list[str]): List of taken abbreviations.
-        min_len (int, optional): Minimum length of the value to abbreviate. Defaults to 3.
-            If the value is shorter than this, None will be returned.
-
-    Example:
-        >>> get_abbrevation("hello_world", [])
-        >>> "h"
-        >>> get_abbrevation("hello_world", ["h"])
-        >>> "hw"
-        >>> get_abbrevation("hello_world", ["hw", "h"])
-        >>> "he"
-        >>> get_abbrevation("hello_world", ["hw", "h", "he"])
-        >>> None
-
-    Example:
-        >>> AbbrevationGenerator(taken=[]).generate("hello_word")
-        "h"
-        >>> AbbrevationGenerator(taken=["h"]).generate("hello_word")
-        "hw"
-        >>> AbbrevationGenerator(taken=["hw", "h"]).generate("hello_word")
-        "he"
-        >>> AbbrevationGenerator(taken=["hw", "h", "he"]).generate("hello_word")
-        None
-        
-    """        
-    if value in taken:
-        raise ValueError(f"Command name '{value}' already taken")
-
-    if len(value) < min_len:
+class NoAbbrevations(AbbrevationGeneratorProtocol):
+    def generate(self, value: str, taken: list[str]) -> str | None:
         return None
-
-    name_split = value.split("_")
-    abbrev = name_split[0][0]
-    if abbrev not in taken and abbrev != value:
-        taken.append(abbrev)
-        return abbrev
-
-    short_name = "".join([i[0] for i in name_split])
-    if short_name not in taken and short_name != value:
-        taken.append(short_name)
-        return short_name
-    try:
-        short_name = name_split[0][:2]
-        if short_name not in taken and short_name != value:
-            taken.append(short_name)
-            return short_name
-        return None
-    except IndexError:
-        return None
-
-
 
 
 class TranslationMapper:
@@ -167,4 +110,4 @@ class TranslationMapper:
         Returns:
             str: The original name if it exists, otherwise returns the same translated name.
         """
-        return self.translations.get(translated,None):
+        return self.translations.get(translated, None)

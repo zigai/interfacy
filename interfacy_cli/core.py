@@ -1,94 +1,45 @@
 import sys
 import typing as T
 
-import strto
 from objinspect import Class, Function, Method, Parameter, inspect
-from stdl import fs
 from stdl.st import kebab_case, snake_case
-from strto import StrToTypeParser, get_base_parser
-from strto.parsers import ParserBase
+from strto import StrToTypeParser, get_parser
+from strto.parsers import Parser
 
-from interfacy_cli.exceptions import DupicateCommandError
+from interfacy_cli.exceptions import DuplicateCommandError, InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import TranslationMapper, get_abbrevation
+from interfacy_cli.util import (
+    AbbrevationGeneratorProtocol,
+    DefaultAbbrevationGenerator,
+    TranslationMapper,
+)
+
+FlagsStyle = T.Literal["keyword_only", "required_positional"]
 
 
-class FlagsStrategy:
-    """
-    Enum to specify how flags should be handled when generating a CLI from a function.
+class FlagStrategyProtocol(T.Protocol):
+    translator: TranslationMapper
 
-    Attributes:
-        ALL_KEYWORD_ONLY: All parameters are keyword-only and flags are generated from the parameter names.
-        REQUIRED_POSITIONAL: All required parameters are positional and all optional parameters are keyword-only.
-    """
-
-    KEYWORD_ONLY = "keyword_only"
-    REQUIRED_POSITIONAL = "required_positional"
-
-
-def display_result(value: T.Any) -> None:
-    print(value)
+    def get_arg_flags(
+        self,
+        name: str,
+        param: Parameter,
+        taken_flags: list[str],
+        abbrev_gen: AbbrevationGeneratorProtocol,
+    ) -> tuple[str, ...]: ...
 
 
-FlagStrategy = T.Literal["keyword_only", "required_positional"]
-
-
-class InterfacyParserCore:
-    method_skips = ["__init__"]
-    logger_message_tag = "interfacy"
+class DefaultFlagStrategy(FlagStrategyProtocol):
     flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
 
     def __init__(
         self,
-        description: str | None = None,
-        epilog: str | None = None,
-        theme: InterfacyTheme | None = None,
-        value_parser: StrToTypeParser | None = None,
-        *,
-        flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
+        flags_style: FlagsStyle = "required_positional",
         flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
-        from_file_prefix: str = "@F",
-        print_result: bool = True,
-        add_abbrevs: bool = True,
-        allow_args_from_file: bool = True,
-        tab_completion: bool = False,
     ) -> None:
-
-        self.description = description
-        self.epilog = epilog
-        self.flag_strategy = flag_strategy
-        self.from_file_prefix = from_file_prefix
-        self.allow_args_from_file = allow_args_from_file
-        self.add_abbrevs = add_abbrevs
-        self.tab_completion = tab_completion
-        self.print_result = print_result
+        self.flags_style = flags_style
         self.flag_translation_mode = flag_translation_mode
-        self.value_parser = value_parser or get_base_parser()
-        self.flag_translator = self._get_flag_translator()
-        self.translate_name = self.flag_translator.translate
-        self.theme = theme or InterfacyTheme()
-        self.theme.translate_name = self.translate_name
-
-    def get_args(self) -> list[str]:
-        return sys.argv[1:]
-
-    def extend_value_parser(self, ext: dict[T.Any, ParserBase]):
-        self.value_parser.extend(ext)
-
-    def log(self, msg: str) -> None:
-        print(f"[{self.logger_message_tag}] {msg}", file=sys.stdout)
-
-    def display_result(self, value: T.Any) -> None:
-        print(value)
-
-    def collect_commands(self, *commands: T.Callable) -> dict[str, Function | Class | Method]:
-        commands_dict = {}
-        for i in commands:
-            command = inspect(i, inherited=False)
-            if command.name in commands:
-                raise DupicateCommandError(command.name)
-            commands_dict[command.name] = command
-        return commands_dict
+        self.translator = self._get_flag_translator()
 
     def _get_flag_translator(self) -> TranslationMapper:
         if self.flag_translation_mode not in self.flag_translate_fn:
@@ -98,11 +49,12 @@ class InterfacyParserCore:
             )
         return TranslationMapper(self.flag_translate_fn[self.flag_translation_mode])
 
-    def _get_arg_flags(
+    def get_arg_flags(
         self,
-        param_name: str,
+        name: str,
         param: Parameter,
         taken_flags: list[str],
+        abbrev_gen: AbbrevationGeneratorProtocol,
     ) -> tuple[str, ...]:
         """
         Generate CLI flag names for a given parameter based on its name and already taken flags.
@@ -115,34 +67,101 @@ class InterfacyParserCore:
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).
         """
 
-        if self.flag_strategy == FlagsStrategy.REQUIRED_POSITIONAL and param.is_required:
-            return (param_name,)
+        if self.flags_style == "required_positional" and param.is_required:
+            return (name,)
 
-        if len(param_name) == 1:
-            flag_long = f"-{param_name}".strip()
+        if len(name) == 1:
+            flag_long = f"-{name}".strip()
         else:
-            flag_long = f"--{param_name}".strip()
+            flag_long = f"--{name}".strip()
 
         flags = (flag_long,)
-        if self.add_abbrevs:
-            if flag_short := get_abbrevation(param_name, taken_flags):
-                flags = (f"-{flag_short}".strip(), flag_long)
+        if flag_short := abbrev_gen.generate(name, taken_flags):
+            flag_short = flag_short.strip()
+            if flag_short != name:
+                flags = (f"-{flag_short}", flag_long)
         return flags
 
-    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
+
+class InterfacyParserCore:
+    method_skips: list[str] = ["__init__"]
+    logger_message_tag: str = "interfacy"
+    reserved_flags: list[str] = []
+
+    def __init__(
+        self,
+        description: str | None = None,
+        epilog: str | None = None,
+        theme: InterfacyTheme | None = None,
+        type_parser: StrToTypeParser | None = None,
+        *,
+        run: bool = False,
+        allow_args_from_file: bool = True,
+        flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
+        abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
+        pipe_target: str | None = None,
+        tab_completion: bool = False,
+        print_result: bool = False,
+        print_result_func: T.Callable = print,
+    ) -> None:
+        self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
+        self.autorun = run
+        self.allow_args_from_file = allow_args_from_file
+        self.description = description
+        self.epilog = epilog
+        self.pipe_target = pipe_target
+        self.enable_tab_completion = tab_completion
+        self.print_result_func = print_result_func
+        self.print_result = print_result
+        self.theme = theme or InterfacyTheme()
+        self.flag_strategy = flag_strategy
+        self.abbrev_gen = abbrev_gen
+        self.theme.translate_name = self.flag_strategy.translator.translate
+
+    def get_args(self) -> list[str]:
+        return sys.argv[1:]
+
+    def log(self, message: str) -> None:
+        print(f"[{self.logger_message_tag}] {message}", file=sys.stdout)
+
+    def _collect_commands(self, *commands: T.Callable) -> dict[str, Function | Class | Method]:
+        ret = {}
+        for i in commands:
+            command = inspect(i, inherited=False)
+            if command.name in commands:
+                raise DuplicateCommandError(command.name)
+            ret[command.name] = command
+        return ret
+
+    def _parser_from_object(self, obj: Function | Method | Class):
+        if isinstance(obj, (Function, Method)):
+            return self._parser_from_func(obj, taken_flags=[*self.reserved_flags])
+        if isinstance(obj, Class):
+            return self._parser_from_class(obj)
+        raise InvalidCommandError(f"Not a valid command: {obj}")
+
+    def _parser_from_func(self, fn: Function, taken_flags: list[str] | None = None):
         raise NotImplementedError
 
-    def parser_from_func(self, fn: Function, taken_flags: list[str] | None = None, parser=None):
+    def _parser_from_class(self, cls: Class, parser=None):
         raise NotImplementedError
 
-    def parser_from_class(self, cls: Class, parser=None):
+    def _parser_from_multiple(self, commands: list[Function | Class]):
         raise NotImplementedError
 
-    def parser_from_multiple(self, commands: list[Function | Class]):
+    def add_command(self, command: T.Callable, name: str | None = None):
         raise NotImplementedError
 
     def install_tab_completion(self) -> None:
         raise NotImplementedError
 
+    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
+        raise NotImplementedError
 
-__all__ = ["InterfacyParserCore", "FlagsStrategy"]
+
+__all__ = [
+    "InterfacyParserCore",
+    "FlagsStyle",
+    "FlagStrategyProtocol",
+    "DefaultFlagStrategy",
+]

@@ -13,7 +13,7 @@ from stdl.st import kebab_case, snake_case
 from strto import StrToTypeParser
 
 from interfacy_cli.constants import ARGPARSE_RESERVED_FLAGS, COMMAND_KEY, ExitCode
-from interfacy_cli.core import FlagsStrategy, InterfacyParserCore
+from interfacy_cli.core import FlagStrategyProtocol, InterfacyParserCore
 from interfacy_cli.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy_cli.themes import InterfacyTheme
 
@@ -216,7 +216,7 @@ class AutoArgparseParser(InterfacyParserCore):
         extra_args = self._extra_add_arg_params(param)
         return parser.add_argument(*flags, **extra_args)
 
-    def parser_from_func(
+    def _parser_from_func(
         self,
         fn: Function,
         taken_flags: list[str] | None = None,
@@ -262,7 +262,7 @@ class AutoArgparseParser(InterfacyParserCore):
             self.add_parameter(parser, param, taken_flags)
         return parser
 
-    def parser_from_class(
+    def _parser_from_class(
         self,
         cls: Class,
         parser: ArgumentParser | None = None,
@@ -292,10 +292,10 @@ class AutoArgparseParser(InterfacyParserCore):
                 for param in init.params:  # type: ignore
                     self.add_parameter(sp, param, taken_flags=taken_flags)
 
-            sp = self.parser_from_func(method, taken_flags, sp)
+            sp = self._parser_from_func(method, taken_flags, sp)
         return parser
 
-    def parser_from_multiple(
+    def _parser_from_multiple(
         self,
         commands: list[Function | Class],
     ) -> ArgumentParser:
@@ -307,11 +307,11 @@ class AutoArgparseParser(InterfacyParserCore):
             command_name = self.translate_name(cmd.name)
             sp = subparsers.add_parser(command_name, description=cmd.description)
             if isinstance(cmd, Function):
-                sp = self.parser_from_func(
+                sp = self._parser_from_func(
                     fn=cmd, taken_flags=[*ARGPARSE_RESERVED_FLAGS], parser=sp
                 )
             elif isinstance(cmd, Class):
-                sp = self.parser_from_class(cmd, sp)
+                sp = self._parser_from_class(cmd, sp)
             elif isinstance(cmd, Method):
                 sp = self.parser_from_method(cmd, taken_flags=[*ARGPARSE_RESERVED_FLAGS], parser=sp)
             else:
@@ -334,7 +334,7 @@ class AutoArgparseParser(InterfacyParserCore):
         extra: dict[str, T.Any] = {"help": self.theme.get_parameter_help(param)}
 
         if param.is_typed:
-            extra["type"] = self.value_parser.get_parse_func(param.type)
+            extra["type"] = self.type_parser.get_parse_func(param.type)
 
         if self.theme.clear_metavar:
             extra["metavar"] = "\b"
@@ -386,7 +386,7 @@ class AutoArgparseParser(InterfacyParserCore):
         args: list[str] | None = None,
     ) -> T.Any:
         args = args or self.get_args()
-        commands_dict = self.collect_commands(*commands)
+        commands_dict = self._collect_commands(*commands)
         runner = AutoArgparseRunner(commands_dict, args=args, builder=self, run=False)
         result = runner.run()
         if self.print_result:
@@ -429,7 +429,7 @@ class AutoArgparseRunner:
         if self.builder.description:
             parser.description = self.builder.theme.format_description(self.builder.description)
 
-        if self.builder.tab_completion:
+        if self.builder.enable_tab_completion:
             self.builder.install_tab_completion(parser)
 
     def _run_callable(self, func: Function | Method) -> T.Any:
@@ -437,7 +437,7 @@ class AutoArgparseRunner:
         Called when a single function or method is passed to CLI
         """
         builder = self.builder
-        parser = builder.parser_from_func(func, [*ARGPARSE_RESERVED_FLAGS])
+        parser = builder._parser_from_func(func, [*ARGPARSE_RESERVED_FLAGS])
         self.setup_parser(parser)
 
         args = parser.parse_args(self.args)
@@ -461,7 +461,7 @@ class AutoArgparseRunner:
 
     def _run_class(self, cls: Class):
         builder = self.builder
-        parser = builder.parser_from_class(cls)
+        parser = builder._parser_from_class(cls)
         self.setup_parser(parser)
 
         args = parser.parse_args(self.args)
@@ -469,7 +469,7 @@ class AutoArgparseRunner:
 
     def _run_multiple(self, commands: dict[str, Function | Class]) -> T.Any:
         builder = self.builder
-        parser = builder.parser_from_multiple(commands.values())  # type: ignore
+        parser = builder._parser_from_multiple(commands.values())  # type: ignore
         self.setup_parser(parser)
 
         args = parser.parse_args(self.args)

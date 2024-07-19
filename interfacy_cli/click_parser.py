@@ -1,15 +1,21 @@
 import typing as T
+from gettext import gettext as _
 from os import get_terminal_size
 
 import click
-from objinspect import Class, Function, Method, Parameter
+from click.exceptions import MissingParameter, UsageError, _join_param_hints
+from objinspect import Class, Function, Method, Parameter, inspect
 from strto import StrToTypeParser
 
-from interfacy_cli.core import InterfacyParserCore
+from interfacy_cli.core import DefaultFlagStrategy, FlagStrategyProtocol, InterfacyParserCore
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
+from interfacy_cli.util import AbbrevationGeneratorProtocol, DefaultAbbrevationGenerator
 
 CLICK_RESERVED_FLAGS = ["help"]
+
+
+class ClickOption(click.Option): ...
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -36,7 +42,39 @@ class ClickFuncParamType(click.types.FuncParamType):
 click.types.FuncParamType = ClickFuncParamType
 
 
-class ClickOption(click.Option): ...
+def missing_parameter_format_message(self) -> str:
+    """
+    if self.param_hint is not None:
+        param_hint = self.param_hint
+    elif self.param is not None:
+        param_hint = self.param.get_error_hint(self.ctx)  # type: ignore
+    else:
+        param_hint = None
+    param_hint = _join_param_hints(param_hint)
+    param_hint = f" {param_hint}" if param_hint else ""
+    if param_type is None and self.param is not None:
+        param_type = self.param.param_type_name"""
+    param_hint = f"{self.param.name.lower()}" if self.param is not None else ""
+    param_type = self.param_type
+    # Translate param_type for known types.
+    if param_type == "argument":
+        missing = _("Missing argument")
+    elif param_type == "option":
+        missing = _("Missing option")
+    elif param_type == "parameter":
+        missing = _("Missing parameter")
+    else:
+        missing = _(f"Missing {param_type}")
+    msg = self.message
+    if self.param is not None:
+        msg_extra = self.param.type.get_missing_message(self.param)
+        if msg_extra:
+            msg = f"{msg}. {msg_extra}" if msg else msg_extra
+    msg = f" {msg}" if msg else ""
+    return f"{missing} '{param_hint}'.{msg}"
+
+
+MissingParameter.format_message = missing_parameter_format_message
 
 
 class ClickGroup(click.Group):
@@ -78,42 +116,40 @@ class ClickCommand(click.Command):
         return description + extra_help + options
 
 
-class AutoClickParser(InterfacyParserCore):
+class ClickParser(InterfacyParserCore):
+    RESERVED_FLAGS = ["help"]
+
     def __init__(
         self,
         description: str | None = None,
         epilog: str | None = None,
         theme: InterfacyTheme | None = None,
-        value_parser: StrToTypeParser | None = None,
+        type_parser: StrToTypeParser | None = None,
         *,
-        flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
-        flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
-        from_file_prefix: str = "@F",
-        print_result: bool = True,
-        add_abbrevs: bool = True,
-        read_stdin: bool = False,
-        tab_completion: bool = False,
+        pipe_target: str | None = None,
         allow_args_from_file: bool = True,
+        print_result: bool = True,
+        print_result_func: T.Callable = click.echo,
+        flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
+        abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
+        tab_completion: bool = False,
     ) -> None:
         super().__init__(
             description,
             epilog,
             theme,
-            value_parser,
-            flag_strategy=flag_strategy,
-            flag_translation_mode=flag_translation_mode,
-            from_file_prefix=from_file_prefix,
-            add_abbrevs=add_abbrevs,
-            read_stdin=read_stdin,
-            print_result=print_result,
+            type_parser,
+            pipe_target=pipe_target,
             allow_args_from_file=allow_args_from_file,
+            print_result=print_result,
+            print_result_func=print_result_func,
+            flag_strategy=flag_strategy,
             tab_completion=tab_completion,
+            abbrev_gen=abbrev_gen,
         )
+        self.main_parser = click.Group(name="main")
 
-    def display_result(self, value: T.Any) -> None:
-        click.echo(value)
-
-    def generate_instance_callback(self, cls: Class) -> T.Callable:
+    def _generate_instance_callback(self, cls: Class) -> T.Callable:
         """
         Generates a function that instantiates the class with the given args.
         """
@@ -125,7 +161,7 @@ class AutoClickParser(InterfacyParserCore):
 
         return callback
 
-    def generate_callback(
+    def _generate_callback(
         self,
         fn: T.Callable,
         instance_callback: T.Callable | None = None,
@@ -135,12 +171,12 @@ class AutoClickParser(InterfacyParserCore):
                 result = fn(instance_callback(), *args, **kwargs)
             else:
                 result = fn(*args, **kwargs)
-            self.display_result(result)
+            self.print_result_func(result)
             return result
 
         return callback
 
-    def get_param(self, param: Parameter, taken_flags: list[str]) -> ClickOption | ClickArgument:
+    def _get_param(self, param: Parameter, taken_flags: list[str]) -> ClickOption | ClickArgument:
         """
         Generates a ClickOption or ClickArgument from a Parameter.
 
@@ -152,7 +188,7 @@ class AutoClickParser(InterfacyParserCore):
             ClickOption | ClickArgument: The generated option or argument. Optional parameters are converted to options, required parameters are converted to arguments.
 
         """
-        name = self.translate_name(param.name)
+        name = self.flag_strategy.translator.translate(param.name)
 
         extras = {}
         extras["help"] = self.theme.get_parameter_help(param)
@@ -160,7 +196,7 @@ class AutoClickParser(InterfacyParserCore):
             extras["metavar"] = ""
 
         if param.is_typed:
-            parse_fn = self.value_parser.get_parse_func(param.type)
+            parse_fn = self.type_parser.get_parse_func(param.type)
             parse_fn = ClickFuncParamType(parse_fn, f"parse_{name}")
             extras["type"] = parse_fn
 
@@ -170,7 +206,7 @@ class AutoClickParser(InterfacyParserCore):
             taken_flags.append(name)
         else:
             opt_class = ClickOption
-            flags = self._get_arg_flags(name, param, taken_flags)
+            flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
             extras["default"] = param.default
             extras["is_flag"] = param.type is bool
 
@@ -180,22 +216,18 @@ class AutoClickParser(InterfacyParserCore):
         )
         return option
 
-    def parser_from_func(
+    def _parser_from_func(  # type:ignore
         self,
         fn: Function,
         taken_flags: list[str] | None = None,
         instance_callback: T.Callable | None = None,
     ) -> ClickCommand:
         if taken_flags is None:
-            taken_flags = [*CLICK_RESERVED_FLAGS]
+            taken_flags = [*self.RESERVED_FLAGS]
 
-        if fn.has_docstring:
-            description = self.theme.format_description(fn.description)
-        else:
-            description = None
-
-        params = [self.get_param(param, taken_flags) for param in fn.params]
-        callback = self.generate_callback(fn.func, instance_callback)
+        description = self.theme.format_description(fn.description) if fn.has_docstring else None
+        params = [self._get_param(param, taken_flags) for param in fn.params]
+        callback = self._generate_callback(fn.func, instance_callback)
         command = ClickCommand(
             name=fn.name,
             callback=callback,
@@ -204,19 +236,19 @@ class AutoClickParser(InterfacyParserCore):
         )
         return command
 
-    def parser_from_class(self, cls: Class):
-        taken_flags = [*CLICK_RESERVED_FLAGS]
-        if cls.has_docstring:
-            description = self.theme.format_description(cls.description)
-        else:
-            description = None
+    def _parser_from_class(self, cls: Class):  # type:ignore
+        description = self.theme.format_description(cls.description) if cls.has_docstring else None
 
+        params = []
         if cls.init_method and not cls.is_initialized:
-            params = [self.get_param(param, taken_flags) for param in cls.init_method.params]
-        else:
-            params = []
+            params.extend(
+                [
+                    self._get_param(param, [*self.reserved_flags])
+                    for param in cls.init_method.params
+                ],
+            )
 
-        init_callback = self.generate_instance_callback(cls)
+        init_callback = self._generate_instance_callback(cls)
         group = ClickGroup(
             name=cls.name,
             help=description,
@@ -226,53 +258,67 @@ class AutoClickParser(InterfacyParserCore):
 
         if cls.receieved_instance:  # Don't need to provide instance to method call.
             init_callback = None
+
         for method in cls.methods:
             if method.name in self.method_skips:
                 continue
-            command = self.parser_from_func(method, taken_flags, init_callback)
+            command = self._parser_from_func(
+                method,
+                taken_flags=[*self.reserved_flags],
+                instance_callback=init_callback,
+            )
             group.add_command(command)
-
         return group
 
-    def parser_from_multiple(
+    def _parser_from_multiple(
         self,
         commands: list[Function | Class],
     ) -> click.Group:
         main_parser = click.Group(name="main")
         for cmd in commands:
-            command_name = self.translate_name(cmd.name)
-            if isinstance(cmd, Function):
-                parser = self.parser_from_func(fn=cmd, taken_flags=[*CLICK_RESERVED_FLAGS])
-            elif isinstance(cmd, Class):
-                parser = self.parser_from_class(cmd)
-            elif isinstance(cmd, Method):
-                parser = self.parser_from_func(cmd, taken_flags=[*CLICK_RESERVED_FLAGS])
-            else:
-                raise InvalidCommandError(f"Not a valid command: {cmd}")
+            command_name = self.flag_strategy.translator.translate(cmd.name)
+            parser = self._parser_from_object(cmd)
             main_parser.add_command(parser, name=command_name)
         return main_parser
 
+    def add_command(self, command: T.Callable, name: str | None = None):
+        self.main_parser.add_command(
+            self._parser_from_object(inspect(command, inherited=False)),
+            name=name,
+        )
+
+    """
     def run(
         self,
         *commands: T.Callable,
         args: list[str] | None = None,
     ):
         args = args or self.get_args()
-        commands_dict = self.collect_commands(*commands)
+        commands_dict = self._collect_commands(*commands)
         if len(commands_dict) == 0:
             raise InvalidCommandError("No commands were provided.")
 
         if len(commands_dict) > 1:
-            parser = self.parser_from_multiple([*commands_dict.values()])
+            parser = self._parser_from_multiple([*commands_dict.values()])
         else:
             command = list(commands_dict.values()).pop()
             if isinstance(command, (Function, Method)):
-                parser = self.parser_from_func(command, taken_flags=[*CLICK_RESERVED_FLAGS])
+                parser = self._parser_from_func(command, taken_flags=[*self.RESERVED_FLAGS])
             elif isinstance(command, Class):
-                parser = self.parser_from_class(command)
+                parser = self._parser_from_class(command)
             else:
                 raise InvalidCommandError(f"Not a valid command: {command}")
         parser.main(args=args)
+    """
+
+    def run(
+        self,
+        args: list[str] | None = None,
+    ):
+
+        args = args or self.get_args()
+
+        self.main_parser.main(args=args)
 
 
-__all__ = ["AutoClickParser"]
+__all__ = ["ClickParser"]

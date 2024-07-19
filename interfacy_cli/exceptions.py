@@ -19,7 +19,7 @@ class InvalidCommandError(InterfacyException):
         super().__init__(message)
 
 
-class DupicateCommandError(InterfacyException):
+class DuplicateCommandError(InterfacyException):
     def __init__(self, command: str):
         self.msg = f"Duplicate command '{command}'"
         super().__init__(self.msg)
