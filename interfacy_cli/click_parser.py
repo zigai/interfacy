@@ -1,3 +1,4 @@
+import re
 import sys
 import typing as T
 from gettext import gettext as _
@@ -7,14 +8,18 @@ import click
 from click import argument, pass_context
 from click.exceptions import MissingParameter, UsageError, _join_param_hints
 from objinspect import Class, Function, Method, Parameter, inspect
-from stdl.log import loguru_formater
+from stdl.fs import read_piped
 from strto import StrToTypeParser
 
 from interfacy_cli.core import DefaultFlagStrategy, FlagStrategyProtocol, InterfacyParserCore
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.logger import logger as _logger
 from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import AbbrevationGeneratorProtocol, DefaultAbbrevationGenerator
+from interfacy_cli.util import (
+    AbbrevationGeneratorProtocol,
+    DefaultAbbrevationGenerator,
+    NoAbbrevations,
+)
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -46,11 +51,20 @@ class ClickOption(click.Option):
         help_record = super().get_help_record(ctx)
         if help_record is not None:
             name, help_text = help_record
-            # Remove metavar from the name part
-            name = name.split(" ")[:-1]
-            name = " ".join(name)
+            if " " in name:
+                name = name.split(" ")[:-1]
+                name = " ".join(name)
             return (name, help_text)
         return None
+
+    def handle_parse_result(self, ctx, opts, args):
+        value, args = super().handle_parse_result(ctx, opts, args)
+        if self.is_flag and self.flag_value is not None:
+            if value is None:  # Flag not present
+                value = not self.flag_value
+            else:
+                value = self.flag_value
+        return value, args
 
 
 class ClickArgument(click.Argument):
@@ -117,32 +131,6 @@ class ClickCommand(click.Command):
         return description + extra_help + options
 
 
-"""
-def missing_parameter_format_message(self) -> str:
-    param_hint = f"{self.param.name.lower()}" if self.param is not None else ""
-    param_type = self.param_type
-    # Translate param_type for known types.
-    if param_type == "argument":
-        missing = _("Missing argument")
-    elif param_type == "option":
-        missing = _("Missing option")
-    elif param_type == "parameter":
-        missing = _("Missing parameter")
-    elif param_type is None:
-        missing = _(f"Missing parameter")
-    else:
-        missing = _(f"Missing {param_type}")
-    msg = self.message
-    if self.param is not None:
-        msg_extra = self.param.type.get_missing_message(self.param)
-        if msg_extra:
-            msg = f"{msg}. {msg_extra}" if msg else msg_extra
-    msg = f" {msg}" if msg else ""
-    return f"{missing} '{param_hint}'.{msg}"
-MissingParameter.format_message = missing_parameter_format_message
-"""
-
-
 class UNSET: ...
 
 
@@ -156,7 +144,7 @@ class ClickParser(InterfacyParserCore):
         theme: InterfacyTheme | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
-        pipe_target: str | None = None,
+        pipe_target: dict[str, str] | str | None = None,
         allow_args_from_file: bool = True,
         print_result: bool = True,
         print_result_func: T.Callable = click.echo,
@@ -180,6 +168,17 @@ class ClickParser(InterfacyParserCore):
         self.main_parser = click.Group(name="main")
         self.args = UNSET
         self.kwargs = UNSET
+
+    def _handle_piped_input(self, command: str, params: dict[str, T.Any]) -> dict[str, T.Any]:
+        piped = read_piped()
+        if piped:
+            if isinstance(self.pipe_target, str):
+                params[self.pipe_target] = piped
+            elif isinstance(self.pipe_target, dict):
+                target = self.pipe_target.get(command)
+                if target:
+                    params[target] = piped
+        return params
 
     def _generate_instance_callback(self, cls: Class) -> T.Callable:
         """
@@ -224,24 +223,10 @@ class ClickParser(InterfacyParserCore):
         return callback
 
     def _get_param(self, param: Parameter, taken_flags: list[str]) -> ClickOption | ClickArgument:
-        """
-        Generates a ClickOption or ClickArgument from a Parameter.
-
-        Args:
-            param (Parameter): The parameter to be converted.
-            taken_flags (list[str]): A list of flags that are already in use.
-
-        Returns:
-            ClickOption | ClickArgument: The generated option or argument. Optional parameters are converted to options, required parameters are converted to arguments.
-
-        """
         name = self.flag_strategy.translator.translate(param.name)
-
         extras = {}
         extras["help"] = self.theme.get_parameter_help(param)
         extras["metavar"] = name
-        # if self.theme.clear_metavar:
-        #    extras["metavar"] = ""
 
         if param.is_typed:
             parse_fn = self.type_parser.get_parse_func(param.type)
@@ -254,10 +239,24 @@ class ClickParser(InterfacyParserCore):
             taken_flags.append(name)
         else:
             opt_class = ClickOption
-            flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
-            if not param.is_required:
-                extras["default"] = param.default
-                extras["is_flag"] = param.type is bool
+            if param.type is bool:
+                if param.default is True:
+                    flag_name = f"--no-{name}"
+                    flags = (flag_name,)
+                    extras["is_flag"] = True
+                    extras["flag_value"] = False
+                    extras["default"] = True
+                else:
+                    flags = self.flag_strategy.get_arg_flags(
+                        name, param, taken_flags, self.abbrev_gen
+                    )
+                    extras["is_flag"] = True
+                    extras["flag_value"] = True
+                    extras["default"] = False
+            else:
+                flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
+                if not param.is_required:
+                    extras["default"] = param.default
 
         option = opt_class(
             flags,

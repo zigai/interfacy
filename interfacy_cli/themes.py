@@ -35,31 +35,49 @@ class InterfacyTheme:
 
     def get_parameter_help(self, param: Parameter) -> str:
         """
-        Returns a parameter helpstring that should be paseed as help to argparse.ArgumentParser
+        Returns a parameter helpstring that should be passed as help to argparse.ArgumentParser
         """
         if param.is_required and not param.is_typed:
             return ""
+
         h = []
 
-        if param.description is not None:
-            fill = " "
-            h.append(f"{with_style(param.description, self.style_description)} | {fill}")
+        # Handle boolean parameters differently
+        if param.type is bool:
+            if param.description is not None:
+                description = param.description
+                if not description.endswith("."):
+                    description = description + "."
+                h.append(f"{with_style(description, self.style_description)}")
 
-        if param.is_typed:
-            type_str = type_name(param.type)
-            if self.simplify_types:
-                type_str = simplified_type_name(type_str)
-            h.append(with_style(type_str, self.style_type))
+            if param.default is True:
+                h.append(
+                    with_style(
+                        " Enabled by default - passing this flag disables it.",
+                        self.style_description,
+                    )
+                )
+        else:
+            if param.description is not None:
+                fill = " "
+                h.append(f"{with_style(param.description, self.style_description)} | {fill}")
 
-        if param.is_optional and param.default is not None:
-            if param.is_typed:
-                h.append(self.sep)
-            h.append(with_style(param.default, self.style_default))
+            if param.is_typed and param.type is not bool:
+                type_str = type_name(param.type)
+                if self.simplify_types:
+                    type_str = simplified_type_name(type_str)
+                h.append(with_style(type_str, self.style_type))
+
+            if param.is_optional and param.default is not None and param.type is not bool:
+                if param.is_typed:
+                    h.append(self.sep)
+                h.append(with_style(param.default, self.style_default))
 
         h = "".join(h)
 
         if param.is_required:
             h = f"{h} {self.required_indicator}"
+
         return h
 
     def get_command_description(self, command: Class | Function | Method, ljust: int) -> str:
