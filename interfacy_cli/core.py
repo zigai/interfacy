@@ -19,6 +19,7 @@ FlagsStyle = T.Literal["keyword_only", "required_positional"]
 
 class FlagStrategyProtocol(T.Protocol):
     translator: TranslationMapper
+    flags_style: FlagsStyle
 
     def get_arg_flags(
         self,
@@ -66,7 +67,6 @@ class DefaultFlagStrategy(FlagStrategyProtocol):
         Returns:
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).
         """
-
         if self.flags_style == "required_positional" and param.is_required:
             return (name,)
 
@@ -127,7 +127,7 @@ class InterfacyParserCore:
     def _collect_commands(self, *commands: T.Callable) -> dict[str, Function | Class | Method]:
         ret = {}
         for i in commands:
-            command = inspect(i, inherited=False)
+            command = inspect(i, inherited=False, private=False)
             if command.name in commands:
                 raise DuplicateCommandError(command.name)
             ret[command.name] = command
@@ -139,6 +139,9 @@ class InterfacyParserCore:
         if isinstance(obj, Class):
             return self._parser_from_class(obj)
         raise InvalidCommandError(f"Not a valid command: {obj}")
+
+    def _should_skip_method(self, method: Method) -> bool:
+        return method.name.startswith("_")
 
     def _parser_from_func(self, fn: Function, taken_flags: list[str] | None = None):
         raise NotImplementedError
