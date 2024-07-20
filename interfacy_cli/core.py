@@ -18,7 +18,8 @@ FlagsStyle = T.Literal["keyword_only", "required_positional"]
 
 
 class FlagStrategyProtocol(T.Protocol):
-    translator: TranslationMapper
+    arg_translator: TranslationMapper
+    command_translator: TranslationMapper
     flags_style: FlagsStyle
 
     def get_arg_flags(
@@ -40,7 +41,8 @@ class DefaultFlagStrategy(FlagStrategyProtocol):
     ) -> None:
         self.flags_style = flags_style
         self.flag_translation_mode = flag_translation_mode
-        self.translator = self._get_flag_translator()
+        self.arg_translator = self._get_flag_translator()
+        self.command_translator = self._get_flag_translator()
 
     def _get_flag_translator(self) -> TranslationMapper:
         if self.flag_translation_mode not in self.flag_translate_fn:
@@ -99,7 +101,7 @@ class InterfacyParserCore:
         allow_args_from_file: bool = True,
         flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
         abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
-        pipe_target: str | None = None,
+        pipe_target: dict[str, str] | None = None,
         tab_completion: bool = False,
         print_result: bool = False,
         print_result_func: T.Callable = print,
@@ -116,7 +118,7 @@ class InterfacyParserCore:
         self.theme = theme or InterfacyTheme()
         self.flag_strategy = flag_strategy
         self.abbrev_gen = abbrev_gen
-        self.theme.translate_name = self.flag_strategy.translator.translate
+        self.theme.translate_name = self.flag_strategy.arg_translator.translate
 
     def get_args(self) -> list[str]:
         return sys.argv[1:]
@@ -143,7 +145,7 @@ class InterfacyParserCore:
     def _should_skip_method(self, method: Method) -> bool:
         return method.name.startswith("_")
 
-    def _parser_from_func(self, fn: Function, taken_flags: list[str] | None = None):
+    def _parser_from_func(self, fn: Function | Method, taken_flags: list[str] | None = None):
         raise NotImplementedError
 
     def _parser_from_class(self, cls: Class, parser=None):

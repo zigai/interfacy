@@ -111,3 +111,9 @@ class TranslationMapper:
             str: The original name if it exists, otherwise returns the same translated name.
         """
         return self.translations.get(translated, None)
+
+    def contains_key(self, name: str):
+        return name in self.translations.values()
+
+    def contains_translation(self, name: str):
+        return name in self.translations

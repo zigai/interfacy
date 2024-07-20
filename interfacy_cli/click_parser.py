@@ -5,21 +5,24 @@ from gettext import gettext as _
 from os import get_terminal_size
 
 import click
-from click import argument, pass_context
-from click.exceptions import MissingParameter, UsageError, _join_param_hints
+from click import pass_context
 from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
 from interfacy_cli.core import DefaultFlagStrategy, FlagStrategyProtocol, InterfacyParserCore
-from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.logger import logger as _logger
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import (
     AbbrevationGeneratorProtocol,
     DefaultAbbrevationGenerator,
     NoAbbrevations,
+    TranslationMapper,
 )
+
+
+def inverted_bool_flag_name(name: str) -> str:
+    return "no-" + name
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -144,7 +147,7 @@ class ClickParser(InterfacyParserCore):
         theme: InterfacyTheme | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
-        pipe_target: dict[str, str] | str | None = None,
+        pipe_target: dict[str, str] | None = None,
         allow_args_from_file: bool = True,
         print_result: bool = True,
         print_result_func: T.Callable = click.echo,
@@ -165,9 +168,11 @@ class ClickParser(InterfacyParserCore):
             tab_completion=tab_completion,
             abbrev_gen=abbrev_gen,
         )
+        self.piped = read_piped()
         self.main_parser = click.Group(name="main")
         self.args = UNSET
         self.kwargs = UNSET
+        self.bool_flag_translator = TranslationMapper(inverted_bool_flag_name)
 
     def _handle_piped_input(self, command: str, params: dict[str, T.Any]) -> dict[str, T.Any]:
         piped = read_piped()
@@ -179,6 +184,17 @@ class ClickParser(InterfacyParserCore):
                 if target:
                     params[target] = piped
         return params
+
+    def _handle_bool_args(self, kwargs: dict):
+        updated_kwargs = {}
+        for k, v in kwargs.items():
+            key = k.replace("_", "-")
+            if self.bool_flag_translator.contains_translation(key):
+                origin = self.bool_flag_translator.reverse(key)
+                updated_kwargs[origin] = not v
+            else:
+                updated_kwargs[k] = v
+        return updated_kwargs
 
     def _generate_instance_callback(self, cls: Class) -> T.Callable:
         """
@@ -200,13 +216,14 @@ class ClickParser(InterfacyParserCore):
 
     def _generate_callback(
         self,
-        fn: T.Callable,
+        fn: Function,
         result_fn: T.Callable | None = None,
     ) -> T.Callable:
         logger = _logger.bind(title="_generate_callback")
         logger.debug(f"Generating callback for {fn}")
 
         def callback(*args, **kwargs):
+            func = fn.func
             logger.debug(f"Calling callback for {fn}", args=args, kwargs=kwargs)
             self.args = args
             self.kwargs = kwargs
@@ -214,16 +231,26 @@ class ClickParser(InterfacyParserCore):
             if result_fn:
                 result = result_fn()
             else:
-                result = fn(*args, **kwargs)
+                updated_kwargs = self._handle_bool_args(kwargs)
+                result = func(*args, **updated_kwargs)
+            if self.print_result:
+                self.print_result_func(result)
 
-            self.print_result_func(result)
             logger.debug(f"Result: {result}")
             return result
 
         return callback
 
-    def _get_param(self, param: Parameter, taken_flags: list[str]) -> ClickOption | ClickArgument:
-        name = self.flag_strategy.translator.translate(param.name)
+    def _is_pipe_target(self, name: str):
+        if isinstance(self.pipe_target, str):
+            return name == self.pipe_target
+        if isinstance(self.pipe_target, dict):
+            return name in self.pipe_target
+
+    def _get_param(
+        self, param: Parameter, taken_flags: list[str], command_name: str | None = None
+    ) -> ClickOption | ClickArgument:
+        name = self.flag_strategy.arg_translator.translate(param.name)
         extras = {}
         extras["help"] = self.theme.get_parameter_help(param)
         extras["metavar"] = name
@@ -241,22 +268,31 @@ class ClickParser(InterfacyParserCore):
             opt_class = ClickOption
             if param.type is bool:
                 if param.default is True:
-                    flag_name = f"--no-{name}"
+                    flag_name = self.bool_flag_translator.translate(name)
+                    flag_name = f"--{flag_name}"
                     flags = (flag_name,)
                     extras["is_flag"] = True
-                    extras["flag_value"] = False
-                    extras["default"] = True
+                    extras["flag_value"] = True
+                    extras["default"] = False
                 else:
                     flags = self.flag_strategy.get_arg_flags(
                         name, param, taken_flags, self.abbrev_gen
                     )
                     extras["is_flag"] = True
-                    extras["flag_value"] = True
-                    extras["default"] = False
+                    extras["flag_value"] = False
+                    extras["default"] = True
             else:
                 flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
                 if not param.is_required:
                     extras["default"] = param.default
+
+        assert command_name
+        pipe_target_for_command = (
+            self.pipe_target.get(command_name, None) if self.pipe_target is not None else None
+        )
+
+        if pipe_target_for_command == param.name:
+            extras["default"] = self.piped
 
         option = opt_class(
             flags,
@@ -266,24 +302,18 @@ class ClickParser(InterfacyParserCore):
 
     def _parser_from_func(  # type:ignore
         self,
-        fn: Function,
+        fn: Function | Method,
         taken_flags: list[str] | None = None,
         instance_callback: T.Callable | None = None,
     ) -> ClickCommand:
         if taken_flags is None:
             taken_flags = [*self.RESERVED_FLAGS]
-
+        command_name = self.flag_strategy.command_translator.translate(fn.name)
         description = self.theme.format_description(fn.description) if fn.has_docstring else None
-        params = [
-            self._get_param(
-                param,
-                taken_flags,
-            )
-            for param in fn.params
-        ]
-        callback = self._generate_callback(fn.func, instance_callback)
+        params = [self._get_param(param, taken_flags, command_name=fn.name) for param in fn.params]
+        callback = self._generate_callback(fn, instance_callback)
         command = ClickCommand(
-            name=fn.name,
+            name=command_name,
             callback=callback,
             params=params,  # type: ignore
             help=description,
@@ -292,7 +322,7 @@ class ClickParser(InterfacyParserCore):
 
     def _parser_from_class(self, cls: Class):  # type:ignore
         description = self.theme.format_description(cls.description) if cls.has_docstring else None
-
+        command_name = self.flag_strategy.command_translator.translate(cls.name)
         params = []
         if cls.init_method and not cls.is_initialized:
             params.extend(
@@ -307,7 +337,7 @@ class ClickParser(InterfacyParserCore):
 
         init_callback = self._generate_instance_callback(cls)
         group = ClickGroup(
-            name=cls.name,
+            name=command_name,
             help=description,
             params=params,
             init_callback=init_callback,
@@ -338,7 +368,7 @@ class ClickParser(InterfacyParserCore):
         commands: list[Function | Class],
     ) -> click.Group:
         for cmd in commands:
-            command_name = self.flag_strategy.translator.translate(cmd.name)
+            command_name = self.flag_strategy.arg_translator.translate(cmd.name)
             parser = self._parser_from_object(cmd)
             self.main_parser.add_command(parser, name=command_name)
         return self.main_parser
@@ -349,10 +379,7 @@ class ClickParser(InterfacyParserCore):
             name=name,
         )
 
-    def run(
-        self,
-        args: list[str] | None = None,
-    ):
+    def run(self, args: list[str] | None = None):
         args = args or self.get_args()
         self.main_parser.main(args=args)
 
