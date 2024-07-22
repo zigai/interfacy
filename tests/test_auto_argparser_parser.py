@@ -1,12 +1,12 @@
 import objinspect
 from data import Math, pow
 
-from interfacy_cli.argparse_parser import AutoArgparseParser
+from interfacy_cli.argparse_parser import ArgparseParser
 
 
 def test_from_function():
     func = objinspect.Function(pow)
-    auto_parser = AutoArgparseParser(description=func.description)
+    auto_parser = ArgparseParser(description=func.description)
     parser = auto_parser._parser_from_func(func)
     assert parser.description == func.description
 
@@ -23,7 +23,7 @@ def test_from_method():
     math = Math()
     method = objinspect.inspect(math.pow)
     assert isinstance(method, objinspect.Method)
-    auto_parser = AutoArgparseParser(description=method.description)
+    auto_parser = ArgparseParser(description=method.description)
     parser = auto_parser.parser_from_method(method, taken_flags=["-h", "--help"])
     assert parser.description == method.description
 
@@ -38,7 +38,7 @@ def test_from_method():
 
 def test_from_class():
     cls = objinspect.Class(Math)
-    auto_parser = AutoArgparseParser(description=cls.description)
+    auto_parser = ArgparseParser(description=cls.description)
     parser = auto_parser._parser_from_class(cls)
     assert parser.description == cls.description
 
@@ -60,7 +60,7 @@ def test_from_class():
 def test_from_instance():
     cls = objinspect.Class(Math())
 
-    auto_parser = AutoArgparseParser(description=cls.description)
+    auto_parser = ArgparseParser(description=cls.description)
     parser = auto_parser._parser_from_class(cls)
     assert parser.description == cls.description
 

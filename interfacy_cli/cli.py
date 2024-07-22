@@ -2,7 +2,7 @@ import typing as T
 
 from strto import StrToTypeParser
 
-from interfacy_cli.argparse_parser import AutoArgparseParser
+from interfacy_cli.argparse_parser import ArgparseParser
 from interfacy_cli.click_parser import ClickParser
 from interfacy_cli.exceptions import InterfacyException
 from interfacy_cli.themes import InterfacyTheme
@@ -31,7 +31,7 @@ class CLI:
         self.backend = backend
         if self.backend not in ["argparse", "click"]:
             raise ValueError(f"Invalid backend: {self.backend}. Must be one of 'argparse', 'click'")
-        parser_cls = AutoArgparseParser if self.backend == "argparse" else ClickParser
+        parser_cls = ArgparseParser if self.backend == "argparse" else ClickParser
 
         self.parser = parser_cls(
             description=description,

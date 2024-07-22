@@ -1,21 +1,27 @@
+import argparse
 import re
 import sys
 import textwrap
 import typing as T
 from argparse import ArgumentError, ArgumentParser, ArgumentTypeError, HelpFormatter
+from copy import deepcopy
 
 from nested_argparse import NestedArgumentParser
-from objinspect import Class, Function, Method, Parameter
+from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 from objinspect.typing import type_name
-from stdl.st import kebab_case, snake_case
 from strto import StrToTypeParser
 
-from interfacy_cli.constants import ARGPARSE_RESERVED_FLAGS, COMMAND_KEY, ExitCode
-from interfacy_cli.core import FlagStrategyProtocol, InterfacyParserCore
-from interfacy_cli.exceptions import InvalidCommandError, ReservedFlagError
+from interfacy_cli.core import (
+    DefaultFlagStrategy,
+    ExitCode,
+    FlagStrategyProtocol,
+    InterfacyParserCore,
+)
+from interfacy_cli.exceptions import InvalidCommandError, ReservedFlagError, UnsupportedParamError
 from interfacy_cli.themes import InterfacyTheme
+from interfacy_cli.util import AbbrevationGeneratorProtocol, DefaultAbbrevationGenerator
 
 try:
     from gettext import gettext as _
@@ -26,6 +32,44 @@ except ImportError:
 
 
 class ArgumentParserWrapper(NestedArgumentParser):
+    def __init__(
+        self,
+        name: str = None,
+        prog=None,
+        nest_dir=None,
+        nest_separator="__",
+        nest_path=None,
+        usage=None,
+        description=None,
+        epilog=None,
+        parents=[],
+        formatter_class=argparse.HelpFormatter,
+        prefix_chars="-",
+        fromfile_prefix_chars=None,
+        argument_default=None,
+        conflict_handler="error",
+        add_help=True,
+        allow_abbrev=True,
+    ):
+        super().__init__(
+            prog,
+            nest_dir,
+            nest_separator,
+            nest_path,
+            usage,
+            description,
+            epilog,
+            parents,
+            formatter_class,
+            prefix_chars,
+            fromfile_prefix_chars,
+            argument_default,
+            conflict_handler,
+            add_help,
+            allow_abbrev,
+        )
+        self.name = name
+
     def _get_value(self, action, arg_string):
         parse_func = self._registry_get("type", action.type, action.type)
         if not callable(parse_func):
@@ -162,48 +206,51 @@ class SafeRawHelpFormatter(SafeHelpFormatter):
         return text.splitlines()
 
 
-class AutoArgparseParser(InterfacyParserCore):
-    flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
-    method_skips = ["__init__"]
-    log_msg_tag = "interfacy"
+COMMAND_KEY = "command"
+
+
+class ArgparseParser(InterfacyParserCore):
+    RESERVED_FLAGS = ["h", "help"]
 
     def __init__(
         self,
         description: str | None = None,
         epilog: str | None = None,
         theme: InterfacyTheme | None = None,
-        value_parser: StrToTypeParser | None = None,
-        formatter_class=SafeRawHelpFormatter,
+        type_parser: StrToTypeParser | None = None,
         *,
-        flag_strategy: T.Literal["keyword_only", "required_positional"] = "required_positional",
-        flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
-        from_file_prefix: str = "@F",
-        print_result: bool = True,
-        add_abbrevs: bool = True,
-        read_stdin: bool = False,
-        tab_completion: bool = False,
+        run: bool = False,
         allow_args_from_file: bool = True,
-    ):
+        flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
+        abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
+        pipe_target: dict[str, str] | None = None,
+        tab_completion: bool = False,
+        formatter_class=SafeRawHelpFormatter,
+        print_result: bool = False,
+        print_result_func: T.Callable = print,
+    ) -> None:
         super().__init__(
             description,
             epilog,
             theme,
-            value_parser,
-            flag_strategy=flag_strategy,
-            flag_translation_mode=flag_translation_mode,
-            from_file_prefix=from_file_prefix,
-            add_abbrevs=add_abbrevs,
-            read_stdin=read_stdin,
-            print_result=print_result,
-            tab_completion=tab_completion,
+            type_parser,
+            run=run,
             allow_args_from_file=allow_args_from_file,
+            flag_strategy=flag_strategy,
+            abbrev_gen=abbrev_gen,
+            pipe_target=pipe_target,
+            tab_completion=tab_completion,
+            print_result=print_result,
+            print_result_func=print_result_func,
         )
         self.formatter_class = formatter_class
+        self._parser = self._new_parser(name="main")
+        self._subparsers = self._parser.add_subparsers(dest=COMMAND_KEY, required=True)
 
-    def _new_parser(self):
-        return ArgumentParserWrapper(formatter_class=self.formatter_class)
+    def _new_parser(self, name: str = None):
+        return ArgumentParserWrapper(name, formatter_class=self.formatter_class)
 
-    def add_parameter(
+    def _add_parameter_to_parser(
         self,
         parser: ArgumentParser,
         param: Parameter,
@@ -211,8 +258,8 @@ class AutoArgparseParser(InterfacyParserCore):
     ):
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
-        name = self.translate_name(param.name)
-        flags = self._get_arg_flags(name, param, taken_flags)
+        name = self.flag_strategy.arg_translator.translate(param.name)
+        flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
         extra_args = self._extra_add_arg_params(param)
         return parser.add_argument(*flags, **extra_args)
 
@@ -229,10 +276,10 @@ class AutoArgparseParser(InterfacyParserCore):
             taken_flags = []
         if parser is None:
             parser = self._new_parser()
-        for param in fn.params:
-            self.add_parameter(parser, param, taken_flags)
         if fn.has_docstring:
             parser.description = self.theme.format_description(fn.description)
+        for param in fn.params:
+            self._add_parameter_to_parser(parser, param, taken_flags)
         return parser
 
     def parser_from_method(
@@ -247,76 +294,90 @@ class AutoArgparseParser(InterfacyParserCore):
         if parser is None:
             parser = self._new_parser()
         for param in method.params:
-            self.add_parameter(parser, param, taken_flags)
+            self._add_parameter_to_parser(parser, param, taken_flags)
 
         if method.has_docstring:
             parser.description = self.theme.format_description(method.description)
 
         obj_class = Class(method.cls)
-
         init = obj_class.init_method
         if init is None:
             return parser
 
         for param in init.params:
-            self.add_parameter(parser, param, taken_flags)
+            self._add_parameter_to_parser(parser, param, taken_flags)
         return parser
 
     def _parser_from_class(
         self,
         cls: Class,
         parser: ArgumentParser | None = None,
+        subparser=None,
     ) -> ArgumentParser:
         """
         Create an ArgumentParser from a Class
         """
+        print(cls)
         if parser is None:
             parser = self._new_parser()
-        if cls.has_init and not cls.is_initialized:
-            init = cls.get_method("__init__")
+
         if cls.has_docstring:
             parser.description = self.theme.format_description(cls.description)
-
         parser.epilog = self.theme.get_commands_help_class(cls)  # type: ignore
 
-        subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
+        if cls.has_init and not cls.is_initialized:
+            init = cls.get_method("__init__")
+            for i in init.params:
+                self._add_parameter_to_parser(
+                    parser, param=i, taken_flags=[*self.RESERVED_FLAGS, COMMAND_KEY]
+                )
+
+        if subparser is None:
+            subparser = parser.add_subparsers(dest=COMMAND_KEY, required=True)
+
         for method in cls.methods:
             if method.name in self.method_skips:
                 continue
-            taken_flags = [*ARGPARSE_RESERVED_FLAGS]
-            method_name = self.translate_name(method.name)
+            taken_flags = [*self.RESERVED_FLAGS]
 
-            sp = subparsers.add_parser(method_name, description=method.description)
-
-            if cls.has_init and not cls.is_initialized and not method.is_static:
-                for param in init.params:  # type: ignore
-                    self.add_parameter(sp, param, taken_flags=taken_flags)
-
+            method_name = self.flag_strategy.command_translator.translate(method.name)
+            sp = subparser.add_parser(method_name, description=method.description)
             sp = self._parser_from_func(method, taken_flags, sp)
         return parser
 
     def _parser_from_multiple(
         self,
-        commands: list[Function | Class],
+        commands: list[Function | Method | Class],
     ) -> ArgumentParser:
         parser = self._new_parser()
         parser.epilog = self.theme.get_commands_help_multiple(commands)
         subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
 
         for cmd in commands:
-            command_name = self.translate_name(cmd.name)
+            command_name = self.flag_strategy.command_translator.translate(cmd.name)
             sp = subparsers.add_parser(command_name, description=cmd.description)
             if isinstance(cmd, Function):
-                sp = self._parser_from_func(
-                    fn=cmd, taken_flags=[*ARGPARSE_RESERVED_FLAGS], parser=sp
-                )
+                sp = self._parser_from_func(fn=cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp)
             elif isinstance(cmd, Class):
                 sp = self._parser_from_class(cmd, sp)
             elif isinstance(cmd, Method):
-                sp = self.parser_from_method(cmd, taken_flags=[*ARGPARSE_RESERVED_FLAGS], parser=sp)
+                sp = self.parser_from_method(cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp)
             else:
                 raise InvalidCommandError(f"Not a valid command: {cmd}")
         return parser
+
+    def _parser_from_object(self, obj: Function | Method | Class, main: bool = False):
+        if isinstance(obj, (Function, Method)):
+            return self._parser_from_func(obj, taken_flags=[*self.RESERVED_FLAGS])
+        if isinstance(obj, Class):
+            extra = {}
+            if main:
+                extra["parser"] = self._parser
+                extra["subparser"] = self._subparsers
+            else:
+                extra = {}
+            return self._parser_from_class(obj, **extra)
+        raise InvalidCommandError(f"Not a valid command: {obj}")
 
     def _extra_add_arg_params(self, param: Parameter) -> dict[str, T.Any]:
         """
@@ -331,7 +392,9 @@ class AutoArgparseParser(InterfacyParserCore):
             "required", "metavar", and "default".
 
         """
-        extra: dict[str, T.Any] = {"help": self.theme.get_parameter_help(param)}
+        help_str = self.theme.get_parameter_help(param)
+        extra: dict[str, T.Any] = {}
+        extra["help"] = help_str
 
         if param.is_typed:
             extra["type"] = self.type_parser.get_parse_func(param.type)
@@ -339,13 +402,14 @@ class AutoArgparseParser(InterfacyParserCore):
         if self.theme.clear_metavar:
             extra["metavar"] = "\b"
 
-        if self.flag_strategy == FlagsStrategy.REQUIRED_POSITIONAL:
+        if self.flag_strategy.flags_style == "required_positional":
             if not param.is_required:
                 extra["required"] = param.is_required  # type:ignore
             else:
                 del extra["metavar"]
         else:
-            extra["required"] = param.is_required  # type:ignore
+            pass
+            # extra["required"] = param.is_required  # type:ignore
 
         # Handle boolean parameters
         if param.is_typed and type(param.type) is bool:
@@ -380,25 +444,32 @@ class AutoArgparseParser(InterfacyParserCore):
 
         argcomplete.autocomplete(parser)
 
-    def run(
-        self,
-        *commands: T.Callable,
-        args: list[str] | None = None,
-    ) -> T.Any:
+    def add_command(self, command: T.Callable, name: str | None = None):
+        obj = inspect(command, inherited=False)
+        name = name or obj.name
+        sp = self._subparsers.add_parser(name)
+        sp = self._parser_from_object(obj, main=False)
+        return sp
+
+    def parse_args(self, args: list[str] | None = None):
+        args = args or self.get_args()
+        return self._parser.parse_args()
+
+    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
         args = args or self.get_args()
         commands_dict = self._collect_commands(*commands)
-        runner = AutoArgparseRunner(commands_dict, args=args, builder=self, run=False)
+        runner = ArgparseRunner(commands_dict, args=args, builder=self, run=False)
         result = runner.run()
         if self.print_result:
-            self.display_result(result)
+            self.print_result_func(result)
         return result
 
 
-class AutoArgparseRunner:
+class ArgparseRunner:
     def __init__(
         self,
         commands: dict[str, Function | Class | Method],
-        builder: AutoArgparseParser,
+        builder: ArgparseParser,
         args: list[str],
         run: bool = True,
     ) -> None:
@@ -437,7 +508,7 @@ class AutoArgparseRunner:
         Called when a single function or method is passed to CLI
         """
         builder = self.builder
-        parser = builder._parser_from_func(func, [*ARGPARSE_RESERVED_FLAGS])
+        parser = builder._parser_from_func(func, [*self.builder.RESERVED_FLAGS])
         self.setup_parser(parser)
 
         args = parser.parse_args(self.args)
@@ -449,7 +520,7 @@ class AutoArgparseRunner:
         Called when a single method is passed to CLI
         """
         builder = self.builder
-        parser = builder.parser_from_method(method, [*ARGPARSE_RESERVED_FLAGS])
+        parser = builder.parser_from_method(method, [*self.builder.RESERVED_FLAGS])
         self.setup_parser(parser)
 
         args = parser.parse_args(self.args)
@@ -463,7 +534,6 @@ class AutoArgparseRunner:
         builder = self.builder
         parser = builder._parser_from_class(cls)
         self.setup_parser(parser)
-
         args = parser.parse_args(self.args)
         return self._run_class_inner(cls, vars(args), parser)
 
@@ -471,26 +541,27 @@ class AutoArgparseRunner:
         builder = self.builder
         parser = builder._parser_from_multiple(commands.values())  # type: ignore
         self.setup_parser(parser)
-
         args = parser.parse_args(self.args)
-        obj_args = vars(args)
-        obj_args = self.revese_arg_translations(obj_args)
+        args = vars(args)
 
-        if COMMAND_KEY not in obj_args:
+        if COMMAND_KEY not in args:
             parser.print_help()
             sys.exit(ExitCode.INVALID_ARGS_ERR)
 
-        command = obj_args[COMMAND_KEY]
-        command = builder.flag_translator.reverse(command)
-        del obj_args[COMMAND_KEY]
-        args_all: dict = vars(obj_args[command])
-        args_all = self.revese_arg_translations(args_all)
-        cmd = commands[command]
+        command_name = args[COMMAND_KEY]
+        command_args = vars(args[command_name])
+        init_args = deepcopy(args)
+        del init_args[COMMAND_KEY]
+        del init_args[command_name]
 
+        command_name = (
+            self.builder.flag_strategy.command_translator.reverse(command_name) or command_name
+        )
+        cmd = commands[command_name]
         if isinstance(cmd, (Function, Method)):
-            return cmd.call(**args_all)
+            return cmd.call(**command_args)
         elif isinstance(cmd, Class):
-            return self._run_class_inner(cmd, args_all, parser)
+            return self._run_class_inner(cmd, command_args, parser)
         else:
             raise InvalidCommandError(f"Not a valid command: {cmd}")
 
@@ -500,24 +571,28 @@ class AutoArgparseRunner:
             sys.exit(ExitCode.INVALID_ARGS_ERR)
 
         command_name = args[COMMAND_KEY]
-        args_all = self.revese_arg_translations(vars(args[command_name]))
+        command_args = vars(args[command_name])
+        init_args = deepcopy(args)
+        del init_args[COMMAND_KEY]
+        del init_args[command_name]
 
+        command_name = (
+            self.builder.flag_strategy.command_translator.reverse(command_name) or command_name
+        )
         method = cls.get_method(command_name)
-        args_init, args_method = split_init_args(args_all, cls, method)
+        args_for_method = self.revese_arg_translations(command_args)
 
         if cls.has_init and not method.is_static:
-            init_args, init_kwargs = split_args_kwargs(args_init, cls.get_method("__init__"))
-            cls.init(*init_args, **init_kwargs)
+            cls.init(**init_args)
 
-        method_args, method_kwargs = split_args_kwargs(args_method, method)
-        return cls.call_method(command_name, *method_args, **method_kwargs)
+        return cls.call_method(command_name, **args_for_method)
 
     def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
         reversed = {}
         for k, v in args.items():
-            k = self.builder.flag_translator.reverse(k)
+            k = self.builder.flag_strategy.arg_translator.reverse(k)
             reversed[k] = v
         return reversed
 
 
-__all__ = ["AutoArgparseParser", "AutoArgparseRunner"]
+__all__ = ["ArgparseParser", "ArgparseRunner"]

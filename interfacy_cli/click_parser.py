@@ -10,7 +10,13 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy_cli.core import DefaultFlagStrategy, FlagStrategyProtocol, InterfacyParserCore
+from interfacy_cli.core import (
+    DefaultFlagStrategy,
+    FlagStrategyProtocol,
+    InterfacyParserCore,
+    inverted_bool_flag_name,
+)
+from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.logger import logger as _logger
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import (
@@ -19,10 +25,6 @@ from interfacy_cli.util import (
     NoAbbrevations,
     TranslationMapper,
 )
-
-
-def inverted_bool_flag_name(name: str) -> str:
-    return "no-" + name
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -168,7 +170,6 @@ class ClickParser(InterfacyParserCore):
             tab_completion=tab_completion,
             abbrev_gen=abbrev_gen,
         )
-        self.piped = read_piped()
         self.main_parser = click.Group(name="main")
         self.args = UNSET
         self.kwargs = UNSET
@@ -248,7 +249,7 @@ class ClickParser(InterfacyParserCore):
             return name in self.pipe_target
 
     def _get_param(
-        self, param: Parameter, taken_flags: list[str], command_name: str | None = None
+        self, param: Parameter, taken_flags: list[str], command_name: str
     ) -> ClickOption | ClickArgument:
         name = self.flag_strategy.arg_translator.translate(param.name)
         extras = {}
@@ -286,7 +287,6 @@ class ClickParser(InterfacyParserCore):
                 if not param.is_required:
                     extras["default"] = param.default
 
-        assert command_name
         pipe_target_for_command = (
             self.pipe_target.get(command_name, None) if self.pipe_target is not None else None
         )
@@ -327,10 +327,7 @@ class ClickParser(InterfacyParserCore):
         if cls.init_method and not cls.is_initialized:
             params.extend(
                 [
-                    self._get_param(
-                        param,
-                        [*self.reserved_flags],
-                    )
+                    self._get_param(param, [*self.RESERVED_FLAGS], command_name="__init__")
                     for param in cls.init_method.params
                 ],
             )
@@ -357,7 +354,7 @@ class ClickParser(InterfacyParserCore):
                 continue
             command = self._parser_from_func(
                 method,
-                taken_flags=[*self.reserved_flags],
+                taken_flags=[*self.RESERVED_FLAGS],
                 instance_callback=create_command_callback(method.func),
             )
             group.add_command(command)
@@ -379,7 +376,16 @@ class ClickParser(InterfacyParserCore):
             name=name,
         )
 
-    def run(self, args: list[str] | None = None):
+    def run(self, *commands: T.Callable, args: list[str] | None = None):
+        # commands_dict = self._collect_commands(*commands)
+        if commands:
+            if len(commands) == 1:
+                command = commands[0]
+                parser = self._parser_from_object(command)
+                self.main_parser = parser  # ?
+            else:
+                for i in commands:
+                    self.add_command(i)
         args = args or self.get_args()
         self.main_parser.main(args=args)
 

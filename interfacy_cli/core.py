@@ -2,6 +2,7 @@ import sys
 import typing as T
 
 from objinspect import Class, Function, Method, Parameter, inspect
+from stdl.fs import read_piped
 from stdl.st import kebab_case, snake_case
 from strto import StrToTypeParser, get_parser
 from strto.parsers import Parser
@@ -13,6 +14,18 @@ from interfacy_cli.util import (
     DefaultAbbrevationGenerator,
     TranslationMapper,
 )
+
+
+def inverted_bool_flag_name(name: str) -> str:
+    return "no-" + name
+
+
+class ExitCode:
+    SUCCESS = 0
+    INVALID_ARGS_ERR = 1
+    RUNTIME_ERR = 2
+    PARSING_ERR = 3
+
 
 FlagsStyle = T.Literal["keyword_only", "required_positional"]
 
@@ -86,9 +99,9 @@ class DefaultFlagStrategy(FlagStrategyProtocol):
 
 
 class InterfacyParserCore:
-    method_skips: list[str] = ["__init__"]
+    method_skips: list[str] = ["__init__", "__repr__", "repr"]
     logger_message_tag: str = "interfacy"
-    reserved_flags: list[str] = []
+    RESERVED_FLAGS: list[str] = []
 
     def __init__(
         self,
@@ -119,6 +132,7 @@ class InterfacyParserCore:
         self.flag_strategy = flag_strategy
         self.abbrev_gen = abbrev_gen
         self.theme.translate_name = self.flag_strategy.arg_translator.translate
+        self.piped = read_piped()
 
     def get_args(self) -> list[str]:
         return sys.argv[1:]
@@ -135,9 +149,9 @@ class InterfacyParserCore:
             ret[command.name] = command
         return ret
 
-    def _parser_from_object(self, obj: Function | Method | Class):
+    def _parser_from_object(self, obj: Function | Method | Class, main: bool = False):
         if isinstance(obj, (Function, Method)):
-            return self._parser_from_func(obj, taken_flags=[*self.reserved_flags])
+            return self._parser_from_func(obj, taken_flags=[*self.RESERVED_FLAGS])
         if isinstance(obj, Class):
             return self._parser_from_class(obj)
         raise InvalidCommandError(f"Not a valid command: {obj}")
@@ -169,4 +183,5 @@ __all__ = [
     "FlagsStyle",
     "FlagStrategyProtocol",
     "DefaultFlagStrategy",
+    "ExitCode",
 ]
