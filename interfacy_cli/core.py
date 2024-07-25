@@ -20,6 +20,18 @@ def inverted_bool_flag_name(name: str) -> str:
     return "no-" + name
 
 
+def show_result(result: T.Any, handler=print):
+    if isinstance(result, list):
+        for i in result:
+            handler(i)
+    elif isinstance(result, dict):
+        from pprint import pprint
+
+        pprint(result)
+    else:
+        handler(result)
+
+
 class ExitCode:
     SUCCESS = 0
     INVALID_ARGS_ERR = 1
@@ -117,7 +129,7 @@ class InterfacyParserCore:
         pipe_target: dict[str, str] | None = None,
         tab_completion: bool = False,
         print_result: bool = False,
-        print_result_func: T.Callable = print,
+        print_result_func: T.Callable = show_result,
     ) -> None:
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
         self.autorun = run

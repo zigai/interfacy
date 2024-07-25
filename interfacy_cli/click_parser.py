@@ -15,9 +15,9 @@ from interfacy_cli.core import (
     FlagStrategyProtocol,
     InterfacyParserCore,
     inverted_bool_flag_name,
+    show_result,
 )
 from interfacy_cli.exceptions import InvalidCommandError
-from interfacy_cli.logger import logger as _logger
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import (
     AbbrevationGeneratorProtocol,
@@ -98,12 +98,9 @@ class ClickGroup(click.Group):
     def __init__(self, init_callback, name=None, commands=None, *args, **kwargs):
         super().__init__(name, commands, *args, **kwargs)
         self.init_callback = init_callback
-        self.logger = _logger.bind(title=self.__class__.__name__)
 
     def invoke(self, ctx):
-        self.logger.debug(f"initializing with params: {ctx.params}")
         instance = self.init_callback(**ctx.params)
-        self.logger.debug(f"generated instance: {instance}")
         ctx.obj = instance
         super().invoke(ctx)
 
@@ -152,7 +149,7 @@ class ClickParser(InterfacyParserCore):
         pipe_target: dict[str, str] | None = None,
         allow_args_from_file: bool = True,
         print_result: bool = True,
-        print_result_func: T.Callable = click.echo,
+        print_result_func: T.Callable = show_result,
         flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
         abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
         tab_completion: bool = False,
@@ -197,20 +194,23 @@ class ClickParser(InterfacyParserCore):
                 updated_kwargs[k] = v
         return updated_kwargs
 
+    def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
+        reversed = {}
+        for k, v in args.items():
+            k = self.flag_strategy.arg_translator.reverse(k)
+            reversed[k] = v
+        return reversed
+
     def _generate_instance_callback(self, cls: Class) -> T.Callable:
         """
         Generates a function that instantiates the class with the given args.
         """
 
         def init_callback(*args, **kwargs):
-            logger = _logger.bind(title="init_callback")
-            logger.debug("Calling init_callback", args=args, kwargs=kwargs)
             if cls.is_initialized:
                 ret = cls.instance
-                logger.debug(f"Class is initialized already, returning {ret}")
                 return ret
             ret = cls.cls(*args, **kwargs)
-            logger.debug(f"Returning {ret}")
             return ret
 
         return init_callback
@@ -220,12 +220,9 @@ class ClickParser(InterfacyParserCore):
         fn: Function,
         result_fn: T.Callable | None = None,
     ) -> T.Callable:
-        logger = _logger.bind(title="_generate_callback")
-        logger.debug(f"Generating callback for {fn}")
 
         def callback(*args, **kwargs):
             func = fn.func
-            logger.debug(f"Calling callback for {fn}", args=args, kwargs=kwargs)
             self.args = args
             self.kwargs = kwargs
 
@@ -233,11 +230,11 @@ class ClickParser(InterfacyParserCore):
                 result = result_fn()
             else:
                 updated_kwargs = self._handle_bool_args(kwargs)
-                result = func(*args, **updated_kwargs)
+                kwargs = self.revese_arg_translations(updated_kwargs)
+                result = func(*args, **kwargs)
             if self.print_result:
                 self.print_result_func(result)
 
-            logger.debug(f"Result: {result}")
             return result
 
         return callback
@@ -377,12 +374,11 @@ class ClickParser(InterfacyParserCore):
         )
 
     def run(self, *commands: T.Callable, args: list[str] | None = None):
-        # commands_dict = self._collect_commands(*commands)
         if commands:
             if len(commands) == 1:
                 command = commands[0]
-                parser = self._parser_from_object(command)
-                self.main_parser = parser  # ?
+                parser = self._parser_from_object(inspect(command))
+                self.main_parser = parser
             else:
                 for i in commands:
                     self.add_command(i)
