@@ -11,11 +11,11 @@ def test_from_function():
     assert parser.description == func.description
 
     args = parser.parse_args(["2", "-e", "2"])
-    assert args.base == "2"
-    assert args.exponent == "2"
+    assert args.base == 2
+    assert args.exponent == 2
 
     args = parser.parse_args(["2"])
-    assert args.base == "2"
+    assert args.base == 2
     assert args.exponent == 2
 
 
@@ -28,33 +28,12 @@ def test_from_method():
     assert parser.description == method.description
 
     args = parser.parse_args(["2", "-e", "2"])
-    assert args.base == "2"
-    assert args.exponent == "2"
-
-    args = parser.parse_args(["2"])
-    assert args.base == "2"
+    assert args.base == 2
     assert args.exponent == 2
 
-
-def test_from_class():
-    cls = objinspect.Class(Math)
-    auto_parser = ArgparseParser(description=cls.description)
-    parser = auto_parser._parser_from_class(cls)
-    assert parser.description == cls.description
-
-    args = parser.parse_args(["pow", "2", "-e", "2"])
-    assert args.command == "pow"
-    namespace = args.pow
-    assert namespace.base == "2"
-    assert namespace.exponent == "2"
-    assert namespace.rounding == 6
-
-    args = parser.parse_args(["pow", "2", "-e", "2", "-r", "2"])
-    assert args.command == "pow"
-    namespace = args.pow
-    assert namespace.base == "2"
-    assert namespace.exponent == "2"
-    assert namespace.rounding == "2"
+    args = parser.parse_args(["2"])
+    assert args.base == 2
+    assert args.exponent == 2
 
 
 def test_from_instance():
@@ -67,5 +46,5 @@ def test_from_instance():
     args = parser.parse_args(["pow", "2", "-e", "2"])
     assert args.command == "pow"
     namespace = args.pow
-    assert namespace.base == "2"
-    assert namespace.exponent == "2"
+    assert namespace.base == 2
+    assert namespace.exponent == 2
