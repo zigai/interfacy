@@ -1,5 +1,3 @@
-import re
-import sys
 import typing as T
 from gettext import gettext as _
 from os import get_terminal_size
@@ -380,7 +378,7 @@ class ClickParser(InterfacyParserCore):
         if commands:
             if len(commands) == 1:
                 command = commands[0]
-                parser = self._parser_from_object(inspect(command))
+                parser = self._parser_from_object(inspect(command, inherited=False, private=False))
                 self.main_parser = parser
             else:
                 for i in commands:

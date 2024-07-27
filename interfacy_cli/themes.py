@@ -17,7 +17,7 @@ class InterfacyTheme:
     min_ljust: int = 19
     style_type: dict = dict(color=FG.GREEN)
     style_default: dict = dict(color=FG.LIGHT_BLUE)
-    style_description: dict = dict(color=FG.GRAY)
+    style_description: dict = dict(color=FG.WHITE)
     sep: str = " = "
     command_skips: list[str] = ["__init__"]
     commands_title: str = "commands:"
@@ -41,7 +41,6 @@ class InterfacyTheme:
             return ""
 
         h = []
-
         # Handle boolean parameters differently
         if param.type is bool:
             if param.description is not None:
@@ -59,8 +58,7 @@ class InterfacyTheme:
                 )
         else:
             if param.description is not None:
-                fill = " "
-                h.append(f"{with_style(param.description, self.style_description)} | {fill}")
+                h.append(f"{with_style(param.description, self.style_description)} | ")
 
             if param.is_typed and param.type is not bool:
                 type_str = type_name(param.type)
@@ -100,6 +98,10 @@ class InterfacyTheme:
         for command in commands:
             lines.append(self.get_command_description(command, ljust))
         return "\n".join(lines)
+
+
+class InterfacyDimTheme(InterfacyTheme):
+    style_description = dict(color=FG.GRAY)
 
 
 class PlainTheme(InterfacyTheme):
