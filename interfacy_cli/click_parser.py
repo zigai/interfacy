@@ -148,7 +148,7 @@ class ClickParser(InterfacyParserCore):
         *,
         pipe_target: dict[str, str] | None = None,
         allow_args_from_file: bool = True,
-        print_result: bool = True,
+        print_result: bool = False,
         print_result_func: T.Callable = show_result,
         flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
         abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
@@ -197,8 +197,11 @@ class ClickParser(InterfacyParserCore):
     def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
         reversed = {}
         for k, v in args.items():
-            k = self.flag_strategy.arg_translator.reverse(k)
-            reversed[k] = v
+            reversed_k = self.flag_strategy.arg_translator.reverse(k)
+            if reversed_k is not None:
+                reversed[reversed_k] = v
+            else:
+                reversed[k] = v
         return reversed
 
     def _generate_instance_callback(self, cls: Class) -> T.Callable:
