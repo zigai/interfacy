@@ -1,7 +1,8 @@
 import objinspect
-from data import Math, pow
 
 from interfacy_cli.argparse_parser import ArgparseParser
+
+from .data import Math, pow
 
 
 def test_from_function():

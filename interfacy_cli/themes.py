@@ -1,7 +1,7 @@
 import typing as T
 
 from objinspect import Class, Function, Method, Parameter
-from objinspect.typing import type_name
+from objinspect.typing import get_literal_choices, is_direct_literal, type_name
 from stdl.st import FG, colored
 
 from interfacy_cli.util import simplified_type_name
@@ -18,6 +18,7 @@ class InterfacyTheme:
     style_type: dict = dict(color=FG.GREEN)
     style_default: dict = dict(color=FG.LIGHT_BLUE)
     style_description: dict = dict(color=FG.WHITE)
+    style_string: dict = dict(color=FG.YELLOW)
     sep: str = " = "
     command_skips: list[str] = ["__init__"]
     commands_title: str = "commands:"
@@ -32,6 +33,16 @@ class InterfacyTheme:
 
     def format_description(self, description: str) -> str:
         return description
+
+    def _get_type_description(self, t):
+        if is_direct_literal(t):
+            choices = [with_style(i, self.style_string) for i in get_literal_choices(t)]
+            return " / ".join(choices)
+
+        type_str = type_name(t)
+        if self.simplify_types:
+            type_str = simplified_type_name(type_str)
+        return with_style(type_str, self.style_type)
 
     def get_parameter_help(self, param: Parameter) -> str:
         """
@@ -61,10 +72,7 @@ class InterfacyTheme:
                 h.append(f"{with_style(param.description, self.style_description)} | ")
 
             if param.is_typed and param.type is not bool:
-                type_str = type_name(param.type)
-                if self.simplify_types:
-                    type_str = simplified_type_name(type_str)
-                h.append(with_style(type_str, self.style_type))
+                h.append(self._get_type_description(param.type))
 
             if param.is_optional and param.default is not None and param.type is not bool:
                 if param.is_typed:
