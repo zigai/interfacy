@@ -9,7 +9,7 @@ from stdl.fs import read_piped
 from strto import StrToTypeParser
 
 from interfacy_cli.core import (
-    DefaultFlagStrategy,
+    BasicFlagStrategy,
     FlagStrategyProtocol,
     InterfacyParserCore,
     inverted_bool_flag_name,
@@ -148,7 +148,7 @@ class ClickParser(InterfacyParserCore):
         allow_args_from_file: bool = True,
         print_result: bool = False,
         print_result_func: T.Callable = show_result,
-        flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
+        flag_strategy: FlagStrategyProtocol = BasicFlagStrategy(),
         abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
         tab_completion: bool = False,
     ) -> None:
@@ -298,7 +298,7 @@ class ClickParser(InterfacyParserCore):
         )
         return option
 
-    def _parser_from_func(  # type:ignore
+    def parser_from_function(  # type:ignore
         self,
         fn: Function | Method,
         taken_flags: list[str] | None = None,
@@ -318,7 +318,7 @@ class ClickParser(InterfacyParserCore):
         )
         return command
 
-    def _parser_from_class(self, cls: Class):  # type:ignore
+    def parser_from_class(self, cls: Class):  # type:ignore
         description = self.theme.format_description(cls.description) if cls.has_docstring else None
         command_name = self.flag_strategy.command_translator.translate(cls.name)
         params = []
@@ -350,7 +350,7 @@ class ClickParser(InterfacyParserCore):
         for method in cls.methods:
             if method.name in self.method_skips or self._should_skip_method(method):
                 continue
-            command = self._parser_from_func(
+            command = self.parser_from_function(
                 method,
                 taken_flags=[*self.RESERVED_FLAGS],
                 instance_callback=create_command_callback(method.func),
@@ -358,19 +358,19 @@ class ClickParser(InterfacyParserCore):
             group.add_command(command)
         return group
 
-    def _parser_from_multiple(
+    def parser_from_multiple_commands(
         self,
         commands: list[Function | Class],
     ) -> click.Group:
         for cmd in commands:
             command_name = self.flag_strategy.arg_translator.translate(cmd.name)
-            parser = self._parser_from_object(cmd)
+            parser = self.parser_from_command(cmd)
             self.main_parser.add_command(parser, name=command_name)
         return self.main_parser
 
     def add_command(self, command: T.Callable, name: str | None = None):
         self.main_parser.add_command(
-            self._parser_from_object(inspect(command, inherited=False, private=False)),
+            self.parser_from_command(inspect(command, inherited=False, private=False)),
             name=name,
         )
 
@@ -378,7 +378,7 @@ class ClickParser(InterfacyParserCore):
         if commands:
             if len(commands) == 1:
                 command = commands[0]
-                parser = self._parser_from_object(inspect(command, inherited=False, private=False))
+                parser = self.parser_from_command(inspect(command, inherited=False, private=False))
                 self.main_parser = parser
             else:
                 for i in commands:

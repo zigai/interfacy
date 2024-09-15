@@ -14,12 +14,17 @@ from objinspect.typing import type_name
 from strto import StrToTypeParser
 
 from interfacy_cli.core import (
-    DefaultFlagStrategy,
+    BasicFlagStrategy,
     ExitCode,
     FlagStrategyProtocol,
     InterfacyParserCore,
 )
-from interfacy_cli.exceptions import InvalidCommandError, ReservedFlagError, UnsupportedParamError
+from interfacy_cli.exceptions import (
+    DuplicateCommandError,
+    InvalidCommandError,
+    ReservedFlagError,
+    UnsupportedParamError,
+)
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import AbbrevationGeneratorProtocol, DefaultAbbrevationGenerator
 
@@ -34,7 +39,7 @@ except ImportError:
 class ArgumentParserWrapper(NestedArgumentParser):
     def __init__(
         self,
-        name: str = None,
+        name: str | None = None,
         prog=None,
         nest_dir=None,
         nest_separator="__",
@@ -206,11 +211,9 @@ class SafeRawHelpFormatter(SafeHelpFormatter):
         return text.splitlines()
 
 
-COMMAND_KEY = "command"
-
-
-class ArgparseParser(InterfacyParserCore):
+class Argparser(InterfacyParserCore):
     RESERVED_FLAGS = ["h", "help"]
+    COMMAND_KEY = "command"
 
     def __init__(
         self,
@@ -221,7 +224,7 @@ class ArgparseParser(InterfacyParserCore):
         *,
         run: bool = False,
         allow_args_from_file: bool = True,
-        flag_strategy: FlagStrategyProtocol = DefaultFlagStrategy(),
+        flag_strategy: FlagStrategyProtocol = BasicFlagStrategy(),
         abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
         tab_completion: bool = False,
@@ -244,16 +247,16 @@ class ArgparseParser(InterfacyParserCore):
             print_result_func=print_result_func,
         )
         self.formatter_class = formatter_class
-        self._parser = self._new_parser(name="main")
-        self._subparsers = self._parser.add_subparsers(dest=COMMAND_KEY, required=True)
+        self._PARSER = self._new_parser(name="main")
+        self._SUBPARSERS = self._PARSER.add_subparsers(dest=self.COMMAND_KEY, required=True)
 
-    def _new_parser(self, name: str = None):
+    def _new_parser(self, name: str | None = None):
         return ArgumentParserWrapper(name, formatter_class=self.formatter_class)
 
     def _add_parameter_to_parser(
         self,
-        parser: ArgumentParser,
         param: Parameter,
+        parser: ArgumentParser,
         taken_flags: list[str],
     ):
         if param.name in taken_flags:
@@ -263,23 +266,32 @@ class ArgparseParser(InterfacyParserCore):
         extra_args = self._extra_add_arg_params(param)
         return parser.add_argument(*flags, **extra_args)
 
-    def _parser_from_func(
+    def add_command(self, command: T.Callable, name: str | None = None):
+        obj = inspect(command, inherited=False)
+        name = name or obj.name
+        if name in self.commands:
+            raise DuplicateCommandError(name)
+        self.commands[name] = obj
+        return obj
+
+    def _commands_list(self) -> list:
+        return list(self.commands.values())
+
+    def parser_from_function(
         self,
-        fn: Function,
-        taken_flags: list[str] | None = None,
+        function: Function,
         parser: ArgumentParser | None = None,
+        taken_flags: list[str] | None = None,
     ) -> ArgumentParser:
         """
         Create an ArgumentParser from a Function
         """
-        if taken_flags is None:
-            taken_flags = []
-        if parser is None:
-            parser = self._new_parser()
-        if fn.has_docstring:
-            parser.description = self.theme.format_description(fn.description)
-        for param in fn.params:
-            self._add_parameter_to_parser(parser, param, taken_flags)
+        taken_flags = [] if taken_flags is None else taken_flags
+        parser = parser or self._new_parser()
+        if function.has_docstring:
+            parser.description = self.theme.format_description(function.description)
+        for param in function.params:
+            self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
         return parser
 
     def parser_from_method(
@@ -291,24 +303,20 @@ class ArgparseParser(InterfacyParserCore):
         """
         Create an ArgumentParser from a Method
         """
-        if parser is None:
-            parser = self._new_parser()
+        parser = parser or self._new_parser()
         for param in method.params:
-            self._add_parameter_to_parser(parser, param, taken_flags)
+            self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
 
         if method.has_docstring:
             parser.description = self.theme.format_description(method.description)
 
-        obj_class = Class(method.cls)
-        init = obj_class.init_method
-        if init is None:
-            return parser
+        if init := Class(method.cls).init_method:
+            for param in init.params:
+                self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
 
-        for param in init.params:
-            self._add_parameter_to_parser(parser, param, taken_flags)
         return parser
 
-    def _parser_from_class(
+    def parser_from_class(
         self,
         cls: Class,
         parser: ArgumentParser | None = None,
@@ -317,9 +325,7 @@ class ArgparseParser(InterfacyParserCore):
         """
         Create an ArgumentParser from a Class
         """
-        print(cls)
-        if parser is None:
-            parser = self._new_parser()
+        parser = parser or self._new_parser()
 
         if cls.has_docstring:
             parser.description = self.theme.format_description(cls.description)
@@ -327,57 +333,65 @@ class ArgparseParser(InterfacyParserCore):
 
         if cls.has_init and not cls.is_initialized:
             init = cls.get_method("__init__")
-            for i in init.params:
+            for param in init.params:
                 self._add_parameter_to_parser(
-                    parser, param=i, taken_flags=[*self.RESERVED_FLAGS, COMMAND_KEY]
+                    parser=parser,
+                    param=param,
+                    taken_flags=[*self.RESERVED_FLAGS, self.COMMAND_KEY],
                 )
 
         if subparser is None:
-            subparser = parser.add_subparsers(dest=COMMAND_KEY, required=True)
+            subparser = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
 
         for method in cls.methods:
             if method.name in self.method_skips:
                 continue
             taken_flags = [*self.RESERVED_FLAGS]
-
             method_name = self.flag_strategy.command_translator.translate(method.name)
+            # sp = subparser.add_parser(method_name, description=method.description)
+            # sp = self.parser_from_function(function=method, parser=sp, taken_flags=taken_flags)
             sp = subparser.add_parser(method_name, description=method.description)
-            sp = self._parser_from_func(method, taken_flags, sp)
+            self.parser_from_function(function=method, parser=sp, taken_flags=taken_flags)
+
         return parser
 
-    def _parser_from_multiple(
+    def parser_from_command(
+        self,
+        command: Function | Method | Class,
+        parser: ArgumentParser | None = None,
+        subparser=None,
+    ):
+        if isinstance(command, (Function, Method)):
+            return self.parser_from_function(
+                command, taken_flags=[*self.RESERVED_FLAGS], parser=parser
+            )
+        if isinstance(command, Class):
+            return self.parser_from_class(command, parser=parser, subparser=subparser)
+        raise InvalidCommandError(command)
+
+    def parser_from_multiple_commands(
         self,
         commands: list[Function | Method | Class],
+        parser: ArgumentParser | None = None,
     ) -> ArgumentParser:
-        parser = self._new_parser()
-        parser.epilog = self.theme.get_commands_help_multiple(commands)
-        subparsers = parser.add_subparsers(dest=COMMAND_KEY, required=True)
+        parser = parser or self._new_parser()
+        parser.epilog = self.theme.get_help_for_multiple_commands(commands)
+        subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
 
         for cmd in commands:
-            command_name = self.flag_strategy.command_translator.translate(cmd.name)
-            sp = subparsers.add_parser(command_name, description=cmd.description)
+            name = self.flag_strategy.command_translator.translate(cmd.name)
+            sp = subparsers.add_parser(name, description=cmd.description)
             if isinstance(cmd, Function):
-                sp = self._parser_from_func(fn=cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp)
+                sp = self.parser_from_function(
+                    function=cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp
+                )
             elif isinstance(cmd, Class):
-                sp = self._parser_from_class(cmd, sp)
+                sp = self.parser_from_class(cmd, sp)
             elif isinstance(cmd, Method):
                 sp = self.parser_from_method(cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp)
             else:
-                raise InvalidCommandError(f"Not a valid command: {cmd}")
+                raise InvalidCommandError(cmd)
         return parser
-
-    def _parser_from_object(self, obj: Function | Method | Class, main: bool = False):
-        if isinstance(obj, (Function, Method)):
-            return self._parser_from_func(obj, taken_flags=[*self.RESERVED_FLAGS])
-        if isinstance(obj, Class):
-            extra = {}
-            if main:
-                extra["parser"] = self._parser
-                extra["subparser"] = self._subparsers
-            else:
-                extra = {}
-            return self._parser_from_class(obj, **extra)
-        raise InvalidCommandError(f"Not a valid command: {obj}")
 
     def _extra_add_arg_params(self, param: Parameter) -> dict[str, T.Any]:
         """
@@ -444,21 +458,43 @@ class ArgparseParser(InterfacyParserCore):
 
         argcomplete.autocomplete(parser)
 
-    def add_command(self, command: T.Callable, name: str | None = None):
-        obj = inspect(command, inherited=False)
-        name = name or obj.name
-        sp = self._subparsers.add_parser(name)
-        sp = self._parser_from_object(obj, main=False)
-        return sp
+    def build_parser(self):
+        if not self.commands:
+            raise ValueError("No commands provided")
+
+        if len(self.commands) == 1:
+            command = self._commands_list()[0]
+            parser = self.parser_from_command(command)
+        else:
+            parser = self.parser_from_multiple_commands(self._commands_list())
+
+        if self.description:
+            parser.description = self.theme.format_description(self.description)
+
+        if self.enable_tab_completion:
+            self.install_tab_completion(parser)
+        return parser
 
     def parse_args(self, args: list[str] | None = None):
         args = args or self.get_args()
-        return self._parser.parse_args()
+        parser = self.build_parser()
+        parsed = parser.parse_args(args)
+        return vars(parsed)
 
     def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
-        args = args or self.get_args()
-        commands_dict = self._collect_commands(*commands)
-        runner = ArgparseRunner(commands_dict, args=args, builder=self, run=False)
+        for i in commands:
+            self.add_command(i)
+        args = self.get_args()
+        namespace = self.parse_args(args)
+
+        runner = ArgparseRunner(
+            self.commands,
+            namespace=namespace,
+            args=args,
+            builder=self,
+            run=False,
+        )
+
         result = runner.run()
         if self.print_result:
             self.print_result_func(result)
@@ -469,11 +505,13 @@ class ArgparseRunner:
     def __init__(
         self,
         commands: dict[str, Function | Class | Method],
-        builder: ArgparseParser,
+        namespace: dict,
+        builder: Argparser,
         args: list[str],
         run: bool = True,
     ) -> None:
         self.commands = commands
+        self.namespace = namespace
         self.run_cli = run
         self.args = args
         self.builder = builder
@@ -508,7 +546,7 @@ class ArgparseRunner:
         Called when a single function or method is passed to CLI
         """
         builder = self.builder
-        parser = builder._parser_from_func(func, [*self.builder.RESERVED_FLAGS])
+        parser = builder.parser_from_function(func, [*self.builder.RESERVED_FLAGS])
         self.setup_parser(parser)
 
         args = parser.parse_args(self.args)
@@ -532,14 +570,14 @@ class ArgparseRunner:
 
     def _run_class(self, cls: Class):
         builder = self.builder
-        parser = builder._parser_from_class(cls)
+        parser = builder.parser_from_class(cls)
         self.setup_parser(parser)
         args = parser.parse_args(self.args)
         return self._run_class_inner(cls, vars(args), parser)
 
     def _run_multiple(self, commands: dict[str, Function | Class]) -> T.Any:
         builder = self.builder
-        parser = builder._parser_from_multiple(commands.values())  # type: ignore
+        parser = builder.parser_from_multiple_commands(commands.values())  # type: ignore
         self.setup_parser(parser)
         args = parser.parse_args(self.args)
         args = vars(args)
@@ -595,4 +633,4 @@ class ArgparseRunner:
         return reversed
 
 
-__all__ = ["ArgparseParser", "ArgparseRunner"]
+__all__ = ["Argparser", "ArgparseRunner"]

@@ -15,8 +15,8 @@ class ReservedFlagError(InterfacyException):
 
 
 class InvalidCommandError(InterfacyException):
-    def __init__(self, message: str):
-        super().__init__(message)
+    def __init__(self, command):
+        super().__init__(f"'{command}' is not a valid command")
 
 
 class DuplicateCommandError(InterfacyException):

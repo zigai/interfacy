@@ -100,7 +100,7 @@ class InterfacyTheme:
             lines.append(self.get_command_description(method, ljust))
         return "\n".join(lines)
 
-    def get_commands_help_multiple(self, commands: list[Class | Function | Method]) -> str:
+    def get_help_for_multiple_commands(self, commands: list[Class | Function | Method]) -> str:
         ljust = self._get_ljust(commands)  # type: ignore
         lines = [self.commands_title]
         for command in commands:

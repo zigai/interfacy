@@ -1,17 +1,16 @@
 import objinspect
+from data import Math, pow
 
-from interfacy_cli.argparse_parser import ArgparseParser
-
-from .data import Math, pow
+from interfacy_cli.argparse_parser import Argparser
 
 
 def test_from_function():
     func = objinspect.Function(pow)
-    auto_parser = ArgparseParser(description=func.description)
-    parser = auto_parser._parser_from_func(func)
+    parser = Argparser(description=func.description)
+    parser = parser.parser_from_function(func)
     assert parser.description == func.description
 
-    args = parser.parse_args(["2", "-e", "2"])
+    args = parser.parse_args(["pow", "2", "-e", "2"])
     assert args.base == 2
     assert args.exponent == 2
 
@@ -22,13 +21,11 @@ def test_from_function():
 
 def test_from_method():
     math = Math()
-    method = objinspect.inspect(math.pow)
-    assert isinstance(method, objinspect.Method)
-    auto_parser = ArgparseParser(description=method.description)
-    parser = auto_parser.parser_from_method(method, taken_flags=["-h", "--help"])
-    assert parser.description == method.description
+    parser = Argparser()
+    parser.add_command(math.pow)
 
-    args = parser.parse_args(["2", "-e", "2"])
+    args = parser.parse_args(["pow", "2", "-e", "2"])
+
     assert args.base == 2
     assert args.exponent == 2
 
@@ -40,8 +37,8 @@ def test_from_method():
 def test_from_instance():
     cls = objinspect.Class(Math())
 
-    auto_parser = ArgparseParser(description=cls.description)
-    parser = auto_parser._parser_from_class(cls)
+    parser = Argparser(description=cls.description)
+    parser = parser.parser_from_class(cls)
     assert parser.description == cls.description
 
     args = parser.parse_args(["pow", "2", "-e", "2"])
