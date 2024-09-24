@@ -4,22 +4,23 @@ class InterfacyException(Exception):
 
 class UnsupportedParamError(InterfacyException):
     def __init__(self, t):
-        self.msg = f"Parameter of type '{t}' is not supported"
-        super().__init__(self.msg)
+        self.param_t = t
+        super().__init__(f"Parameter of type '{t}' is not supported")
 
 
 class ReservedFlagError(InterfacyException):
     def __init__(self, flag: str):
-        self.msg = f"'{flag}' is a reserved flag"
-        super().__init__(self.msg)
+        self.flag = flag
+        super().__init__(f"'{flag}' is a reserved flag")
 
 
 class InvalidCommandError(InterfacyException):
     def __init__(self, command):
+        self.command = command
         super().__init__(f"'{command}' is not a valid command")
 
 
 class DuplicateCommandError(InterfacyException):
-    def __init__(self, command: str):
-        self.msg = f"Duplicate command '{command}'"
-        super().__init__(self.msg)
+    def __init__(self, command):
+        self.command = command
+        super().__init__(f"Duplicate command '{command}'")

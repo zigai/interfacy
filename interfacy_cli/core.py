@@ -94,8 +94,10 @@ class BasicFlagStrategy(FlagStrategyProtocol):
         Returns:
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).
         """
+        is_bool_flag = param.is_typed and param.type is bool
         if self.flags_style == "required_positional" and param.is_required:
-            return (name,)
+            if not is_bool_flag:
+                return (name,)
 
         if len(name) == 1:
             flag_long = f"-{name}".strip()
@@ -103,6 +105,9 @@ class BasicFlagStrategy(FlagStrategyProtocol):
             flag_long = f"--{name}".strip()
 
         flags = (flag_long,)
+        if is_bool_flag:
+            return flags
+
         if flag_short := abbrev_gen.generate(name, taken_flags):
             flag_short = flag_short.strip()
             if flag_short != name:
@@ -138,8 +143,8 @@ class InterfacyParserCore:
         self.epilog = epilog
         self.pipe_target = pipe_target
         self.enable_tab_completion = tab_completion
-        self.print_result_func = print_result_func
-        self.print_result = print_result
+        self.result_display_fn = print_result_func
+        self.display_result = print_result
         self.theme = theme or InterfacyTheme()
         self.flag_strategy = flag_strategy
         self.abbrev_gen = abbrev_gen
@@ -155,17 +160,6 @@ class InterfacyParserCore:
 
     def log(self, message: str) -> None:
         print(f"[{self.logger_message_tag}] {message}", file=sys.stdout)
-
-    """
-    def _collect_commands(self, *commands: T.Callable) -> dict[str, Function | Class | Method]:
-        ret = {}
-        for i in commands:
-            command = inspect(i, inherited=False, private=False)
-            if command.name in commands:
-                raise DuplicateCommandError(command.name)
-            ret[command.name] = command
-        return ret
-    """
 
     def parser_from_command(self, command: Function | Method | Class, main: bool = False):
         if isinstance(command, (Function, Method)):

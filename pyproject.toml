@@ -81,3 +81,11 @@ exclude = [
 
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401", "E402"]
+
+[tool.setuptools.packages.find]
+include = ["interfacy-cli*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
+pythonpath = ["."]

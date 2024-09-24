@@ -233,8 +233,8 @@ class ClickParser(InterfacyParserCore):
                 updated_kwargs = self._handle_bool_args(kwargs)
                 kwargs = self.revese_arg_translations(updated_kwargs)
                 result = func(*args, **kwargs)
-            if self.print_result:
-                self.print_result_func(result)
+            if self.display_result:
+                self.result_display_fn(result)
 
             return result
 

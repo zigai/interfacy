@@ -66,3 +66,15 @@ class Math:
             float: Difference of a and b.
         """
         return self._round(a - b)
+
+
+def func_with_bool_arg(value: bool):
+    return value
+
+
+def func_with_bool_default_true(value: bool = True):
+    return value
+
+
+def func_with_bool_default_false(value: bool = False):
+    return value

@@ -59,14 +59,6 @@ class InterfacyTheme:
                 if not description.endswith("."):
                     description = description + "."
                 h.append(f"{with_style(description, self.style_description)}")
-
-            if param.default is True:
-                h.append(
-                    with_style(
-                        " Enabled by default - passing this flag disables it.",
-                        self.style_description,
-                    )
-                )
         else:
             if param.description is not None:
                 h.append(f"{with_style(param.description, self.style_description)} | ")
@@ -77,7 +69,7 @@ class InterfacyTheme:
             if param.is_optional and param.default is not None and param.type is not bool:
                 if param.is_typed:
                     h.append(self.sep)
-                h.append(with_style(param.default, self.style_default))
+                h.append(with_style(str(param.default), self.style_default))
 
         h = "".join(h)
 
