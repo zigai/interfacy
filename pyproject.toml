@@ -83,7 +83,7 @@ exclude = [
 "__init__.py" = ["F401", "E402"]
 
 [tool.setuptools.packages.find]
-include = ["interfacy-cli*"]
+include = ["interfacy_cli*"]
 exclude = ["tests*"]
 
 [tool.pytest.ini_options]

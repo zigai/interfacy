@@ -78,3 +78,13 @@ def func_with_bool_default_true(value: bool = True):
 
 def func_with_bool_default_false(value: bool = False):
     return value
+
+
+def func_nargs(values: list[int]):
+    return values
+
+
+def func_nargs_two_positional(strs: list[str], ints: list[int]):
+    print(strs)
+    print(ints)
+    return len(strs), len(ints)

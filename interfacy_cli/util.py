@@ -1,5 +1,7 @@
 from typing import Callable
 
+from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
+
 
 def simplified_type_name(name: str) -> str:
     """
@@ -10,11 +12,11 @@ def simplified_type_name(name: str) -> str:
     return name
 
 
-class AbbrevationGeneratorProtocol:
+class AbbrevationGenerator:
     def generate(self, value: str, taken: list[str]) -> str | None: ...
 
 
-class DefaultAbbrevationGenerator(AbbrevationGeneratorProtocol):
+class DefaultAbbrevationGenerator(AbbrevationGenerator):
     """
     Simple abbrevation generator that tries to return a short name for a command.
     Returns None if it cannot find a short name.
@@ -61,7 +63,7 @@ class DefaultAbbrevationGenerator(AbbrevationGeneratorProtocol):
             return None
 
 
-class NoAbbrevations(AbbrevationGeneratorProtocol):
+class NoAbbrevations(AbbrevationGenerator):
     def generate(self, value: str, taken: list[str]) -> str | None:
         return None
 
@@ -119,9 +121,16 @@ class TranslationMapper:
         return name in self.translations
 
 
+def is_list_or_list_alias(t):
+    if t is list:
+        return True
+    t_origin = type_origin(t)
+    return t_origin is list
+
+
 __all__ = [
     "simplified_type_name",
-    "AbbrevationGeneratorProtocol",
+    "AbbrevationGenerator",
     "DefaultAbbrevationGenerator",
     "NoAbbrevations",
     "TranslationMapper",

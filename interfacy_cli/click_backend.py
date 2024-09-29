@@ -10,7 +10,7 @@ from strto import StrToTypeParser
 
 from interfacy_cli.core import (
     BasicFlagStrategy,
-    FlagStrategyProtocol,
+    FlagStrategy,
     InterfacyParserCore,
     inverted_bool_flag_name,
     show_result,
@@ -18,7 +18,7 @@ from interfacy_cli.core import (
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import (
-    AbbrevationGeneratorProtocol,
+    AbbrevationGenerator,
     DefaultAbbrevationGenerator,
     NoAbbrevations,
     TranslationMapper,
@@ -148,8 +148,8 @@ class ClickParser(InterfacyParserCore):
         allow_args_from_file: bool = True,
         print_result: bool = False,
         print_result_func: T.Callable = show_result,
-        flag_strategy: FlagStrategyProtocol = BasicFlagStrategy(),
-        abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
+        flag_strategy: FlagStrategy = BasicFlagStrategy(),
+        abbrev_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         tab_completion: bool = False,
     ) -> None:
         super().__init__(
@@ -259,7 +259,7 @@ class ClickParser(InterfacyParserCore):
             parse_fn = ClickFuncParamType(parse_fn, f"parse_{name}")
             extras["type"] = parse_fn
 
-        if param.is_required and self.flag_strategy.flags_style == "required_positional":
+        if param.is_required and self.flag_strategy.style == "required_positional":
             opt_class = ClickArgument
             flags = (name,)
             taken_flags.append(name)

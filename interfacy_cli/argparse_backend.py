@@ -10,15 +10,10 @@ from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
-from objinspect.typing import type_name
+from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
 from strto import StrToTypeParser
 
-from interfacy_cli.core import (
-    BasicFlagStrategy,
-    ExitCode,
-    FlagStrategyProtocol,
-    InterfacyParserCore,
-)
+from interfacy_cli.core import BasicFlagStrategy, ExitCode, FlagStrategy, InterfacyParserCore
 from interfacy_cli.exceptions import (
     DuplicateCommandError,
     InvalidCommandError,
@@ -26,7 +21,7 @@ from interfacy_cli.exceptions import (
     UnsupportedParamError,
 )
 from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import AbbrevationGeneratorProtocol, DefaultAbbrevationGenerator
+from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 try:
     from gettext import gettext as _
@@ -224,8 +219,8 @@ class Argparser(InterfacyParserCore):
         *,
         run: bool = False,
         allow_args_from_file: bool = True,
-        flag_strategy: FlagStrategyProtocol = BasicFlagStrategy(),
-        abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
+        flag_strategy: FlagStrategy = BasicFlagStrategy(),
+        abbrev_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
         tab_completion: bool = False,
         formatter_class=SafeRawHelpFormatter,
@@ -248,6 +243,7 @@ class Argparser(InterfacyParserCore):
         )
         self.formatter_class = formatter_class
         self._parser = None
+        del self.type_parser.parsers[list]
 
     def _new_parser(self, name: str | None = None):
         return ArgumentParserWrapper(name, formatter_class=self.formatter_class)
@@ -262,7 +258,7 @@ class Argparser(InterfacyParserCore):
             raise ReservedFlagError(param.name)
         name = self.flag_strategy.arg_translator.translate(param.name)
         flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
-        extra_args = self._extra_add_arg_params(param)
+        extra_args = self._extra_add_arg_params(param, flags)
         return parser.add_argument(*flags, **extra_args)
 
     def add_command(self, command: T.Callable | T.Any, name: str | None = None):
@@ -273,7 +269,7 @@ class Argparser(InterfacyParserCore):
         self.commands[name] = obj
         return obj
 
-    def _commands_list(self) -> list:
+    def _commands_list(self) -> list[Function | Class | Method]:
         return list(self.commands.values())
 
     def parser_from_function(
@@ -399,7 +395,7 @@ class Argparser(InterfacyParserCore):
                 raise InvalidCommandError(cmd)
         return parser
 
-    def _extra_add_arg_params(self, param: Parameter) -> dict[str, T.Any]:
+    def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, T.Any]:
         """
         This method creates a dictionary with additional argument parameters needed to
         customize argparse's `add_argument` method based on a given `Parameter` object.
@@ -414,19 +410,34 @@ class Argparser(InterfacyParserCore):
         """
         extra: dict[str, T.Any] = {}
         extra["help"] = self.theme.get_parameter_help(param)
-        # extra["dest"] = param.name
+
+        from objinspect.typing import is_generic_alias, type_args, type_origin
 
         if param.is_typed:
-            extra["type"] = self.type_parser.get_parse_func(param.type)
+            t_origin = type_origin(param.type)
+            is_list_alias = t_origin is list
 
+            if is_list_alias or param.type is list:
+                extra["nargs"] = "*"
+
+            if is_list_alias:
+                t_args = type_args(param.type)
+                assert t_args
+                t = t_args[0]
+                extra["type"] = self.type_parser.get_parse_func(t)
+            else:
+                extra["type"] = self.type_parser.get_parse_func(param.type)
+
+        """
         if self.theme.clear_metavar:
             extra["metavar"] = "\b"
+        del extra["metavar"]
+        """
 
-        if self.flag_strategy.flags_style == "required_positional":
-            if not param.is_required:
-                extra["required"] = param.is_required  # type:ignore
-            else:
-                del extra["metavar"]
+        if self.flag_strategy.style == "required_positional":
+            is_positional = all([not i.startswith("-") for i in flags])
+            if not is_positional:
+                extra["required"] = param.is_required
 
         # Handle boolean parameters
         if param.is_typed and param.type is bool:
@@ -571,7 +582,7 @@ class ArgparseRunner:
         method_args, method_kwargs = split_args_kwargs(args_method, method)
         return instance.call_method(method.name, *method_args, **method_kwargs)
 
-    def run_class(self, cls: Class, args: dict):
+    def run_class(self, cls: Class, args: dict) -> T.Any:
         command_name = args[self.COMMAND_KEY]
         command_args = args[command_name]
         del args[self.COMMAND_KEY]
@@ -584,12 +595,13 @@ class ArgparseRunner:
         method_args, method_kwargs = split_args_kwargs(command_args, cls.get_method(command_name))
         return cls.call_method(command_name, *method_args, **method_kwargs)
 
-    def run_multiple(self, commands: dict[str, Function | Class | Method]):
+    def run_multiple(self, commands: dict[str, Function | Class | Method]) -> T.Any:
         command_name = self.namespace[self.COMMAND_KEY]
         command = commands[command_name]
         args = self.namespace
-        print(command)
-        print(self.namespace)
+        # print(command)
+        # print(self.namespace)
+        return self.run_command(command, args)
 
 
 """

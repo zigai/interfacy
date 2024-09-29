@@ -1,10 +1,15 @@
 from interfacy_cli.argparse_backend import Argparser
+from interfacy_cli.core import BasicFlagStrategy
 
 from ..inputs import *
 
 
+def new_parser():
+    return Argparser(flag_strategy=BasicFlagStrategy(style="required_positional"))
+
+
 def test_from_function():
-    parser = Argparser()
+    parser = new_parser()
     parser.add_command(pow)
 
     namespace = parser.parse_args(["2", "-e", "2"])
@@ -17,7 +22,7 @@ def test_from_function():
 
 
 def test_from_class():
-    parser = Argparser()
+    parser = new_parser()
     parser.add_command(Math)
 
     namespace = parser.parse_args(["pow", "2", "-e", "2"])
@@ -30,7 +35,7 @@ def test_from_class():
 
 
 def test_from_instance():
-    parser = Argparser()
+    parser = new_parser()
     math = Math(rounding=2)
     parser.add_command(math)
 
@@ -43,7 +48,7 @@ def test_from_instance():
 
 
 def test_from_method():
-    parser = Argparser()
+    parser = new_parser()
     math = Math(rounding=2)
     parser.add_command(math.pow)
 
@@ -56,8 +61,23 @@ def test_from_method():
     assert namespace["exponent"] == 2
 
 
+def test_list_nargs():
+    parser = new_parser()
+    parser.add_command(func_nargs)
+    namespace = parser.parse_args(["1", "2", "3"])
+    print(namespace)
+
+
+def test_list_two_positional():
+    parser = new_parser()
+    parser.add_command(func_nargs_two_positional)
+    namespace = parser.parse_args(["a", "b", "--ints", "1", "2"])
+    assert namespace["strs"] == ["a", "b"]
+    assert namespace["ints"] == [1, 2]
+
+
 def test_bool():
-    parser = Argparser()
+    parser = new_parser()
     parser.add_command(func_with_bool_arg)
 
     namespace = parser.parse_args(["--value"])
@@ -68,7 +88,7 @@ def test_bool():
 
 
 def test_bool_true_by_default():
-    parser = Argparser()
+    parser = new_parser()
     parser.add_command(func_with_bool_default_true)
 
     namespace = parser.parse_args([])
@@ -82,7 +102,7 @@ def test_bool_true_by_default():
 
 
 def test_bool_false_by_default():
-    parser = Argparser()
+    parser = new_parser()
     parser.add_command(func_with_bool_default_false)
 
     namespace = parser.parse_args([])

@@ -2,6 +2,7 @@ import sys
 import typing as T
 
 from objinspect import Class, Function, Method, Parameter, inspect
+from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
 from stdl.fs import read_piped
 from stdl.st import kebab_case, snake_case
 from strto import StrToTypeParser, get_parser
@@ -10,9 +11,10 @@ from strto.parsers import Parser
 from interfacy_cli.exceptions import DuplicateCommandError, InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import (
-    AbbrevationGeneratorProtocol,
+    AbbrevationGenerator,
     DefaultAbbrevationGenerator,
     TranslationMapper,
+    is_list_or_list_alias,
 )
 
 
@@ -42,47 +44,48 @@ class ExitCode:
 FlagsStyle = T.Literal["keyword_only", "required_positional"]
 
 
-class FlagStrategyProtocol(T.Protocol):
+class FlagStrategy(T.Protocol):
     arg_translator: TranslationMapper
     command_translator: TranslationMapper
-    flags_style: FlagsStyle
+    style: FlagsStyle
 
     def get_arg_flags(
         self,
         name: str,
         param: Parameter,
         taken_flags: list[str],
-        abbrev_gen: AbbrevationGeneratorProtocol,
+        abbrev_gen: AbbrevationGenerator,
     ) -> tuple[str, ...]: ...
 
 
-class BasicFlagStrategy(FlagStrategyProtocol):
+class BasicFlagStrategy(FlagStrategy):
     flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
 
     def __init__(
         self,
-        flags_style: FlagsStyle = "required_positional",
-        flag_translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
+        style: FlagsStyle = "required_positional",
+        translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
     ) -> None:
-        self.flags_style = flags_style
-        self.flag_translation_mode = flag_translation_mode
+        self.style = style
+        self.translation_mode = translation_mode
         self.arg_translator = self._get_flag_translator()
         self.command_translator = self._get_flag_translator()
+        self._nargs_list_count = 0
 
     def _get_flag_translator(self) -> TranslationMapper:
-        if self.flag_translation_mode not in self.flag_translate_fn:
+        if self.translation_mode not in self.flag_translate_fn:
             raise ValueError(
-                f"Invalid flag translation mode: {self.flag_translation_mode}. "
+                f"Invalid flag translation mode: {self.translation_mode}. "
                 f"Valid modes are: {', '.join(self.flag_translate_fn.keys())}"
             )
-        return TranslationMapper(self.flag_translate_fn[self.flag_translation_mode])
+        return TranslationMapper(self.flag_translate_fn[self.translation_mode])
 
     def get_arg_flags(
         self,
         name: str,
         param: Parameter,
         taken_flags: list[str],
-        abbrev_gen: AbbrevationGeneratorProtocol,
+        abbrev_gen: AbbrevationGenerator,
     ) -> tuple[str, ...]:
         """
         Generate CLI flag names for a given parameter based on its name and already taken flags.
@@ -95,9 +98,23 @@ class BasicFlagStrategy(FlagStrategyProtocol):
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).
         """
         is_bool_flag = param.is_typed and param.type is bool
-        if self.flags_style == "required_positional" and param.is_required:
-            if not is_bool_flag:
-                return (name,)
+        is_positional_list = (
+            is_list_or_list_alias(param.type)
+            and param.is_required
+            and self.style == "required_positional"
+        )
+
+        # Return positional argument?
+        if is_positional_list and self._nargs_list_count < 1:
+            self._nargs_list_count += 1
+            return (name,)
+        if (
+            not is_bool_flag
+            and not is_positional_list
+            and param.is_required
+            and self.style == "required_positional"
+        ):
+            return (name,)
 
         if len(name) == 1:
             flag_long = f"-{name}".strip()
@@ -129,8 +146,8 @@ class InterfacyParserCore:
         *,
         run: bool = False,
         allow_args_from_file: bool = True,
-        flag_strategy: FlagStrategyProtocol = BasicFlagStrategy(),
-        abbrev_gen: AbbrevationGeneratorProtocol = DefaultAbbrevationGenerator(),
+        flag_strategy: FlagStrategy = BasicFlagStrategy(),
+        abbrev_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
         tab_completion: bool = False,
         print_result: bool = False,
@@ -197,7 +214,7 @@ class InterfacyParserCore:
 __all__ = [
     "InterfacyParserCore",
     "FlagsStyle",
-    "FlagStrategyProtocol",
+    "FlagStrategy",
     "BasicFlagStrategy",
     "ExitCode",
 ]
