@@ -61,11 +61,29 @@ def test_from_method():
     assert namespace["exponent"] == 2
 
 
+def test_from_multiple():
+    parser = new_parser()
+    parser.add_command(pow)
+    parser.add_command(Math)
+
+    namespace = parser.parse_args(["pow", "2", "-e", "2"])
+    assert namespace["command"] == "pow"
+    assert namespace["pow"]["base"] == 2
+    assert namespace["pow"]["exponent"] == 2
+
+    namespace = parser.parse_args(["math", "pow", "2", "-e", "2"])
+    assert namespace["command"] == "math"
+    assert namespace["math"]["command"] == "pow"
+    assert namespace["math"]["rounding"] == 6
+    assert namespace["math"]["pow"]["base"] == 2
+    assert namespace["math"]["pow"]["exponent"] == 2
+
+
 def test_list_nargs():
     parser = new_parser()
     parser.add_command(func_nargs)
     namespace = parser.parse_args(["1", "2", "3"])
-    print(namespace)
+    assert namespace["values"] == [1, 2, 3]
 
 
 def test_list_two_positional():

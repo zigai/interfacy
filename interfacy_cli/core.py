@@ -18,10 +18,6 @@ from interfacy_cli.util import (
 )
 
 
-def inverted_bool_flag_name(name: str) -> str:
-    return "no-" + name
-
-
 def show_result(result: T.Any, handler=print):
     if isinstance(result, list):
         for i in result:

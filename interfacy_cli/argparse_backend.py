@@ -31,6 +31,16 @@ except ImportError:
         return message
 
 
+def namespace_to_dict(namespace: argparse.Namespace) -> dict[str, T.Any]:
+    result = {}
+    for key, value in vars(namespace).items():
+        if isinstance(value, argparse.Namespace):
+            result[key] = namespace_to_dict(value)
+        else:
+            result[key] = value
+    return result
+
+
 class ArgumentParserWrapper(NestedArgumentParser):
     def __init__(
         self,
@@ -496,10 +506,10 @@ class Argparser(InterfacyParserCore):
         parser = self.build_parser()
         self._parser = parser
         parsed = parser.parse_args(args)
-        namespace = vars(parsed)
+        namespace = namespace_to_dict(parsed)
         if self.COMMAND_KEY in namespace:
             command = namespace[self.COMMAND_KEY]
-            namespace[command] = vars(namespace[command])
+            namespace[command] = namespace[command]
         return namespace
 
     def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
