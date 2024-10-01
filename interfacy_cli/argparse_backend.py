@@ -394,13 +394,13 @@ class Argparser(InterfacyParserCore):
             name = self.flag_strategy.command_translator.translate(cmd.name)
             sp = subparsers.add_parser(name, description=cmd.description)
             if isinstance(cmd, Function):
-                sp = self.parser_from_function(
+                self.parser_from_function(
                     function=cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp
                 )
             elif isinstance(cmd, Class):
-                sp = self.parser_from_class(cmd, sp)
+                self.parser_from_class(cmd, sp)
             elif isinstance(cmd, Method):
-                sp = self.parser_from_method(cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp)
+                self.parser_from_method(cmd, taken_flags=[*self.RESERVED_FLAGS], parser=sp)
             else:
                 raise InvalidCommandError(cmd)
         return parser
@@ -598,7 +598,7 @@ class ArgparseRunner:
         del args[self.COMMAND_KEY]
         del args[command_name]
 
-        if cls.init_method:
+        if cls.init_method and not cls.is_initialized:
             init_args, init_kwargs = split_args_kwargs(args, cls.init_method)
             cls.init(*init_args, **init_kwargs)
 
@@ -609,61 +609,7 @@ class ArgparseRunner:
         command_name = self.namespace[self.COMMAND_KEY]
         command = commands[command_name]
         args = self.namespace
-        # print(command)
-        # print(self.namespace)
         return self.run_command(command, args)
 
-
-"""
-    def _run_multiple(self, commands: dict[str, Function | Class]) -> T.Any:
-        builder = self.builder
-        parser = builder.parser_from_multiple_commands(commands.values())  # type: ignore
-        args = parser.parse_args(self.args)
-        args = vars(args)
-
-        if COMMAND_KEY not in args:
-            parser.print_help()
-            sys.exit(ExitCode.INVALID_ARGS_ERR)
-
-        command_name = args[COMMAND_KEY]
-        command_args = vars(args[command_name])
-        init_args = deepcopy(args)
-        del init_args[COMMAND_KEY]
-        del init_args[command_name]
-
-        command_name = (
-            self.builder.flag_strategy.command_translator.reverse(command_name) or command_name
-        )
-        cmd = commands[command_name]
-        if isinstance(cmd, (Function, Method)):
-            return cmd.call(**command_args)
-        elif isinstance(cmd, Class):
-            return self._run_class_inner(cmd, command_args, parser)
-        else:
-            raise InvalidCommandError(f"Not a valid command: {cmd}")
-    
-    def _run_class_inner(self, cls: Class, args: dict, parser: ArgumentParser):
-        if COMMAND_KEY not in args:
-            parser.print_help()
-            sys.exit(ExitCode.INVALID_ARGS_ERR)
-
-        command_name = args[COMMAND_KEY]
-        command_args = vars(args[command_name])
-        init_args = deepcopy(args)
-        del init_args[COMMAND_KEY]
-        del init_args[command_name]
-
-        command_name = (
-            self.builder.flag_strategy.command_translator.reverse(command_name) or command_name
-        )
-        method = cls.get_method(command_name)
-        args_for_method = self.revese_arg_translations(command_args)
-
-        if cls.has_init and not method.is_static:
-            cls.init(**init_args)
-
-        return cls.call_method(command_name, **args_for_method)
-
-"""
 
 __all__ = ["Argparser", "ArgparseRunner"]

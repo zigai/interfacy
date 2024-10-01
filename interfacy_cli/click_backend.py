@@ -8,13 +8,7 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy_cli.core import (
-    BasicFlagStrategy,
-    FlagStrategy,
-    InterfacyParserCore,
-    inverted_bool_flag_name,
-    show_result,
-)
+from interfacy_cli.core import BasicFlagStrategy, FlagStrategy, InterfacyParserCore, show_result
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import (
@@ -23,6 +17,10 @@ from interfacy_cli.util import (
     NoAbbrevations,
     TranslationMapper,
 )
+
+
+def inverted_bool_flag_name(name: str) -> str:
+    return "no-" + name
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -41,6 +39,7 @@ click.Context.formatter_class = ClickHelpFormatter
 
 class ClickFuncParamType(click.types.FuncParamType):
     def __init__(self, func: T.Callable[[T.Any], T.Any], name: str | None = None) -> None:
+        super().__init__(func)
         self.name = name or "NO_NAME"
         self.func = func
 
@@ -57,7 +56,7 @@ class ClickOption(click.Option):
             if " " in name:
                 name = name.split(" ")[:-1]
                 name = " ".join(name)
-            return (name, help_text)
+            return name, help_text
         return None
 
     def handle_parse_result(self, ctx, opts, args):
@@ -88,7 +87,7 @@ class ClickArgument(click.Argument):
             # Remove metavar from the name part
             name = name.split(" ")[:-1]
             name = " ".join(name)
-            return (name, help_text)
+            return name, help_text
         return None
 
 
@@ -250,9 +249,7 @@ class ClickParser(InterfacyParserCore):
         self, param: Parameter, taken_flags: list[str], command_name: str
     ) -> ClickOption | ClickArgument:
         name = self.flag_strategy.arg_translator.translate(param.name)
-        extras = {}
-        extras["help"] = self.theme.get_parameter_help(param)
-        extras["metavar"] = name
+        extras = {"help": self.theme.get_parameter_help(param), "metavar": name}
 
         if param.is_typed:
             parse_fn = self.type_parser.get_parse_func(param.type)
