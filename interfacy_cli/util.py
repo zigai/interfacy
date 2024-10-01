@@ -1,7 +1,8 @@
 import typing as T
+from argparse import Namespace
 from typing import Callable
 
-from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
+from objinspect.typing import type_origin
 
 
 def simplified_type_name(name: str) -> str:
@@ -34,6 +35,16 @@ def show_result(result: T.Any, handler=print):
 
 def inverted_bool_flag_name(name: str) -> str:
     return "no-" + name
+
+
+def namespace_to_dict(namespace: Namespace) -> dict[str, T.Any]:
+    result = {}
+    for key, value in vars(namespace).items():
+        if isinstance(value, Namespace):
+            result[key] = namespace_to_dict(value)
+        else:
+            result[key] = value
+    return result
 
 
 class TranslationMapper:
@@ -153,4 +164,6 @@ __all__ = [
     "TranslationMapper",
     "is_list_or_list_alias",
     "show_result",
+    "inverted_bool_flag_name",
+    "namespace_to_dict",
 ]

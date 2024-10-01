@@ -23,7 +23,7 @@ from interfacy_cli.exceptions import (
 )
 from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
 from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
+from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator, namespace_to_dict
 
 try:
     from gettext import gettext as _
@@ -31,16 +31,6 @@ except ImportError:
 
     def _(message):
         return message
-
-
-def namespace_to_dict(namespace: argparse.Namespace) -> dict[str, T.Any]:
-    result = {}
-    for key, value in vars(namespace).items():
-        if isinstance(value, argparse.Namespace):
-            result[key] = namespace_to_dict(value)
-        else:
-            result[key] = value
-    return result
 
 
 class ArgumentParserWrapper(NestedArgumentParser):
