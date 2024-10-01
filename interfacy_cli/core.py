@@ -4,7 +4,7 @@ import typing as T
 from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
 from stdl.fs import read_piped
-from stdl.st import kebab_case, snake_case
+from stdl.st import colored, kebab_case, snake_case
 from strto import StrToTypeParser, get_parser
 from strto.parsers import Parser
 
@@ -30,18 +30,22 @@ def show_result(result: T.Any, handler=print):
         handler(result)
 
 
-class ExitCode:
-    SUCCESS = 0
-    INVALID_ARGS_ERR = 1
-    RUNTIME_ERR = 2
-    PARSING_ERR = 3
+from enum import Enum, IntEnum, auto
+
+
+class ExitCode(IntEnum):
+    SUCCESS = auto()
+    ERR_INVALID_ARGS = auto()
+    ERR_PARSING = auto()
+    ERR_RUNTIME = auto()
+    ERR_RUNTIME_INTERNAL = auto()
 
 
 FlagsStyle = T.Literal["keyword_only", "required_positional"]
 
 
 class FlagStrategy(T.Protocol):
-    arg_translator: TranslationMapper
+    argument_translator: TranslationMapper
     command_translator: TranslationMapper
     style: FlagsStyle
 
@@ -64,7 +68,7 @@ class BasicFlagStrategy(FlagStrategy):
     ) -> None:
         self.style = style
         self.translation_mode = translation_mode
-        self.arg_translator = self._get_flag_translator()
+        self.argument_translator = self._get_flag_translator()
         self.command_translator = self._get_flag_translator()
         self._nargs_list_count = 0
 
@@ -148,6 +152,8 @@ class InterfacyParserCore:
         tab_completion: bool = False,
         print_result: bool = False,
         print_result_func: T.Callable = show_result,
+        full_error_traceback: bool = False,
+        disable_sys_exit: bool = False,
     ) -> None:
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
         self.autorun = run
@@ -161,7 +167,9 @@ class InterfacyParserCore:
         self.theme = theme or InterfacyTheme()
         self.flag_strategy = flag_strategy
         self.abbrev_gen = abbrev_gen
-        self.theme.translate_name = self.flag_strategy.arg_translator.translate
+        self.full_error_traceback = full_error_traceback
+        self.disable_sys_exit = disable_sys_exit
+        self.theme.translate_name = self.flag_strategy.argument_translator.translate
         self.commands: dict[str, Function | Class | Method] = {}
         if self.pipe_target:
             self.piped = read_piped()
@@ -174,12 +182,22 @@ class InterfacyParserCore:
     def log(self, message: str) -> None:
         print(f"[{self.logger_message_tag}] {message}", file=sys.stdout)
 
+    def log_err(self, message: str) -> None:
+        message = f"[{self.logger_message_tag}] {message}"
+        message = colored(message, color="red")
+        print(message, file=sys.stderr)
+
+    def exit(self, code: ExitCode):
+        if self.disable_sys_exit:
+            return
+        sys.exit(code)
+
     def parser_from_command(self, command: Function | Method | Class, main: bool = False):
         if isinstance(command, (Function, Method)):
             return self.parser_from_function(command, taken_flags=[*self.RESERVED_FLAGS])
         if isinstance(command, Class):
             return self.parser_from_class(command)
-        raise InvalidCommandError(f"Not a valid command: {command}")
+        raise InvalidCommandError(command)
 
     def _should_skip_method(self, method: Method) -> bool:
         return method.name.startswith("_")

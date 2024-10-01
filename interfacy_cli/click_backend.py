@@ -194,7 +194,7 @@ class ClickParser(InterfacyParserCore):
     def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
         reversed = {}
         for k, v in args.items():
-            reversed_k = self.flag_strategy.arg_translator.reverse(k)
+            reversed_k = self.flag_strategy.argument_translator.reverse(k)
             if reversed_k is not None:
                 reversed[reversed_k] = v
             else:
@@ -248,7 +248,7 @@ class ClickParser(InterfacyParserCore):
     def _get_param(
         self, param: Parameter, taken_flags: list[str], command_name: str
     ) -> ClickOption | ClickArgument:
-        name = self.flag_strategy.arg_translator.translate(param.name)
+        name = self.flag_strategy.argument_translator.translate(param.name)
         extras = {"help": self.theme.get_parameter_help(param), "metavar": name}
 
         if param.is_typed:
@@ -360,7 +360,7 @@ class ClickParser(InterfacyParserCore):
         commands: list[Function | Class],
     ) -> click.Group:
         for cmd in commands:
-            command_name = self.flag_strategy.arg_translator.translate(cmd.name)
+            command_name = self.flag_strategy.argument_translator.translate(cmd.name)
             parser = self.parser_from_command(cmd)
             self.main_parser.add_command(parser, name=command_name)
         return self.main_parser

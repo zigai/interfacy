@@ -6,7 +6,9 @@ from ..inputs import *
 
 class TestRunnerRequiredPositional:
     def new_parser(self):
-        return Argparser(flag_strategy=BasicFlagStrategy(style="required_positional"))
+        return Argparser(
+            flag_strategy=BasicFlagStrategy(style="required_positional"), disable_sys_exit=True
+        )
 
     def test_from_function(self):
         result = self.new_parser().run(pow, args=["2", "-e", "2"])

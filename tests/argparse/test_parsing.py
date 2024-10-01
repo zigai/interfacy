@@ -8,7 +8,10 @@ from ..inputs import *
 
 class TestParsingRequiredPositional:
     def new_parser(self):
-        return Argparser(flag_strategy=BasicFlagStrategy(style="required_positional"))
+        return Argparser(
+            flag_strategy=BasicFlagStrategy(style="required_positional"),
+            disable_sys_exit=True,
+        )
 
     def test_from_function(self):
         parser = self.new_parser()
@@ -106,6 +109,18 @@ class TestParsingRequiredPositional:
         assert namespace["value"] == True
         namespace = parser.parse_args(["--no-value"])
         assert namespace["value"] == False
+
+
+"""
+    def test_unsupported_type(self):
+        class unsupported: ...
+
+        def func(arg: unsupported): ...
+
+        parser = self.new_parser()
+        parser.add_command(func)
+        parser.parse_args()
+"""
 
 
 class TestParsingKeywordOnly:

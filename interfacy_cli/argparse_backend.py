@@ -16,9 +16,11 @@ from strto import StrToTypeParser
 from interfacy_cli.core import BasicFlagStrategy, ExitCode, FlagStrategy, InterfacyParserCore
 from interfacy_cli.exceptions import (
     DuplicateCommandError,
+    InterfacyError,
     InvalidCommandError,
+    InvalidConfigurationError,
     ReservedFlagError,
-    UnsupportedParamError,
+    UnsupportedParameterTypeError,
 )
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
@@ -236,6 +238,8 @@ class Argparser(InterfacyParserCore):
         formatter_class=SafeRawHelpFormatter,
         print_result: bool = False,
         print_result_func: T.Callable = print,
+        full_error_traceback: bool = False,
+        disable_sys_exit: bool = False,
     ) -> None:
         super().__init__(
             description,
@@ -250,6 +254,8 @@ class Argparser(InterfacyParserCore):
             tab_completion=tab_completion,
             print_result=print_result,
             print_result_func=print_result_func,
+            full_error_traceback=full_error_traceback,
+            disable_sys_exit=disable_sys_exit,
         )
         self.formatter_class = formatter_class
         self._parser = None
@@ -266,7 +272,7 @@ class Argparser(InterfacyParserCore):
     ):
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
-        name = self.flag_strategy.arg_translator.translate(param.name)
+        name = self.flag_strategy.argument_translator.translate(param.name)
         flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
         extra_args = self._extra_add_arg_params(param, flags)
         return parser.add_argument(*flags, **extra_args)
@@ -485,11 +491,11 @@ class Argparser(InterfacyParserCore):
 
     def build_parser(self):
         if not self.commands:
-            raise ValueError("No commands provided")
+            raise InvalidConfigurationError("No commands were provided")
 
         commands_list = self._commands_list()
         if len(commands_list) == 1:
-            command = commands_list[0]
+            command = commands_list.pop()
             parser = self.parser_from_command(command)
         else:
             parser = self.parser_from_multiple_commands(commands_list)
@@ -512,23 +518,58 @@ class Argparser(InterfacyParserCore):
             namespace[command] = namespace[command]
         return namespace
 
+    def _display_err(self, e: Exception, message: str):
+        message += f": {str(e)}"
+        if not self.full_error_traceback:
+            message += ". You can see the full traceback by enabling 'full_error_traceback'"
+        self.log_err(message)
+        if self.full_error_traceback:
+            import traceback
+
+            print(traceback.format_exc(), file=sys.stderr)
+
     def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
-        for i in commands:
-            self.add_command(i)
-        args = args if args is not None else self.get_args()
-        namespace = self.parse_args(args)
+        try:
+            for i in commands:
+                self.add_command(i)
+            args = args if args is not None else self.get_args()
+            namespace = self.parse_args(args)
+        except (
+            DuplicateCommandError,
+            UnsupportedParameterTypeError,
+            ReservedFlagError,
+            InvalidCommandError,
+            InvalidConfigurationError,
+        ) as e:
+            self._display_err(e, "Failed to parse command-line arguments")
+            self.exit(ExitCode.ERR_PARSING)
+            return e
 
-        runner = ArgparseRunner(
-            self.commands,
-            namespace=namespace,
-            args=args,
-            parser=self._parser,
-            builder=self,
-        )
+        try:
+            runner = ArgparseRunner(
+                self.commands,
+                namespace=namespace,
+                args=args,
+                parser=self._parser,
+                builder=self,
+            )
+            result = runner.run()
+        except InterfacyError as e:
+            self._display_err(e, "")
+            self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
+            return e
+        except Exception as e:
+            self._display_err(
+                e,
+                "An unexpected error occurred. This is likely due to an Interfacy issue, not user input",
+            )
+            self.exit(ExitCode.ERR_RUNTIME)
+            return e
 
-        result = runner.run()
         if self.display_result:
             self.result_display_fn(result)
+
+        self.exit(ExitCode.SUCCESS)
         return result
 
 
@@ -551,13 +592,13 @@ class ArgparseRunner:
     def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
         reversed = {}
         for k, v in args.items():
-            k = self.builder.flag_strategy.arg_translator.reverse(k)
+            k = self.builder.flag_strategy.argument_translator.reverse(k)
             reversed[k] = v
         return reversed
 
     def run(self):
         if len(self.commands) == 0:
-            raise InvalidCommandError("No commands were provided.")
+            raise InvalidConfigurationError("No commands were provided")
         if len(self.commands) == 1:
             command = list(self.commands.values())[0]
             return self.run_command(command, self.namespace)
