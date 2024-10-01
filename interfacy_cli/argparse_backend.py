@@ -4,16 +4,15 @@ import sys
 import textwrap
 import typing as T
 from argparse import ArgumentError, ArgumentParser, ArgumentTypeError, HelpFormatter
-from copy import deepcopy
 
 from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
-from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
+from objinspect.typing import type_name
 from strto import StrToTypeParser
 
-from interfacy_cli.core import BasicFlagStrategy, ExitCode, FlagStrategy, InterfacyParserCore
+from interfacy_cli.core import ExitCode, InterfacyParserCore
 from interfacy_cli.exceptions import (
     DuplicateCommandError,
     InterfacyError,
@@ -22,6 +21,7 @@ from interfacy_cli.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
+from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
@@ -231,8 +231,8 @@ class Argparser(InterfacyParserCore):
         *,
         run: bool = False,
         allow_args_from_file: bool = True,
-        flag_strategy: FlagStrategy = BasicFlagStrategy(),
-        abbrev_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
+        flag_strategy: FlagGenerator = BasicFlagGenerator(),
+        abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
         tab_completion: bool = False,
         formatter_class=SafeRawHelpFormatter,
@@ -249,7 +249,7 @@ class Argparser(InterfacyParserCore):
             run=run,
             allow_args_from_file=allow_args_from_file,
             flag_strategy=flag_strategy,
-            abbrev_gen=abbrev_gen,
+            abbrevation_gen=abbrevation_gen,
             pipe_target=pipe_target,
             tab_completion=tab_completion,
             print_result=print_result,
@@ -273,7 +273,7 @@ class Argparser(InterfacyParserCore):
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
         name = self.flag_strategy.argument_translator.translate(param.name)
-        flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
+        flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrevation_gen)
         extra_args = self._extra_add_arg_params(param, flags)
         return parser.add_argument(*flags, **extra_args)
 

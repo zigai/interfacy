@@ -8,19 +8,14 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy_cli.core import BasicFlagStrategy, FlagStrategy, InterfacyParserCore, show_result
-from interfacy_cli.exceptions import InvalidCommandError
+from interfacy_cli.core import BasicFlagGenerator, FlagGenerator, InterfacyParserCore, show_result
 from interfacy_cli.themes import InterfacyTheme
 from interfacy_cli.util import (
     AbbrevationGenerator,
     DefaultAbbrevationGenerator,
-    NoAbbrevations,
     TranslationMapper,
+    inverted_bool_flag_name,
 )
-
-
-def inverted_bool_flag_name(name: str) -> str:
-    return "no-" + name
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -147,8 +142,8 @@ class ClickParser(InterfacyParserCore):
         allow_args_from_file: bool = True,
         print_result: bool = False,
         print_result_func: T.Callable = show_result,
-        flag_strategy: FlagStrategy = BasicFlagStrategy(),
-        abbrev_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
+        flag_strategy: FlagGenerator = BasicFlagGenerator(),
+        abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         tab_completion: bool = False,
     ) -> None:
         super().__init__(
@@ -162,7 +157,7 @@ class ClickParser(InterfacyParserCore):
             print_result_func=print_result_func,
             flag_strategy=flag_strategy,
             tab_completion=tab_completion,
-            abbrev_gen=abbrev_gen,
+            abbrevation_gen=abbrevation_gen,
         )
         self.main_parser = click.Group(name="main")
         self.args = UNSET
@@ -249,7 +244,10 @@ class ClickParser(InterfacyParserCore):
         self, param: Parameter, taken_flags: list[str], command_name: str
     ) -> ClickOption | ClickArgument:
         name = self.flag_strategy.argument_translator.translate(param.name)
-        extras = {"help": self.theme.get_parameter_help(param), "metavar": name}
+        extras: dict = {
+            "help": self.theme.get_parameter_help(param),
+            "metavar": name,
+        }
 
         if param.is_typed:
             parse_fn = self.type_parser.get_parse_func(param.type)
@@ -272,13 +270,15 @@ class ClickParser(InterfacyParserCore):
                     extras["default"] = False
                 else:
                     flags = self.flag_strategy.get_arg_flags(
-                        name, param, taken_flags, self.abbrev_gen
+                        name, param, taken_flags, self.abbrevation_gen
                     )
                     extras["is_flag"] = True
                     extras["flag_value"] = False
                     extras["default"] = True
             else:
-                flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrev_gen)
+                flags = self.flag_strategy.get_arg_flags(
+                    name, param, taken_flags, self.abbrevation_gen
+                )
                 if not param.is_required:
                     extras["default"] = param.default
 

@@ -1,5 +1,5 @@
 from interfacy_cli.argparse_backend import Argparser
-from interfacy_cli.core import BasicFlagStrategy
+from interfacy_cli.core import BasicFlagGenerator
 
 from ..inputs import *
 
@@ -7,7 +7,7 @@ from ..inputs import *
 class TestRunnerRequiredPositional:
     def new_parser(self):
         return Argparser(
-            flag_strategy=BasicFlagStrategy(style="required_positional"), disable_sys_exit=True
+            flag_strategy=BasicFlagGenerator(style="required_positional"), disable_sys_exit=True
         )
 
     def test_from_function(self):

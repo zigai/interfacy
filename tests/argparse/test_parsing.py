@@ -1,7 +1,7 @@
 import pytest
 
 from interfacy_cli.argparse_backend import Argparser
-from interfacy_cli.core import BasicFlagStrategy
+from interfacy_cli.core import BasicFlagGenerator
 
 from ..inputs import *
 
@@ -9,7 +9,7 @@ from ..inputs import *
 class TestParsingRequiredPositional:
     def new_parser(self):
         return Argparser(
-            flag_strategy=BasicFlagStrategy(style="required_positional"),
+            flag_strategy=BasicFlagGenerator(style="required_positional"),
             disable_sys_exit=True,
         )
 
@@ -125,4 +125,4 @@ class TestParsingRequiredPositional:
 
 class TestParsingKeywordOnly:
     def new_parser(self):
-        return Argparser(flag_strategy=BasicFlagStrategy(style="keyword_only"))
+        return Argparser(flag_strategy=BasicFlagGenerator(style="keyword_only"))
