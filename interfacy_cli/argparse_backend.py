@@ -27,7 +27,6 @@ from interfacy_cli.util import (
     AbbrevationGenerator,
     DefaultAbbrevationGenerator,
     revese_arg_translations,
-    simplified_type_name,
 )
 
 try:
