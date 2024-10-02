@@ -22,7 +22,7 @@ from interfacy_cli.exceptions import (
     UnsupportedParameterTypeError,
 )
 from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
-from interfacy_cli.themes import InterfacyTheme
+from interfacy_cli.themes import DefaultTheme
 from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 try:
@@ -226,20 +226,20 @@ class Argparser(InterfacyParserCore):
         self,
         description: str | None = None,
         epilog: str | None = None,
-        theme: InterfacyTheme | None = None,
         type_parser: StrToTypeParser | None = None,
+        theme: DefaultTheme | None = None,
         *,
         run: bool = False,
+        print_result: bool = False,
+        tab_completion: bool = False,
+        full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
+        disable_sys_exit: bool = False,
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
-        tab_completion: bool = False,
         formatter_class=SafeRawHelpFormatter,
-        print_result: bool = False,
         print_result_func: T.Callable = print,
-        full_error_traceback: bool = False,
-        disable_sys_exit: bool = False,
     ) -> None:
         super().__init__(
             description,
@@ -342,7 +342,7 @@ class Argparser(InterfacyParserCore):
 
         if cls.has_docstring:
             parser.description = self.theme.format_description(cls.description)
-        parser.epilog = self.theme.get_commands_help_class(cls)  # type: ignore
+        parser.epilog = self.theme.get_help_for_class(cls)  # type: ignore
 
         if cls.has_init and not cls.is_initialized:
             for param in cls.get_method("__init__").params:
@@ -425,7 +425,7 @@ class Argparser(InterfacyParserCore):
 
         """
         extra: dict[str, T.Any] = {}
-        extra["help"] = self.theme.get_parameter_help(param)
+        extra["help"] = self.theme.get_help_for_parameter(param)
 
         from objinspect.typing import is_generic_alias, type_args, type_origin
 

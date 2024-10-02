@@ -1,28 +1,38 @@
 import typing as T
+from dataclasses import dataclass
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_literal_choices, is_direct_literal, type_name
-from stdl.st import FG, colored
+from stdl.st import FG, BackgroundColor, ForegroundColor, Style, colored
 
 from interfacy_cli.util import simplified_type_name
 
 
-def with_style(text: str, style: dict[T.Literal["color", "background", "style"], str]) -> str:
-    return colored(text, **style)
+@dataclass
+class TextStyle:
+    color: ForegroundColor | str | None = None
+    background: BackgroundColor | str | None = None
+    style: Style | str | None = None
 
 
-class InterfacyTheme:
+def with_style(text: str, style: TextStyle) -> str:
+    return colored(text, color=style.color, background=style.background, style=style.style)
+
+
+class DefaultTheme:
+    style_type: TextStyle = TextStyle(color="green")
+    style_default: TextStyle = TextStyle(color="light_white")
+    style_description: TextStyle = TextStyle(color="white")
+    style_string: TextStyle = TextStyle(color="yellow")
+
     clear_metavar: bool = True
     simplify_types: bool = True
     min_ljust: int = 19
-    style_type: dict = dict(color=FG.GREEN)
-    style_default: dict = dict(color=FG.LIGHT_BLUE)
-    style_description: dict = dict(color=FG.WHITE)
-    style_string: dict = dict(color=FG.YELLOW)
     sep: str = " = "
-    command_skips: list[str] = ["__init__"]
     commands_title: str = "commands:"
+    literal_sep: str = " | "
     required_indicator: str = "(" + colored("*", color=FG.RED) + ") "
+    command_skips: list[str] = ["__init__"]
     translate_name: T.Callable = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
@@ -31,20 +41,21 @@ class InterfacyTheme:
     def _translate_name(self, name: str) -> str:
         return self.translate_name(name) if self.translate_name else name
 
-    def format_description(self, description: str) -> str:
-        return description
-
     def _get_type_description(self, t):
         if is_direct_literal(t):
             choices = [with_style(i, self.style_string) for i in get_literal_choices(t)]
-            return " / ".join(choices)
+            return self.literal_sep.join(choices)
 
         type_str = type_name(t)
         if self.simplify_types:
             type_str = simplified_type_name(type_str)
+
         return with_style(type_str, self.style_type)
 
-    def get_parameter_help(self, param: Parameter) -> str:
+    def format_description(self, description: str) -> str:
+        return description
+
+    def get_help_for_parameter(self, param: Parameter) -> str:
         """
         Returns a parameter helpstring that should be passed as help to argparse.ArgumentParser
         """
@@ -80,10 +91,10 @@ class InterfacyTheme:
 
     def get_command_description(self, command: Class | Function | Method, ljust: int) -> str:
         command_name = self._translate_name(command.name)
-        name = f"  {command_name}".ljust(ljust)
+        name = f"   {command_name}".ljust(ljust)
         return f"{name} {with_style(command.description, self.style_description)}"
 
-    def get_commands_help_class(self, command: Class) -> str:
+    def get_help_for_class(self, command: Class) -> str:
         ljust = self._get_ljust(command.methods)  # type: ignore
         lines = [self.commands_title]
         for method in command.methods:
@@ -100,27 +111,27 @@ class InterfacyTheme:
         return "\n".join(lines)
 
 
-class InterfacyDimTheme(InterfacyTheme):
-    style_description = dict(color=FG.GRAY)
+class DimTheme(DefaultTheme):
+    style_description = TextStyle(color=FG.GRAY)
 
 
-class PlainTheme(InterfacyTheme):
-    style_type = dict(color=FG.WHITE)
-    style_default = dict(color=FG.WHITE)
-    style_description = dict(color=FG.WHITE)
+class PlainTheme(DefaultTheme):
+    style_type = TextStyle(color=FG.WHITE)
+    style_default = TextStyle(color=FG.WHITE)
+    style_description = TextStyle(color=FG.WHITE)
     required_indicator = "(required)"
 
 
-class LegacyTheme(InterfacyTheme):
+class LegacyTheme(DefaultTheme):
     simplify_types = False
     sep = ", default: "
     type_color = FG.LIGHT_YELLOW
-    style_type = dict(color=FG.LIGHT_YELLOW)
+    style_type = TextStyle(color=FG.LIGHT_YELLOW)
     param_default_color = dict(color=FG.LIGHT_BLUE)
 
 
 __all__ = [
-    "InterfacyTheme",
+    "DefaultTheme",
     "PlainTheme",
     "LegacyTheme",
 ]

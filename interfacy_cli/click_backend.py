@@ -8,13 +8,14 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy_cli.core import BasicFlagGenerator, FlagGenerator, InterfacyParserCore, show_result
-from interfacy_cli.themes import InterfacyTheme
+from interfacy_cli.core import BasicFlagGenerator, FlagGenerator, InterfacyParserCore
+from interfacy_cli.themes import DefaultTheme
 from interfacy_cli.util import (
     AbbrevationGenerator,
     DefaultAbbrevationGenerator,
     TranslationMapper,
     inverted_bool_flag_name,
+    show_result,
 )
 
 
@@ -135,16 +136,19 @@ class ClickParser(InterfacyParserCore):
         self,
         description: str | None = None,
         epilog: str | None = None,
-        theme: InterfacyTheme | None = None,
+        theme: DefaultTheme | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
-        pipe_target: dict[str, str] | None = None,
-        allow_args_from_file: bool = True,
+        run: bool = False,
         print_result: bool = False,
-        print_result_func: T.Callable = show_result,
+        tab_completion: bool = False,
+        full_error_traceback: bool = False,
+        allow_args_from_file: bool = True,
+        disable_sys_exit: bool = False,
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
-        tab_completion: bool = False,
+        pipe_target: dict[str, str] | None = None,
+        print_result_func: T.Callable = print,
     ) -> None:
         super().__init__(
             description,
@@ -245,7 +249,7 @@ class ClickParser(InterfacyParserCore):
     ) -> ClickOption | ClickArgument:
         name = self.flag_strategy.argument_translator.translate(param.name)
         extras: dict = {
-            "help": self.theme.get_parameter_help(param),
+            "help": self.theme.get_help_for_parameter(param),
             "metavar": name,
         }
 

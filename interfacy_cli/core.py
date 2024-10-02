@@ -9,12 +9,12 @@ from strto import StrToTypeParser, get_parser
 
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
-from interfacy_cli.themes import InterfacyTheme
-from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator, show_result
+from interfacy_cli.themes import DefaultTheme
+from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 
 class ExitCode(IntEnum):
-    SUCCESS = auto()
+    SUCCESS = 0
     ERR_INVALID_ARGS = auto()
     ERR_PARSING = auto()
     ERR_RUNTIME = auto()
@@ -30,36 +30,40 @@ class InterfacyParserCore:
         self,
         description: str | None = None,
         epilog: str | None = None,
-        theme: InterfacyTheme | None = None,
+        theme: DefaultTheme | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
         run: bool = False,
+        print_result: bool = False,
+        tab_completion: bool = False,
+        full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
+        disable_sys_exit: bool = False,
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
-        tab_completion: bool = False,
-        print_result: bool = False,
-        print_result_func: T.Callable = show_result,
-        full_error_traceback: bool = False,
-        disable_sys_exit: bool = False,
+        print_result_func: T.Callable = print,
     ) -> None:
-        self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
-        self.autorun = run
-        self.allow_args_from_file = allow_args_from_file
-        self.description = description
         self.epilog = epilog
-        self.pipe_target = pipe_target
+        self.theme = theme or DefaultTheme()
+        self.autorun = run
+        self.description = description
+        self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
+
+        self.allow_args_from_file = allow_args_from_file
         self.enable_tab_completion = tab_completion
-        self.result_display_fn = print_result_func
         self.display_result = print_result
-        self.theme = theme or InterfacyTheme()
-        self.flag_strategy = flag_strategy
-        self.abbrevation_gen = abbrevation_gen
         self.full_error_traceback = full_error_traceback
         self.disable_sys_exit = disable_sys_exit
+
+        self.abbrevation_gen = abbrevation_gen
+        self.flag_strategy = flag_strategy
+        self.pipe_target = pipe_target
+        self.result_display_fn = print_result_func
+
         self.theme.translate_name = self.flag_strategy.argument_translator.translate
         self.commands: dict[str, Function | Class | Method] = {}
+
         if self.pipe_target:
             self.piped = read_piped()
         else:

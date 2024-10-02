@@ -154,5 +154,4 @@ __all__ = [
     "is_list_or_list_alias",
     "show_result",
     "inverted_bool_flag_name",
-    "namespace_to_dict",
 ]
