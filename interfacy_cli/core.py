@@ -62,7 +62,6 @@ class InterfacyParserCore:
         self.pipe_target = pipe_target
         self.result_display_fn = print_result_func
 
-        self.theme.translate_name = self.flag_strategy.argument_translator.translate
         self.theme.flag_generator = self.flag_strategy
         self.commands: dict[str, Function | Class | Method] = {}
         if self.pipe_target:

@@ -1,4 +1,3 @@
-import typing as T
 from dataclasses import dataclass
 
 from objinspect import Class, Function, Method, Parameter
@@ -34,16 +33,10 @@ class DefaultTheme:
     literal_sep: str = " | "
     required_indicator: str = "(" + colored("*", color=FG.RED) + ") "
     command_skips: list[str] = ["__init__"]
-    # translate_name: T.Callable = None  # type:ignore
     flag_generator: FlagGenerator = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))
-
-    """
-    def _translate_name(self, name: str) -> str:
-        return self.translate_name(name) if self.translate_name else name
-    """
 
     def _get_type_description(self, t):
         if is_direct_literal(t):

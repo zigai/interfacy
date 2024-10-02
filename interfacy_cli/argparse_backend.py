@@ -9,7 +9,7 @@ from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
-from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
+from objinspect.typing import type_args, type_name, type_origin
 from strto import StrToTypeParser
 
 from interfacy_cli.core import ExitCode, InterfacyParserCore
