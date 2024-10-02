@@ -11,6 +11,7 @@ class TestParsingRequiredPositional:
         return Argparser(
             flag_strategy=BasicFlagGenerator(style="required_positional"),
             disable_sys_exit=True,
+            full_error_traceback=True,
         )
 
     def test_from_function(self):
@@ -113,4 +114,8 @@ class TestParsingRequiredPositional:
 
 class TestParsingKeywordOnly:
     def new_parser(self):
-        return Argparser(flag_strategy=BasicFlagGenerator(style="keyword_only"))
+        return Argparser(
+            flag_strategy=BasicFlagGenerator(style="keyword_only"),
+            disable_sys_exit=True,
+            full_error_traceback=True,
+        )

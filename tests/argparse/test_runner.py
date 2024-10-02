@@ -1,3 +1,5 @@
+import pytest
+
 from interfacy_cli.argparse_backend import Argparser
 from interfacy_cli.core import BasicFlagGenerator
 
@@ -7,7 +9,9 @@ from ..inputs import *
 class TestRunnerRequiredPositional:
     def new_parser(self):
         return Argparser(
-            flag_strategy=BasicFlagGenerator(style="required_positional"), disable_sys_exit=True
+            flag_strategy=BasicFlagGenerator(style="required_positional"),
+            disable_sys_exit=True,
+            full_error_traceback=True,
         )
 
     def test_from_function(self):
@@ -55,3 +59,12 @@ class TestRunnerRequiredPositional:
         assert result == 4
         result = self.new_parser().run(Math, args=["add", "1", "1"])
         assert result == 2
+
+    def test_custom_command_names(self):
+        parser = self.new_parser()
+        parser.add_command(Math, name="command1")
+        parser.add_command(pow, name="command2")
+        with pytest.raises(SystemExit):
+            parser.run(args=["pow", "2", "-e", "2"])
+
+        assert parser.run(args=["command2", "2", "-e", "2"]) == 4

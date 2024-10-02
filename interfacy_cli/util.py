@@ -55,6 +55,10 @@ class TranslationMapper:
         """
         self.translation_func = translation_func
         self.translations: dict[str, str] = {}
+        self.ignored_names: set[str] = set()
+
+    def add_ignored(self, name: str):
+        self.ignored_names.add(name)
 
     def translate(self, name: str) -> str:
         """
@@ -66,6 +70,8 @@ class TranslationMapper:
         Returns:
             str: The translated name.
         """
+        if name in self.ignored_names:
+            return name
         translated_name = self.translation_func(name)
         self.translations[translated_name] = name
         return translated_name
@@ -80,6 +86,8 @@ class TranslationMapper:
         Returns:
             str: The original name if it exists, otherwise returns the same translated name.
         """
+        if translated in self.ignored_names:
+            return translated
         return self.translations.get(translated, None)
 
     def contains_key(self, name: str):
@@ -145,6 +153,14 @@ class NoAbbrevations(AbbrevationGenerator):
         return None
 
 
+def revese_arg_translations(args: dict, arg_translator: TranslationMapper) -> dict[str, T.Any]:
+    reversed = {}
+    for k, v in args.items():
+        k = arg_translator.reverse(k)
+        reversed[k] = v
+    return reversed
+
+
 __all__ = [
     "simplified_type_name",
     "AbbrevationGenerator",
@@ -154,4 +170,5 @@ __all__ = [
     "is_list_or_list_alias",
     "show_result",
     "inverted_bool_flag_name",
+    "revese_arg_translations",
 ]

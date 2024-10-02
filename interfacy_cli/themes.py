@@ -5,6 +5,7 @@ from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_literal_choices, is_direct_literal, type_name
 from stdl.st import FG, BackgroundColor, ForegroundColor, Style, colored
 
+from interfacy_cli.flag_generator import FlagGenerator
 from interfacy_cli.util import simplified_type_name
 
 
@@ -33,13 +34,16 @@ class DefaultTheme:
     literal_sep: str = " | "
     required_indicator: str = "(" + colored("*", color=FG.RED) + ") "
     command_skips: list[str] = ["__init__"]
-    translate_name: T.Callable = None  # type:ignore
+    # translate_name: T.Callable = None  # type:ignore
+    flag_generator: FlagGenerator = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))
 
+    """
     def _translate_name(self, name: str) -> str:
         return self.translate_name(name) if self.translate_name else name
+    """
 
     def _get_type_description(self, t):
         if is_direct_literal(t):
@@ -63,6 +67,7 @@ class DefaultTheme:
             return ""
 
         h = []
+
         # Handle boolean parameters differently
         if param.type is bool:
             if param.description is not None:
@@ -89,8 +94,11 @@ class DefaultTheme:
 
         return h
 
-    def get_command_description(self, command: Class | Function | Method, ljust: int) -> str:
-        command_name = self._translate_name(command.name)
+    def get_command_description(
+        self, command: Class | Function | Method, ljust: int, name: str | None = None
+    ) -> str:
+        name = name or command.name
+        command_name = self.flag_generator.command_translator.translate(name)
         name = f"   {command_name}".ljust(ljust)
         return f"{name} {with_style(command.description, self.style_description)}"
 
@@ -103,11 +111,11 @@ class DefaultTheme:
             lines.append(self.get_command_description(method, ljust))
         return "\n".join(lines)
 
-    def get_help_for_multiple_commands(self, commands: list[Class | Function | Method]) -> str:
-        ljust = self._get_ljust(commands)  # type: ignore
+    def get_help_for_multiple_commands(self, commands: dict[str, Class | Function | Method]) -> str:
+        ljust = self._get_ljust(commands.values())  # type: ignore
         lines = [self.commands_title]
-        for command in commands:
-            lines.append(self.get_command_description(command, ljust))
+        for name, command in commands.items():
+            lines.append(self.get_command_description(command, ljust, name))
         return "\n".join(lines)
 
 

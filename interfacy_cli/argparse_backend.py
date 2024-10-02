@@ -9,7 +9,7 @@ from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
-from objinspect.typing import type_name
+from objinspect.typing import is_generic_alias, type_args, type_name, type_origin
 from strto import StrToTypeParser
 
 from interfacy_cli.core import ExitCode, InterfacyParserCore
@@ -23,7 +23,12 @@ from interfacy_cli.exceptions import (
 )
 from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
 from interfacy_cli.themes import DefaultTheme
-from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
+from interfacy_cli.util import (
+    AbbrevationGenerator,
+    DefaultAbbrevationGenerator,
+    revese_arg_translations,
+    simplified_type_name,
+)
 
 try:
     from gettext import gettext as _
@@ -277,16 +282,18 @@ class Argparser(InterfacyParserCore):
         extra_args = self._extra_add_arg_params(param, flags)
         return parser.add_argument(*flags, **extra_args)
 
+    def _commands_list(self) -> list[Function | Class | Method]:
+        return list(self.commands.values())
+
     def add_command(self, command: T.Callable | T.Any, name: str | None = None):
         obj = inspect(command, inherited=False)
+        if name is not None:
+            self.flag_strategy.command_translator.add_ignored(name)
         name = name or obj.name
         if name in self.commands:
             raise DuplicateCommandError(name)
         self.commands[name] = obj
         return obj
-
-    def _commands_list(self) -> list[Function | Class | Method]:
-        return list(self.commands.values())
 
     def parser_from_function(
         self,
@@ -393,7 +400,7 @@ class Argparser(InterfacyParserCore):
         parser: ArgumentParser | None = None,
     ) -> ArgumentParser:
         parser = parser or self._new_parser()
-        parser.epilog = self.theme.get_help_for_multiple_commands(list(commands.values()))
+        parser.epilog = self.theme.get_help_for_multiple_commands(commands)
         subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
 
         for name, cmd in commands.items():
@@ -426,8 +433,6 @@ class Argparser(InterfacyParserCore):
         """
         extra: dict[str, T.Any] = {}
         extra["help"] = self.theme.get_help_for_parameter(param)
-
-        from objinspect.typing import is_generic_alias, type_args, type_origin
 
         if param.is_typed:
             t_origin = type_origin(param.type)
@@ -519,14 +524,17 @@ class Argparser(InterfacyParserCore):
         return namespace
 
     def _display_err(self, e: Exception, message: str):
-        message += f": {str(e)}"
-        if not self.full_error_traceback:
-            message += ". You can see the full traceback by enabling 'full_error_traceback'"
-        self.log_err(message)
+        exception_str = f'{type_name(str(type(e)))}("{str(e)}")'
+        message += f": {exception_str}"
+
         if self.full_error_traceback:
             import traceback
 
             print(traceback.format_exc(), file=sys.stderr)
+            self.log_err(message)
+        else:
+            self.log_err(message)
+            self.log_err("To see the full traceback enable 'full_error_traceback'")
 
     def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
         try:
@@ -561,7 +569,7 @@ class Argparser(InterfacyParserCore):
         except Exception as e:
             self._display_err(
                 e,
-                "An unexpected error occurred. This is likely due to an Interfacy issue, not user input",
+                "Unexpected error occurred. Likely an issue with Interfacy, not user input",
             )
             self.exit(ExitCode.ERR_RUNTIME)
             return e
@@ -589,13 +597,6 @@ class ArgparseRunner:
         self.builder = builder
         self.COMMAND_KEY = self.builder.COMMAND_KEY
 
-    def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
-        reversed = {}
-        for k, v in args.items():
-            k = self.builder.flag_strategy.argument_translator.reverse(k)
-            reversed[k] = v
-        return reversed
-
     def run(self):
         if len(self.commands) == 0:
             raise InvalidConfigurationError("No commands were provided")
@@ -620,7 +621,7 @@ class ArgparseRunner:
         return func.call(*func_args, **func_kwargs)
 
     def run_method(self, method: Method, args: dict) -> T.Any:
-        cli_args = self.revese_arg_translations(args)
+        cli_args = revese_arg_translations(args, self.builder.flag_strategy.argument_translator)
         instance = method.class_instance
         if instance:
             method_args, method_kwargs = split_args_kwargs(cli_args, method)
@@ -649,7 +650,7 @@ class ArgparseRunner:
     def run_multiple(self, commands: dict[str, Function | Class | Method]) -> T.Any:
         command_name = self.namespace[self.COMMAND_KEY]
         command = commands[command_name]
-        args = self.namespace
+        args = self.namespace[command_name]
         return self.run_command(command, args)
 
 
