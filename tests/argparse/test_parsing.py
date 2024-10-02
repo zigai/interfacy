@@ -111,18 +111,6 @@ class TestParsingRequiredPositional:
         assert namespace["value"] == False
 
 
-"""
-    def test_unsupported_type(self):
-        class unsupported: ...
-
-        def func(arg: unsupported): ...
-
-        parser = self.new_parser()
-        parser.add_command(func)
-        parser.parse_args()
-"""
-
-
 class TestParsingKeywordOnly:
     def new_parser(self):
         return Argparser(flag_strategy=BasicFlagGenerator(style="keyword_only"))

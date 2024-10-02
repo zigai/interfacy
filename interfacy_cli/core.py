@@ -1,5 +1,6 @@
 import sys
 import typing as T
+from abc import abstractmethod
 from enum import IntEnum, auto
 
 from objinspect import Class, Function, Method
@@ -95,26 +96,26 @@ class InterfacyParserCore:
     def _should_skip_method(self, method: Method) -> bool:
         return method.name.startswith("_")
 
-    def parser_from_function(
-        self,
-        function: Function | Method,
-        taken_flags: list[str] | None = None,
-    ):
-        raise NotImplementedError
-
-    def parser_from_class(self, cls: Class, parser=None):
-        raise NotImplementedError
-
-    def parser_from_multiple_commands(self, commands: list[Function | Class]):
-        raise NotImplementedError
-
     def add_command(self, command: T.Callable, name: str | None = None):
         raise NotImplementedError
 
-    def install_tab_completion(self, parser) -> None:
+    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
         raise NotImplementedError
 
-    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
+    @abstractmethod
+    def parser_from_function(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def parser_from_class(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def parser_from_multiple_commands(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def install_tab_completion(self, *args, **kwargs) -> None:
         raise NotImplementedError
 
 

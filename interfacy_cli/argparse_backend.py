@@ -389,15 +389,15 @@ class Argparser(InterfacyParserCore):
 
     def parser_from_multiple_commands(
         self,
-        commands: list[Function | Method | Class],
+        commands: dict[str, Function | Method | Class],
         parser: ArgumentParser | None = None,
     ) -> ArgumentParser:
         parser = parser or self._new_parser()
-        parser.epilog = self.theme.get_help_for_multiple_commands(commands)
+        parser.epilog = self.theme.get_help_for_multiple_commands(list(commands.values()))
         subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
 
-        for cmd in commands:
-            name = self.flag_strategy.command_translator.translate(cmd.name)
+        for name, cmd in commands.items():
+            name = self.flag_strategy.command_translator.translate(name)
             sp = subparsers.add_parser(name, description=cmd.description)
             if isinstance(cmd, Function):
                 self.parser_from_function(
@@ -498,7 +498,7 @@ class Argparser(InterfacyParserCore):
             command = commands_list.pop()
             parser = self.parser_from_command(command)
         else:
-            parser = self.parser_from_multiple_commands(commands_list)
+            parser = self.parser_from_multiple_commands(self.commands)
 
         if self.description:
             parser.description = self.theme.format_description(self.description)
