@@ -449,7 +449,8 @@ class Argparser(InterfacyParserCore):
                 extra["type"] = self.type_parser.get_parse_func(param.type)
 
         if self.theme.clear_metavar:
-            extra["metavar"] = "\b"
+            if not param.is_required:
+                extra["metavar"] = "\b"
 
         if self.flag_strategy.style == "required_positional":
             is_positional = all([not i.startswith("-") for i in flags])
