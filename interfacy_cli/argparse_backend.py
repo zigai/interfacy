@@ -47,67 +47,6 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, T.Any]:
     return result
 
 
-class ArgumentParserWrapper(NestedArgumentParser):
-    def __init__(
-        self,
-        name: str | None = None,
-        prog=None,
-        nest_dir=None,
-        nest_separator="__",
-        nest_path=None,
-        usage=None,
-        description=None,
-        epilog=None,
-        parents=[],
-        formatter_class=argparse.HelpFormatter,
-        prefix_chars="-",
-        fromfile_prefix_chars=None,
-        argument_default=None,
-        conflict_handler="error",
-        add_help=True,
-        allow_abbrev=True,
-    ):
-        super().__init__(
-            prog,
-            nest_dir,
-            nest_separator,
-            nest_path,
-            usage,
-            description,
-            epilog,
-            parents,
-            formatter_class,
-            prefix_chars,
-            fromfile_prefix_chars,
-            argument_default,
-            conflict_handler,
-            add_help,
-            allow_abbrev,
-        )
-        self.name = name
-
-    def _get_value(self, action, arg_string):
-        parse_func = self._registry_get("type", action.type, action.type)
-        if not callable(parse_func):
-            msg = _("%r is not callable")
-            raise ArgumentError(action, msg % parse_func)
-        try:
-            result = parse_func(arg_string)
-
-        # ArgumentTypeErrors indicate errors
-        except ArgumentTypeError:
-            name = getattr(action.type, "__name__", repr(action.type))
-            msg = str(sys.exc_info()[1])
-            raise ArgumentError(action, msg)
-
-        # TypeErrors or ValueErrors also indicate errors
-        except (TypeError, ValueError):
-            t = type_name(str(parse_func.keywords["t"]))
-            msg = _(f"invalid {t} value: '{arg_string}'")
-            raise ArgumentError(action, msg)
-        return result
-
-
 class SafeHelpFormatter(HelpFormatter):
     """
     Helpstring formatter that doesn't crash your program if your terminal windows isn't wide enough.
@@ -200,7 +139,43 @@ class SafeHelpFormatter(HelpFormatter):
                 usage = "\n".join(lines)
 
         # prefix with 'usage:'
-        return "%s%s\n\n" % (prefix, usage)
+        return "{}{}\n\n".format(prefix, usage)
+
+    def _split_lines(self, text, width):
+        return [text]
+
+    def _format_action_invocation(self, action):
+        if not action.option_strings:
+            # For subcommands and positional arguments, use the default formatting
+            metavar = self._format_args(action, action.dest)
+            return metavar or action.dest
+
+        default = self._get_default_metavar_for_optional(action)
+        args_string = self._format_args(action, default)
+
+        if len(action.option_strings) == 1:
+            return action.option_strings[0] + (f" {args_string}" if args_string else "")
+
+        return "{}, {}{}".format(
+            action.option_strings[0],
+            action.option_strings[1],
+            f" {args_string}" if args_string else "",
+        )
+
+    def _format_action(self, action):
+        # Use the _action_max_length from parent class, with a minimum of 20
+        help_position = max(20, self._action_max_length)
+
+        action_header = self._format_action_invocation(action)
+
+        if not action.help:
+            return "  %s\n" % action_header
+
+        help_text = self._expand_help(action)
+
+        # Calculate padding needed to align help text
+        padding = " " * (help_position - len(action_header))
+        return "  %s%s%s\n" % (action_header, padding, help_text)
 
 
 class SafeRawHelpFormatter(SafeHelpFormatter):
@@ -220,6 +195,65 @@ class SafeRawHelpFormatter(SafeHelpFormatter):
 
     def _split_lines(self, text, width):
         return text.splitlines()
+
+
+class ArgumentParserWrapper(NestedArgumentParser):
+    def __init__(
+        self,
+        name: str | None = None,
+        prog=None,
+        nest_dir=None,
+        nest_separator="__",
+        nest_path=None,
+        usage=None,
+        description=None,
+        epilog=None,
+        parents=[],
+        formatter_class=SafeHelpFormatter,
+        prefix_chars="-",
+        fromfile_prefix_chars=None,
+        argument_default=None,
+        conflict_handler="error",
+        add_help=True,
+        allow_abbrev=True,
+    ):
+        super().__init__(
+            prog,
+            nest_dir,
+            nest_separator,
+            nest_path,
+            usage,
+            description,
+            epilog,
+            parents,
+            formatter_class,
+            prefix_chars,
+            fromfile_prefix_chars,
+            argument_default,
+            conflict_handler,
+            add_help,
+            allow_abbrev,
+        )
+        self.name = name
+
+    def _get_value(self, action, arg_string):
+        parse_func = self._registry_get("type", action.type, action.type)
+        if not callable(parse_func):
+            msg = _("%r is not callable")
+            raise ArgumentError(action, msg % parse_func)
+        try:
+            result = parse_func(arg_string)
+
+        except ArgumentTypeError:
+            name = getattr(action.type, "__name__", repr(action.type))
+            msg = str(sys.exc_info()[1])
+            raise ArgumentError(action, msg)
+
+        except (TypeError, ValueError):
+            t = type_name(str(parse_func.keywords["t"]))
+            msg = _(f"invalid {t} value: '{arg_string}'")
+            raise ArgumentError(action, msg)
+        return result
 
 
 class Argparser(InterfacyParserCore):
@@ -528,10 +562,7 @@ class Argparser(InterfacyParserCore):
             import traceback
 
             print(traceback.format_exc(), file=sys.stderr)
-            self.log_err(message)
-        else:
-            self.log_err(message)
-            self.log_err("To see the full traceback enable 'full_error_traceback'")
+        self.log_err(message)
 
     def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
         try:
@@ -566,7 +597,7 @@ class Argparser(InterfacyParserCore):
         except Exception as e:
             self._display_err(
                 e,
-                "Unexpected error occurred. Likely an issue with Interfacy, not user input",
+                "Unexpected error occurred",
             )
             self.exit(ExitCode.ERR_RUNTIME)
             return e

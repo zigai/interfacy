@@ -21,7 +21,7 @@ def with_style(text: str, style: TextStyle) -> str:
 
 class DefaultTheme:
     style_type: TextStyle = TextStyle(color="green")
-    style_default: TextStyle = TextStyle(color="light_white")
+    style_default: TextStyle = TextStyle(color="light_blue")
     style_description: TextStyle = TextStyle(color="white")
     style_string: TextStyle = TextStyle(color="yellow")
 
