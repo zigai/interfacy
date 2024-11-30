@@ -47,13 +47,60 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, T.Any]:
     return result
 
 
-class SafeHelpFormatter(HelpFormatter):
-    """
-    Helpstring formatter that doesn't crash your program if your terminal windows isn't wide enough.
-    Explained here: https://stackoverflow.com/a/50394665/18588657
-    """
+class InterfacyHelpFormatter(HelpFormatter):
+
+    def _split_lines(self, text, width):
+        # return text.splitlines()
+        return [text]
+
+    def _format_args(self, action, default_metavar):
+        result = super()._format_args(action, default_metavar)
+        return result.strip()
+
+    def _format_action_invocation(self, action):
+        if not action.option_strings:
+            metavar = self._format_args(action, action.dest)
+            return metavar or action.dest
+
+        default = self._get_default_metavar_for_optional(action)
+        args_string = self._format_args(action, default)
+
+        if len(action.option_strings) == 1:
+            return action.option_strings[0] + (f" {args_string}" if args_string else "")
+
+        return "{}, {}".format(action.option_strings[0], action.option_strings[1])
+
+    def _format_action(self, action):
+        action_header = self._format_action_invocation(action)
+        help_position = max(24, self._action_max_length + 4)
+        indent_len = 2
+
+        if not action.help:
+            return f"{' ' * indent_len}{action_header}\n"
+
+        help_text = self._expand_help(action)
+        padding_len = help_position - len(action_header)
+        return f"{' ' * indent_len}{action_header}{' ' * padding_len}{help_text}\n"
+
+    def _fill_text(self, text, width, indent):
+        """
+        Doesn't strip whitespace from the beginning of the line when formatting help text.
+        Code from: https://stackoverflow.com/a/74368128/18588657
+        """
+        # Strip the indent from the original python definition that plagues most of us.
+        text = textwrap.dedent(text)
+        text = textwrap.indent(text, indent)  # Apply any requested indent.
+        text = text.splitlines()  # Make a list of lines
+        text = [textwrap.fill(line, width) for line in text]  # Wrap each line
+        text = "\n".join(text)  # Join the lines again
+        return text
 
     def _format_usage(self, usage, actions, groups, prefix):
+        """
+        Making sure that doesn't crash your program if your terminal window isn't wide enough.
+        Explained here: https://stackoverflow.com/a/50394665/18588657
+        """
+
         if prefix is None:
             prefix = _("usage: ")
         # if usage is specified, use that
@@ -135,66 +182,9 @@ class SafeHelpFormatter(HelpFormatter):
                         lines.extend(get_lines(pos_parts, indent))
                     lines = [prog] + lines
 
-                # join lines into usage
                 usage = "\n".join(lines)
 
-        # prefix with 'usage:'
-        return "{}{}\n\n".format(prefix, usage)
-
-    def _split_lines(self, text, width):
-        return [text]
-
-    def _format_action_invocation(self, action):
-        if not action.option_strings:
-            # For subcommands and positional arguments, use the default formatting
-            metavar = self._format_args(action, action.dest)
-            return metavar or action.dest
-
-        default = self._get_default_metavar_for_optional(action)
-        args_string = self._format_args(action, default)
-
-        if len(action.option_strings) == 1:
-            return action.option_strings[0] + (f" {args_string}" if args_string else "")
-
-        return "{}, {}{}".format(
-            action.option_strings[0],
-            action.option_strings[1],
-            f" {args_string}" if args_string else "",
-        )
-
-    def _format_action(self, action):
-        # Use the _action_max_length from parent class, with a minimum of 20
-        help_position = max(20, self._action_max_length)
-
-        action_header = self._format_action_invocation(action)
-
-        if not action.help:
-            return "  %s\n" % action_header
-
-        help_text = self._expand_help(action)
-
-        # Calculate padding needed to align help text
-        padding = " " * (help_position - len(action_header))
-        return "  %s%s%s\n" % (action_header, padding, help_text)
-
-
-class SafeRawHelpFormatter(SafeHelpFormatter):
-    def _fill_text(self, text, width, indent):
-        """
-        Doesn't strip whitespace from the beginning of the line when formatting help text.
-
-        Code from: https://stackoverflow.com/a/74368128/18588657
-        """
-        # Strip the indent from the original python definition that plagues most of us.
-        text = textwrap.dedent(text)
-        text = textwrap.indent(text, indent)  # Apply any requested indent.
-        text = text.splitlines()  # Make a list of lines
-        text = [textwrap.fill(line, width) for line in text]  # Wrap each line
-        text = "\n".join(text)  # Join the lines again
-        return text
-
-    def _split_lines(self, text, width):
-        return text.splitlines()
+        return f"{prefix}{usage}\n\n"
 
 
 class ArgumentParserWrapper(NestedArgumentParser):
@@ -209,7 +199,7 @@ class ArgumentParserWrapper(NestedArgumentParser):
         description=None,
         epilog=None,
         parents=[],
-        formatter_class=SafeHelpFormatter,
+        formatter_class=InterfacyHelpFormatter,
         prefix_chars="-",
         fromfile_prefix_chars=None,
         argument_default=None,
@@ -276,7 +266,7 @@ class Argparser(InterfacyParserCore):
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
-        formatter_class=SafeRawHelpFormatter,
+        formatter_class=InterfacyHelpFormatter,
         print_result_func: T.Callable = print,
     ) -> None:
         super().__init__(
