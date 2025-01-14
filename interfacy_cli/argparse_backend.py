@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 import sys
 import textwrap
@@ -72,15 +73,35 @@ class InterfacyHelpFormatter(HelpFormatter):
 
     def _format_action(self, action):
         action_header = self._format_action_invocation(action)
-        help_position = max(24, self._action_max_length + 4)
+        help_position = max(40, self._action_max_length + 4)
         indent_len = 2
 
         if not action.help:
             return f"{' ' * indent_len}{action_header}\n"
 
+        term_width = os.get_terminal_size().columns
+        help_width = term_width - help_position - indent_len
+
         help_text = self._expand_help(action)
-        padding_len = help_position - len(action_header)
-        return f"{' ' * indent_len}{action_header}{' ' * padding_len}{help_text}\n"
+        padding_len = help_position - len(action_header) - indent_len
+
+        # respect terminal width
+        wrapped_lines = []
+        for word in help_text.split():
+            if not wrapped_lines:
+                wrapped_lines.append(word)
+            else:
+                if len(wrapped_lines[-1]) + len(word) + 1 <= help_width:
+                    wrapped_lines[-1] = f"{wrapped_lines[-1]} {word}"
+                else:
+                    wrapped_lines.append(word)
+
+        result = [f"{' ' * indent_len}{action_header}{' ' * padding_len}{wrapped_lines[0]}"]
+        if len(wrapped_lines) > 1:
+            for line in wrapped_lines[1:]:
+                result.append(f"{' ' * help_position}{line}")
+
+        return "\n".join(result) + "\n"
 
     def _fill_text(self, text, width, indent):
         """
@@ -584,6 +605,7 @@ class Argparser(InterfacyParserCore):
             self._display_err(e, "")
             self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
             return e
+
         except Exception as e:
             self._display_err(
                 e,
