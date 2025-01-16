@@ -83,7 +83,7 @@ class TestParsingRequiredPositional:
 
     def test_bool(self):
         parser = self.new_parser()
-        parser.add_command(func_with_bool_arg)
+        parser.add_command(required_bool_arg)
         namespace = parser.parse_args(["--value"])
         assert namespace["value"] == True
         namespace = parser.parse_args(["--no-value"])

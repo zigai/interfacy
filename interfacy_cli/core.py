@@ -1,7 +1,7 @@
 import sys
-import typing as T
 from abc import abstractmethod
 from enum import IntEnum, auto
+from typing import Any, Callable
 
 from objinspect import Class, Function, Method
 from stdl.fs import read_piped
@@ -95,10 +95,10 @@ class InterfacyParserCore:
     def _should_skip_method(self, method: Method) -> bool:
         return method.name.startswith("_")
 
-    def add_command(self, command: T.Callable, name: str | None = None):
+    def add_command(self, command: Callable, name: str | None = None):
         raise NotImplementedError
 
-    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
+    def run(self, *commands: Callable, args: list[str] | None = None) -> Any:
         raise NotImplementedError
 
     @abstractmethod

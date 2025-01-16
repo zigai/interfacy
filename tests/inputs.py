@@ -68,7 +68,7 @@ class Math:
         return self._round(a - b)
 
 
-def func_with_bool_arg(value: bool):
+def required_bool_arg(value: bool):
     return value
 
 

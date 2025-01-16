@@ -27,8 +27,8 @@ class TestRunnerRequiredPositional:
         assert result == 4
 
     def test_bool(self):
-        assert self.new_parser().run(func_with_bool_arg, args=["--value"]) == True
-        assert self.new_parser().run(func_with_bool_arg, args=["--no-value"]) == False
+        assert self.new_parser().run(required_bool_arg, args=["--value"]) == True
+        assert self.new_parser().run(required_bool_arg, args=["--no-value"]) == False
 
     def test_bool_true_by_default(self):
         assert self.new_parser().run(func_with_bool_default_true, args=["--value"]) == True

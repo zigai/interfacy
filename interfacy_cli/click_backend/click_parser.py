@@ -1,6 +1,6 @@
-import typing as T
 from gettext import gettext as _
 from os import get_terminal_size
+from typing import Any, Callable, Optional, Sequence
 
 import click
 from click import pass_context
@@ -33,7 +33,7 @@ click.Context.formatter_class = ClickHelpFormatter
 
 
 class ClickFuncParamType(click.types.FuncParamType):
-    def __init__(self, func: T.Callable[[T.Any], T.Any], name: str | None = None) -> None:
+    def __init__(self, func: Callable[[Any], Any], name: str | None = None) -> None:
         super().__init__(func)
         self.name = name or "NO_NAME"
         self.func = func
@@ -67,10 +67,10 @@ class ClickOption(click.Option):
 class ClickArgument(click.Argument):
     def __init__(
         self,
-        param_decls: T.Sequence[str],
-        required: T.Optional[bool] = None,
-        help: T.Optional[str] = None,
-        **attrs: T.Any,
+        param_decls: Sequence[str],
+        required: Optional[bool] = None,
+        help: Optional[str] = None,
+        **attrs: Any,
     ):
         self.help = help
         super().__init__(param_decls, required=required, **attrs)
@@ -147,7 +147,7 @@ class ClickParser(InterfacyParserCore):
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
-        print_result_func: T.Callable = print,
+        print_result_func: Callable = print,
     ) -> None:
         super().__init__(
             description,
@@ -167,7 +167,7 @@ class ClickParser(InterfacyParserCore):
         self.kwargs = UNSET
         self.bool_flag_translator = TranslationMapper(inverted_bool_flag_name)
 
-    def _handle_piped_input(self, command: str, params: dict[str, T.Any]) -> dict[str, T.Any]:
+    def _handle_piped_input(self, command: str, params: dict[str, Any]) -> dict[str, Any]:
         piped = read_piped()
         if piped:
             if isinstance(self.pipe_target, str):
@@ -189,7 +189,7 @@ class ClickParser(InterfacyParserCore):
                 updated_kwargs[k] = v
         return updated_kwargs
 
-    def revese_arg_translations(self, args: dict) -> dict[str, T.Any]:
+    def revese_arg_translations(self, args: dict) -> dict[str, Any]:
         reversed = {}
         for k, v in args.items():
             reversed_k = self.flag_strategy.argument_translator.reverse(k)
@@ -199,7 +199,7 @@ class ClickParser(InterfacyParserCore):
                 reversed[k] = v
         return reversed
 
-    def _generate_instance_callback(self, cls: Class) -> T.Callable:
+    def _generate_instance_callback(self, cls: Class) -> Callable:
         """
         Generates a function that instantiates the class with the given args.
         """
@@ -216,8 +216,8 @@ class ClickParser(InterfacyParserCore):
     def _generate_callback(
         self,
         fn: Function,
-        result_fn: T.Callable | None = None,
-    ) -> T.Callable:
+        result_fn: Callable | None = None,
+    ) -> Callable:
 
         def callback(*args, **kwargs):
             func = fn.func
@@ -302,7 +302,7 @@ class ClickParser(InterfacyParserCore):
         self,
         fn: Function | Method,
         taken_flags: list[str] | None = None,
-        instance_callback: T.Callable | None = None,
+        instance_callback: Callable | None = None,
     ) -> ClickCommand:
         if taken_flags is None:
             taken_flags = [*self.RESERVED_FLAGS]
@@ -368,13 +368,13 @@ class ClickParser(InterfacyParserCore):
             self.main_parser.add_command(parser, name=command_name)
         return self.main_parser
 
-    def add_command(self, command: T.Callable, name: str | None = None):
+    def add_command(self, command: Callable, name: str | None = None):
         self.main_parser.add_command(
             self.parser_from_command(inspect(command, inherited=False, private=False)),
             name=name,
         )
 
-    def run(self, *commands: T.Callable, args: list[str] | None = None):
+    def run(self, *commands: Callable, args: list[str] | None = None):
         if commands:
             if len(commands) == 1:
                 command = commands[0]

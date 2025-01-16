@@ -1,14 +1,14 @@
-import typing as T
+from typing import Literal, Protocol
 
 from objinspect import Parameter
 from stdl.st import kebab_case, snake_case
 
 from interfacy_cli.util import AbbrevationGenerator, TranslationMapper, is_list_or_list_alias
 
-FlagsStyle = T.Literal["keyword_only", "required_positional"]
+FlagsStyle = Literal["keyword_only", "required_positional"]
 
 
-class FlagGenerator(T.Protocol):
+class FlagGenerator(Protocol):
     argument_translator: TranslationMapper
     command_translator: TranslationMapper
     style: FlagsStyle
@@ -28,7 +28,7 @@ class BasicFlagGenerator(FlagGenerator):
     def __init__(
         self,
         style: FlagsStyle = "required_positional",
-        translation_mode: T.Literal["none", "kebab", "snake"] = "kebab",
+        translation_mode: Literal["none", "kebab", "snake"] = "kebab",
     ) -> None:
         self.style = style
         self.translation_mode = translation_mode
