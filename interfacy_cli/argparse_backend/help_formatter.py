@@ -3,6 +3,8 @@ import os
 import re
 import textwrap
 
+from stdl.st import len_without_ansi
+
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
 
@@ -42,12 +44,12 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         padding_len = help_position - len(action_header) - indent_len
 
         # respect terminal width
-        wrapped_lines = []
+        wrapped_lines: list[str] = []
         for word in help_text.split():
             if not wrapped_lines:
                 wrapped_lines.append(word)
             else:
-                if len(wrapped_lines[-1]) + len(word) + 1 <= help_width:
+                if len_without_ansi(wrapped_lines[-1]) + len_without_ansi(word) + 1 <= help_width:
                     wrapped_lines[-1] = f"{wrapped_lines[-1]} {word}"
                 else:
                     wrapped_lines.append(word)
