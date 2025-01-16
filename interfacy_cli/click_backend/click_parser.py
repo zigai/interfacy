@@ -15,7 +15,6 @@ from interfacy_cli.util import (
     DefaultAbbrevationGenerator,
     TranslationMapper,
     inverted_bool_flag_name,
-    show_result,
 )
 
 

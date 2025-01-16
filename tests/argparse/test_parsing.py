@@ -1,6 +1,4 @@
-import pytest
-
-from interfacy_cli.argparse_backend import Argparser
+from interfacy_cli import Argparser
 from interfacy_cli.core import BasicFlagGenerator
 
 from ..inputs import *

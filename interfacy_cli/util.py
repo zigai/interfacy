@@ -1,5 +1,4 @@
-import typing as T
-from typing import Callable
+from typing import Any, Callable
 
 from objinspect.typing import type_origin
 
@@ -9,7 +8,9 @@ def simplified_type_name(name: str) -> str:
     Simplifies the type name by removing module paths and optional "None" union.
     """
     name = name.split(".")[-1]
-    name = name.replace("| None", "").strip()
+    if "| None" in name:
+        name = name.replace("| None", "").strip()
+        name += "?"
     return name
 
 
@@ -20,7 +21,7 @@ def is_list_or_list_alias(t):
     return t_origin is list
 
 
-def show_result(result: T.Any, handler=print):
+def show_result(result: Any, handler=print):
     if isinstance(result, list):
         for i in result:
             handler(i)
@@ -32,8 +33,10 @@ def show_result(result: T.Any, handler=print):
         handler(result)
 
 
-def inverted_bool_flag_name(name: str) -> str:
-    return "no-" + name
+def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
+    if name.startswith(prefix):
+        return name[len(prefix) :]
+    return prefix + name
 
 
 class TranslationMapper:
@@ -153,7 +156,7 @@ class NoAbbrevations(AbbrevationGenerator):
         return None
 
 
-def revese_arg_translations(args: dict, arg_translator: TranslationMapper) -> dict[str, T.Any]:
+def revese_arg_translations(args: dict, arg_translator: TranslationMapper) -> dict[str, Any]:
     reversed = {}
     for k, v in args.items():
         k = arg_translator.reverse(k)

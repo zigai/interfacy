@@ -1,18 +1,16 @@
 import argparse
-import os
-import re
 import sys
-import textwrap
-import typing as T
-from argparse import ArgumentError, ArgumentParser, ArgumentTypeError, HelpFormatter, Namespace
+from argparse import ArgumentParser
+from typing import Any, Callable
 
-from nested_argparse import NestedArgumentParser
 from objinspect import Class, Function, Method, Parameter, inspect
-from objinspect._class import split_init_args
-from objinspect.method import split_args_kwargs
 from objinspect.typing import type_args, type_name, type_origin
 from strto import StrToTypeParser
 
+from interfacy_cli.argparse_backend.argumentparser import ArgumentParser
+from interfacy_cli.argparse_backend.help_formatter import InterfacyHelpFormatter
+from interfacy_cli.argparse_backend.runner import ArgparseRunner
+from interfacy_cli.argparse_backend.utils import namespace_to_dict
 from interfacy_cli.core import ExitCode, InterfacyParserCore
 from interfacy_cli.exceptions import (
     DuplicateCommandError,
@@ -24,247 +22,7 @@ from interfacy_cli.exceptions import (
 )
 from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
 from interfacy_cli.themes import DefaultTheme
-from interfacy_cli.util import (
-    AbbrevationGenerator,
-    DefaultAbbrevationGenerator,
-    revese_arg_translations,
-)
-
-try:
-    from gettext import gettext as _
-except ImportError:
-
-    def _(message):
-        return message
-
-
-def namespace_to_dict(namespace: Namespace) -> dict[str, T.Any]:
-    result = {}
-    for key, value in vars(namespace).items():
-        if isinstance(value, Namespace):
-            result[key] = namespace_to_dict(value)
-        else:
-            result[key] = value
-    return result
-
-
-class InterfacyHelpFormatter(HelpFormatter):
-
-    def _split_lines(self, text, width):
-        # return text.splitlines()
-        return [text]
-
-    def _format_args(self, action, default_metavar):
-        result = super()._format_args(action, default_metavar)
-        return result.strip()
-
-    def _format_action_invocation(self, action):
-        if not action.option_strings:
-            metavar = self._format_args(action, action.dest)
-            return metavar or action.dest
-
-        default = self._get_default_metavar_for_optional(action)
-        args_string = self._format_args(action, default)
-
-        if len(action.option_strings) == 1:
-            return action.option_strings[0] + (f" {args_string}" if args_string else "")
-
-        return "{}, {}".format(action.option_strings[0], action.option_strings[1])
-
-    def _format_action(self, action):
-        action_header = self._format_action_invocation(action)
-        help_position = max(40, self._action_max_length + 4)
-        indent_len = 2
-
-        if not action.help:
-            return f"{' ' * indent_len}{action_header}\n"
-
-        term_width = os.get_terminal_size().columns
-        help_width = term_width - help_position - indent_len
-
-        help_text = self._expand_help(action)
-        padding_len = help_position - len(action_header) - indent_len
-
-        # respect terminal width
-        wrapped_lines = []
-        for word in help_text.split():
-            if not wrapped_lines:
-                wrapped_lines.append(word)
-            else:
-                if len(wrapped_lines[-1]) + len(word) + 1 <= help_width:
-                    wrapped_lines[-1] = f"{wrapped_lines[-1]} {word}"
-                else:
-                    wrapped_lines.append(word)
-
-        result = [f"{' ' * indent_len}{action_header}{' ' * padding_len}{wrapped_lines[0]}"]
-        if len(wrapped_lines) > 1:
-            for line in wrapped_lines[1:]:
-                result.append(f"{' ' * help_position}{line}")
-
-        return "\n".join(result) + "\n"
-
-    def _fill_text(self, text, width, indent):
-        """
-        Doesn't strip whitespace from the beginning of the line when formatting help text.
-        Code from: https://stackoverflow.com/a/74368128/18588657
-        """
-        # Strip the indent from the original python definition that plagues most of us.
-        text = textwrap.dedent(text)
-        text = textwrap.indent(text, indent)  # Apply any requested indent.
-        text = text.splitlines()  # Make a list of lines
-        text = [textwrap.fill(line, width) for line in text]  # Wrap each line
-        text = "\n".join(text)  # Join the lines again
-        return text
-
-    def _format_usage(self, usage, actions, groups, prefix):
-        """
-        Making sure that doesn't crash your program if your terminal window isn't wide enough.
-        Explained here: https://stackoverflow.com/a/50394665/18588657
-        """
-
-        if prefix is None:
-            prefix = _("usage: ")
-        # if usage is specified, use that
-        if usage is not None:
-            usage = usage % dict(prog=self._prog)
-        # if no optionals or positionals are available, usage is just prog
-        elif usage is None and not actions:
-            usage = "%(prog)s" % dict(prog=self._prog)
-        # if optionals and positionals are available, calculate usage
-        elif usage is None:
-            prog = "%(prog)s" % dict(prog=self._prog)
-            # split optionals from positionals
-            optionals = []
-            positionals = []
-            for action in actions:
-                if action.option_strings:
-                    optionals.append(action)
-                else:
-                    positionals.append(action)
-
-            # build full usage string
-            format = self._format_actions_usage
-            action_usage = format(optionals + positionals, groups)
-            usage = " ".join([s for s in [prog, action_usage] if s])
-
-            # wrap the usage parts if it's too long
-            text_width = self._width - self._current_indent
-            if len(prefix) + len(usage) > text_width:
-                # break usage into wrappable parts
-                part_regexp = r"\(.*?\)+(?=\s|$)|" r"\[.*?\]+(?=\s|$)|" r"\S+"
-                opt_usage = format(optionals, groups)
-                pos_usage = format(positionals, groups)
-                opt_parts = re.findall(part_regexp, opt_usage)
-                pos_parts = re.findall(part_regexp, pos_usage)
-
-                # NOTE: only change from original code is commenting out the assert statements
-                # assert " ".join(opt_parts) == opt_usage
-                # assert " ".join(pos_parts) == pos_usage
-
-                # helper for wrapping lines
-                def get_lines(parts, indent, prefix=None):
-                    lines, line = [], []
-                    if prefix is not None:
-                        line_len = len(prefix) - 1
-                    else:
-                        line_len = len(indent) - 1
-                    for part in parts:
-                        if line_len + 1 + len(part) > text_width and line:
-                            lines.append(indent + " ".join(line))
-                            line = []
-                            line_len = len(indent) - 1
-                        line.append(part)
-                        line_len += len(part) + 1
-                    if line:
-                        lines.append(indent + " ".join(line))
-                    if prefix is not None:
-                        lines[0] = lines[0][len(indent) :]
-                    return lines
-
-                # if prog is short, follow it with optionals or positionals
-                if len(prefix) + len(prog) <= 0.75 * text_width:
-                    indent = " " * (len(prefix) + len(prog) + 1)
-                    if opt_parts:
-                        lines = get_lines([prog] + opt_parts, indent, prefix)
-                        lines.extend(get_lines(pos_parts, indent))
-                    elif pos_parts:
-                        lines = get_lines([prog] + pos_parts, indent, prefix)
-                    else:
-                        lines = [prog]
-
-                # if prog is long, put it on its own line
-                else:
-                    indent = " " * len(prefix)
-                    parts = opt_parts + pos_parts
-                    lines = get_lines(parts, indent)
-                    if len(lines) > 1:
-                        lines = []
-                        lines.extend(get_lines(opt_parts, indent))
-                        lines.extend(get_lines(pos_parts, indent))
-                    lines = [prog] + lines
-
-                usage = "\n".join(lines)
-
-        return f"{prefix}{usage}\n\n"
-
-
-class ArgumentParserWrapper(NestedArgumentParser):
-    def __init__(
-        self,
-        name: str | None = None,
-        prog=None,
-        nest_dir=None,
-        nest_separator="__",
-        nest_path=None,
-        usage=None,
-        description=None,
-        epilog=None,
-        parents=[],
-        formatter_class=InterfacyHelpFormatter,
-        prefix_chars="-",
-        fromfile_prefix_chars=None,
-        argument_default=None,
-        conflict_handler="error",
-        add_help=True,
-        allow_abbrev=True,
-    ):
-        super().__init__(
-            prog,
-            nest_dir,
-            nest_separator,
-            nest_path,
-            usage,
-            description,
-            epilog,
-            parents,
-            formatter_class,
-            prefix_chars,
-            fromfile_prefix_chars,
-            argument_default,
-            conflict_handler,
-            add_help,
-            allow_abbrev,
-        )
-        self.name = name
-
-    def _get_value(self, action, arg_string):
-        parse_func = self._registry_get("type", action.type, action.type)
-        if not callable(parse_func):
-            msg = _("%r is not callable")
-            raise ArgumentError(action, msg % parse_func)
-        try:
-            result = parse_func(arg_string)
-
-        except ArgumentTypeError:
-            name = getattr(action.type, "__name__", repr(action.type))
-            msg = str(sys.exc_info()[1])
-            raise ArgumentError(action, msg)
-
-        except (TypeError, ValueError):
-            t = type_name(str(parse_func.keywords["t"]))
-            msg = _(f"invalid {t} value: '{arg_string}'")
-            raise ArgumentError(action, msg)
-        return result
+from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 
 class Argparser(InterfacyParserCore):
@@ -288,7 +46,7 @@ class Argparser(InterfacyParserCore):
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
         formatter_class=InterfacyHelpFormatter,
-        print_result_func: T.Callable = print,
+        print_result_func: Callable = print,
     ) -> None:
         super().__init__(
             description,
@@ -311,7 +69,7 @@ class Argparser(InterfacyParserCore):
         del self.type_parser.parsers[list]
 
     def _new_parser(self, name: str | None = None):
-        return ArgumentParserWrapper(name, formatter_class=self.formatter_class)
+        return ArgumentParser(name, formatter_class=self.formatter_class)
 
     def _add_parameter_to_parser(
         self,
@@ -329,7 +87,7 @@ class Argparser(InterfacyParserCore):
     def _commands_list(self) -> list[Function | Class | Method]:
         return list(self.commands.values())
 
-    def add_command(self, command: T.Callable | T.Any, name: str | None = None):
+    def add_command(self, command: Callable | Any, name: str | None = None):
         obj = inspect(command, inherited=False)
         if name is not None:
             self.flag_strategy.command_translator.add_ignored(name)
@@ -462,7 +220,7 @@ class Argparser(InterfacyParserCore):
                 raise InvalidCommandError(cmd)
         return parser
 
-    def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, T.Any]:
+    def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, Any]:
         """
         This method creates a dictionary with additional argument parameters needed to
         customize argparse's `add_argument` method based on a given `Parameter` object.
@@ -475,7 +233,7 @@ class Argparser(InterfacyParserCore):
             "required", "metavar", and "default".
 
         """
-        extra: dict[str, T.Any] = {}
+        extra: dict[str, Any] = {}
         extra["help"] = self.theme.get_help_for_parameter(param)
 
         if param.is_typed:
@@ -575,7 +333,7 @@ class Argparser(InterfacyParserCore):
             print(traceback.format_exc(), file=sys.stderr)
         self.log_err(message)
 
-    def run(self, *commands: T.Callable, args: list[str] | None = None) -> T.Any:
+    def run(self, *commands: Callable, args: list[str] | None = None) -> Any:
         try:
             for i in commands:
                 self.add_command(i)
@@ -619,79 +377,3 @@ class Argparser(InterfacyParserCore):
 
         self.exit(ExitCode.SUCCESS)
         return result
-
-
-class ArgparseRunner:
-    def __init__(
-        self,
-        commands: dict[str, Function | Class | Method],
-        namespace: dict,
-        builder: Argparser,
-        args: list[str],
-        parser,
-    ) -> None:
-        self._parser = parser
-        self.commands = commands
-        self.namespace = namespace
-        self.args = args
-        self.builder = builder
-        self.COMMAND_KEY = self.builder.COMMAND_KEY
-
-    def run(self):
-        if len(self.commands) == 0:
-            raise InvalidConfigurationError("No commands were provided")
-        if len(self.commands) == 1:
-            command = list(self.commands.values())[0]
-            return self.run_command(command, self.namespace)
-        return self.run_multiple(self.commands)
-
-    def run_command(self, command: Function | Method | Class, args: dict):
-        handler = {
-            Function: self.run_function,
-            Method: self.run_method,
-            Class: self.run_class,
-        }
-        t = type(command)
-        if t not in handler:
-            raise InvalidCommandError(command)
-        return handler[t](command, args)
-
-    def run_function(self, func: Function | Method, args: dict) -> T.Any:
-        func_args, func_kwargs = split_args_kwargs(args, func)
-        return func.call(*func_args, **func_kwargs)
-
-    def run_method(self, method: Method, args: dict) -> T.Any:
-        cli_args = revese_arg_translations(args, self.builder.flag_strategy.argument_translator)
-        instance = method.class_instance
-        if instance:
-            method_args, method_kwargs = split_args_kwargs(cli_args, method)
-            return method.call(*method_args, **method_kwargs)
-
-        instance = Class(method.cls)
-        args_init, args_method = split_init_args(cli_args, instance, method)
-        init_args, init_kwargs = split_args_kwargs(args_init, method)
-        instance.init(*init_args, **init_kwargs)
-        method_args, method_kwargs = split_args_kwargs(args_method, method)
-        return instance.call_method(method.name, *method_args, **method_kwargs)
-
-    def run_class(self, cls: Class, args: dict) -> T.Any:
-        command_name = args[self.COMMAND_KEY]
-        command_args = args[command_name]
-        del args[self.COMMAND_KEY]
-        del args[command_name]
-
-        if cls.init_method and not cls.is_initialized:
-            init_args, init_kwargs = split_args_kwargs(args, cls.init_method)
-            cls.init(*init_args, **init_kwargs)
-
-        method_args, method_kwargs = split_args_kwargs(command_args, cls.get_method(command_name))
-        return cls.call_method(command_name, *method_args, **method_kwargs)
-
-    def run_multiple(self, commands: dict[str, Function | Class | Method]) -> T.Any:
-        command_name = self.namespace[self.COMMAND_KEY]
-        command = commands[command_name]
-        args = self.namespace[command_name]
-        return self.run_command(command, args)
-
-
-__all__ = ["Argparser", "ArgparseRunner"]

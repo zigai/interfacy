@@ -1,4 +1,3 @@
-from interfacy_cli.argparse_backend import Argparser
-from interfacy_cli.click_backend import ClickParser
+from interfacy_cli.argparse_backend.argparser import Argparser
 
-__all__ = ["Argparser", "ClickParser"]
+__all__ = ["Argparser"]
