@@ -91,7 +91,7 @@ class TestParsingRequiredPositional:
 
     def test_bool_true_by_default(self):
         parser = self.new_parser()
-        parser.add_command(func_with_bool_default_true)
+        parser.add_command(bool_default_true)
         namespace = parser.parse_args([])
         assert namespace["value"] == True
         namespace = parser.parse_args(["--value"])
@@ -101,13 +101,19 @@ class TestParsingRequiredPositional:
 
     def test_bool_false_by_default(self):
         parser = self.new_parser()
-        parser.add_command(func_with_bool_default_false)
+        parser.add_command(bool_default_false)
         namespace = parser.parse_args([])
         assert namespace["value"] == False
         namespace = parser.parse_args(["--value"])
         assert namespace["value"] == True
         namespace = parser.parse_args(["--no-value"])
         assert namespace["value"] == False
+
+    def test_enum(self):
+        parser = self.new_parser()
+        parser.add_command(enum_arg)
+        namespace = parser.parse_args(["RED"])
+        assert namespace["color"] == Color.RED
 
 
 class TestParsingKeywordOnly:

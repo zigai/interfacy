@@ -35,16 +35,16 @@ class ArgparseRunner:
             return self.run_command(command, self.namespace)
         return self.run_multiple(self.commands)
 
-    def run_command(self, command: Function | Method | Class, args: dict):
-        handler = {
+    def run_command(self, command: Function | Method | Class, args: dict[str, Any]) -> Any:
+        handlers = {
             Function: self.run_function,
             Method: self.run_method,
             Class: self.run_class,
         }
         t = type(command)
-        if t not in handler:
+        if t not in handlers:
             raise InvalidCommandError(command)
-        return handler[t](command, args)
+        return handlers[t](command, args)
 
     def run_function(self, func: Function | Method, args: dict) -> Any:
         func_args, func_kwargs = split_args_kwargs(args, func)
@@ -59,7 +59,9 @@ class ArgparseRunner:
 
         instance = Class(method.cls)
         args_init, args_method = split_init_args(cli_args, instance, method)
-        init_args, init_kwargs = split_args_kwargs(args_init, method)
+        if not instance.init_method:
+            raise ValueError("No __init__ method found for class")
+        init_args, init_kwargs = split_args_kwargs(args_init, instance.init_method)
         instance.init(*init_args, **init_kwargs)
         method_args, method_kwargs = split_args_kwargs(args_method, method)
         return instance.call_method(method.name, *method_args, **method_kwargs)

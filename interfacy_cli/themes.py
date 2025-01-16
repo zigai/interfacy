@@ -1,31 +1,12 @@
 from dataclasses import dataclass
-from typing import Type
+from typing import Literal, Type
 
 from objinspect import Class, Function, Method, Parameter
-from objinspect.typing import (
-    get_enum_choices,
-    get_literal_choices,
-    is_enum,
-    is_or_contains_literal,
-    is_union_type,
-    type_args,
-    type_name,
-)
-from stdl.st import FG, BackgroundColor, ForegroundColor, Style, colored
+from objinspect.typing import get_choices, type_name
+from stdl.st import TextStyle, colored, with_style
 
 from interfacy_cli.flag_generator import FlagGenerator
 from interfacy_cli.util import simplified_type_name
-
-
-@dataclass
-class TextStyle:
-    color: ForegroundColor | str | None = None
-    background: BackgroundColor | str | None = None
-    style: Style | str | None = None
-
-
-def with_style(text: str, style: TextStyle) -> str:
-    return colored(text, color=style.color, background=style.background, style=style.style)
 
 
 def colored_type(
@@ -50,29 +31,7 @@ def colored_type(
     return "".join(parts)
 
 
-import enum
-from typing import Literal, Type
-
-
-def get_choices(t: Type) -> tuple | None:
-    if is_or_contains_literal(t):
-        return get_literal_choices(t)
-    if is_enum(t):
-        return get_enum_choices(t)
-    if is_union_type(t):
-        args = type_args(t)
-        choices = []
-        for i in args:
-            print(i)
-            if is_enum(i):
-                choices.extend(get_enum_choices(i))
-            elif is_or_contains_literal(i):
-                choices.extend(get_literal_choices(i))
-        return tuple(choices)
-    return None
-
-
-class DefaultTheme:
+class ParserTheme:
     style_type: TextStyle = TextStyle(color="green")
     style_default: TextStyle = TextStyle(color="light_blue")
     style_description: TextStyle = TextStyle(color="white")
@@ -81,9 +40,9 @@ class DefaultTheme:
 
     commands_title: str = "commands:"
     prefix_choices: str = "choices: "
-    prefix_default: str = "default= "
+    prefix_default: str = "default="
     prefix_type: str = "type: "
-    required_indicator: str = "(" + colored("*", color=FG.RED) + ")"
+    required_indicator: str = "(" + colored("*", color="red") + ")"
 
     clear_metavar: bool = True
     simplify_types: bool = True
@@ -183,11 +142,13 @@ class DefaultTheme:
         return "\n".join(lines)
 
 
-class PlainTheme(DefaultTheme):
-    style_type = TextStyle(color=FG.WHITE)
-    style_default = TextStyle(color=FG.WHITE)
-    style_description = TextStyle(color=FG.WHITE)
+class PlainParserTheme(ParserTheme):
+    style_type: TextStyle = TextStyle(color="white")
+    style_default: TextStyle = TextStyle(color="white")
+    style_description: TextStyle = TextStyle(color="white")
+    style_string: TextStyle = TextStyle(color="white")
+    style_extra_data: TextStyle = TextStyle(color="white")
     required_indicator = "(*)"
 
 
-__all__ = ["DefaultTheme", "PlainTheme"]
+__all__ = ["ParserTheme", "PlainParserTheme"]

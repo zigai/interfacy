@@ -79,9 +79,9 @@ class TranslationMapper:
         self.translations[translated_name] = name
         return translated_name
 
-    def reverse(self, translated: str) -> str | None:
+    def reverse(self, translated: str) -> str:
         """
-        Retrieve the original name based on the translated name.
+        Retrieve the original name based on the translated name. If the translated name is not found, it is returned as is.
 
         Args:
             translated (str): The translated name whose original name needs to be found.
@@ -91,7 +91,7 @@ class TranslationMapper:
         """
         if translated in self.ignored_names:
             return translated
-        return self.translations.get(translated, None)
+        return self.translations.get(translated, translated)
 
     def contains_key(self, name: str):
         return name in self.translations.values()

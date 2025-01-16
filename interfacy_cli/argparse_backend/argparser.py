@@ -1,7 +1,7 @@
 import argparse
 import sys
 from argparse import ArgumentParser
-from typing import Any, Callable
+from typing import Any, Callable, Type
 
 from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import type_args, type_name, type_origin
@@ -21,7 +21,7 @@ from interfacy_cli.exceptions import (
     UnsupportedParameterTypeError,
 )
 from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
-from interfacy_cli.themes import DefaultTheme
+from interfacy_cli.themes import ParserTheme
 from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 
@@ -34,7 +34,7 @@ class Argparser(InterfacyParserCore):
         description: str | None = None,
         epilog: str | None = None,
         type_parser: StrToTypeParser | None = None,
-        theme: DefaultTheme | None = None,
+        theme: ParserTheme | None = None,
         *,
         run: bool = False,
         print_result: bool = False,
@@ -323,7 +323,7 @@ class Argparser(InterfacyParserCore):
             namespace[command] = namespace[command]
         return namespace
 
-    def _display_err(self, e: Exception, message: str):
+    def _display_error(self, e: Exception, message: str):
         exception_str = f'{type_name(str(type(e)))}("{str(e)}")'
         message += f": {exception_str}"
 
@@ -333,7 +333,7 @@ class Argparser(InterfacyParserCore):
             print(traceback.format_exc(), file=sys.stderr)
         self.log_err(message)
 
-    def run(self, *commands: Callable, args: list[str] | None = None) -> Any:
+    def run(self, *commands: Callable | Type | object, args: list[str] | None = None) -> Any:
         try:
             for i in commands:
                 self.add_command(i)
@@ -346,7 +346,7 @@ class Argparser(InterfacyParserCore):
             InvalidCommandError,
             InvalidConfigurationError,
         ) as e:
-            self._display_err(e, "Failed to parse command-line arguments")
+            self._display_error(e, "Failed to parse command-line arguments")
             self.exit(ExitCode.ERR_PARSING)
             return e
 
@@ -360,12 +360,12 @@ class Argparser(InterfacyParserCore):
             )
             result = runner.run()
         except InterfacyError as e:
-            self._display_err(e, "")
+            self._display_error(e, "")
             self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
             return e
 
         except Exception as e:
-            self._display_err(
+            self._display_error(
                 e,
                 "Unexpected error occurred",
             )

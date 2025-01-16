@@ -9,7 +9,7 @@ from stdl.fs import read_piped
 from strto import StrToTypeParser
 
 from interfacy_cli.core import BasicFlagGenerator, FlagGenerator, InterfacyParserCore
-from interfacy_cli.themes import DefaultTheme
+from interfacy_cli.themes import ParserTheme
 from interfacy_cli.util import (
     AbbrevationGenerator,
     DefaultAbbrevationGenerator,
@@ -135,7 +135,7 @@ class ClickParser(InterfacyParserCore):
         self,
         description: str | None = None,
         epilog: str | None = None,
-        theme: DefaultTheme | None = None,
+        theme: ParserTheme | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
         run: bool = False,

@@ -31,14 +31,14 @@ class TestRunnerRequiredPositional:
         assert self.new_parser().run(required_bool_arg, args=["--no-value"]) == False
 
     def test_bool_true_by_default(self):
-        assert self.new_parser().run(func_with_bool_default_true, args=["--value"]) == True
-        assert self.new_parser().run(func_with_bool_default_true, args=["--no-value"]) == False
-        assert self.new_parser().run(func_with_bool_default_true, args=[]) == True
+        assert self.new_parser().run(bool_default_true, args=["--value"]) == True
+        assert self.new_parser().run(bool_default_true, args=["--no-value"]) == False
+        assert self.new_parser().run(bool_default_true, args=[]) == True
 
     def test_bool_false_by_default(self):
-        assert self.new_parser().run(func_with_bool_default_false, args=["--value"]) == True
-        assert self.new_parser().run(func_with_bool_default_false, args=["--no-value"]) == False
-        assert self.new_parser().run(func_with_bool_default_false, args=[]) == False
+        assert self.new_parser().run(bool_default_false, args=["--value"]) == True
+        assert self.new_parser().run(bool_default_false, args=["--no-value"]) == False
+        assert self.new_parser().run(bool_default_false, args=[]) == False
 
     def test_from_instance(self):
         instance = Math(rounding=1)

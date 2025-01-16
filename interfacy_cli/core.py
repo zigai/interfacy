@@ -10,7 +10,7 @@ from strto import StrToTypeParser, get_parser
 
 from interfacy_cli.exceptions import InvalidCommandError
 from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
-from interfacy_cli.themes import DefaultTheme
+from interfacy_cli.themes import ParserTheme
 from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 
@@ -31,7 +31,7 @@ class InterfacyParserCore:
         self,
         description: str | None = None,
         epilog: str | None = None,
-        theme: DefaultTheme | None = None,
+        theme: ParserTheme | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
         run: bool = False,
@@ -43,10 +43,10 @@ class InterfacyParserCore:
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
-        print_result_func: T.Callable = print,
+        print_result_func: Callable = print,
     ) -> None:
         self.epilog = epilog
-        self.theme = theme or DefaultTheme()
+        self.theme = theme or ParserTheme()
         self.autorun = run
         self.description = description
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)

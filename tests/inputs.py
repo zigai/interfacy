@@ -1,3 +1,6 @@
+import enum
+
+
 def pow(base: int, exponent: int = 2) -> int:
     """
     Raise base to the power of exponent.
@@ -72,11 +75,11 @@ def required_bool_arg(value: bool):
     return value
 
 
-def func_with_bool_default_true(value: bool = True):
+def bool_default_true(value: bool = True):
     return value
 
 
-def func_with_bool_default_false(value: bool = False):
+def bool_default_false(value: bool = False):
     return value
 
 
@@ -88,3 +91,13 @@ def func_nargs_two_positional(strs: list[str], ints: list[int]):
     print(strs)
     print(ints)
     return len(strs), len(ints)
+
+
+class Color(enum.Enum):
+    RED = 1
+    GREEN = 2
+    BLUE = 3
+
+
+def enum_arg(color: Color):
+    return color.name
