@@ -7,7 +7,7 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import type_args, type_name, type_origin
 from strto import StrToTypeParser
 
-from interfacy_cli.argparse_backend.argumentparser import ArgumentParser
+from interfacy_cli.argparse_backend.argument_parser import ArgumentParser
 from interfacy_cli.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy_cli.argparse_backend.runner import ArgparseRunner
 from interfacy_cli.argparse_backend.utils import namespace_to_dict
