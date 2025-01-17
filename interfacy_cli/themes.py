@@ -1,12 +1,11 @@
-from typing import Literal, Type
+from typing import Literal
 
 from objinspect import Class, Function, Method, Parameter
-from objinspect.typing import get_choices, type_name
+from objinspect.typing import get_choices
 from objinspect.util import colored_type
 from stdl.st import TextStyle, colored, with_style
 
 from interfacy_cli.flag_generator import FlagGenerator
-from interfacy_cli.util import simplified_type_name
 
 
 class ParserTheme:

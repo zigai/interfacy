@@ -1,6 +1,6 @@
 import argparse
 import sys
-from typing import Any, Callable, Iterable, Literal, Sequence, Type
+from typing import Any, Callable, Literal, Sequence, Type
 
 from objinspect.typing import type_name
 
