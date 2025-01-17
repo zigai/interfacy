@@ -1,34 +1,12 @@
-from dataclasses import dataclass
 from typing import Literal, Type
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices, type_name
+from objinspect.util import colored_type
 from stdl.st import TextStyle, colored, with_style
 
 from interfacy_cli.flag_generator import FlagGenerator
 from interfacy_cli.util import simplified_type_name
-
-
-def colored_type(
-    t: Type,
-    style: TextStyle,
-    simplify: bool = True,
-) -> str:
-    text = type_name(t)
-    if simplify:
-        text = simplified_type_name(text)
-    NO_COLOR_CHARS = "[](){}|,?"
-    parts = []
-    part = []
-    for char in text:
-        if char in NO_COLOR_CHARS:
-            parts.append(with_style("".join(part), style))
-            part.clear()
-            parts.append(char)
-        else:
-            part.append(char)
-    parts.append(with_style("".join(part), style))
-    return "".join(parts)
 
 
 class ParserTheme:
