@@ -3,7 +3,7 @@ import os
 import re
 import textwrap
 
-from stdl.st import len_without_ansi
+from stdl.st import ansi_len
 
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
@@ -49,7 +49,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             if not wrapped_lines:
                 wrapped_lines.append(word)
             else:
-                if len_without_ansi(wrapped_lines[-1]) + len_without_ansi(word) + 1 <= help_width:
+                if ansi_len(wrapped_lines[-1]) + ansi_len(word) + 1 <= help_width:
                     wrapped_lines[-1] = f"{wrapped_lines[-1]} {word}"
                 else:
                     wrapped_lines.append(word)
