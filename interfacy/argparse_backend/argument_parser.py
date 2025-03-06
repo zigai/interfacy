@@ -4,7 +4,7 @@ from typing import Any, Callable, Literal, Sequence, Type
 
 from objinspect.typing import type_name
 
-from interfacy_cli.argparse_backend.help_formatter import InterfacyHelpFormatter
+from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 
 DEBUG = 0
 

@@ -8,9 +8,9 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy_cli.core import BasicFlagGenerator, FlagGenerator, InterfacyParserCore
-from interfacy_cli.themes import ParserTheme
-from interfacy_cli.util import (
+from interfacy.core import BasicFlagGenerator, FlagGenerator, InterfacyParserCore
+from interfacy.themes import ParserTheme
+from interfacy.util import (
     AbbrevationGenerator,
     DefaultAbbrevationGenerator,
     TranslationMapper,

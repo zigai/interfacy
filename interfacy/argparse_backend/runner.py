@@ -4,11 +4,11 @@ from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 
-from interfacy_cli.exceptions import InvalidCommandError, InvalidConfigurationError
-from interfacy_cli.util import revese_arg_translations
+from interfacy.exceptions import InvalidCommandError, InvalidConfigurationError
+from interfacy.util import revese_arg_translations
 
 if TYPE_CHECKING:
-    from interfacy_cli.argparse_backend.argparser import Argparser
+    from interfacy.argparse_backend.argparser import Argparser
 
 
 class ArgparseRunner:

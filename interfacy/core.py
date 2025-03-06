@@ -8,10 +8,10 @@ from stdl.fs import read_piped
 from stdl.st import colored
 from strto import StrToTypeParser, get_parser
 
-from interfacy_cli.exceptions import InvalidCommandError
-from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
-from interfacy_cli.themes import ParserTheme
-from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
+from interfacy.exceptions import InvalidCommandError
+from interfacy.flag_generator import BasicFlagGenerator, FlagGenerator
+from interfacy.themes import ParserTheme
+from interfacy.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 
 class ExitCode(IntEnum):

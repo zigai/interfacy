@@ -3,7 +3,7 @@ from typing import Literal, Protocol
 from objinspect import Parameter
 from stdl.st import kebab_case, snake_case
 
-from interfacy_cli.util import AbbrevationGenerator, TranslationMapper, is_list_or_list_alias
+from interfacy.util import AbbrevationGenerator, TranslationMapper, is_list_or_list_alias
 
 FlagsStyle = Literal["keyword_only", "required_positional"]
 

@@ -7,12 +7,12 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import type_args, type_name, type_origin
 from strto import StrToTypeParser
 
-from interfacy_cli.argparse_backend.argument_parser import ArgumentParser
-from interfacy_cli.argparse_backend.help_formatter import InterfacyHelpFormatter
-from interfacy_cli.argparse_backend.runner import ArgparseRunner
-from interfacy_cli.argparse_backend.utils import namespace_to_dict
-from interfacy_cli.core import ExitCode, InterfacyParserCore
-from interfacy_cli.exceptions import (
+from interfacy.argparse_backend.argument_parser import ArgumentParser
+from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
+from interfacy.argparse_backend.runner import ArgparseRunner
+from interfacy.argparse_backend.utils import namespace_to_dict
+from interfacy.core import ExitCode, InterfacyParserCore
+from interfacy.exceptions import (
     DuplicateCommandError,
     InterfacyError,
     InvalidCommandError,
@@ -20,9 +20,9 @@ from interfacy_cli.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
-from interfacy_cli.flag_generator import BasicFlagGenerator, FlagGenerator
-from interfacy_cli.themes import ParserTheme
-from interfacy_cli.util import AbbrevationGenerator, DefaultAbbrevationGenerator
+from interfacy.flag_generator import BasicFlagGenerator, FlagGenerator
+from interfacy.themes import ParserTheme
+from interfacy.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 
 class Argparser(InterfacyParserCore):

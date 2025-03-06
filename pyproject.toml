@@ -1,7 +1,7 @@
 
 [project]
-name = "interfacy-cli"
-version = "0.2.3"
+name = "interfacy"
+version = "0.3.0"
 description = ""
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE.txt" }
@@ -42,7 +42,7 @@ test = ["pytest"]
 dev = ["black", "pytest", "flake8"]
 
 [project.urls]
-Repository = "https://github.com/zigai/obj-inspect"
+Repository = "https://github.com/zigai/interfacy"
 
 [tool.black]
 line-length = 100
