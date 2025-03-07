@@ -39,7 +39,7 @@ class InterfacyParserCore:
         tab_completion: bool = False,
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
-        disable_sys_exit: bool = False,
+        sys_exit_enabled: bool = True,
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
@@ -55,7 +55,7 @@ class InterfacyParserCore:
         self.enable_tab_completion = tab_completion
         self.display_result = print_result
         self.full_error_traceback = full_error_traceback
-        self.disable_sys_exit = disable_sys_exit
+        self.sys_exit_enabled = sys_exit_enabled
 
         self.abbrevation_gen = abbrevation_gen
         self.flag_strategy = flag_strategy
@@ -81,9 +81,11 @@ class InterfacyParserCore:
         print(message, file=sys.stderr)
 
     def exit(self, code: ExitCode):
-        if self.disable_sys_exit:
-            return
-        sys.exit(code)
+        if self.sys_exit_enabled:
+            sys.exit(code)
+
+    def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
+        raise NotImplementedError
 
     def parser_from_command(self, command: Function | Method | Class, main: bool = False):
         if isinstance(command, (Function, Method)):

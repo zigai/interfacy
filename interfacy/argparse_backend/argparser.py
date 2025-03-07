@@ -41,12 +41,12 @@ class Argparser(InterfacyParserCore):
         tab_completion: bool = False,
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
-        disable_sys_exit: bool = False,
+        sys_exit_enabled: bool = True,
         flag_strategy: FlagGenerator = BasicFlagGenerator(),
         abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
         pipe_target: dict[str, str] | None = None,
-        formatter_class=InterfacyHelpFormatter,
         print_result_func: Callable = print,
+        formatter_class=InterfacyHelpFormatter,
     ) -> None:
         super().__init__(
             description,
@@ -62,7 +62,7 @@ class Argparser(InterfacyParserCore):
             print_result=print_result,
             print_result_func=print_result_func,
             full_error_traceback=full_error_traceback,
-            disable_sys_exit=disable_sys_exit,
+            sys_exit_enabled=sys_exit_enabled,
         )
         self.formatter_class = formatter_class
         self._parser = None
@@ -312,7 +312,7 @@ class Argparser(InterfacyParserCore):
             self.install_tab_completion(parser)
         return parser
 
-    def parse_args(self, args: list[str] | None = None):
+    def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
         args = args if args is not None else self.get_args()
         parser = self.build_parser()
         self._parser = parser

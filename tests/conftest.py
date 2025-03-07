@@ -1,5 +1,11 @@
 import enum
 
+import pytest
+
+from interfacy.argparse_backend import Argparser
+from interfacy.core import BasicFlagGenerator
+from interfacy.flag_generator import BasicFlagGenerator
+
 
 def pow(base: int, exponent: int = 2) -> int:
     """
@@ -71,33 +77,64 @@ class Math:
         return self._round(a - b)
 
 
-def required_bool_arg(value: bool):
-    return value
-
-
-def bool_default_true(value: bool = True):
-    return value
-
-
-def bool_default_false(value: bool = False):
-    return value
-
-
-def func_nargs(values: list[int]):
-    return values
-
-
-def func_nargs_two_positional(strs: list[str], ints: list[int]):
-    print(strs)
-    print(ints)
-    return len(strs), len(ints)
-
-
 class Color(enum.Enum):
     RED = 1
     GREEN = 2
     BLUE = 3
 
 
-def enum_arg(color: Color):
-    return color.name
+def function_enum_arg(color: Color):
+    print(f"Value: {color.value}, Name: {color.name}")
+    return color
+
+
+def function_bool_required(value: bool):
+    print(f"Value: {value}")
+    return value
+
+
+def function_bool_default_true(value: bool = True):
+    print(f"Value: {value}")
+    return value
+
+
+def function_bool_default_false(value: bool = False):
+    print(f"Value: {value}")
+    return value
+
+
+def function_list_int(values: list[int]):
+    print(f"Values: {values}")
+    return values
+
+
+def function_two_lists(strings: list[str], ints: list[int]) -> tuple[int, int]:
+    print(strings, f"({len(strings)})")
+    print(ints, f"({len(ints)})")
+    return len(strings), len(ints)
+
+
+@pytest.fixture
+def parser(request):
+    fixture_name = request.param
+    return request.getfixturevalue(fixture_name)
+
+
+@pytest.fixture
+def argparse_req_pos():
+    return Argparser(
+        flag_strategy=BasicFlagGenerator(style="required_positional"),
+        sys_exit_enabled=False,
+        full_error_traceback=True,
+        theme=None,
+    )
+
+
+@pytest.fixture
+def argparse_kw_only():
+    return Argparser(
+        flag_strategy=BasicFlagGenerator(style="keyword_only"),
+        sys_exit_enabled=False,
+        full_error_traceback=True,
+        theme=None,
+    )
