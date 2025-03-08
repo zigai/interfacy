@@ -4,8 +4,9 @@ from enum import IntEnum, auto
 from typing import Any, Callable
 
 from objinspect import Class, Function, Method
+from objinspect.typing import type_args, type_name, type_origin
 from stdl.fs import read_piped
-from stdl.st import colored
+from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
 from interfacy.exceptions import InvalidCommandError
@@ -72,14 +73,6 @@ class InterfacyParserCore:
     def get_args(self) -> list[str]:
         return sys.argv[1:]
 
-    def log(self, message: str) -> None:
-        print(f"[{self.logger_message_tag}] {message}", file=sys.stdout)
-
-    def log_err(self, message: str) -> None:
-        message = f"[{self.logger_message_tag}] {message}"
-        message = colored(message, color="red")
-        print(message, file=sys.stderr)
-
     def exit(self, code: ExitCode):
         if self.sys_exit_enabled:
             sys.exit(code)
@@ -96,6 +89,37 @@ class InterfacyParserCore:
 
     def _should_skip_method(self, method: Method) -> bool:
         return method.name.startswith("_")
+
+    def log(self, message: str) -> None:
+        print(f"[{self.logger_message_tag}] {message}", file=sys.stdout)
+
+    def log_error(self, message: str) -> None:
+        message = f"[{self.logger_message_tag}] {message}"
+        message = colored(message, color="red")
+        print(message, file=sys.stderr)
+
+    def log_exception(self, e: Exception) -> None:
+        import sys
+        import traceback
+
+        if self.full_error_traceback:
+            print(traceback.format_exc(), file=sys.stderr)
+
+        message = ""
+        tb = e.__traceback__
+
+        exception_str = type_name(str(type(e))) + ": " + str(e)
+        file_info = None
+        if tb:
+            file_info = f"{terminal_link(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}"
+        if file_info:
+            message += file_info
+            message += " "
+
+        message += f"{colored(exception_str,color='red')}"
+        message = f"[{self.logger_message_tag}] {message}"
+        message = colored(message, color="red")
+        print(message, file=sys.stderr)
 
     def add_command(self, command: Callable, name: str | None = None):
         raise NotImplementedError
