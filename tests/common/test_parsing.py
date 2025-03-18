@@ -9,6 +9,7 @@ from tests.conftest import (
     function_bool_required,
     function_enum_arg,
     function_list_int,
+    function_literal_arg,
     function_two_lists,
     pow,
 )
@@ -162,7 +163,18 @@ class TestEnums:
         assert args["color"] == Color.RED
 
 
-class TestLiterals: ...
+class TestLiterals:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_literal_positional(self, parser: InterfacyParserCore):
+        parser.add_command(function_literal_arg)
+        args = parser.parse_args(["RED"])
+        assert args["color"] == "RED"
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    def test_literal_kwarg(self, parser: InterfacyParserCore):
+        parser.add_command(function_literal_arg)
+        args = parser.parse_args(["-c", "RED"])
+        assert args["color"] == "RED"
 
 
 class TestListNargs:

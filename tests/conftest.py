@@ -1,4 +1,5 @@
 import enum
+from typing import Literal
 
 import pytest
 
@@ -83,8 +84,16 @@ class Color(enum.Enum):
     BLUE = 3
 
 
+ColorLiteral = Literal["RED", "GREEN", "BLUE"]
+
+
 def function_enum_arg(color: Color):
     print(f"Value: {color.value}, Name: {color.name}")
+    return color
+
+
+def function_literal_arg(color: ColorLiteral):
+    print(f"Value: {color}")
     return color
 
 

@@ -35,6 +35,7 @@ class ParserTheme:
 
     def _get_param_extra_help(self, param: Parameter) -> str:
         parts: list[str] = []
+        default_added = False
         if param.is_typed and param.type is not bool:
             if choices := get_choices(param.type):
                 param_info = with_style(self.prefix_choices, self.style_extra_data) + ", ".join(
@@ -44,14 +45,20 @@ class ParserTheme:
                     default_text = with_style(
                         self.prefix_default, self.style_extra_data
                     ) + with_style(str(param.default), self.style_default)
-                    param_info += default_text
+                    param_info += ", " + default_text
+                    default_added = True
             else:
                 param_info = with_style(self.prefix_type, self.style_extra_data) + colored_type(
                     param.type, self.style_type
                 )
             parts.append(param_info)
 
-        if param.is_optional and param.default is not None and param.type is not bool:
+        if (
+            param.is_optional
+            and param.default is not None
+            and param.type is not bool
+            and not default_added
+        ):
             parts.append(", ")
             parts.append(
                 with_style(self.prefix_default, self.style_extra_data)
