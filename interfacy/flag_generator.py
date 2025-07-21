@@ -23,8 +23,6 @@ class FlagGenerator(Protocol):
 
 
 class BasicFlagGenerator(FlagGenerator):
-    flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
-
     def __init__(
         self,
         style: FlagsStyle = "required_positional",
@@ -32,9 +30,11 @@ class BasicFlagGenerator(FlagGenerator):
     ) -> None:
         self.style = style
         self.translation_mode = translation_mode
+        self.flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
+        self._nargs_list_count = 0
+
         self.argument_translator = self._get_flag_translator()
         self.command_translator = self._get_flag_translator()
-        self._nargs_list_count = 0
 
     def _get_flag_translator(self) -> TranslationMapper:
         if self.translation_mode not in self.flag_translate_fn:
@@ -55,8 +55,10 @@ class BasicFlagGenerator(FlagGenerator):
         Generate CLI flag names for a given parameter based on its name and already taken flags.
 
         Args:
-            param_name (str): The name of the parameter for which to generate flags.
-            taken_flags (list[str]): A list of flags that are already in use.
+            name (str): The name of the parameter for which to generate flags.
+            param (Parameter): Parameter object containing type and other metadata.
+            taken_flags (list[str]): Flags that are already in use.
+            abbrev_gen (AbbrevationGenerator): AbbrevationGenerator instance.
 
         Returns:
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).

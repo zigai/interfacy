@@ -1,6 +1,7 @@
 import argparse
 import sys
-from typing import Any, Callable, Literal, Sequence, Type
+from collections.abc import Callable, Sequence
+from typing import Any, Literal
 
 from objinspect.typing import type_name
 
@@ -11,11 +12,11 @@ DEBUG = 0
 
 def log(message: str, indent: int = 0):
     if DEBUG:
-        print(f"{' '*indent}{message}")
+        print(f"{' ' * indent}{message}")
 
 
 DEST_KEY = "dest"
-ActionType = Callable[[str], Any] | Type[Any] | str | None
+ActionType = Callable[[str], Any] | type[Any] | str | None
 NargsPattern = Literal["?", "*", "+"]
 
 
@@ -26,7 +27,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         prog: str,
         base_nest_path: list[str],
         nest_separator: str,
-        parser_class: Type["ArgumentParser"] | None = None,
+        parser_class: type["ArgumentParser"] | None = None,
         dest: str = argparse.SUPPRESS,
         required: bool = False,
         help: str | None = None,
@@ -55,7 +56,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         description: str | None = None,
         epilog: str | None = None,
         parents: Sequence[argparse.ArgumentParser] = (),
-        formatter_class: Type[argparse.HelpFormatter] = argparse.HelpFormatter,
+        formatter_class: type[argparse.HelpFormatter] = argparse.HelpFormatter,
         prefix_chars: str = "-",
         fromfile_prefix_chars: str | None = None,
         argument_default: Any = None,
@@ -107,7 +108,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
             conflict_handler=conflict_handler,
             add_help=add_help,
             allow_abbrev=allow_abbrev,
-            nest_path=self.base_nest_path_components + [nest_dir or name],
+            nest_path=[*self.base_nest_path_components, nest_dir or name],
             nest_separator=self.nest_separator,
             exit_on_error=exit_on_error,
             **kwargs,
@@ -121,8 +122,8 @@ class ArgumentParser(argparse.ArgumentParser):
         usage: str | None = None,
         description: str | None = None,
         epilog: str | None = None,
-        parents: list[argparse.ArgumentParser] = [],
-        formatter_class: Type[argparse.HelpFormatter] = InterfacyHelpFormatter,
+        parents: list[argparse.ArgumentParser] | None = None,
+        formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
         prefix_chars: str = "-",
         fromfile_prefix_chars: str | None = None,
         argument_default: Any = None,
@@ -150,9 +151,13 @@ class ArgumentParser(argparse.ArgumentParser):
             conflict_handler (str, optional): String indicating how to handle conflicts.
             add_help (bool, optional): Whether to add a -h/-help option.
             allow_abbrev (bool, optional): Whether to allow long options to be abbreviated unambiguously.
+            nest_dir (str | None, optional): Custom nesting directory name. Defaults to None.
+            nest_separator (str, optional): Separator for nested arguments. Defaults to "__".
+            nest_path (list[str] | None, optional): Path components for nested arguments. Defaults to None.
             exit_on_error (bool, optional): Whether ArgumentParser exits with error info when an error occurs.
         """
-
+        if parents is None:
+            parents = []
         self.nest_path_components = nest_path or ([nest_dir] if nest_dir else [])
         self.nest_dir = self.nest_path_components[-1] if self.nest_path_components else None
         self.nest_separator = nest_separator
@@ -335,13 +340,12 @@ class ArgumentParser(argparse.ArgumentParser):
     def _get_value(self, action, arg_string):
         parse_func = self._registry_get("type", action.type, action.type)
         if not callable(parse_func):
-            msg = _("%r is not callable")
-            raise argparse.ArgumentError(action, msg % parse_func)
+            raise argparse.ArgumentError(action, f"{parse_func!r} is not callable")
         try:
             result = parse_func(arg_string)
 
         except argparse.ArgumentTypeError:
-            name = getattr(action.type, "__name__", repr(action.type))
+            getattr(action.type, "__name__", repr(action.type))
             msg = str(sys.exc_info()[1])
             raise argparse.ArgumentError(action, msg)
 

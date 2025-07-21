@@ -1,11 +1,10 @@
 import argparse
 import sys
-from argparse import ArgumentParser
-from typing import Any, Callable, Type
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 from objinspect import Class, Function, Method, Parameter, inspect
-from objinspect.typing import type_args, type_name, type_origin
-from stdl.st import colored, terminal_link
+from objinspect.typing import type_args, type_origin
 from strto import StrToTypeParser
 
 from interfacy.argparse_backend.argument_parser import ArgumentParser
@@ -21,13 +20,13 @@ from interfacy.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
-from interfacy.flag_generator import BasicFlagGenerator, FlagGenerator
+from interfacy.flag_generator import FlagGenerator
 from interfacy.themes import ParserTheme
-from interfacy.util import AbbrevationGenerator, DefaultAbbrevationGenerator
+from interfacy.util import AbbrevationGenerator
 
 
 class Argparser(InterfacyParserCore):
-    RESERVED_FLAGS = ["h", "help"]
+    RESERVED_FLAGS: ClassVar[list[str]] = ["h", "help"]
     COMMAND_KEY = "command"
 
     def __init__(
@@ -43,8 +42,8 @@ class Argparser(InterfacyParserCore):
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
-        flag_strategy: FlagGenerator = BasicFlagGenerator(),
-        abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
+        flag_strategy: FlagGenerator | None = None,
+        abbrevation_gen: AbbrevationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
         formatter_class=InterfacyHelpFormatter,
@@ -104,9 +103,7 @@ class Argparser(InterfacyParserCore):
         parser: ArgumentParser | None = None,
         taken_flags: list[str] | None = None,
     ) -> ArgumentParser:
-        """
-        Create an ArgumentParser from a Function
-        """
+        """Create an ArgumentParser from a Function"""
         taken_flags = [] if taken_flags is None else taken_flags
         parser = parser or self._new_parser()
         if function.has_docstring:
@@ -121,9 +118,7 @@ class Argparser(InterfacyParserCore):
         taken_flags: list[str],
         parser: ArgumentParser | None = None,
     ) -> ArgumentParser:
-        """
-        Create an ArgumentParser from a Method
-        """
+        """Create an ArgumentParser from a Method"""
         parser = parser or self._new_parser()
 
         is_initialized = hasattr(method.func, "__self__")
@@ -145,9 +140,7 @@ class Argparser(InterfacyParserCore):
         parser: ArgumentParser | None = None,
         subparser=None,
     ) -> ArgumentParser:
-        """
-        Create an ArgumentParser from a Class
-        """
+        """Create an ArgumentParser from a Class"""
         parser = parser or self._new_parser()
 
         if cls.has_docstring:
@@ -228,6 +221,7 @@ class Argparser(InterfacyParserCore):
 
         Args:
             param (Parameter): The parameter for which to construct additional parameters.
+            flags (tuple[str, ...]): The flags to be used for the argument.
 
         Returns:
             dict[str, Any]: A dictionary containing additional parameter settings like "help",
@@ -324,7 +318,7 @@ class Argparser(InterfacyParserCore):
             namespace[command] = namespace[command]
         return namespace
 
-    def run(self, *commands: Callable | Type | object, args: list[str] | None = None) -> Any:
+    def run(self, *commands: Callable | type | object, args: list[str] | None = None) -> Any:
         try:
             for i in commands:
                 self.add_command(i)

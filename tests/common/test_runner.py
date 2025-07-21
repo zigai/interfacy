@@ -67,6 +67,7 @@ class TestMultipleCommands:
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
     def test_from_multiple_math(self, parser: InterfacyParserCore):
+        parser.add_command(pow)
         parser.add_command(Math)
 
         assert parser.run(args=["math", "pow", "2", "-e", "2"]) == 4

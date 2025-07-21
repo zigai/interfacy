@@ -7,7 +7,6 @@ from stdl.st import ansi_len
 
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
-
     def _split_lines(self, text, width):
         # return text.splitlines()
         return [text]
@@ -27,7 +26,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if len(action.option_strings) == 1:
             return action.option_strings[0] + (f" {args_string}" if args_string else "")
 
-        return "{}, {}".format(action.option_strings[0], action.option_strings[1])
+        return f"{action.option_strings[0]}, {action.option_strings[1]}"
 
     def _format_action(self, action):
         action_header = self._format_action_invocation(action)
@@ -79,7 +78,6 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         Making sure that doesn't crash your program if your terminal window isn't wide enough.
         Explained here: https://stackoverflow.com/a/50394665/18588657
         """
-
         if prefix is None:
             prefix = "usage: "
         # if usage is specified, use that
@@ -87,10 +85,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             usage = usage % dict(prog=self._prog)
         # if no optionals or positionals are available, usage is just prog
         elif usage is None and not actions:
-            usage = "%(prog)s" % dict(prog=self._prog)
+            usage = "{prog}".format(**dict(prog=self._prog))
         # if optionals and positionals are available, calculate usage
         elif usage is None:
-            prog = "%(prog)s" % dict(prog=self._prog)
+            prog = "{prog}".format(**dict(prog=self._prog))
             # split optionals from positionals
             optionals = []
             positionals = []
@@ -143,10 +141,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 if len(prefix) + len(prog) <= 0.75 * text_width:
                     indent = " " * (len(prefix) + len(prog) + 1)
                     if opt_parts:
-                        lines = get_lines([prog] + opt_parts, indent, prefix)
+                        lines = get_lines([prog, *opt_parts], indent, prefix)
                         lines.extend(get_lines(pos_parts, indent))
                     elif pos_parts:
-                        lines = get_lines([prog] + pos_parts, indent, prefix)
+                        lines = get_lines([prog, *pos_parts], indent, prefix)
                     else:
                         lines = [prog]
 
@@ -159,7 +157,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                         lines = []
                         lines.extend(get_lines(opt_parts, indent))
                         lines.extend(get_lines(pos_parts, indent))
-                    lines = [prog] + lines
+                    lines = [prog, *lines]
 
                 usage = "\n".join(lines)
 

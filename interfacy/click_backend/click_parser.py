@@ -1,6 +1,6 @@
-from gettext import gettext as _
+from collections.abc import Callable, Sequence
 from os import get_terminal_size
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, ClassVar, Optional
 
 import click
 from click import pass_context
@@ -8,14 +8,9 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy.core import BasicFlagGenerator, FlagGenerator, InterfacyParserCore
+from interfacy.core import FlagGenerator, InterfacyParserCore
 from interfacy.themes import ParserTheme
-from interfacy.util import (
-    AbbrevationGenerator,
-    DefaultAbbrevationGenerator,
-    TranslationMapper,
-    inverted_bool_flag_name,
-)
+from interfacy.util import AbbrevationGenerator, TranslationMapper, inverted_bool_flag_name
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -129,7 +124,7 @@ class UNSET: ...
 
 
 class ClickParser(InterfacyParserCore):
-    RESERVED_FLAGS = ["help"]
+    RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
 
     def __init__(
         self,
@@ -144,8 +139,8 @@ class ClickParser(InterfacyParserCore):
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
-        flag_strategy: FlagGenerator = BasicFlagGenerator(),
-        abbrevation_gen: AbbrevationGenerator = DefaultAbbrevationGenerator(),
+        flag_strategy: FlagGenerator | None = None,
+        abbrevation_gen: AbbrevationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
     ) -> None:
@@ -200,9 +195,7 @@ class ClickParser(InterfacyParserCore):
         return reversed
 
     def _generate_instance_callback(self, cls: Class) -> Callable:
-        """
-        Generates a function that instantiates the class with the given args.
-        """
+        """Generates a function that instantiates the class with the given args."""
 
         def init_callback(*args, **kwargs):
             if cls.is_initialized:
@@ -218,7 +211,6 @@ class ClickParser(InterfacyParserCore):
         fn: Function,
         result_fn: Callable | None = None,
     ) -> Callable:
-
         def callback(*args, **kwargs):
             func = fn.func
             self.args = args
@@ -242,6 +234,7 @@ class ClickParser(InterfacyParserCore):
             return name == self.pipe_target
         if isinstance(self.pipe_target, dict):
             return name in self.pipe_target
+        return False
 
     def _get_param(
         self, param: Parameter, taken_flags: list[str], command_name: str

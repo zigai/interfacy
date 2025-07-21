@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import ClassVar, Literal
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices
@@ -27,7 +27,7 @@ class ParserTheme:
 
     required_indicator_pos: Literal["left", "right"] = "right"
     min_ljust: int = 19
-    command_skips: list[str] = ["__init__"]
+    command_skips: ClassVar[list[str]] = ["__init__"]
     flag_generator: FlagGenerator = None  # type:ignore
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
@@ -74,9 +74,7 @@ class ParserTheme:
         return description
 
     def get_help_for_parameter(self, param: Parameter) -> str:
-        """
-        Returns a parameter helpstring that should be passed as help to argparse.ArgumentParser
-        """
+        """Returns a parameter helpstring that should be passed as help to argparse.ArgumentParser"""
         if param.is_required and not param.is_typed:
             return ""
         parts: list[str] = []
