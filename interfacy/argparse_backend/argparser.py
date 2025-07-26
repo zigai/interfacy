@@ -1,5 +1,6 @@
 import argparse
 import sys
+from argparse import Namespace
 from collections.abc import Callable
 from typing import Any, ClassVar
 
@@ -7,22 +8,31 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import type_args, type_origin
 from strto import StrToTypeParser
 
+from interfacy.abbervations import AbbrevationGenerator
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
-from interfacy.argparse_backend.utils import namespace_to_dict
 from interfacy.core import ExitCode, InterfacyParserCore
 from interfacy.exceptions import (
+    ConfigurationError,
     DuplicateCommandError,
     InterfacyError,
     InvalidCommandError,
-    InvalidConfigurationError,
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
 from interfacy.flag_generator import FlagGenerator
 from interfacy.themes import ParserTheme
-from interfacy.util import AbbrevationGenerator
+
+
+def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
+    result = {}
+    for key, value in vars(namespace).items():
+        if isinstance(value, Namespace):
+            result[key] = namespace_to_dict(value)
+        else:
+            result[key] = value
+    return result
 
 
 class Argparser(InterfacyParserCore):
@@ -291,7 +301,7 @@ class Argparser(InterfacyParserCore):
 
     def build_parser(self):
         if not self.commands:
-            raise InvalidConfigurationError("No commands were provided")
+            raise ConfigurationError("No commands were provided")
 
         commands_list = self._commands_list()
         if len(commands_list) == 1:
@@ -329,7 +339,7 @@ class Argparser(InterfacyParserCore):
             UnsupportedParameterTypeError,
             ReservedFlagError,
             InvalidCommandError,
-            InvalidConfigurationError,
+            ConfigurationError,
         ) as e:
             self.log_exception(e)
             self.exit(ExitCode.ERR_PARSING)

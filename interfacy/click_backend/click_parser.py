@@ -8,9 +8,11 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
+from interfacy.abbervations import AbbrevationGenerator
 from interfacy.core import FlagGenerator, InterfacyParserCore
 from interfacy.themes import ParserTheme
-from interfacy.util import AbbrevationGenerator, TranslationMapper, inverted_bool_flag_name
+from interfacy.translations import MappingCache
+from interfacy.util import inverted_bool_flag_name
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -160,7 +162,7 @@ class ClickParser(InterfacyParserCore):
         self.main_parser = click.Group(name="main")
         self.args = UNSET
         self.kwargs = UNSET
-        self.bool_flag_translator = TranslationMapper(inverted_bool_flag_name)
+        self.bool_flag_translator = MappingCache(inverted_bool_flag_name)
 
     def _handle_piped_input(self, command: str, params: dict[str, Any]) -> dict[str, Any]:
         piped = read_piped()

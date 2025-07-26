@@ -26,6 +26,6 @@ class DuplicateCommandError(InterfacyError):
         super().__init__(f"Duplicate command '{command}'")
 
 
-class InvalidConfigurationError(InterfacyError):
+class ConfigurationError(InterfacyError):
     def __init__(self, message: str) -> None:
         super().__init__(message)

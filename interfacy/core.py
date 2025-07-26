@@ -10,10 +10,10 @@ from stdl.fs import read_piped
 from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
+from interfacy.abbervations import AbbrevationGenerator, DefaultAbbrevationGenerator
 from interfacy.exceptions import InvalidCommandError
 from interfacy.flag_generator import BasicFlagGenerator, FlagGenerator
 from interfacy.themes import ParserTheme
-from interfacy.util import AbbrevationGenerator, DefaultAbbrevationGenerator
 
 
 class ExitCode(IntEnum):

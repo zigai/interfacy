@@ -4,8 +4,8 @@ from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 
-from interfacy.exceptions import InvalidCommandError, InvalidConfigurationError
-from interfacy.util import revese_arg_translations
+from interfacy.exceptions import ConfigurationError, InvalidCommandError
+from interfacy.translations import revese_translations
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
@@ -29,7 +29,7 @@ class ArgparseRunner:
 
     def run(self):
         if len(self.commands) == 0:
-            raise InvalidConfigurationError("No commands were provided")
+            raise ConfigurationError("No commands were provided")
         if len(self.commands) == 1:
             command = list(self.commands.values())[0]
             return self.run_command(command, self.namespace)
@@ -51,7 +51,7 @@ class ArgparseRunner:
         return func.call(*func_args, **func_kwargs)
 
     def run_method(self, method: Method, args: dict) -> Any:
-        cli_args = revese_arg_translations(args, self.builder.flag_strategy.argument_translator)
+        cli_args = revese_translations(args, self.builder.flag_strategy.argument_translator)
         instance = method.class_instance
         if instance:
             method_args, method_kwargs = split_args_kwargs(cli_args, method)

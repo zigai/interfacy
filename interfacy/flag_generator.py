@@ -3,14 +3,16 @@ from typing import Literal, Protocol
 from objinspect import Parameter
 from stdl.st import kebab_case, snake_case
 
-from interfacy.util import AbbrevationGenerator, TranslationMapper, is_list_or_list_alias
+from interfacy.abbervations import AbbrevationGenerator
+from interfacy.translations import MappingCache
+from interfacy.util import is_list_or_list_alias
 
 FlagsStyle = Literal["keyword_only", "required_positional"]
 
 
 class FlagGenerator(Protocol):
-    argument_translator: TranslationMapper
-    command_translator: TranslationMapper
+    argument_translator: MappingCache
+    command_translator: MappingCache
     style: FlagsStyle
 
     def get_arg_flags(
@@ -36,13 +38,13 @@ class BasicFlagGenerator(FlagGenerator):
         self.argument_translator = self._get_flag_translator()
         self.command_translator = self._get_flag_translator()
 
-    def _get_flag_translator(self) -> TranslationMapper:
+    def _get_flag_translator(self) -> MappingCache:
         if self.translation_mode not in self.flag_translate_fn:
             raise ValueError(
                 f"Invalid flag translation mode: {self.translation_mode}. "
                 f"Valid modes are: {', '.join(self.flag_translate_fn.keys())}"
             )
-        return TranslationMapper(self.flag_translate_fn[self.translation_mode])
+        return MappingCache(self.flag_translate_fn[self.translation_mode])
 
     def get_arg_flags(
         self,
