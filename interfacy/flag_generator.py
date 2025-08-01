@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Literal, Protocol
 
 from objinspect import Parameter
@@ -8,12 +9,29 @@ from interfacy.translations import MappingCache
 from interfacy.util import is_list_or_list_alias
 
 FlagsStyle = Literal["keyword_only", "required_positional"]
+TranslationMode = Literal["none", "kebab", "snake"]
+
+NAME_TRANSLATORS: dict[TranslationMode, Callable[[str], str]] = {
+    "none": lambda s: s,
+    "kebab": kebab_case,
+    "snake": snake_case,
+}
+
+
+def get_translator(mode: TranslationMode) -> MappingCache:
+    if mode not in NAME_TRANSLATORS:
+        raise ValueError(
+            f"Invalid flag translation mode: {mode}. "
+            f"Valid modes are: {', '.join(NAME_TRANSLATORS.keys())}"
+        )
+    return MappingCache(NAME_TRANSLATORS[mode])
 
 
 class FlagGenerator(Protocol):
     argument_translator: MappingCache
     command_translator: MappingCache
     style: FlagsStyle
+    translation_mode: TranslationMode
 
     def get_arg_flags(
         self,
@@ -28,23 +46,14 @@ class BasicFlagGenerator(FlagGenerator):
     def __init__(
         self,
         style: FlagsStyle = "required_positional",
-        translation_mode: Literal["none", "kebab", "snake"] = "kebab",
+        translation_mode: TranslationMode = "kebab",
     ) -> None:
         self.style = style
         self.translation_mode = translation_mode
-        self.flag_translate_fn = {"none": lambda s: s, "kebab": kebab_case, "snake": snake_case}
         self._nargs_list_count = 0
 
-        self.argument_translator = self._get_flag_translator()
-        self.command_translator = self._get_flag_translator()
-
-    def _get_flag_translator(self) -> MappingCache:
-        if self.translation_mode not in self.flag_translate_fn:
-            raise ValueError(
-                f"Invalid flag translation mode: {self.translation_mode}. "
-                f"Valid modes are: {', '.join(self.flag_translate_fn.keys())}"
-            )
-        return MappingCache(self.flag_translate_fn[self.translation_mode])
+        self.argument_translator = get_translator(self.translation_mode)
+        self.command_translator = get_translator(self.translation_mode)
 
     def get_arg_flags(
         self,

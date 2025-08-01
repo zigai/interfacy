@@ -4,16 +4,19 @@ from collections.abc import Callable
 from enum import IntEnum, auto
 from typing import Any, ClassVar
 
-from objinspect import Class, Function, Method
+from objinspect import Class, Function, Method, inspect
 from objinspect.typing import type_name
-from stdl.fs import read_piped
 from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
 from interfacy.abbervations import AbbrevationGenerator, DefaultAbbrevationGenerator
-from interfacy.exceptions import InvalidCommandError
-from interfacy.flag_generator import BasicFlagGenerator, FlagGenerator
+from interfacy.command import Command
+from interfacy.exceptions import DuplicateCommandError, InvalidCommandError
+from interfacy.flag_generator import BasicFlagGenerator, FlagGenerator, get_translator
+from interfacy.logger import get_logger
 from interfacy.themes import ParserTheme
+
+logger = get_logger(__name__)
 
 
 class ExitCode(IntEnum):
@@ -24,7 +27,7 @@ class ExitCode(IntEnum):
     ERR_RUNTIME_INTERNAL = auto()
 
 
-class InterfacyParserCore:
+class InterfacyParser:
     RESERVED_FLAGS: ClassVar[list[str]] = []
     logger_message_tag: str = "interfacy"
 
@@ -46,13 +49,13 @@ class InterfacyParserCore:
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
     ) -> None:
-        self.autorun = run
         self.description = description
         self.epilog = epilog
         self.method_skips: list[str] = ["__init__", "__repr__", "repr"]
         self.pipe_target = pipe_target
         self.result_display_fn = print_result_func
 
+        self.autorun = run
         self.allow_args_from_file = allow_args_from_file
         self.full_error_traceback = full_error_traceback
         self.enable_tab_completion = tab_completion
@@ -64,20 +67,40 @@ class InterfacyParserCore:
         self.flag_strategy = flag_strategy or BasicFlagGenerator()
         self.theme = theme or ParserTheme()
         self.theme.flag_generator = self.flag_strategy
+        self.outer_command_translator = get_translator(mode=self.flag_strategy.translation_mode)
 
-        self.commands: dict[str, Function | Class | Method] = {}
+        self.commands: dict[str, Command] = {}
 
-        if self.pipe_target:
-            self.piped = read_piped()
-        else:
-            self.piped = None
+    def add_command(
+        self,
+        command: Callable | Any,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> Command:
+        obj = inspect(command, inherited=False)
+
+        if name is not None:
+            self.outer_command_translator.ignore(name)
+        name = name or self.outer_command_translator.translate(obj.name)
+        if name in self.commands:
+            raise DuplicateCommandError(name)
+
+        cmd = Command(obj=obj, name=name, description=description)
+        self.commands[name] = cmd
+        logger.debug(f"Added command: {cmd}")
+        return cmd
+
+    def get_commands(self) -> list[Command]:
+        return list(self.commands.values())
 
     def get_args(self) -> list[str]:
         return sys.argv[1:]
 
-    def exit(self, code: ExitCode):
+    def exit(self, code: ExitCode) -> ExitCode:
+        logger.info(f"Exit code: {code}")
         if self.sys_exit_enabled:
             sys.exit(code)
+        return code
 
     def parser_from_command(self, command: Function | Method | Class, main: bool = False):
         if isinstance(command, (Function, Method)):
@@ -90,9 +113,6 @@ class InterfacyParserCore:
         return method.name.startswith("_")
 
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
-        raise NotImplementedError
-
-    def add_command(self, command: Callable, name: str | None = None):
         raise NotImplementedError
 
     def run(self, *commands: Callable, args: list[str] | None = None) -> Any:
@@ -140,4 +160,4 @@ class InterfacyParserCore:
         print(message, file=sys.stderr)
 
 
-__all__ = ["InterfacyParserCore", "ExitCode"]
+__all__ = ["InterfacyParser", "ExitCode"]

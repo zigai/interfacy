@@ -22,7 +22,7 @@ class MappingCache:
         self.ignored_names: set[str] = ignored if ignored is not None else set()
         self.translations: dict[str, str] = {}
 
-    def add_ignored(self, name: str):
+    def ignore(self, name: str) -> None:
         self.ignored_names.add(name)
 
     def translate(self, key: str) -> str:

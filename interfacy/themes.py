@@ -5,6 +5,7 @@ from objinspect.typing import get_choices
 from objinspect.util import colored_type
 from stdl.st import TextStyle, colored, with_style
 
+from interfacy.command import Command
 from interfacy.flag_generator import FlagGenerator
 
 
@@ -116,11 +117,11 @@ class ParserTheme:
             lines.append(self.get_command_description(method, ljust))
         return "\n".join(lines)
 
-    def get_help_for_multiple_commands(self, commands: dict[str, Class | Function | Method]) -> str:
+    def get_help_for_multiple_commands(self, commands: dict[str, Command]) -> str:
         ljust = self._get_ljust(commands.values())  # type: ignore
         lines = [self.commands_title]
         for name, command in commands.items():
-            lines.append(self.get_command_description(command, ljust, name))
+            lines.append(self.get_command_description(command.obj, ljust, name))
         return "\n".join(lines)
 
 

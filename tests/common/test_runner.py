@@ -1,6 +1,6 @@
 import pytest
 
-from interfacy.core import InterfacyParserCore
+from interfacy.core import InterfacyParser
 from tests.conftest import (
     Color,
     Math,
@@ -16,41 +16,41 @@ from tests.conftest import (
 
 class TestPowFunctionParsing:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_default_exponent(self, parser: InterfacyParserCore):
+    def test_default_exponent(self, parser: InterfacyParser):
         parser.add_command(pow)
         assert parser.run(args=["2"]) == 4
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_positional(self, parser: InterfacyParserCore):
+    def test_positional(self, parser: InterfacyParser):
         parser.add_command(pow)
         assert parser.run(args=["2", "-e", "4"]) == 16
 
     @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
-    def test_kw_only_abbrev(self, parser: InterfacyParserCore):
+    def test_kw_only_abbrev(self, parser: InterfacyParser):
         parser.add_command(pow)
         assert parser.run(args=["-b", "2", "-e", "4"]) == 16
 
     @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
-    def test_kw_only_no_abbrev(self, parser: InterfacyParserCore):
+    def test_kw_only_no_abbrev(self, parser: InterfacyParser):
         parser.add_command(pow)
         assert parser.run(args=["-base", "2", "-exponent", "4"]) == 16
 
 
 class TestMathClassParsing:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_from_class(self, parser: InterfacyParserCore):
+    def test_from_class(self, parser: InterfacyParser):
         parser.add_command(Math)
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_from_instance(self, parser: InterfacyParserCore):
+    def test_from_instance(self, parser: InterfacyParser):
         math = Math(rounding=2)
         parser.add_command(math)  # type: ignore
 
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_from_instance_method(self, parser: InterfacyParserCore):
+    def test_from_instance_method(self, parser: InterfacyParser):
         math = Math(rounding=2)
         parser.add_command(math.pow)
 
@@ -59,14 +59,14 @@ class TestMathClassParsing:
 
 class TestMultipleCommands:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_from_multiple_pow(self, parser: InterfacyParserCore):
+    def test_from_multiple_pow(self, parser: InterfacyParser):
         parser.add_command(pow)
         parser.add_command(Math)
 
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_from_multiple_math(self, parser: InterfacyParserCore):
+    def test_from_multiple_math(self, parser: InterfacyParser):
         parser.add_command(pow)
         parser.add_command(Math)
 
@@ -75,13 +75,13 @@ class TestMultipleCommands:
 
 class TestBooleanFlags:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_bool_required(self, parser: InterfacyParserCore):
+    def test_bool_required(self, parser: InterfacyParser):
         parser.add_command(function_bool_required)
         assert parser.run(args=["--value"]) == True
         assert parser.run(args=["--no-value"]) == False
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_bool_default_true(self, parser: InterfacyParserCore):
+    def test_bool_default_true(self, parser: InterfacyParser):
         parser.add_command(function_bool_default_true)
 
         assert parser.run(args=[]) == True
@@ -89,7 +89,7 @@ class TestBooleanFlags:
         assert parser.run(args=["--no-value"]) == False
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_bool_false_by_default(self, parser: InterfacyParserCore):
+    def test_bool_false_by_default(self, parser: InterfacyParser):
         parser.add_command(function_bool_default_false)
 
         assert parser.run(args=[]) == False
@@ -99,12 +99,12 @@ class TestBooleanFlags:
 
 class TestEnums:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_enum_positional(self, parser: InterfacyParserCore):
+    def test_enum_positional(self, parser: InterfacyParser):
         parser.add_command(function_enum_arg)
         assert parser.run(args=["RED"]) == Color.RED
 
     @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
-    def test_enum_kwarg(self, parser: InterfacyParserCore):
+    def test_enum_kwarg(self, parser: InterfacyParser):
         parser.add_command(function_enum_arg)
         assert parser.run(args=["-c", "RED"]) == Color.RED
 
@@ -114,19 +114,19 @@ class TestLiterals: ...
 
 class TestListNargs:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_list_nargs(self, parser: InterfacyParserCore):
+    def test_list_nargs(self, parser: InterfacyParser):
         parser.add_command(function_list_int)
         assert parser.run(args=["1", "2", "3"]) == [1, 2, 3]
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_list_two_positional(self, parser: InterfacyParserCore):
+    def test_list_two_positional(self, parser: InterfacyParser):
         parser.add_command(function_two_lists)
         assert parser.run(args=["a", "b", "--ints", "1", "2"]) == (2, 2)
 
 
 class TestCustomCommandNames:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_custom_command_names(self, parser: InterfacyParserCore):
+    def test_custom_command_names(self, parser: InterfacyParser):
         parser.add_command(Math, name="CMD_A")
         parser.add_command(pow, name="CMD_B")
         with pytest.raises(SystemExit):

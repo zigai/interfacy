@@ -4,51 +4,56 @@ from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 
+from interfacy.core import Command
 from interfacy.exceptions import ConfigurationError, InvalidCommandError
+from interfacy.logger import get_logger
 from interfacy.translations import revese_translations
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
 
+logger = get_logger(__name__)
+
 
 class ArgparseRunner:
     def __init__(
         self,
-        commands: dict[str, Function | Class | Method],
         namespace: dict,
         builder: "Argparser",
         args: list[str],
         parser,
     ) -> None:
         self._parser = parser
-        self.commands = commands
         self.namespace = namespace
         self.args = args
         self.builder = builder
         self.COMMAND_KEY = self.builder.COMMAND_KEY
 
     def run(self):
-        if len(self.commands) == 0:
+        commands = self.builder.commands
+        if len(commands) == 0:
             raise ConfigurationError("No commands were provided")
-        if len(self.commands) == 1:
-            command = list(self.commands.values())[0]
-            return self.run_command(command, self.namespace)
-        return self.run_multiple(self.commands)
+        if len(commands) == 1:
+            return self.run_command(self.builder.get_commands()[0], self.namespace)
+        return self.run_multiple(commands)
 
-    def run_command(self, command: Function | Method | Class, args: dict[str, Any]) -> Any:
+    def run_command(self, command: Command, args: dict[str, Any]) -> Any:
         handlers = {
             Function: self.run_function,
             Method: self.run_method,
             Class: self.run_class,
         }
-        t = type(command)
+        t = type(command.obj)
         if t not in handlers:
-            raise InvalidCommandError(command)
-        return handlers[t](command, args)
+            raise InvalidCommandError(command.obj)
+        return handlers[t](command.obj, args)
 
     def run_function(self, func: Function | Method, args: dict) -> Any:
         func_args, func_kwargs = split_args_kwargs(args, func)
-        return func.call(*func_args, **func_kwargs)
+        logger.info(f"Calling function {func.name} with args: {func_args}, kwargs: {func_kwargs}")
+        result = func.call(*func_args, **func_kwargs)
+        logger.info(f"Result: {result}")
+        return result
 
     def run_method(self, method: Method, args: dict) -> Any:
         cli_args = revese_translations(args, self.builder.flag_strategy.argument_translator)
@@ -79,7 +84,7 @@ class ArgparseRunner:
         method_args, method_kwargs = split_args_kwargs(command_args, cls.get_method(command_name))
         return cls.call_method(command_name, *method_args, **method_kwargs)
 
-    def run_multiple(self, commands: dict[str, Function | Class | Method]) -> Any:
+    def run_multiple(self, commands: dict[str, Command]) -> Any:
         command_name = self.namespace[self.COMMAND_KEY]
         command = commands[command_name]
         args = self.namespace[command_name]

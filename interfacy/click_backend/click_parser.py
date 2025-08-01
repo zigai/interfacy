@@ -9,7 +9,7 @@ from stdl.fs import read_piped
 from strto import StrToTypeParser
 
 from interfacy.abbervations import AbbrevationGenerator
-from interfacy.core import FlagGenerator, InterfacyParserCore
+from interfacy.core import FlagGenerator, InterfacyParser
 from interfacy.themes import ParserTheme
 from interfacy.translations import MappingCache
 from interfacy.util import inverted_bool_flag_name
@@ -125,7 +125,7 @@ class ClickCommand(click.Command):
 class UNSET: ...
 
 
-class ClickParser(InterfacyParserCore):
+class ClickParser(InterfacyParser):
     RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
 
     def __init__(
