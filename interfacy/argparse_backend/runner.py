@@ -50,7 +50,7 @@ class ArgparseRunner:
 
     def run_function(self, func: Function | Method, args: dict) -> Any:
         func_args, func_kwargs = split_args_kwargs(args, func)
-        logger.info(f"Calling function {func.name} with args: {func_args}, kwargs: {func_kwargs}")
+        logger.info(f"Calling function '{func.name}' with args: {func_args}, kwargs: {func_kwargs}")
         result = func.call(*func_args, **func_kwargs)
         logger.info(f"Result: {result}")
         return result
@@ -65,10 +65,16 @@ class ArgparseRunner:
         instance = Class(method.cls)
         args_init, args_method = split_init_args(cli_args, instance, method)
         if not instance.init_method:
-            raise ValueError("No __init__ method found for class")
+            raise ValueError(f"No __init__ method found for class '{instance.name}'")
+
         init_args, init_kwargs = split_args_kwargs(args_init, instance.init_method)
+        logger.info(f"__init__ method args: {init_args}, kwargs: {init_kwargs}")
         instance.init(*init_args, **init_kwargs)
+
         method_args, method_kwargs = split_args_kwargs(args_method, method)
+        logger.info(
+            f"Calling method '{method.name}' with args: {method_args}, kwargs: {method_kwargs}"
+        )
         return instance.call_method(method.name, *method_args, **method_kwargs)
 
     def run_class(self, cls: Class, args: dict) -> Any:
@@ -76,12 +82,17 @@ class ArgparseRunner:
         command_args = args[command_name]
         del args[self.COMMAND_KEY]
         del args[command_name]
+        logger.info(f"Namespace: {command_args}")
 
         if cls.init_method and not cls.is_initialized:
             init_args, init_kwargs = split_args_kwargs(args, cls.init_method)
+            logger.info(f"__init__ method args: {init_args}, kwargs: {init_kwargs}")
             cls.init(*init_args, **init_kwargs)
 
         method_args, method_kwargs = split_args_kwargs(command_args, cls.get_method(command_name))
+        logger.info(
+            f"Calling method '{command_name}' with args: {method_args}, kwargs: {method_kwargs}"
+        )
         return cls.call_method(command_name, *method_args, **method_kwargs)
 
     def run_multiple(self, commands: dict[str, Command]) -> Any:

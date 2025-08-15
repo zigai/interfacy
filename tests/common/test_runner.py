@@ -127,9 +127,24 @@ class TestListNargs:
 class TestCustomCommandNames:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
     def test_custom_command_names(self, parser: InterfacyParser):
-        parser.add_command(Math, name="CMD_A")
-        parser.add_command(pow, name="CMD_B")
-        with pytest.raises(SystemExit):
-            parser.run(args=["pow", "2", "-e", "2"])
+        parser.add_command(Math, name="command1")
+        parser.add_command(pow, name="command2")
+        assert parser.run(args=["command2", "2", "-e", "2"]) == 4
 
-        assert parser.run(args=["CMD_B", "2", "-e", "2"]) == 4
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_custom_command_names_with_hyphen(self, parser: InterfacyParser):
+        parser.add_command(Math, name="command-1")
+        parser.add_command(pow, name="command-2")
+        assert parser.run(args=["command-2", "2", "-e", "2"]) == 4
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_custom_command_names_uppercase(self, parser: InterfacyParser):
+        parser.add_command(Math, name="COMMAND1")
+        parser.add_command(pow, name="COMMAND2")
+        assert parser.run(args=["COMMAND2", "2", "-e", "2"]) == 4
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_custom_command_names_with_underscore(self, parser: InterfacyParser):
+        parser.add_command(Math, name="command_1")
+        parser.add_command(pow, name="command_2")
+        assert parser.run(args=["command_2", "2", "-e", "2"]) == 4

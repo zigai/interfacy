@@ -136,6 +136,7 @@ def argparse_req_pos():
         sys_exit_enabled=False,
         full_error_traceback=True,
         theme=None,
+        print_result=True,
     )
 
 
@@ -146,4 +147,5 @@ def argparse_kw_only():
         sys_exit_enabled=False,
         full_error_traceback=True,
         theme=None,
+        print_result=True,
     )

@@ -245,10 +245,10 @@ class Argparser(InterfacyParser):
         if self.theme.clear_metavar:
             if not param.is_required:
                 extra["metavar"] = "\b"
-        logger.debug(self.flag_strategy.style)
+
         if self.flag_strategy.style == "required_positional":
             is_positional = all([not i.startswith("-") for i in flags])
-            logger.debug(f"Flags: {flags}, pos={is_positional}")
+            logger.debug(f"Flags: {flags}, positional={is_positional}")
             if not is_positional:
                 extra["required"] = param.is_required
 
@@ -286,7 +286,7 @@ class Argparser(InterfacyParser):
 
         argcomplete.autocomplete(parser)
 
-    def build_parser(self):
+    def build_parser(self) -> ArgumentParser:
         if not self.commands:
             raise ConfigurationError("No commands were provided")
 

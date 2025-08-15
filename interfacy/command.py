@@ -9,4 +9,3 @@ class Command:
     name: str | None = None
     description: str | None = None
     pipe_target: dict[str, str] | str | None = None
-    pipe_target: dict[str, str] | str | None = None
