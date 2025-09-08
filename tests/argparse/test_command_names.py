@@ -35,7 +35,7 @@ def build_parser_with_custom_name(custom_name: str) -> tuple[Argparser, argparse
 
 
 class TestCustomCommandNames:
-    @pytest.mark.parametrize("custom_name", ["CustomCommand", "My__Weird__Name"])
+    @pytest.mark.parametrize("custom_name", ["CustomCommand", "_Custom__Command__NAME"])
     def test_subparsers_use_custom_name_verbatim(self, custom_name: str):
         _, parser = build_parser_with_custom_name(custom_name)
         names = get_subparser_names(parser)
