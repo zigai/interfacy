@@ -81,6 +81,8 @@ class InterfacyParser:
 
         if name is not None:
             self.outer_command_translator.ignore(name)
+            self.flag_strategy.command_translator.ignore(name)
+
         name = name or self.outer_command_translator.translate(obj.name)
         if name in self.commands:
             raise DuplicateCommandError(name)
