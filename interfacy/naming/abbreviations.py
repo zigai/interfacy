@@ -1,14 +1,14 @@
 from abc import abstractmethod
 
 
-class AbbrevationGenerator:
+class AbbreviationGenerator:
     @abstractmethod
     def generate(self, value: str, taken: list[str]) -> str | None: ...
 
 
-class DefaultAbbrevationGenerator(AbbrevationGenerator):
+class DefaultAbbreviationGenerator(AbbreviationGenerator):
     """
-    Simple abbrevation generator that tries to return a short name for a command.
+    Simple abbreviation generator that tries to return a short name for a command.
     Returns None if it cannot find a short name.
 
     Args:
@@ -16,13 +16,13 @@ class DefaultAbbrevationGenerator(AbbrevationGenerator):
         min_len (int, optional): Minimum length of the value to abbreviate. If the value is shorter than this, None will be returned.
 
     Example:
-        >>> AbbrevationGenerator(taken=[]).generate("hello_word")
+        >>> AbbreviationGenerator(taken=[]).generate("hello_word")
         "h"
-        >>> AbbrevationGenerator(taken=["h"]).generate("hello_word")
+        >>> AbbreviationGenerator(taken=["h"]).generate("hello_word")
         "hw"
-        >>> AbbrevationGenerator(taken=["hw", "h"]).generate("hello_word")
+        >>> AbbreviationGenerator(taken=["hw", "h"]).generate("hello_word")
         "he"
-        >>> AbbrevationGenerator(taken=["hw", "h", "he"]).generate("hello_word")
+        >>> AbbreviationGenerator(taken=["hw", "h", "he"]).generate("hello_word")
         None
 
     """
@@ -32,7 +32,7 @@ class DefaultAbbrevationGenerator(AbbrevationGenerator):
 
     def generate(self, value: str, taken: list[str]) -> str | None:
         if value in taken:
-            raise ValueError(f"'{value}' is already an abbervation")
+            raise ValueError(f"'{value}' is already an abbreviation")
 
         name_split = value.split("_")
         abbrev = name_split[0][0]
@@ -55,13 +55,13 @@ class DefaultAbbrevationGenerator(AbbrevationGenerator):
             return None
 
 
-class NoAbbrevations(AbbrevationGenerator):
+class NoAbbreviations(AbbreviationGenerator):
     def generate(self, value: str, taken: list[str]) -> str | None:
         return None
 
 
 __all__ = [
-    "AbbrevationGenerator",
-    "DefaultAbbrevationGenerator",
-    "NoAbbrevations",
+    "AbbreviationGenerator",
+    "DefaultAbbreviationGenerator",
+    "NoAbbreviations",
 ]

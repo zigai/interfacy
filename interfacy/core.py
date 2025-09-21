@@ -13,9 +13,9 @@ from interfacy.command import Command
 from interfacy.exceptions import DuplicateCommandError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import (
-    AbbrevationGenerator,
+    AbbreviationGenerator,
     CommandNameRegistry,
-    DefaultAbbrevationGenerator,
+    DefaultAbbreviationGenerator,
     DefaultFlagStrategy,
     FlagStrategy,
 )
@@ -50,7 +50,7 @@ class InterfacyParser:
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
-        abbrevation_gen: AbbrevationGenerator | None = None,
+        abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
     ) -> None:
@@ -67,7 +67,7 @@ class InterfacyParser:
         self.sys_exit_enabled = sys_exit_enabled
         self.display_result = print_result
 
-        self.abbrevation_gen = abbrevation_gen or DefaultAbbrevationGenerator()
+        self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator()
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
         self.flag_strategy = flag_strategy or DefaultFlagStrategy()
         self.theme = theme or ParserTheme()

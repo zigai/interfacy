@@ -4,7 +4,7 @@ from typing import Literal, Protocol
 from objinspect import Parameter
 from stdl.st import kebab_case, snake_case
 
-from interfacy.naming.abbervations import AbbrevationGenerator
+from interfacy.naming.abbreviations import AbbreviationGenerator
 from interfacy.naming.name_mapping import NameMapping
 from interfacy.util import is_list_or_list_alias
 
@@ -38,7 +38,7 @@ class FlagStrategy(Protocol):
         name: str,
         param: Parameter,
         taken_flags: list[str],
-        abbrev_gen: AbbrevationGenerator,
+        abbrev_gen: AbbreviationGenerator,
     ) -> tuple[str, ...]: ...
 
 
@@ -60,7 +60,7 @@ class DefaultFlagStrategy(FlagStrategy):
         name: str,
         param: Parameter,
         taken_flags: list[str],
-        abbrev_gen: AbbrevationGenerator,
+        abbrev_gen: AbbreviationGenerator,
     ) -> tuple[str, ...]:
         """
         Generate CLI flag names for a given parameter based on its name and already taken flags.
@@ -69,7 +69,7 @@ class DefaultFlagStrategy(FlagStrategy):
             name (str): The name of the parameter for which to generate flags.
             param (Parameter): Parameter object containing type and other metadata.
             taken_flags (list[str]): Flags that are already in use.
-            abbrev_gen (AbbrevationGenerator): AbbrevationGenerator instance.
+            abbrev_gen (AbbreviationGenerator): AbbreviationGenerator instance.
 
         Returns:
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).

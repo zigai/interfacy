@@ -8,9 +8,8 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy.abbervations import AbbrevationGenerator
 from interfacy.core import InterfacyParser
-from interfacy.naming import FlagStrategy, NameMapping
+from interfacy.naming import AbbreviationGenerator, FlagStrategy, NameMapping
 from interfacy.themes import ParserTheme
 from interfacy.util import inverted_bool_flag_name
 
@@ -142,7 +141,7 @@ class ClickParser(InterfacyParser):
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
-        abbrevation_gen: AbbrevationGenerator | None = None,
+        abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
     ) -> None:
@@ -157,7 +156,7 @@ class ClickParser(InterfacyParser):
             print_result_func=print_result_func,
             flag_strategy=flag_strategy,
             tab_completion=tab_completion,
-            abbrevation_gen=abbrevation_gen,
+            abbreviation_gen=abbreviation_gen,
         )
         self.main_parser = click.Group(name="main")
         self.args = UNSET
@@ -268,14 +267,14 @@ class ClickParser(InterfacyParser):
                     extras["default"] = False
                 else:
                     flags = self.flag_strategy.get_arg_flags(
-                        name, param, taken_flags, self.abbrevation_gen
+                        name, param, taken_flags, self.abbreviation_gen
                     )
                     extras["is_flag"] = True
                     extras["flag_value"] = False
                     extras["default"] = True
             else:
                 flags = self.flag_strategy.get_arg_flags(
-                    name, param, taken_flags, self.abbrevation_gen
+                    name, param, taken_flags, self.abbreviation_gen
                 )
                 if not param.is_required:
                     extras["default"] = param.default

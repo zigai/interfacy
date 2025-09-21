@@ -21,7 +21,7 @@ from interfacy.exceptions import (
     UnsupportedParameterTypeError,
 )
 from interfacy.logger import get_logger
-from interfacy.naming import AbbrevationGenerator, FlagStrategy
+from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.themes import ParserTheme
 
 logger = get_logger(__name__)
@@ -45,7 +45,7 @@ class Argparser(InterfacyParser):
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
-        abbrevation_gen: AbbrevationGenerator | None = None,
+        abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
         formatter_class=InterfacyHelpFormatter,
@@ -58,7 +58,7 @@ class Argparser(InterfacyParser):
             run=run,
             allow_args_from_file=allow_args_from_file,
             flag_strategy=flag_strategy,
-            abbrevation_gen=abbrevation_gen,
+            abbreviation_gen=abbreviation_gen,
             pipe_target=pipe_target,
             tab_completion=tab_completion,
             print_result=print_result,
@@ -82,7 +82,7 @@ class Argparser(InterfacyParser):
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
         name = self.flag_strategy.argument_translator.translate(param.name)
-        flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbrevation_gen)
+        flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbreviation_gen)
         extra_args = self._extra_add_arg_params(param, flags)
         logger.info(f"Flags: {flags}, Extra args: {extra_args}")
         return parser.add_argument(*flags, **extra_args)
