@@ -4,7 +4,7 @@ import pytest
 
 from interfacy.argparse_backend import Argparser
 from interfacy.argparse_backend.argument_parser import namespace_to_dict
-from interfacy.flag_generator import BasicFlagGenerator
+from interfacy.naming import DefaultFlagStrategy
 
 
 def get_subparser_names(parser: argparse.ArgumentParser) -> list[str]:
@@ -21,7 +21,7 @@ def build_parser_with_custom_name(custom_name: str) -> tuple[Argparser, argparse
         return a
 
     builder = Argparser(
-        flag_strategy=BasicFlagGenerator(style="required_positional"),
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
         full_error_traceback=True,
         theme=None,
@@ -30,6 +30,27 @@ def build_parser_with_custom_name(custom_name: str) -> tuple[Argparser, argparse
 
     builder.add_command(default)
     builder.add_command(custom, name=custom_name)
+    parser = builder.build_parser()
+    return builder, parser
+
+
+def build_parser_with_aliases(aliases: list[str]) -> tuple[Argparser, argparse.ArgumentParser]:
+    def primary(a: int) -> int:
+        return a
+
+    def secondary(a: int) -> int:
+        return a
+
+    builder = Argparser(
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        sys_exit_enabled=False,
+        full_error_traceback=True,
+        theme=None,
+        print_result=False,
+    )
+
+    builder.add_command(primary, aliases=aliases)
+    builder.add_command(secondary)
     parser = builder.build_parser()
     return builder, parser
 
@@ -69,3 +90,36 @@ class TestCustomCommandNames:
         )
         result = runner.run()
         assert result == 2
+
+
+class TestCommandAliases:
+    def test_subparsers_include_aliases(self):
+        aliases = ["pick", "choose"]
+        _, parser = build_parser_with_aliases(aliases)
+        names = get_subparser_names(parser)
+        for alias in aliases:
+            assert alias in names
+
+    def test_help_lists_aliases(self):
+        aliases = ["pick", "choose"]
+        _, parser = build_parser_with_aliases(aliases)
+        epilog = parser.epilog or ""
+        for alias in aliases:
+            assert alias in epilog
+
+    def test_runner_executes_command_via_alias(self):
+        aliases = ["pick"]
+        builder, parser = build_parser_with_aliases(aliases)
+        args = [aliases[0], "3"]
+        namespace = namespace_to_dict(parser.parse_args(args))
+
+        from interfacy.argparse_backend.runner import ArgparseRunner
+
+        runner = ArgparseRunner(
+            namespace=namespace,
+            builder=builder,
+            args=args,
+            parser=parser,
+        )
+        result = runner.run()
+        assert result == 3

@@ -7,7 +7,7 @@ from objinspect.method import split_args_kwargs
 from interfacy.core import Command
 from interfacy.exceptions import ConfigurationError, InvalidCommandError
 from interfacy.logger import get_logger
-from interfacy.translations import revese_translations
+from interfacy.naming import reverse_translations
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
@@ -56,7 +56,7 @@ class ArgparseRunner:
         return result
 
     def run_method(self, method: Method, args: dict) -> Any:
-        cli_args = revese_translations(args, self.builder.flag_strategy.argument_translator)
+        cli_args = reverse_translations(args, self.builder.flag_strategy.argument_translator)
         instance = method.class_instance
         if instance:
             method_args, method_kwargs = split_args_kwargs(cli_args, method)
@@ -97,6 +97,6 @@ class ArgparseRunner:
 
     def run_multiple(self, commands: dict[str, Command]) -> Any:
         command_name = self.namespace[self.COMMAND_KEY]
-        command = commands[command_name]
-        args = self.namespace[command_name]
+        command = self.builder.get_command_by_cli_name(command_name)
+        args = self.namespace[command.name]
         return self.run_command(command, args)

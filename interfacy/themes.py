@@ -6,7 +6,7 @@ from objinspect.util import colored_type
 from stdl.st import TextStyle, colored, with_style
 
 from interfacy.command import Command
-from interfacy.flag_generator import FlagGenerator
+from interfacy.naming import CommandNameRegistry, FlagStrategy
 
 
 class ParserTheme:
@@ -29,7 +29,8 @@ class ParserTheme:
     required_indicator_pos: Literal["left", "right"] = "right"
     min_ljust: int = 19
     command_skips: ClassVar[list[str]] = ["__init__"]
-    flag_generator: FlagGenerator = None  # type:ignore
+    flag_generator: FlagStrategy = None  # type:ignore
+    name_registry: CommandNameRegistry | None = None
 
     def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
         return max(self.min_ljust, max([len(i.name) for i in commands]))
@@ -100,13 +101,24 @@ class ParserTheme:
                 text = f"{text} {self.required_indicator}"
         return text
 
+    def _format_command_display_name(self, name: str, aliases: tuple[str, ...] = ()) -> str:
+        if not aliases:
+            return name
+        alias_text = ", ".join(aliases)
+        return f"{name} ({alias_text})"
+
     def get_command_description(
-        self, command: Class | Function | Method, ljust: int, name: str | None = None
+        self,
+        command: Class | Function | Method,
+        ljust: int,
+        name: str | None = None,
+        aliases: tuple[str, ...] = (),
     ) -> str:
         name = name or command.name
-        command_name = self.flag_generator.command_translator.translate(name)
-        name = f"   {command_name}".ljust(ljust)
-        return f"{name} {with_style(command.description, self.style_description)}"
+        command_name = self._format_command_display_name(name, aliases)
+        name_column = f"   {command_name}".ljust(ljust)
+        description = command.description or ""
+        return f"{name_column} {with_style(description, self.style_description)}"
 
     def get_help_for_class(self, command: Class) -> str:
         ljust = self._get_ljust(command.methods)  # type: ignore
@@ -114,14 +126,26 @@ class ParserTheme:
         for method in command.methods:
             if method.name in self.command_skips:
                 continue
-            lines.append(self.get_command_description(method, ljust))
+            method_name = self.flag_generator.command_translator.translate(method.name)
+            lines.append(self.get_command_description(method, ljust, method_name))
         return "\n".join(lines)
 
     def get_help_for_multiple_commands(self, commands: dict[str, Command]) -> str:
-        ljust = self._get_ljust(commands.values())  # type: ignore
+        display_names = [
+            self._format_command_display_name(cmd.name, cmd.aliases) for cmd in commands.values()
+        ]
+        max_display = max([len(name) for name in display_names], default=0)
+        ljust = max(self.min_ljust, max_display)
         lines = [self.commands_title]
         for name, command in commands.items():
-            lines.append(self.get_command_description(command.obj, ljust, name))
+            lines.append(
+                self.get_command_description(
+                    command.obj,
+                    ljust,
+                    name,
+                    command.aliases,
+                )
+            )
         return "\n".join(lines)
 
 

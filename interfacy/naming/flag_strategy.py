@@ -4,11 +4,11 @@ from typing import Literal, Protocol
 from objinspect import Parameter
 from stdl.st import kebab_case, snake_case
 
-from interfacy.abbervations import AbbrevationGenerator
-from interfacy.translations import MappingCache
+from interfacy.naming.abbervations import AbbrevationGenerator
+from interfacy.naming.name_mapping import NameMapping
 from interfacy.util import is_list_or_list_alias
 
-FlagsStyle = Literal["keyword_only", "required_positional"]
+FlagStyle = Literal["keyword_only", "required_positional"]
 TranslationMode = Literal["none", "kebab", "snake"]
 
 NAME_TRANSLATORS: dict[TranslationMode, Callable[[str], str]] = {
@@ -18,19 +18,19 @@ NAME_TRANSLATORS: dict[TranslationMode, Callable[[str], str]] = {
 }
 
 
-def get_translator(mode: TranslationMode) -> MappingCache:
+def build_name_mapping(mode: TranslationMode) -> NameMapping:
     if mode not in NAME_TRANSLATORS:
         raise ValueError(
             f"Invalid flag translation mode: {mode}. "
             f"Valid modes are: {', '.join(NAME_TRANSLATORS.keys())}"
         )
-    return MappingCache(NAME_TRANSLATORS[mode])
+    return NameMapping(NAME_TRANSLATORS[mode])
 
 
-class FlagGenerator(Protocol):
-    argument_translator: MappingCache
-    command_translator: MappingCache
-    style: FlagsStyle
+class FlagStrategy(Protocol):
+    argument_translator: NameMapping
+    command_translator: NameMapping
+    style: FlagStyle
     translation_mode: TranslationMode
 
     def get_arg_flags(
@@ -42,18 +42,18 @@ class FlagGenerator(Protocol):
     ) -> tuple[str, ...]: ...
 
 
-class BasicFlagGenerator(FlagGenerator):
+class DefaultFlagStrategy(FlagStrategy):
     def __init__(
         self,
-        style: FlagsStyle = "required_positional",
+        style: FlagStyle = "required_positional",
         translation_mode: TranslationMode = "kebab",
     ) -> None:
         self.style = style
         self.translation_mode = translation_mode
         self._nargs_list_count = 0
 
-        self.argument_translator = get_translator(self.translation_mode)
-        self.command_translator = get_translator(self.translation_mode)
+        self.argument_translator = build_name_mapping(self.translation_mode)
+        self.command_translator = build_name_mapping(self.translation_mode)
 
     def get_arg_flags(
         self,
@@ -109,4 +109,10 @@ class BasicFlagGenerator(FlagGenerator):
         return flags
 
 
-__all__ = ["FlagsStyle", "FlagGenerator", "BasicFlagGenerator"]
+__all__ = [
+    "DefaultFlagStrategy",
+    "FlagStrategy",
+    "FlagStyle",
+    "TranslationMode",
+    "build_name_mapping",
+]

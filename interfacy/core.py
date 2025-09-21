@@ -1,6 +1,6 @@
 import sys
 from abc import abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from enum import IntEnum, auto
 from typing import Any, ClassVar
 
@@ -9,11 +9,16 @@ from objinspect.typing import type_name
 from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
-from interfacy.abbervations import AbbrevationGenerator, DefaultAbbrevationGenerator
 from interfacy.command import Command
 from interfacy.exceptions import DuplicateCommandError, InvalidCommandError
-from interfacy.flag_generator import BasicFlagGenerator, FlagGenerator, get_translator
 from interfacy.logger import get_logger
+from interfacy.naming import (
+    AbbrevationGenerator,
+    CommandNameRegistry,
+    DefaultAbbrevationGenerator,
+    DefaultFlagStrategy,
+    FlagStrategy,
+)
 from interfacy.themes import ParserTheme
 
 logger = get_logger(__name__)
@@ -44,7 +49,7 @@ class InterfacyParser:
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
-        flag_strategy: FlagGenerator | None = None,
+        flag_strategy: FlagStrategy | None = None,
         abbrevation_gen: AbbrevationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
@@ -64,10 +69,11 @@ class InterfacyParser:
 
         self.abbrevation_gen = abbrevation_gen or DefaultAbbrevationGenerator()
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
-        self.flag_strategy = flag_strategy or BasicFlagGenerator()
+        self.flag_strategy = flag_strategy or DefaultFlagStrategy()
         self.theme = theme or ParserTheme()
         self.theme.flag_generator = self.flag_strategy
-        self.outer_command_translator = get_translator(mode=self.flag_strategy.translation_mode)
+        self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
+        self.theme.name_registry = self.name_registry
 
         self.commands: dict[str, Command] = {}
 
@@ -76,24 +82,37 @@ class InterfacyParser:
         command: Callable | Any,
         name: str | None = None,
         description: str | None = None,
+        aliases: Sequence[str] | None = None,
     ) -> Command:
         obj = inspect(command, inherited=False)
 
-        if name is not None:
-            self.outer_command_translator.ignore(name)
-            self.flag_strategy.command_translator.ignore(name)
+        canonical_name, command_aliases = self.name_registry.register(
+            default_name=obj.name,
+            explicit_name=name,
+            aliases=aliases,
+        )
 
-        name = name or self.outer_command_translator.translate(obj.name)
-        if name in self.commands:
-            raise DuplicateCommandError(name)
+        if canonical_name in self.commands:
+            raise DuplicateCommandError(canonical_name)
 
-        cmd = Command(obj=obj, name=name, description=description)
-        self.commands[name] = cmd
+        cmd = Command(
+            obj=obj,
+            name=canonical_name,
+            description=description,
+            aliases=command_aliases,
+        )
+        self.commands[canonical_name] = cmd
         logger.debug(f"Added command: {cmd}")
         return cmd
 
     def get_commands(self) -> list[Command]:
         return list(self.commands.values())
+
+    def get_command_by_cli_name(self, cli_name: str) -> Command:
+        canonical = self.name_registry.canonical_for(cli_name)
+        if canonical is None:
+            raise InvalidCommandError(cli_name)
+        return self.commands[canonical]
 
     def get_args(self) -> list[str]:
         return sys.argv[1:]

@@ -4,8 +4,7 @@ from typing import Literal
 import pytest
 
 from interfacy.argparse_backend import Argparser
-from interfacy.core import BasicFlagGenerator
-from interfacy.flag_generator import BasicFlagGenerator
+from interfacy.naming import DefaultFlagStrategy
 
 
 def pow(base: int, exponent: int = 2) -> int:
@@ -132,7 +131,7 @@ def parser(request):
 @pytest.fixture
 def argparse_req_pos():
     return Argparser(
-        flag_strategy=BasicFlagGenerator(style="required_positional"),
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
         full_error_traceback=True,
         theme=None,
@@ -143,7 +142,7 @@ def argparse_req_pos():
 @pytest.fixture
 def argparse_kw_only():
     return Argparser(
-        flag_strategy=BasicFlagGenerator(style="keyword_only"),
+        flag_strategy=DefaultFlagStrategy(style="keyword_only"),
         sys_exit_enabled=False,
         full_error_traceback=True,
         theme=None,

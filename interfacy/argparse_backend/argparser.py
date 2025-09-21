@@ -7,7 +7,6 @@ from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import type_args, type_origin
 from strto import StrToTypeParser
 
-from interfacy.abbervations import AbbrevationGenerator
 from interfacy.argparse_backend.argument_parser import ArgumentParser, namespace_to_dict
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
@@ -21,8 +20,8 @@ from interfacy.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
-from interfacy.flag_generator import FlagGenerator
 from interfacy.logger import get_logger
+from interfacy.naming import AbbrevationGenerator, FlagStrategy
 from interfacy.themes import ParserTheme
 
 logger = get_logger(__name__)
@@ -45,7 +44,7 @@ class Argparser(InterfacyParser):
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
-        flag_strategy: FlagGenerator | None = None,
+        flag_strategy: FlagStrategy | None = None,
         abbrevation_gen: AbbrevationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
@@ -195,9 +194,12 @@ class Argparser(InterfacyParser):
         parser.epilog = self.theme.get_help_for_multiple_commands(commands)
         subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
 
-        for name, cmd in commands.items():
-            name = self.flag_strategy.command_translator.translate(name)
-            sp = subparsers.add_parser(name, description=cmd.description)
+        for canonical_name, cmd in commands.items():
+            sp = subparsers.add_parser(
+                canonical_name,
+                description=cmd.description,
+                aliases=list(cmd.aliases),
+            )
             obj = cmd.obj
             if isinstance(obj, Function):
                 self.parser_from_function(
@@ -311,8 +313,14 @@ class Argparser(InterfacyParser):
         namespace = namespace_to_dict(parsed)
 
         if self.COMMAND_KEY in namespace:
-            command = namespace[self.COMMAND_KEY]
-            namespace[command] = namespace[command]
+            cli_name = namespace[self.COMMAND_KEY]
+            canonical = self.name_registry.canonical_for(cli_name) or cli_name
+            namespace[self.COMMAND_KEY] = canonical
+            command_args_key = canonical if canonical in namespace else cli_name
+            if command_args_key not in namespace:
+                raise InvalidCommandError(cli_name)
+            if command_args_key != canonical:
+                namespace[canonical] = namespace.pop(command_args_key)
 
         return namespace
 

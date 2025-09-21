@@ -9,9 +9,9 @@ from stdl.fs import read_piped
 from strto import StrToTypeParser
 
 from interfacy.abbervations import AbbrevationGenerator
-from interfacy.core import FlagGenerator, InterfacyParser
+from interfacy.core import InterfacyParser
+from interfacy.naming import FlagStrategy, NameMapping
 from interfacy.themes import ParserTheme
-from interfacy.translations import MappingCache
 from interfacy.util import inverted_bool_flag_name
 
 
@@ -141,7 +141,7 @@ class ClickParser(InterfacyParser):
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
         sys_exit_enabled: bool = True,
-        flag_strategy: FlagGenerator | None = None,
+        flag_strategy: FlagStrategy | None = None,
         abbrevation_gen: AbbrevationGenerator | None = None,
         pipe_target: dict[str, str] | None = None,
         print_result_func: Callable = print,
@@ -162,7 +162,7 @@ class ClickParser(InterfacyParser):
         self.main_parser = click.Group(name="main")
         self.args = UNSET
         self.kwargs = UNSET
-        self.bool_flag_translator = MappingCache(inverted_bool_flag_name)
+        self.bool_flag_translator = NameMapping(inverted_bool_flag_name)
 
     def _handle_piped_input(self, command: str, params: dict[str, Any]) -> dict[str, Any]:
         piped = read_piped()
@@ -186,15 +186,15 @@ class ClickParser(InterfacyParser):
                 updated_kwargs[k] = v
         return updated_kwargs
 
-    def revese_arg_translations(self, args: dict) -> dict[str, Any]:
-        reversed = {}
-        for k, v in args.items():
-            reversed_k = self.flag_strategy.argument_translator.reverse(k)
-            if reversed_k is not None:
-                reversed[reversed_k] = v
+    def reverse_arg_translations(self, args: dict) -> dict[str, Any]:
+        reversed_args: dict[str, Any] = {}
+        for key, value in args.items():
+            canonical_key = self.flag_strategy.argument_translator.reverse(key)
+            if canonical_key is not None:
+                reversed_args[canonical_key] = value
             else:
-                reversed[k] = v
-        return reversed
+                reversed_args[key] = value
+        return reversed_args
 
     def _generate_instance_callback(self, cls: Class) -> Callable:
         """Generates a function that instantiates the class with the given args."""
@@ -222,7 +222,7 @@ class ClickParser(InterfacyParser):
                 result = result_fn()
             else:
                 updated_kwargs = self._handle_bool_args(kwargs)
-                kwargs = self.revese_arg_translations(updated_kwargs)
+                kwargs = self.reverse_arg_translations(updated_kwargs)
                 result = func(*args, **kwargs)
             if self.display_result:
                 self.result_display_fn(result)
