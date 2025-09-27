@@ -56,9 +56,9 @@ class _ClickableFormatter(logging.Formatter):
         else:
             record.short_name = record.name
 
-        combined = f"{record.short_name}.{label}"
+        combined = f"{record.short_name}.{label}"  # type:ignore
         visible_length = len(combined)
-        combined_with_link = f"{record.short_name}.{record.clickable_path}"
+        combined_with_link = f"{record.short_name}.{record.clickable_path}"  # type:ignore
         padding_needed = max(0, max_total_width - visible_length)
         record.name_location = combined_with_link + (" " * padding_needed)
 

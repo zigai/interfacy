@@ -2,7 +2,7 @@ import sys
 from abc import abstractmethod
 from collections.abc import Callable, Sequence
 from enum import IntEnum, auto
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Final
 
 from objinspect import Class, Function, Method, inspect
 from objinspect.typing import type_name
@@ -19,7 +19,14 @@ from interfacy.naming import (
     DefaultFlagStrategy,
     FlagStrategy,
 )
+from interfacy.specs.builder import ParserSpecBuilder
 from interfacy.themes import ParserTheme
+
+if TYPE_CHECKING:
+    from interfacy.specs.spec import ParserSpec
+
+
+COMMAND_KEY: Final[str] = "command"
 
 logger = get_logger(__name__)
 
@@ -123,7 +130,7 @@ class InterfacyParser:
             sys.exit(code)
         return code
 
-    def parser_from_command(self, command: Function | Method | Class, main: bool = False):
+    def parser_from_command(self, command: Function | Method | Class, main: bool = False) -> Any:
         if isinstance(command, (Function, Method)):
             return self.parser_from_function(command, taken_flags=[*self.RESERVED_FLAGS])
         if isinstance(command, Class):
@@ -140,13 +147,13 @@ class InterfacyParser:
         raise NotImplementedError
 
     @abstractmethod
-    def parser_from_function(self, *args, **kwargs): ...
+    def parser_from_function(self, *args, **kwargs) -> Any: ...
 
     @abstractmethod
-    def parser_from_class(self, *args, **kwargs): ...
+    def parser_from_class(self, *args, **kwargs) -> Any: ...
 
     @abstractmethod
-    def parser_from_multiple_commands(self, *args, **kwargs): ...
+    def parser_from_multiple_commands(self, *args, **kwargs) -> Any: ...
 
     @abstractmethod
     def install_tab_completion(self, *args, **kwargs) -> None: ...
@@ -179,6 +186,10 @@ class InterfacyParser:
         message = f"[{self.logger_message_tag}] {message}"
         message = colored(message, color="red")
         print(message, file=sys.stderr)
+
+    def build_parser_spec(self) -> "ParserSpec":
+        builder = ParserSpecBuilder(self)
+        return builder.build()
 
 
 __all__ = ["InterfacyParser", "ExitCode"]

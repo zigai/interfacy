@@ -21,7 +21,7 @@ format:
 
 # run tests across all supported Python versions
 test: _require-hatch
-   hatch run test:test
+   hatch run -m test:test
 
 # run all quality checks
 check: format lint test
