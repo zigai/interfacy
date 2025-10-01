@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from os import get_terminal_size
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
 
 import click
 from click import pass_context
@@ -64,8 +64,8 @@ class ClickArgument(click.Argument):
     def __init__(
         self,
         param_decls: Sequence[str],
-        required: Optional[bool] = None,
-        help: Optional[str] = None,
+        required: bool | None = None,
+        help: str | None = None,
         **attrs: Any,
     ):
         self.help = help

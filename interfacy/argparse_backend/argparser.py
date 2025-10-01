@@ -22,6 +22,7 @@ from interfacy.exceptions import (
 )
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
+from interfacy.specs.spec import ArgumentKind, ArgumentSpec, CommandSpec, ParserSpec, ValueShape
 from interfacy.themes import ParserTheme
 
 logger = get_logger(__name__)
@@ -81,6 +82,7 @@ class Argparser(InterfacyParser):
     ):
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
+
         name = self.flag_strategy.argument_translator.translate(param.name)
         flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbreviation_gen)
         extra_args = self._extra_add_arg_params(param, flags)
@@ -200,10 +202,13 @@ class Argparser(InterfacyParser):
                 description=cmd.description,
                 aliases=list(cmd.aliases),
             )
+
             obj = cmd.obj
             if isinstance(obj, Function):
                 self.parser_from_function(
-                    function=obj, taken_flags=[*self.RESERVED_FLAGS], parser=sp
+                    function=obj,
+                    taken_flags=[*self.RESERVED_FLAGS],
+                    parser=sp,
                 )
             elif isinstance(obj, Class):
                 self.parser_from_class(obj, sp)
@@ -268,6 +273,92 @@ class Argparser(InterfacyParser):
             extra["default"] = param.default
         return extra
 
+    def _argument_kwargs(self, arg: ArgumentSpec) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"help": arg.help or ""}
+        if arg.metavar:
+            kwargs["metavar"] = arg.metavar
+        if arg.nargs:
+            kwargs["nargs"] = arg.nargs
+
+        if arg.value_shape == ValueShape.FLAG:
+            kwargs["action"] = argparse.BooleanOptionalAction
+            if arg.boolean_behavior is not None:
+                kwargs["default"] = arg.boolean_behavior.default
+        else:
+            if arg.parser is not None:
+                kwargs["type"] = arg.parser
+            if not arg.required:
+                kwargs["default"] = arg.default
+
+        if self.flag_strategy.style == "required_positional" and arg.kind == ArgumentKind.OPTION:
+            kwargs["required"] = arg.required
+
+        return kwargs
+
+    def _add_argument_from_spec(self, parser: ArgumentParser, argument: ArgumentSpec) -> None:
+        kwargs = self._argument_kwargs(argument)
+        logger.info(f"Adding argument flags={argument.flags}, kwargs={kwargs}")
+        parser.add_argument(*argument.flags, **kwargs)
+
+    def _apply_command_spec(self, parser: ArgumentParser, spec: CommandSpec) -> None:
+        if spec.description:
+            parser.description = spec.description
+
+        if isinstance(spec.obj, Class):
+            for argument in spec.initializer:
+                self._add_argument_from_spec(parser, argument)
+
+            if spec.epilog:
+                parser.epilog = spec.epilog
+
+            subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
+            if spec.subcommands:
+                for sub_spec in spec.subcommands.values():
+                    subparser = subparsers.add_parser(
+                        sub_spec.cli_name,
+                        description=sub_spec.description,
+                    )
+                    self._apply_command_spec(subparser, sub_spec)
+            return
+
+        if isinstance(spec.obj, Method) and spec.initializer:
+            for argument in spec.initializer:
+                self._add_argument_from_spec(parser, argument)
+
+        for argument in spec.parameters:
+            self._add_argument_from_spec(parser, argument)
+
+    def _build_from_spec(self, spec: ParserSpec) -> ArgumentParser:
+        parser = self._new_parser()
+
+        if spec.is_multi_command:
+            subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
+            for _, command_spec in spec.commands.items():
+                subparser = subparsers.add_parser(
+                    command_spec.cli_name,
+                    description=command_spec.description,
+                    aliases=list(command_spec.aliases),
+                )
+                self._apply_command_spec(subparser, command_spec)
+
+            if spec.commands_help:
+                parser.epilog = spec.commands_help
+        else:
+            command_spec = next(iter(spec.commands.values()))
+            self._apply_command_spec(parser, command_spec)
+
+            if command_spec.epilog and not parser.epilog:
+                parser.epilog = command_spec.epilog
+
+        if spec.description:
+            parser.description = spec.description
+
+        if spec.epilog:
+            existing = parser.epilog or ""
+            parser.epilog = f"{existing}\n\n{spec.epilog}".strip()
+
+        return parser
+
     def install_tab_completion(self, parser: ArgumentParser) -> None:
         """
         Install tab completion for the given parser.
@@ -292,14 +383,8 @@ class Argparser(InterfacyParser):
         if not self.commands:
             raise ConfigurationError("No commands were provided")
 
-        commands = self.get_commands()
-        if len(commands) == 1:
-            parser = self.parser_from_command(commands.pop())
-        else:
-            parser = self.parser_from_multiple_commands(self.commands)
-
-        if self.description:
-            parser.description = self.theme.format_description(self.description)
+        spec = self.build_parser_spec()
+        parser = self._build_from_spec(spec)
 
         if self.enable_tab_completion:
             self.install_tab_completion(parser)
