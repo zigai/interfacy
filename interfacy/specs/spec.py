@@ -8,6 +8,7 @@ from typing import Any
 
 from objinspect import Class, Function, Method
 
+from interfacy.pipe import PipeTargets
 from interfacy.themes import ParserTheme
 
 
@@ -45,6 +46,8 @@ class ArgumentSpec:
     nargs: str | None = None
     boolean_behavior: BooleanBehavior | None = None
     choices: Sequence[Any] | None = None
+    accepts_stdin: bool = False
+    pipe_required: bool = False
 
 
 @dataclass
@@ -55,7 +58,7 @@ class CommandSpec:
     aliases: tuple[str, ...]
     raw_description: str | None
     theme: ParserTheme | None = None
-    pipe_target: dict[str, str] | str | None = None
+    pipe_targets: PipeTargets | None = None
     parameters: list[ArgumentSpec] = field(default_factory=list)
     initializer: list[ArgumentSpec] = field(default_factory=list)
     subcommands: dict[str, CommandSpec] | None = None
@@ -81,7 +84,7 @@ class ParserSpec:
     commands: dict[str, CommandSpec]
     command_key: str | None
     allow_args_from_file: bool
-    pipe_target: dict[str, str] | str | None
+    pipe_targets: PipeTargets | None
     theme: ParserTheme
     commands_help: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)

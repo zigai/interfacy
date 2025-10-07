@@ -9,6 +9,7 @@ from objinspect.typing import get_choices, type_args, type_origin
 
 from interfacy.command import Command
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
+from interfacy.pipe import PipeTargets
 from interfacy.specs.spec import (
     ArgumentKind,
     ArgumentSpec,
@@ -42,7 +43,7 @@ class ParserSpecBuilder:
             commands=commands,
             command_key=getattr(self.parser, "COMMAND_KEY", None),
             allow_args_from_file=self.parser.allow_args_from_file,
-            pipe_target=self.parser.pipe_target,
+            pipe_targets=self.parser.pipe_targets_default,
             theme=self.parser.theme,
             commands_help=commands_help,
         )
@@ -63,10 +64,17 @@ class ParserSpecBuilder:
         command: Command | None = None,
         *,
         cli_name_override: str | None = None,
+        pipe_config: PipeTargets | None = None,
     ) -> CommandSpec:
         taken_flags = [*self.parser.RESERVED_FLAGS]
+        if pipe_config is None and command is not None:
+            pipe_config = command.get_pipe_targets()
+
+        pipe_param_names = pipe_config.targeted_parameters() if pipe_config else set()
+
         parameters = [
-            self._argument_from_parameter(param, taken_flags) for param in function.params
+            self._argument_from_parameter(param, taken_flags, pipe_param_names)
+            for param in function.params
         ]
         raw_description = (
             command.description
@@ -82,7 +90,7 @@ class ParserSpecBuilder:
             aliases=command.aliases if command else (),
             raw_description=raw_description,
             parameters=parameters,
-            pipe_target=self._resolve_command_pipe_target(command),
+            pipe_targets=pipe_config,
             theme=self.parser.theme,
         )
 
@@ -91,12 +99,24 @@ class ParserSpecBuilder:
 
         initializer: list[ArgumentSpec] = []
         is_initialized = hasattr(method.func, "__self__")
+        init_pipe_config: PipeTargets | None = None
+        if command is not None:
+            init_pipe_config = command.get_pipe_targets(subcommand="__init__")
+        init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
+
         if (init := Class(method.cls).init_method) and not is_initialized:
             initializer = [
-                self._argument_from_parameter(param, taken_flags) for param in init.params
+                self._argument_from_parameter(param, taken_flags, init_pipe_names)
+                for param in init.params
             ]
 
-        parameters = [self._argument_from_parameter(param, taken_flags) for param in method.params]
+        method_pipe_config = command.get_pipe_targets() if command is not None else None
+        pipe_param_names = method_pipe_config.targeted_parameters() if method_pipe_config else set()
+
+        parameters = [
+            self._argument_from_parameter(param, taken_flags, pipe_param_names)
+            for param in method.params
+        ]
 
         raw_description = (
             command.description
@@ -113,7 +133,7 @@ class ParserSpecBuilder:
             raw_description=raw_description,
             parameters=parameters,
             initializer=initializer,
-            pipe_target=self._resolve_command_pipe_target(command),
+            pipe_targets=method_pipe_config,
             theme=self.parser.theme,
         )
 
@@ -124,9 +144,17 @@ class ParserSpecBuilder:
             taken_flags.append(command_key)
 
         initializer: list[ArgumentSpec] = []
+        class_pipe_config = command.get_pipe_targets() if command is not None else None
+        init_pipe_config = None
+        if command is not None:
+            init_pipe_config = command.get_pipe_targets(subcommand="__init__")
+            if init_pipe_config is None:
+                init_pipe_config = class_pipe_config
+
         if cls.has_init and not cls.is_initialized:
+            init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
             initializer = [
-                self._argument_from_parameter(param, taken_flags)
+                self._argument_from_parameter(param, taken_flags, init_pipe_names)
                 for param in cls.get_method("__init__").params
             ]
 
@@ -136,10 +164,18 @@ class ParserSpecBuilder:
                 continue
 
             method_cli_name = self.parser.flag_strategy.command_translator.translate(method.name)
+            sub_pipe_config = None
+            if command is not None:
+                sub_pipe_config = (
+                    command.get_pipe_targets(subcommand=method_cli_name)
+                    or command.get_pipe_targets(subcommand=method.name)
+                    or class_pipe_config
+                )
             subcommands[method_cli_name] = self._function_spec(
                 method,
                 command=None,
                 cli_name_override=method_cli_name,
+                pipe_config=sub_pipe_config,
             )
 
         raw_description = (
@@ -159,11 +195,16 @@ class ParserSpecBuilder:
             initializer=initializer,
             subcommands=subcommands,
             raw_epilog=self.parser.theme.get_help_for_class(cls),
-            pipe_target=self._resolve_command_pipe_target(command),
+            pipe_targets=class_pipe_config,
             theme=self.parser.theme,
         )
 
-    def _argument_from_parameter(self, param: Parameter, taken_flags: list[str]) -> ArgumentSpec:
+    def _argument_from_parameter(
+        self,
+        param: Parameter,
+        taken_flags: list[str],
+        pipe_param_names: set[str] | None = None,
+    ) -> ArgumentSpec:
         translated_name = self.parser.flag_strategy.argument_translator.translate(param.name)
         if translated_name in taken_flags:
             raise ReservedFlagError(translated_name)
@@ -233,13 +274,27 @@ class ParserSpecBuilder:
         if any(flag.startswith("-") for flag in flags):
             kind = ArgumentKind.OPTION
 
+        accepts_stdin = pipe_param_names is not None and param.name in pipe_param_names
+        pipe_required = accepts_stdin and param.is_required
+
+        if accepts_stdin:
+            if (
+                value_shape is ValueShape.SINGLE
+                and kind is ArgumentKind.POSITIONAL
+                and nargs is None
+            ):
+                nargs = "?"
+            required = False
+        else:
+            required = param.is_required
+
         return ArgumentSpec(
             name=param.name,
             display_name=translated_name,
             kind=kind,
             value_shape=value_shape,
             flags=flags,
-            required=param.is_required,
+            required=required,
             default=default_value,
             help=help_text,
             type=parsed_type,
@@ -248,6 +303,8 @@ class ParserSpecBuilder:
             nargs=nargs,
             boolean_behavior=boolean_behavior,
             choices=choices,
+            accepts_stdin=accepts_stdin,
+            pipe_required=pipe_required,
         )
 
     def _resolve_cli_name(
@@ -261,8 +318,3 @@ class ParserSpecBuilder:
         if command and command.name:
             return command.name
         return fallback
-
-    def _resolve_command_pipe_target(self, command: Command | None) -> dict[str, str] | str | None:
-        if command is None:
-            return None
-        return command.pipe_target

@@ -38,7 +38,7 @@ def test_function_command_spec_includes_positional_and_option(parser: Argparser)
 
     spec = parser.build_parser_spec()
     assert spec.command_key == "command"
-    assert spec.pipe_target is None
+    assert spec.pipe_targets is None
     assert not spec.is_multi_command
 
     command_spec = spec.commands["pow"]
@@ -137,27 +137,45 @@ def test_bound_method_command_spec_omits_initializer(parser: Argparser):
     assert method_spec.raw_description == doc_summary(Math.pow)
 
 
-def test_multi_command_spec_records_aliases_and_pipe_target():
+def test_multi_command_spec_records_aliases_and_pipe_targets():
     parser = Argparser(
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
         theme=None,
-        pipe_target={"stdout": "result"},
+        pipe_targets="result",
     )
     parser.add_command(pow, aliases=("p",))
     parser.add_command(function_bool_default_true, name="booler")
 
     spec = parser.build_parser_spec()
     assert spec.is_multi_command is True
-    assert spec.pipe_target == {"stdout": "result"}
+    assert spec.pipe_targets is not None
+    assert list(spec.pipe_targets.targets) == ["result"]
     assert spec.commands_help and "commands:" in spec.commands_help
 
     pow_spec = spec.commands["pow"]
     assert pow_spec.aliases == ("p",)
-    assert pow_spec.pipe_target is None
+    assert pow_spec.pipe_targets is None
 
     bool_spec = spec.commands["booler"]
     assert bool_spec.aliases == ()
+
+
+def test_command_pipe_targets_flagged_on_arguments(parser: Argparser):
+    parser.add_command(pow, pipe_targets="base")
+
+    spec = parser.build_parser_spec()
+    pow_spec = spec.commands["pow"]
+
+    base_arg = pow_spec.parameters[0]
+    assert base_arg.name == "base"
+    assert base_arg.accepts_stdin is True
+    assert base_arg.pipe_required is True
+    assert base_arg.required is False
+    assert base_arg.nargs == "?"
+
+    exponent_arg = pow_spec.parameters[1]
+    assert exponent_arg.accepts_stdin is False
 
 
 def test_enum_argument_populates_choices(parser: Argparser):

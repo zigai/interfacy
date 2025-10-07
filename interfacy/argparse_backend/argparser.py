@@ -1,6 +1,6 @@
 import argparse
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 from objinspect import Class, Function, Method, Parameter
@@ -22,6 +22,7 @@ from interfacy.exceptions import (
 )
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
+from interfacy.pipe import PipeTargets
 from interfacy.specs.spec import ArgumentKind, ArgumentSpec, CommandSpec, ParserSpec, ValueShape
 from interfacy.themes import ParserTheme
 
@@ -47,7 +48,7 @@ class Argparser(InterfacyParser):
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
-        pipe_target: dict[str, str] | None = None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable = print,
         formatter_class=InterfacyHelpFormatter,
     ) -> None:
@@ -60,7 +61,7 @@ class Argparser(InterfacyParser):
             allow_args_from_file=allow_args_from_file,
             flag_strategy=flag_strategy,
             abbreviation_gen=abbreviation_gen,
-            pipe_target=pipe_target,
+            pipe_targets=pipe_targets,
             tab_completion=tab_completion,
             print_result=print_result,
             print_result_func=print_result_func,
@@ -411,6 +412,7 @@ class Argparser(InterfacyParser):
 
     def run(self, *commands: Callable | type | object, args: list[str] | None = None) -> Any:
         try:
+            self.reset_piped_input()
             for cmd in commands:
                 self.add_command(cmd, name=None, description=None)
 

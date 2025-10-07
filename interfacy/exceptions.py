@@ -29,3 +29,10 @@ class DuplicateCommandError(InterfacyError):
 class ConfigurationError(InterfacyError):
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+class PipeInputError(InterfacyError):
+    def __init__(self, parameter: str, message: str) -> None:
+        self.parameter = parameter
+        prefix = "stdin" if parameter == "stdin" else f"parameter '{parameter}'"
+        super().__init__(f"Pipe input error for {prefix}: {message}")

@@ -10,6 +10,7 @@ from strto import StrToTypeParser
 
 from interfacy.core import InterfacyParser
 from interfacy.naming import AbbreviationGenerator, FlagStrategy, NameMapping
+from interfacy.pipe import PipeTargets
 from interfacy.themes import ParserTheme
 from interfacy.util import inverted_bool_flag_name
 
@@ -142,7 +143,7 @@ class ClickParser(InterfacyParser):
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
-        pipe_target: dict[str, str] | None = None,
+        pipe_targets: PipeTargets | dict[str, str] | str | None = None,
         print_result_func: Callable = print,
     ) -> None:
         super().__init__(
@@ -150,7 +151,7 @@ class ClickParser(InterfacyParser):
             epilog,
             theme,
             type_parser,
-            pipe_target=pipe_target,
+            pipe_targets=None,
             allow_args_from_file=allow_args_from_file,
             print_result=print_result,
             print_result_func=print_result_func,
@@ -162,6 +163,14 @@ class ClickParser(InterfacyParser):
         self.args = UNSET
         self.kwargs = UNSET
         self.bool_flag_translator = NameMapping(inverted_bool_flag_name)
+        if isinstance(pipe_targets, PipeTargets):
+            target_names = list(pipe_targets.targets)
+            if len(target_names) == 1:
+                self.pipe_target = target_names[0]
+            else:
+                self.pipe_target = None
+        else:
+            self.pipe_target = pipe_targets
 
     def _handle_piped_input(self, command: str, params: dict[str, Any]) -> dict[str, Any]:
         piped = read_piped()

@@ -1,16 +1,17 @@
 import sys
 from abc import abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from enum import IntEnum, auto
 from typing import TYPE_CHECKING, Any, ClassVar, Final
 
-from objinspect import Class, Function, Method, inspect
+from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import type_name
+from stdl.fs import read_piped
 from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
 from interfacy.command import Command
-from interfacy.exceptions import DuplicateCommandError, InvalidCommandError
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import (
     AbbreviationGenerator,
@@ -19,6 +20,7 @@ from interfacy.naming import (
     DefaultFlagStrategy,
     FlagStrategy,
 )
+from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.specs.builder import ParserSpecBuilder
 from interfacy.themes import ParserTheme
 
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
 
 
 COMMAND_KEY: Final[str] = "command"
+_PIPE_UNSET = ...
 
 logger = get_logger(__name__)
 
@@ -58,13 +61,17 @@ class InterfacyParser:
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
-        pipe_target: dict[str, str] | None = None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable = print,
     ) -> None:
         self.description = description
         self.epilog = epilog
         self.method_skips: list[str] = ["__init__", "__repr__", "repr"]
-        self.pipe_target = pipe_target
+        self.pipe_targets_default: PipeTargets | None = (
+            build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
+        )
+        self._pipe_target_overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
+        self._pipe_buffer: str | None | object = _PIPE_UNSET
         self.result_display_fn = print_result_func
 
         self.autorun = run
@@ -90,6 +97,7 @@ class InterfacyParser:
         name: str | None = None,
         description: str | None = None,
         aliases: Sequence[str] | None = None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
     ) -> Command:
         obj = inspect(command, inherited=False)
 
@@ -107,6 +115,7 @@ class InterfacyParser:
             name=canonical_name,
             description=description,
             aliases=command_aliases,
+            pipe_targets=pipe_targets,
         )
         self.commands[canonical_name] = cmd
         logger.debug(f"Added command: {cmd}")
@@ -129,6 +138,140 @@ class InterfacyParser:
         if self.sys_exit_enabled:
             sys.exit(code)
         return code
+
+    def pipe_to(
+        self,
+        targets,
+        *,
+        command: str | None = None,
+        subcommand: str | None = None,
+        **normalization_kwargs,
+    ) -> PipeTargets:
+        """Configure default pipe targets.
+
+        If ``command`` is provided, the configuration applies only to that command name
+        (and optionally one of its subcommands). Otherwise it becomes the global default
+        for commands without an explicit override.
+        """
+        if "precedence" in normalization_kwargs and "priority" not in normalization_kwargs:
+            normalization_kwargs["priority"] = normalization_kwargs.pop("precedence")
+        config = build_pipe_targets_config(targets, **normalization_kwargs)
+        if command is None:
+            self.pipe_targets_default = config
+        else:
+            self._pipe_target_overrides[(command, subcommand)] = config
+        return config
+
+    def resolve_pipe_targets(
+        self,
+        command: Command,
+        *,
+        subcommand: str | None = None,
+    ) -> PipeTargets | None:
+        direct = command.get_pipe_targets(subcommand=subcommand)
+        if direct is not None:
+            return direct
+
+        if subcommand is not None:
+            alt = self.flag_strategy.command_translator.reverse(subcommand)
+            if alt != subcommand:
+                alt_config = command.get_pipe_targets(subcommand=alt)
+                if alt_config is not None:
+                    return alt_config
+
+        for key in self._iter_pipe_override_keys(command, subcommand):
+            config = self._pipe_target_overrides.get(key)
+            if config is not None:
+                return config
+
+        return self.pipe_targets_default
+
+    def _iter_pipe_override_keys(
+        self,
+        command: Command,
+        subcommand: str | None,
+    ) -> Iterable[tuple[str | None, str | None]]:
+        names: list[str] = []
+        if command.name:
+            names.append(command.name)
+
+        if hasattr(command.obj, "name") and command.obj.name not in names:
+            names.append(command.obj.name)
+
+        for alias in command.aliases:
+            if alias not in names:
+                names.append(alias)
+
+        sub_candidates: list[str | None] = [subcommand]
+        if subcommand is not None:
+            alt = self.flag_strategy.command_translator.reverse(subcommand)
+            if alt != subcommand:
+                sub_candidates.append(alt)
+
+        for name in names:
+            for sub in sub_candidates:
+                yield (name, sub)
+
+        yield (None, subcommand)
+        if subcommand is not None:
+            alt = self.flag_strategy.command_translator.reverse(subcommand)
+            if alt != subcommand:
+                yield (None, alt)
+        yield (None, None)
+
+    def read_piped_input(self) -> str | None:
+        if self._pipe_buffer is _PIPE_UNSET:
+            piped = read_piped()
+            self._pipe_buffer = piped if piped else None
+        return self._pipe_buffer if self._pipe_buffer is not _PIPE_UNSET else None
+
+    def reset_piped_input(self) -> None:
+        self._pipe_buffer = _PIPE_UNSET
+
+    def get_parameters_for(
+        self,
+        command: Command,
+        *,
+        subcommand: str | None = None,
+    ) -> dict[str, Parameter]:
+        obj = command.obj
+
+        if isinstance(obj, Function):
+            params = obj.params
+        elif isinstance(obj, Method):
+            params = obj.params
+        elif isinstance(obj, Class):
+            if subcommand in (None, "__init__"):
+                if obj.init_method is None:
+                    return {}
+                params = obj.init_method.params
+            else:
+                method = self._resolve_class_method(obj, subcommand)
+                params = method.params
+        else:
+            return {}
+
+        return {param.name: param for param in params}
+
+    def _resolve_class_method(self, cls: Class, subcommand: str | None) -> Method:
+        if subcommand is None:
+            raise ConfigurationError("Subcommand name is required for class pipe targets")
+
+        if subcommand == "__init__":
+            if cls.init_method is None:
+                raise ConfigurationError("Class does not define an __init__ method")
+            return cls.init_method
+
+        for method in cls.methods:
+            if method.name == subcommand:
+                return method
+            translated = self.flag_strategy.command_translator.translate(method.name)
+            if translated == subcommand:
+                return method
+
+        raise ConfigurationError(
+            f"Could not resolve subcommand '{subcommand}' for class '{cls.name}'"
+        )
 
     def parser_from_command(self, command: Function | Method | Class, main: bool = False) -> Any:
         if isinstance(command, (Function, Method)):

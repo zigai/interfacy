@@ -8,6 +8,7 @@ from interfacy.core import Command
 from interfacy.exceptions import ConfigurationError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import reverse_translations
+from interfacy.pipe import apply_pipe_values
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
@@ -37,16 +38,41 @@ class ArgparseRunner:
             return self.run_command(self.builder.get_commands()[0], self.namespace)
         return self.run_multiple(commands)
 
+    def _apply_pipe(
+        self,
+        command: Command,
+        args: dict[str, Any],
+        *,
+        subcommand: str | None = None,
+    ) -> dict[str, Any]:
+        config = self.builder.resolve_pipe_targets(command, subcommand=subcommand)
+        if config is None:
+            return args
+
+        payload = self.builder.read_piped_input()
+        if payload in (None, ""):
+            return args
+
+        parameters = self.builder.get_parameters_for(command, subcommand=subcommand)
+        return apply_pipe_values(
+            payload,
+            config=config,
+            arguments=args,
+            parameters=parameters,
+            type_parser=self.builder.type_parser,
+        )
+
     def run_command(self, command: Command, args: dict[str, Any]) -> Any:
-        handlers = {
-            Function: self.run_function,
-            Method: self.run_method,
-            Class: self.run_class,
-        }
-        t = type(command.obj)
-        if t not in handlers:
-            raise InvalidCommandError(command.obj)
-        return handlers[t](command.obj, args)
+        obj = command.obj
+        if isinstance(obj, Function):
+            args = self._apply_pipe(command, args)
+            return self.run_function(obj, args)
+        if isinstance(obj, Method):
+            args = self._apply_pipe(command, args)
+            return self.run_method(obj, args)
+        if isinstance(obj, Class):
+            return self.run_class(command, args)
+        raise InvalidCommandError(command.obj)
 
     def run_function(self, func: Function | Method, args: dict) -> Any:
         func_args, func_kwargs = split_args_kwargs(args, func)
@@ -77,7 +103,8 @@ class ArgparseRunner:
         )
         return instance.call_method(method.name, *method_args, **method_kwargs)
 
-    def run_class(self, cls: Class, args: dict) -> Any:
+    def run_class(self, command: Command, args: dict) -> Any:
+        cls = command.obj
         command_name = args[self.COMMAND_KEY]
         command_args = args[command_name]
         del args[self.COMMAND_KEY]
@@ -85,11 +112,14 @@ class ArgparseRunner:
         logger.info(f"Namespace: {command_args}")
 
         if cls.init_method and not cls.is_initialized:
+            args = self._apply_pipe(command, args, subcommand="__init__")
             init_args, init_kwargs = split_args_kwargs(args, cls.init_method)
             logger.info(f"__init__ method args: {init_args}, kwargs: {init_kwargs}")
             cls.init(*init_args, **init_kwargs)
 
-        method_args, method_kwargs = split_args_kwargs(command_args, cls.get_method(command_name))
+        command_args = self._apply_pipe(command, command_args, subcommand=command_name)
+        method = cls.get_method(command_name)
+        method_args, method_kwargs = split_args_kwargs(command_args, method)
         logger.info(
             f"Calling method '{command_name}' with args: {method_args}, kwargs: {method_kwargs}"
         )
