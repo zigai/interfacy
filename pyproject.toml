@@ -36,7 +36,8 @@ keywords = [
 
 
 [project.optional-dependencies]
-full = ["argcomplete"]
+full = ["argcomplete", "click"]
+click = ["click"]
 test = ["pytest"]
 dev = ["pytest", "black", "ruff", "pre-commit"]
 
