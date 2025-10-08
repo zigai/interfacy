@@ -4,7 +4,7 @@ import pytest
 
 from interfacy.argparse_backend import Argparser
 from interfacy.naming import DefaultFlagStrategy
-from interfacy.specs.spec import ArgumentKind, ValueShape
+from interfacy.schema.schema import ArgumentKind, ValueShape
 from tests.conftest import (
     Color,
     Math,
@@ -33,20 +33,20 @@ def parser():
     )
 
 
-def test_function_command_spec_includes_positional_and_option(parser: Argparser):
+def test_function_command_includes_positional_and_option(parser: Argparser):
     parser.add_command(pow)
 
-    spec = parser.build_parser_spec()
-    assert spec.command_key == "command"
-    assert spec.pipe_targets is None
-    assert not spec.is_multi_command
+    schema = parser.build_parser_schema()
+    assert schema.command_key == "command"
+    assert schema.pipe_targets is None
+    assert not schema.is_multi_command
 
-    command_spec = spec.commands["pow"]
-    assert command_spec.canonical_name == "pow"
-    assert command_spec.cli_name == "pow"
-    assert command_spec.raw_description == doc_summary(pow)
+    command = schema.commands["pow"]
+    assert command.canonical_name == "pow"
+    assert command.cli_name == "pow"
+    assert command.raw_description == doc_summary(pow)
 
-    base_arg = command_spec.parameters[0]
+    base_arg = command.parameters[0]
     assert base_arg.display_name == "base"
     assert base_arg.flags == ("base",)
     assert base_arg.kind is ArgumentKind.POSITIONAL
@@ -56,7 +56,7 @@ def test_function_command_spec_includes_positional_and_option(parser: Argparser)
     assert base_arg.type is int
     assert callable(base_arg.parser)
 
-    exponent_arg = command_spec.parameters[1]
+    exponent_arg = command.parameters[1]
     assert exponent_arg.display_name == "exponent"
     assert exponent_arg.flags == ("-e", "--exponent")
     assert exponent_arg.kind is ArgumentKind.OPTION
@@ -68,19 +68,19 @@ def test_function_command_spec_includes_positional_and_option(parser: Argparser)
     assert callable(exponent_arg.parser)
 
 
-def test_class_command_spec_exposes_initializer_and_subcommands(parser: Argparser):
+def test_class_command_exposes_initializer_and_subcommands(parser: Argparser):
     parser.add_command(Math)
 
-    spec = parser.build_parser_spec()
-    assert spec.is_multi_command is False
+    schema = parser.build_parser_schema()
+    assert schema.is_multi_command is False
 
-    class_spec = spec.commands["math"]
-    assert class_spec.canonical_name == "math"
-    assert class_spec.cli_name == "math"
-    assert class_spec.raw_description == doc_summary(Math)
-    assert class_spec.initializer, "expected class initializer parameters"
+    command = schema.commands["math"]
+    assert command.canonical_name == "math"
+    assert command.cli_name == "math"
+    assert command.raw_description == doc_summary(Math)
+    assert command.initializer, "expected class initializer parameters"
 
-    rounding_arg = class_spec.initializer[0]
+    rounding_arg = command.initializer[0]
     assert rounding_arg.display_name == "rounding"
     assert rounding_arg.flags == ("-r", "--rounding")
     assert rounding_arg.required is False
@@ -88,20 +88,20 @@ def test_class_command_spec_exposes_initializer_and_subcommands(parser: Argparse
     assert rounding_arg.type is int
     assert rounding_arg.metavar == "\b"
 
-    assert class_spec.subcommands is not None
-    assert set(class_spec.subcommands) == {"add", "pow", "subtract"}
+    assert command.subcommands is not None
+    assert set(command.subcommands) == {"add", "pow", "subtract"}
 
-    pow_spec = class_spec.subcommands["pow"]
-    assert pow_spec.cli_name == "pow"
-    assert [arg.display_name for arg in pow_spec.parameters] == ["base", "exponent"]
+    pow_command = command.subcommands["pow"]
+    assert pow_command.cli_name == "pow"
+    assert [arg.display_name for arg in pow_command.parameters] == ["base", "exponent"]
 
 
 def test_boolean_argument_annotated_with_boolean_behavior(parser: Argparser):
     parser.add_command(function_bool_default_true)
 
-    spec = parser.build_parser_spec()
-    bool_spec = spec.commands["function-bool-default-true"]
-    argument = bool_spec.parameters[0]
+    schema = parser.build_parser_schema()
+    command = schema.commands["function-bool-default-true"]
+    argument = command.parameters[0]
 
     assert argument.flags == ("--value",)
     assert argument.value_shape is ValueShape.FLAG
@@ -115,9 +115,9 @@ def test_boolean_argument_annotated_with_boolean_behavior(parser: Argparser):
 def test_list_argument_uses_list_shape(parser: Argparser):
     parser.add_command(function_list_int)
 
-    spec = parser.build_parser_spec()
-    list_spec = spec.commands["function-list-int"]
-    argument = list_spec.parameters[0]
+    schema = parser.build_parser_schema()
+    command = schema.commands["function-list-int"]
+    argument = command.parameters[0]
 
     assert argument.flags == ("values",)
     assert argument.value_shape is ValueShape.LIST
@@ -125,19 +125,19 @@ def test_list_argument_uses_list_shape(parser: Argparser):
     assert callable(argument.parser)
 
 
-def test_bound_method_command_spec_omits_initializer(parser: Argparser):
+def test_bound_method_command_omits_initializer(parser: Argparser):
     math = Math(rounding=2)
     parser.add_command(math.pow)
 
-    spec = parser.build_parser_spec()
-    method_spec = spec.commands["pow"]
+    schema = parser.build_parser_schema()
+    command_pow = schema.commands["pow"]
 
-    assert method_spec.initializer == []
-    assert [arg.display_name for arg in method_spec.parameters] == ["base", "exponent"]
-    assert method_spec.raw_description == doc_summary(Math.pow)
+    assert command_pow.initializer == []
+    assert [arg.display_name for arg in command_pow.parameters] == ["base", "exponent"]
+    assert command_pow.raw_description == doc_summary(Math.pow)
 
 
-def test_multi_command_spec_records_aliases_and_pipe_targets():
+def test_multi_command_records_aliases_and_pipe_targets():
     parser = Argparser(
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
@@ -147,43 +147,43 @@ def test_multi_command_spec_records_aliases_and_pipe_targets():
     parser.add_command(pow, aliases=("p",))
     parser.add_command(function_bool_default_true, name="booler")
 
-    spec = parser.build_parser_spec()
-    assert spec.is_multi_command is True
-    assert spec.pipe_targets is not None
-    assert list(spec.pipe_targets.targets) == ["result"]
-    assert spec.commands_help and "commands:" in spec.commands_help
+    schema = parser.build_parser_schema()
+    assert schema.is_multi_command is True
+    assert schema.pipe_targets is not None
+    assert list(schema.pipe_targets.targets) == ["result"]
+    assert schema.commands_help and "commands:" in schema.commands_help
 
-    pow_spec = spec.commands["pow"]
-    assert pow_spec.aliases == ("p",)
-    assert pow_spec.pipe_targets is None
+    command_pow = schema.commands["pow"]
+    assert command_pow.aliases == ("p",)
+    assert command_pow.pipe_targets is None
 
-    bool_spec = spec.commands["booler"]
-    assert bool_spec.aliases == ()
+    command_bool = schema.commands["booler"]
+    assert command_bool.aliases == ()
 
 
 def test_command_pipe_targets_flagged_on_arguments(parser: Argparser):
     parser.add_command(pow, pipe_targets="base")
 
-    spec = parser.build_parser_spec()
-    pow_spec = spec.commands["pow"]
+    schema = parser.build_parser_schema()
+    command = schema.commands["pow"]
 
-    base_arg = pow_spec.parameters[0]
+    base_arg = command.parameters[0]
     assert base_arg.name == "base"
     assert base_arg.accepts_stdin is True
     assert base_arg.pipe_required is True
     assert base_arg.required is False
     assert base_arg.nargs == "?"
 
-    exponent_arg = pow_spec.parameters[1]
+    exponent_arg = command.parameters[1]
     assert exponent_arg.accepts_stdin is False
 
 
 def test_enum_argument_populates_choices(parser: Argparser):
     parser.add_command(function_enum_arg)
 
-    spec = parser.build_parser_spec()
-    enum_spec = spec.commands["function-enum-arg"]
-    argument = enum_spec.parameters[0]
+    schema = parser.build_parser_schema()
+    command = schema.commands["function-enum-arg"]
+    argument = command.parameters[0]
 
     assert argument.choices == tuple(member.name for member in Color)
     assert argument.flags == ("color",)
@@ -198,9 +198,9 @@ def test_keyword_only_strategy_keeps_argument_metadata():
     )
     parser.add_command(pow)
 
-    spec = parser.build_parser_spec()
-    command_spec = spec.commands["pow"]
-    flags = [argument.flags for argument in command_spec.parameters]
+    schema = parser.build_parser_schema()
+    command = schema.commands["pow"]
+    flags = [argument.flags for argument in command.parameters]
 
     assert flags[0] == ("-b", "--base")
     assert flags[1] == ("-e", "--exponent")
@@ -209,8 +209,8 @@ def test_keyword_only_strategy_keeps_argument_metadata():
 def test_boolean_short_flag_has_no_negative_form(parser: Argparser):
     parser.add_command(function_bool_short_flag)
 
-    spec = parser.build_parser_spec()
-    argument = spec.commands["function-bool-short-flag"].parameters[0]
+    schema = parser.build_parser_schema()
+    argument = schema.commands["function-bool-short-flag"].parameters[0]
 
     assert argument.flags == ("-x",)
     assert argument.boolean_behavior is not None
@@ -221,8 +221,8 @@ def test_boolean_short_flag_has_no_negative_form(parser: Argparser):
 def test_optional_list_argument_metadata(parser: Argparser):
     parser.add_command(function_list_with_default)
 
-    spec = parser.build_parser_spec()
-    argument = spec.commands["function-list-with-default"].parameters[0]
+    schema = parser.build_parser_schema()
+    argument = schema.commands["function-list-with-default"].parameters[0]
 
     assert argument.flags == ("-v", "--values")
     assert argument.value_shape is ValueShape.LIST

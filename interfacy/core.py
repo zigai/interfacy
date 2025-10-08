@@ -10,7 +10,6 @@ from stdl.fs import read_piped
 from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
-from interfacy.command import Command
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import (
@@ -21,15 +20,15 @@ from interfacy.naming import (
     FlagStrategy,
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
-from interfacy.specs.builder import ParserSpecBuilder
+from interfacy.schema.builder import ParserSchemaBuilder
 from interfacy.themes import ParserTheme
 
 if TYPE_CHECKING:
-    from interfacy.specs.spec import ParserSpec
+    from interfacy.schema.schema import Command, ParserSchema
 
 
 COMMAND_KEY: Final[str] = "command"
-_PIPE_UNSET = ...
+PIPE_UNSET = ...
 
 logger = get_logger(__name__)
 
@@ -71,7 +70,7 @@ class InterfacyParser:
             build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
         )
         self._pipe_target_overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
-        self._pipe_buffer: str | None | object = _PIPE_UNSET
+        self._pipe_buffer: str | None | object = PIPE_UNSET
         self.result_display_fn = print_result_func
 
         self.autorun = run
@@ -98,7 +97,7 @@ class InterfacyParser:
         description: str | None = None,
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
-    ) -> Command:
+    ) -> "Command":
         obj = inspect(command, inherited=False)
 
         canonical_name, command_aliases = self.name_registry.register(
@@ -110,21 +109,37 @@ class InterfacyParser:
         if canonical_name in self.commands:
             raise DuplicateCommandError(canonical_name)
 
-        cmd = Command(
-            obj=obj,
-            name=canonical_name,
-            description=description,
-            aliases=command_aliases,
-            pipe_targets=pipe_targets,
-        )
-        self.commands[canonical_name] = cmd
-        logger.debug(f"Added command: {cmd}")
-        return cmd
+        if pipe_targets is not None:
+            config = build_pipe_targets_config(pipe_targets)
+            self._pipe_target_overrides[(canonical_name, None)] = config
 
-    def get_commands(self) -> list[Command]:
+        raw_description = (
+            description
+            if description is not None
+            else (obj.description if obj.has_docstring else None)
+        )
+        from interfacy.schema.schema import Command
+
+        command = Command(
+            obj=obj,
+            canonical_name=canonical_name,
+            cli_name=canonical_name,
+            aliases=tuple(command_aliases),
+            raw_description=raw_description,
+            parameters=[],
+            initializer=[],
+            subcommands=None,
+            pipe_targets=None,
+            theme=self.theme,
+        )
+        self.commands[canonical_name] = command
+        logger.debug(f"Added command: {command}")
+        return command
+
+    def get_commands(self) -> list["Command"]:
         return list(self.commands.values())
 
-    def get_command_by_cli_name(self, cli_name: str) -> Command:
+    def get_command_by_cli_name(self, cli_name: str) -> "Command":
         canonical = self.name_registry.canonical_for(cli_name)
         if canonical is None:
             raise InvalidCommandError(cli_name)
@@ -164,44 +179,34 @@ class InterfacyParser:
 
     def resolve_pipe_targets(
         self,
-        command: Command,
+        command: "Command",
         *,
         subcommand: str | None = None,
     ) -> PipeTargets | None:
-        direct = command.get_pipe_targets(subcommand=subcommand)
-        if direct is not None:
-            return direct
-
-        if subcommand is not None:
-            alt = self.flag_strategy.command_translator.reverse(subcommand)
-            if alt != subcommand:
-                alt_config = command.get_pipe_targets(subcommand=alt)
-                if alt_config is not None:
-                    return alt_config
-
-        for key in self._iter_pipe_override_keys(command, subcommand):
-            config = self._pipe_target_overrides.get(key)
-            if config is not None:
-                return config
-
-        return self.pipe_targets_default
-
-    def _iter_pipe_override_keys(
-        self,
-        command: Command,
-        subcommand: str | None,
-    ) -> Iterable[tuple[str | None, str | None]]:
         names: list[str] = []
-        if command.name:
-            names.append(command.name)
-
-        if hasattr(command.obj, "name") and command.obj.name not in names:
+        if command.canonical_name:
+            names.append(command.canonical_name)
+        if command.cli_name and command.cli_name not in names:
+            names.append(command.cli_name)
+        if command.obj.name not in names:
             names.append(command.obj.name)
 
         for alias in command.aliases:
             if alias not in names:
                 names.append(alias)
 
+        for key in self._iter_pipe_override_keys_for_names(names, subcommand):
+            config = self._pipe_target_overrides.get(key)
+            if config is not None:
+                return config
+
+        return self.pipe_targets_default
+
+    def _iter_pipe_override_keys_for_names(
+        self,
+        names: list[str],
+        subcommand: str | None,
+    ) -> Iterable[tuple[str | None, str | None]]:
         sub_candidates: list[str | None] = [subcommand]
         if subcommand is not None:
             alt = self.flag_strategy.command_translator.reverse(subcommand)
@@ -217,20 +222,46 @@ class InterfacyParser:
             alt = self.flag_strategy.command_translator.reverse(subcommand)
             if alt != subcommand:
                 yield (None, alt)
+
         yield (None, None)
 
+    def resolve_pipe_targets_by_names(
+        self,
+        *,
+        canonical_name: str,
+        obj_name: str | None,
+        aliases: tuple[str, ...] = (),
+        subcommand: str | None = None,
+        include_default: bool = True,
+    ) -> PipeTargets | None:
+        names: list[str] = [canonical_name]
+        if obj_name and obj_name not in names:
+            names.append(obj_name)
+
+        for alias in aliases:
+            if alias not in names:
+                names.append(alias)
+
+        for key in self._iter_pipe_override_keys_for_names(names, subcommand):
+            config = self._pipe_target_overrides.get(key)
+            if config is not None:
+                return config
+
+        return self.pipe_targets_default if include_default else None
+
     def read_piped_input(self) -> str | None:
-        if self._pipe_buffer is _PIPE_UNSET:
+        if self._pipe_buffer is PIPE_UNSET:
             piped = read_piped()
             self._pipe_buffer = piped if piped else None
-        return self._pipe_buffer if self._pipe_buffer is not _PIPE_UNSET else None
+
+        return self._pipe_buffer if self._pipe_buffer is not PIPE_UNSET else None
 
     def reset_piped_input(self) -> None:
-        self._pipe_buffer = _PIPE_UNSET
+        self._pipe_buffer = PIPE_UNSET
 
     def get_parameters_for(
         self,
-        command: Command,
+        command: "Command",
         *,
         subcommand: str | None = None,
     ) -> dict[str, Parameter]:
@@ -265,6 +296,7 @@ class InterfacyParser:
         for method in cls.methods:
             if method.name == subcommand:
                 return method
+
             translated = self.flag_strategy.command_translator.translate(method.name)
             if translated == subcommand:
                 return method
@@ -330,8 +362,8 @@ class InterfacyParser:
         message = colored(message, color="red")
         print(message, file=sys.stderr)
 
-    def build_parser_spec(self) -> "ParserSpec":
-        builder = ParserSpecBuilder(self)
+    def build_parser_schema(self) -> "ParserSchema":
+        builder = ParserSchemaBuilder(self)
         return builder.build()
 
 

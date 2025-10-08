@@ -17,7 +17,8 @@ DELIMITER_UNSET = ...
 
 @dataclass(frozen=True)
 class PipeTargets:
-    """Configuration for routing stdin content to parameters.
+    """
+    Configuration for routing stdin content to parameters.
 
     Attributes:
         targets: Ordered parameter names that receive piped chunks.
@@ -51,6 +52,7 @@ def parse_priority(value: str | None) -> PipePriority:
         return value  # type:ignore
     if value is None:
         return "cli"
+
     raise ConfigurationError(f"Invalid pipe priority '{value}'. Valid values: {','.join(choices)}")
 
 
@@ -255,7 +257,7 @@ def get_chunks(
 
 
 def apply_pipe_values(
-    payload: str,
+    data: str,
     *,
     config: PipeTargets,
     arguments: dict[str, Any],
@@ -264,7 +266,7 @@ def apply_pipe_values(
 ) -> dict[str, Any]:
     """Return a new argument mapping with piped stdin applied."""
     updated = dict(arguments)
-    chunks = get_chunks(payload, config)
+    chunks = get_chunks(data, config)
 
     for param_name, raw_chunk in zip(config.targets, chunks, strict=False):
         parameter = parameters.get(param_name)

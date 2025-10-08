@@ -1,12 +1,14 @@
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices
 from objinspect.util import colored_type
 from stdl.st import TextStyle, colored, with_style
 
-from interfacy.command import Command
 from interfacy.naming import CommandNameRegistry, FlagStrategy
+
+if TYPE_CHECKING:  # pragma: no cover
+    from interfacy.schema.schema import Command
 
 
 class ParserTheme:
@@ -130,9 +132,10 @@ class ParserTheme:
             lines.append(self.get_command_description(method, ljust, method_name))
         return "\n".join(lines)
 
-    def get_help_for_multiple_commands(self, commands: dict[str, Command]) -> str:
+    def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:
         display_names = [
-            self._format_command_display_name(cmd.name, cmd.aliases) for cmd in commands.values()
+            self._format_command_display_name(cmd.cli_name, cmd.aliases)
+            for cmd in commands.values()
         ]
         max_display = max([len(name) for name in display_names], default=0)
         ljust = max(self.min_ljust, max_display)

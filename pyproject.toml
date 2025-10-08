@@ -1,13 +1,13 @@
 
 [project]
 name = "interfacy"
-version = "0.3.1"
+version = "0.3.2"
 description = ""
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["stdl>=0.6.3", "objinspect>=0.3.0", "strto>=0.2.1"]
+dependencies = ["stdl>=0.6.3", "objinspect>=0.3.0", "strto>=0.2.2"]
 
 classifiers = [
     "Intended Audience :: Developers",

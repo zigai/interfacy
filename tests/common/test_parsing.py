@@ -37,7 +37,7 @@ class TestPowFunctionParsing:
     @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
     def test_kw_only_no_abbrev(self, parser: InterfacyParser):
         parser.add_command(pow)
-        args = parser.parse_args(["-base", "2", "-exponent", "4"])
+        args = parser.parse_args(["--base", "2", "--exponent", "4"])
         assert args == {"base": 2, "exponent": 4}
 
     # @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)

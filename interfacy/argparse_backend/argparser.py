@@ -10,7 +10,6 @@ from strto import StrToTypeParser
 from interfacy.argparse_backend.argument_parser import ArgumentParser, namespace_to_dict
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
-from interfacy.command import Command
 from interfacy.core import ExitCode, InterfacyParser
 from interfacy.exceptions import (
     ConfigurationError,
@@ -23,7 +22,7 @@ from interfacy.exceptions import (
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
-from interfacy.specs.spec import ArgumentKind, ArgumentSpec, CommandSpec, ParserSpec, ValueShape
+from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 from interfacy.themes import ParserTheme
 
 logger = get_logger(__name__)
@@ -164,61 +163,6 @@ class Argparser(InterfacyParser):
 
         return parser
 
-    def parser_from_command(
-        self,
-        command: Command,
-        parser: ArgumentParser | None = None,
-        subparser=None,
-    ):
-        obj = command.obj
-        if isinstance(obj, Method):
-            return self.parser_from_method(
-                obj,
-                taken_flags=[*self.RESERVED_FLAGS],
-                parser=parser,
-            )
-        if isinstance(obj, Function):
-            return self.parser_from_function(
-                obj,
-                taken_flags=[*self.RESERVED_FLAGS],
-                parser=parser,
-            )
-        if isinstance(obj, Class):
-            return self.parser_from_class(obj, parser=parser, subparser=subparser)
-        raise InvalidCommandError(obj)
-
-    def parser_from_multiple_commands(
-        self,
-        commands: dict[str, Command],
-        parser: ArgumentParser | None = None,
-    ) -> ArgumentParser:
-        logger.debug(f"Building parser from {len(commands)} commands")
-        parser = parser or self._new_parser()
-        parser.epilog = self.theme.get_help_for_multiple_commands(commands)
-        subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
-
-        for canonical_name, cmd in commands.items():
-            sp = subparsers.add_parser(
-                canonical_name,
-                description=cmd.description,
-                aliases=list(cmd.aliases),
-            )
-
-            obj = cmd.obj
-            if isinstance(obj, Function):
-                self.parser_from_function(
-                    function=obj,
-                    taken_flags=[*self.RESERVED_FLAGS],
-                    parser=sp,
-                )
-            elif isinstance(obj, Class):
-                self.parser_from_class(obj, sp)
-            elif isinstance(obj, Method):
-                self.parser_from_method(obj, taken_flags=[*self.RESERVED_FLAGS], parser=sp)
-            else:
-                raise InvalidCommandError(obj)
-        return parser
-
     def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, Any]:
         """
         This method creates a dictionary with additional argument parameters needed to
@@ -274,7 +218,7 @@ class Argparser(InterfacyParser):
             extra["default"] = param.default
         return extra
 
-    def _argument_kwargs(self, arg: ArgumentSpec) -> dict[str, Any]:
+    def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
         kwargs: dict[str, Any] = {"help": arg.help or ""}
         if arg.metavar:
             kwargs["metavar"] = arg.metavar
@@ -296,67 +240,67 @@ class Argparser(InterfacyParser):
 
         return kwargs
 
-    def _add_argument_from_spec(self, parser: ArgumentParser, argument: ArgumentSpec) -> None:
+    def _add_argument_from_schema(self, parser: ArgumentParser, argument: Argument) -> None:
         kwargs = self._argument_kwargs(argument)
         logger.info(f"Adding argument flags={argument.flags}, kwargs={kwargs}")
         parser.add_argument(*argument.flags, **kwargs)
 
-    def _apply_command_spec(self, parser: ArgumentParser, spec: CommandSpec) -> None:
-        if spec.description:
-            parser.description = spec.description
+    def _apply_command_schema(self, parser: ArgumentParser, command: Command) -> None:
+        if command.description:
+            parser.description = command.description
 
-        if isinstance(spec.obj, Class):
-            for argument in spec.initializer:
-                self._add_argument_from_spec(parser, argument)
+        if isinstance(command.obj, Class):
+            for argument in command.initializer:
+                self._add_argument_from_schema(parser, argument)
 
-            if spec.epilog:
-                parser.epilog = spec.epilog
+            if command.epilog:
+                parser.epilog = command.epilog
 
             subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
-            if spec.subcommands:
-                for sub_spec in spec.subcommands.values():
+            if command.subcommands:
+                for sub_cmd in command.subcommands.values():
                     subparser = subparsers.add_parser(
-                        sub_spec.cli_name,
-                        description=sub_spec.description,
+                        sub_cmd.cli_name,
+                        description=sub_cmd.description,
                     )
-                    self._apply_command_spec(subparser, sub_spec)
+                    self._apply_command_schema(subparser, sub_cmd)
             return
 
-        if isinstance(spec.obj, Method) and spec.initializer:
-            for argument in spec.initializer:
-                self._add_argument_from_spec(parser, argument)
+        if isinstance(command.obj, Method) and command.initializer:
+            for argument in command.initializer:
+                self._add_argument_from_schema(parser, argument)
 
-        for argument in spec.parameters:
-            self._add_argument_from_spec(parser, argument)
+        for argument in command.parameters:
+            self._add_argument_from_schema(parser, argument)
 
-    def _build_from_spec(self, spec: ParserSpec) -> ArgumentParser:
+    def _build_from_schema(self, schema: ParserSchema) -> ArgumentParser:
         parser = self._new_parser()
 
-        if spec.is_multi_command:
+        if schema.is_multi_command:
             subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
-            for _, command_spec in spec.commands.items():
+            for _, cmd in schema.commands.items():
                 subparser = subparsers.add_parser(
-                    command_spec.cli_name,
-                    description=command_spec.description,
-                    aliases=list(command_spec.aliases),
+                    cmd.cli_name,
+                    description=cmd.description,
+                    aliases=list(cmd.aliases),
                 )
-                self._apply_command_spec(subparser, command_spec)
+                self._apply_command_schema(subparser, cmd)
 
-            if spec.commands_help:
-                parser.epilog = spec.commands_help
+            if schema.commands_help:
+                parser.epilog = schema.commands_help
         else:
-            command_spec = next(iter(spec.commands.values()))
-            self._apply_command_spec(parser, command_spec)
+            cmd = next(iter(schema.commands.values()))
+            self._apply_command_schema(parser, cmd)
 
-            if command_spec.epilog and not parser.epilog:
-                parser.epilog = command_spec.epilog
+            if cmd.epilog and not parser.epilog:
+                parser.epilog = cmd.epilog
 
-        if spec.description:
-            parser.description = spec.description
+        if schema.description:
+            parser.description = schema.description
 
-        if spec.epilog:
+        if schema.epilog:
             existing = parser.epilog or ""
-            parser.epilog = f"{existing}\n\n{spec.epilog}".strip()
+            parser.epilog = f"{existing}\n\n{schema.epilog}".strip()
 
         return parser
 
@@ -384,8 +328,8 @@ class Argparser(InterfacyParser):
         if not self.commands:
             raise ConfigurationError("No commands were provided")
 
-        spec = self.build_parser_spec()
-        parser = self._build_from_spec(spec)
+        schema = self.build_parser_schema()
+        parser = self._build_from_schema(schema)
 
         if self.enable_tab_completion:
             self.install_tab_completion(parser)

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 from objinspect.typing import type_origin
@@ -12,14 +13,14 @@ def simplified_type_name(name: str) -> str:
     return name
 
 
-def is_list_or_list_alias(t):
+def is_list_or_list_alias(t: type) -> bool:
     if t is list:
         return True
     t_origin = type_origin(t)
     return t_origin is list
 
 
-def show_result(result: Any, handler=print):
+def show_result(result: Any, handler: Callable = print) -> None:
     if isinstance(result, list):
         for i in result:
             handler(i)

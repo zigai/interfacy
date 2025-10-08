@@ -31,7 +31,7 @@ class BooleanBehavior:
 
 
 @dataclass
-class ArgumentSpec:
+class Argument:
     name: str
     display_name: str
     kind: ArgumentKind
@@ -51,7 +51,7 @@ class ArgumentSpec:
 
 
 @dataclass
-class CommandSpec:
+class Command:
     obj: Class | Function | Method
     canonical_name: str
     cli_name: str
@@ -59,9 +59,9 @@ class CommandSpec:
     raw_description: str | None
     theme: ParserTheme | None = None
     pipe_targets: PipeTargets | None = None
-    parameters: list[ArgumentSpec] = field(default_factory=list)
-    initializer: list[ArgumentSpec] = field(default_factory=list)
-    subcommands: dict[str, CommandSpec] | None = None
+    parameters: list[Argument] = field(default_factory=list)
+    initializer: list[Argument] = field(default_factory=list)
+    subcommands: dict[str, Command] | None = None
     raw_epilog: str | None = None
 
     @cached_property
@@ -78,10 +78,10 @@ class CommandSpec:
 
 
 @dataclass
-class ParserSpec:
+class ParserSchema:
     raw_description: str | None
     raw_epilog: str | None
-    commands: dict[str, CommandSpec]
+    commands: dict[str, Command]
     command_key: str | None
     allow_args_from_file: bool
     pipe_targets: PipeTargets | None
@@ -105,7 +105,7 @@ class ParserSpec:
     def is_multi_command(self) -> bool:
         return len(self.commands) > 1
 
-    def get_command(self, canonical_name: str) -> CommandSpec:
+    def get_command(self, canonical_name: str) -> Command:
         return self.commands[canonical_name]
 
     @property
@@ -115,9 +115,9 @@ class ParserSpec:
 
 __all__ = [
     "ArgumentKind",
-    "ArgumentSpec",
+    "Argument",
     "BooleanBehavior",
-    "CommandSpec",
-    "ParserSpec",
+    "Command",
+    "ParserSchema",
     "ValueShape",
 ]

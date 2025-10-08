@@ -7,15 +7,14 @@ from typing import TYPE_CHECKING, Any
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices, type_args, type_origin
 
-from interfacy.command import Command
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy.pipe import PipeTargets
-from interfacy.specs.spec import (
+from interfacy.schema.schema import (
+    Argument,
     ArgumentKind,
-    ArgumentSpec,
     BooleanBehavior,
-    CommandSpec,
-    ParserSpec,
+    Command,
+    ParserSchema,
     ValueShape,
 )
 from interfacy.util import inverted_bool_flag_name
@@ -25,19 +24,25 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 @dataclass
-class ParserSpecBuilder:
+class ParserSchemaBuilder:
     parser: InterfacyParser
 
-    def build(self) -> ParserSpec:
-        commands: dict[str, CommandSpec] = {}
-        for canonical_name, cmd in self.parser.commands.items():
-            commands[canonical_name] = self._command_spec_from_command(cmd)
+    def build(self) -> ParserSchema:
+        commands: dict[str, Command] = {}
+        for canonical_name, command in self.parser.commands.items():
+            rebuilt = self.build_command_spec_for(
+                command.obj,
+                canonical_name=command.canonical_name,
+                description=command.raw_description,
+                aliases=command.aliases,
+            )
+            commands[canonical_name] = rebuilt
 
         commands_help = None
         if len(commands) > 1:
             commands_help = self.parser.theme.get_help_for_multiple_commands(self.parser.commands)
 
-        return ParserSpec(
+        return ParserSchema(
             raw_description=self.parser.description,
             raw_epilog=self.parser.epilog,
             commands=commands,
@@ -48,27 +53,58 @@ class ParserSpecBuilder:
             commands_help=commands_help,
         )
 
-    def _command_spec_from_command(self, command: Command) -> CommandSpec:
-        obj = command.obj
+    def build_command_spec_for(
+        self,
+        obj: Class | Function | Method,
+        *,
+        canonical_name: str,
+        description: str | None = None,
+        aliases: tuple[str, ...] = (),
+    ) -> Command:
         if isinstance(obj, Function):
-            return self._function_spec(obj, command)
+            return self._function_spec(
+                obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+            )
+
         if isinstance(obj, Method):
-            return self._method_spec(obj, command)
+            return self._method_command(
+                obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+            )
+
         if isinstance(obj, Class):
-            return self._class_spec(obj, command)
+            return self._class_command(
+                obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+            )
         raise InvalidCommandError(obj)
 
     def _function_spec(
         self,
         function: Function | Method,
-        command: Command | None = None,
         *,
+        canonical_name: str | None = None,
+        description: str | None = None,
+        aliases: tuple[str, ...] = (),
         cli_name_override: str | None = None,
         pipe_config: PipeTargets | None = None,
-    ) -> CommandSpec:
+    ) -> Command:
         taken_flags = [*self.parser.RESERVED_FLAGS]
-        if pipe_config is None and command is not None:
-            pipe_config = command.get_pipe_targets()
+        if pipe_config is None and canonical_name is not None:
+            pipe_config = self.parser.resolve_pipe_targets_by_names(
+                canonical_name=canonical_name,
+                obj_name=function.name,
+                aliases=aliases,
+                subcommand=None,
+                include_default=False,
+            )
 
         pipe_param_names = pipe_config.targeted_parameters() if pipe_config else set()
 
@@ -77,31 +113,48 @@ class ParserSpecBuilder:
             for param in function.params
         ]
         raw_description = (
-            command.description
-            if command and command.description
+            description
+            if description
             else (function.description if function.has_docstring else None)
         )
-        cli_name = self._resolve_cli_name(cli_name_override, command, function.name)
+        cli_name = self._resolve_cli_name(
+            override=cli_name_override,
+            canonical_name=canonical_name,
+            fallback=function.name,
+        )
 
-        return CommandSpec(
+        return Command(
             obj=function,
-            canonical_name=self._resolve_cli_name(None, command, function.name),
+            canonical_name=self._resolve_cli_name(None, canonical_name, function.name),
             cli_name=cli_name,
-            aliases=command.aliases if command else (),
+            aliases=aliases,
             raw_description=raw_description,
             parameters=parameters,
             pipe_targets=pipe_config,
             theme=self.parser.theme,
         )
 
-    def _method_spec(self, method: Method, command: Command | None = None) -> CommandSpec:
+    def _method_command(
+        self,
+        method: Method,
+        *,
+        canonical_name: str | None = None,
+        description: str | None = None,
+        aliases: tuple[str, ...] = (),
+    ) -> Command:
         taken_flags = [*self.parser.RESERVED_FLAGS]
 
-        initializer: list[ArgumentSpec] = []
+        initializer: list[Argument] = []
         is_initialized = hasattr(method.func, "__self__")
         init_pipe_config: PipeTargets | None = None
-        if command is not None:
-            init_pipe_config = command.get_pipe_targets(subcommand="__init__")
+        if canonical_name is not None:
+            init_pipe_config = self.parser.resolve_pipe_targets_by_names(
+                canonical_name=canonical_name,
+                obj_name=method.name,
+                aliases=aliases,
+                subcommand="__init__",
+                include_default=False,
+            )
         init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
 
         if (init := Class(method.cls).init_method) and not is_initialized:
@@ -110,7 +163,15 @@ class ParserSpecBuilder:
                 for param in init.params
             ]
 
-        method_pipe_config = command.get_pipe_targets() if command is not None else None
+        method_pipe_config = None
+        if canonical_name is not None:
+            method_pipe_config = self.parser.resolve_pipe_targets_by_names(
+                canonical_name=canonical_name,
+                obj_name=method.name,
+                aliases=aliases,
+                subcommand=None,
+                include_default=False,
+            )
         pipe_param_names = method_pipe_config.targeted_parameters() if method_pipe_config else set()
 
         parameters = [
@@ -119,17 +180,15 @@ class ParserSpecBuilder:
         ]
 
         raw_description = (
-            command.description
-            if command and command.description
-            else (method.description if method.has_docstring else None)
+            description if description else (method.description if method.has_docstring else None)
         )
-        cli_name = self._resolve_cli_name(None, command, method.name)
+        cli_name = self._resolve_cli_name(None, canonical_name, method.name)
 
-        return CommandSpec(
+        return Command(
             obj=method,
             canonical_name=cli_name,
             cli_name=cli_name,
-            aliases=command.aliases if command else (),
+            aliases=aliases,
             raw_description=raw_description,
             parameters=parameters,
             initializer=initializer,
@@ -137,19 +196,40 @@ class ParserSpecBuilder:
             theme=self.parser.theme,
         )
 
-    def _class_spec(self, cls: Class, command: Command | None = None) -> CommandSpec:
+    def _class_command(
+        self,
+        cls: Class,
+        *,
+        canonical_name: str | None = None,
+        description: str | None = None,
+        aliases: tuple[str, ...] = (),
+    ) -> Command:
         taken_flags = [*self.parser.RESERVED_FLAGS]
         command_key = getattr(self.parser, "COMMAND_KEY", None)
         if command_key:
             taken_flags.append(command_key)
 
-        initializer: list[ArgumentSpec] = []
-        class_pipe_config = command.get_pipe_targets() if command is not None else None
+        initializer: list[Argument] = []
+        class_pipe_config = None
         init_pipe_config = None
-        if command is not None:
-            init_pipe_config = command.get_pipe_targets(subcommand="__init__")
-            if init_pipe_config is None:
-                init_pipe_config = class_pipe_config
+        if canonical_name is not None:
+            class_pipe_config = self.parser.resolve_pipe_targets_by_names(
+                canonical_name=canonical_name,
+                obj_name=cls.name,
+                aliases=aliases,
+                subcommand=None,
+                include_default=False,
+            )
+            init_pipe_config = (
+                self.parser.resolve_pipe_targets_by_names(
+                    canonical_name=canonical_name,
+                    obj_name=cls.name,
+                    aliases=aliases,
+                    subcommand="__init__",
+                    include_default=False,
+                )
+                or class_pipe_config
+            )
 
         if cls.has_init and not cls.is_initialized:
             init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
@@ -158,38 +238,51 @@ class ParserSpecBuilder:
                 for param in cls.get_method("__init__").params
             ]
 
-        subcommands: dict[str, CommandSpec] = {}
+        subcommands: dict[str, Command] = {}
         for method in cls.methods:
             if method.name in self.parser.method_skips:
                 continue
 
             method_cli_name = self.parser.flag_strategy.command_translator.translate(method.name)
             sub_pipe_config = None
-            if command is not None:
+            if canonical_name is not None:
                 sub_pipe_config = (
-                    command.get_pipe_targets(subcommand=method_cli_name)
-                    or command.get_pipe_targets(subcommand=method.name)
+                    self.parser.resolve_pipe_targets_by_names(
+                        canonical_name=canonical_name,
+                        obj_name=cls.name,
+                        aliases=aliases,
+                        subcommand=method_cli_name,
+                        include_default=False,
+                    )
+                    or self.parser.resolve_pipe_targets_by_names(
+                        canonical_name=canonical_name,
+                        obj_name=cls.name,
+                        aliases=aliases,
+                        subcommand=method.name,
+                        include_default=False,
+                    )
                     or class_pipe_config
                 )
+
             subcommands[method_cli_name] = self._function_spec(
                 method,
-                command=None,
+                canonical_name=None,
+                description=None,
+                aliases=(),
                 cli_name_override=method_cli_name,
                 pipe_config=sub_pipe_config,
             )
 
         raw_description = (
-            command.description
-            if command and command.description
-            else (cls.description if cls.has_docstring else None)
+            description if description else (cls.description if cls.has_docstring else None)
         )
-        cli_name = self._resolve_cli_name(None, command, cls.name)
+        cli_name = self._resolve_cli_name(None, canonical_name, cls.name)
 
-        return CommandSpec(
+        return Command(
             obj=cls,
             canonical_name=cli_name,
             cli_name=cli_name,
-            aliases=command.aliases if command else (),
+            aliases=aliases,
             raw_description=raw_description,
             parameters=[],
             initializer=initializer,
@@ -204,7 +297,7 @@ class ParserSpecBuilder:
         param: Parameter,
         taken_flags: list[str],
         pipe_param_names: set[str] | None = None,
-    ) -> ArgumentSpec:
+    ) -> Argument:
         translated_name = self.parser.flag_strategy.argument_translator.translate(param.name)
         if translated_name in taken_flags:
             raise ReservedFlagError(translated_name)
@@ -235,7 +328,6 @@ class ParserSpecBuilder:
                 nargs = "*"
                 if is_list_alias:
                     t_args = type_args(param.type)
-
                     if t_args:
                         parsed_type = t_args[0]
                         parser_func = self.parser.type_parser.get_parse_func(t_args[0])
@@ -253,7 +345,7 @@ class ParserSpecBuilder:
                     long_name = long_flags[0][2:] if long_flags else translated_name
                     negative_form = f"--{inverted_bool_flag_name(long_name)}"
 
-                default_value = param.default if getattr(param, "has_default", False) else False
+                default_value = param.default if param.has_default else False
 
                 boolean_behavior = BooleanBehavior(
                     supports_negative=supports_negative,
@@ -288,7 +380,7 @@ class ParserSpecBuilder:
         else:
             required = param.is_required
 
-        return ArgumentSpec(
+        return Argument(
             name=param.name,
             display_name=translated_name,
             kind=kind,
@@ -310,11 +402,11 @@ class ParserSpecBuilder:
     def _resolve_cli_name(
         self,
         override: str | None,
-        command: Command | None,
+        canonical_name: str | None,
         fallback: str,
     ) -> str:
         if override:
             return override
-        if command and command.name:
-            return command.name
+        if canonical_name:
+            return canonical_name
         return fallback

@@ -4,11 +4,11 @@ from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 
-from interfacy.core import Command
 from interfacy.exceptions import ConfigurationError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import reverse_translations
 from interfacy.pipe import apply_pipe_values
+from interfacy.schema.schema import Command
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
@@ -105,6 +105,9 @@ class ArgparseRunner:
 
     def run_class(self, command: Command, args: dict) -> Any:
         cls = command.obj
+        if not isinstance(cls, Class):
+            raise TypeError(f"Expected {Class}, got {type(cls)}")
+
         command_name = args[self.COMMAND_KEY]
         command_args = args[command_name]
         del args[self.COMMAND_KEY]
@@ -128,5 +131,5 @@ class ArgparseRunner:
     def run_multiple(self, commands: dict[str, Command]) -> Any:
         command_name = self.namespace[self.COMMAND_KEY]
         command = self.builder.get_command_by_cli_name(command_name)
-        args = self.namespace[command.name]
+        args = self.namespace[command.canonical_name]
         return self.run_command(command, args)
