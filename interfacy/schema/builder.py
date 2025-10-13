@@ -40,16 +40,18 @@ class ParserSchemaBuilder:
 
         commands_help = None
         if len(commands) > 1:
-            commands_help = self.parser.theme.get_help_for_multiple_commands(self.parser.commands)
+            commands_help = self.parser.help_layout.get_help_for_multiple_commands(
+                self.parser.commands
+            )
 
         return ParserSchema(
             raw_description=self.parser.description,
             raw_epilog=self.parser.epilog,
             commands=commands,
-            command_key=getattr(self.parser, "COMMAND_KEY", None),
+            command_key=self.parser.COMMAND_KEY,
             allow_args_from_file=self.parser.allow_args_from_file,
             pipe_targets=self.parser.pipe_targets_default,
-            theme=self.parser.theme,
+            theme=self.parser.help_layout,
             commands_help=commands_help,
         )
 
@@ -131,7 +133,7 @@ class ParserSchemaBuilder:
             raw_description=raw_description,
             parameters=parameters,
             pipe_targets=pipe_config,
-            theme=self.parser.theme,
+            help_layout=self.parser.help_layout,
         )
 
     def _method_command(
@@ -193,7 +195,7 @@ class ParserSchemaBuilder:
             parameters=parameters,
             initializer=initializer,
             pipe_targets=method_pipe_config,
-            theme=self.parser.theme,
+            help_layout=self.parser.help_layout,
         )
 
     def _class_command(
@@ -205,7 +207,7 @@ class ParserSchemaBuilder:
         aliases: tuple[str, ...] = (),
     ) -> Command:
         taken_flags = [*self.parser.RESERVED_FLAGS]
-        command_key = getattr(self.parser, "COMMAND_KEY", None)
+        command_key = self.parser.COMMAND_KEY
         if command_key:
             taken_flags.append(command_key)
 
@@ -287,9 +289,9 @@ class ParserSchemaBuilder:
             parameters=[],
             initializer=initializer,
             subcommands=subcommands,
-            raw_epilog=self.parser.theme.get_help_for_class(cls),
+            raw_epilog=self.parser.help_layout.get_help_for_class(cls),
             pipe_targets=class_pipe_config,
-            theme=self.parser.theme,
+            help_layout=self.parser.help_layout,
         )
 
     def _argument_from_parameter(
@@ -309,12 +311,12 @@ class ParserSchemaBuilder:
             self.parser.abbreviation_gen,
         )
         taken_flags.append(translated_name)
-        help_text = self.parser.theme.get_help_for_parameter(param)
+        help_text = self.parser.help_layout.get_help_for_parameter(param, tuple(flags))
 
         parser_func: Callable[[str], Any] | None = None
         value_shape = ValueShape.SINGLE
         nargs: str | None = None
-        default_value: Any = param.default if getattr(param, "has_default", False) else None
+        default_value: Any = param.default if param.has_default else None
         parsed_type: type[Any] | None = param.type if param.is_typed else None
         choices = get_choices(param.type) if param.is_typed else None
         boolean_behavior: BooleanBehavior | None = None
@@ -359,7 +361,7 @@ class ParserSchemaBuilder:
             default_value = param.default
 
         metavar = None
-        if self.parser.theme.clear_metavar and not param.is_required:
+        if self.parser.help_layout.clear_metavar and not param.is_required:
             metavar = "\b"
 
         kind = ArgumentKind.POSITIONAL

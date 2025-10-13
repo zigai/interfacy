@@ -10,6 +10,7 @@ from stdl.fs import read_piped
 from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
+from interfacy.appearance.layout import HelpLayout, InterfacyLayout
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import (
@@ -21,7 +22,6 @@ from interfacy.naming import (
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.schema.builder import ParserSchemaBuilder
-from interfacy.themes import ParserTheme
 
 if TYPE_CHECKING:
     from interfacy.schema.schema import Command, ParserSchema
@@ -44,12 +44,13 @@ class ExitCode(IntEnum):
 class InterfacyParser:
     RESERVED_FLAGS: ClassVar[list[str]] = []
     logger_message_tag: str = "interfacy"
+    COMMAND_KEY: Final[str] = "command"
 
     def __init__(
         self,
         description: str | None = None,
         epilog: str | None = None,
-        theme: ParserTheme | None = None,
+        help_layout: HelpLayout | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
         run: bool = False,
@@ -83,10 +84,10 @@ class InterfacyParser:
         self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator()
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
         self.flag_strategy = flag_strategy or DefaultFlagStrategy()
-        self.theme = theme or ParserTheme()
-        self.theme.flag_generator = self.flag_strategy
+        self.help_layout = help_layout or InterfacyLayout()
+        self.help_layout.flag_generator = self.flag_strategy
         self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
-        self.theme.name_registry = self.name_registry
+        self.help_layout.name_registry = self.name_registry
 
         self.commands: dict[str, Command] = {}
 
@@ -130,7 +131,7 @@ class InterfacyParser:
             initializer=[],
             subcommands=None,
             pipe_targets=None,
-            theme=self.theme,
+            help_layout=self.help_layout,
         )
         self.commands[canonical_name] = command
         logger.debug(f"Added command: {command}")

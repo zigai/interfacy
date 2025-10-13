@@ -7,6 +7,7 @@ from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import type_args, type_origin
 from strto import StrToTypeParser
 
+from interfacy.appearance.layout import HelpLayout
 from interfacy.argparse_backend.argument_parser import ArgumentParser, namespace_to_dict
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
@@ -23,7 +24,6 @@ from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
-from interfacy.themes import ParserTheme
 
 logger = get_logger(__name__)
 
@@ -37,7 +37,7 @@ class Argparser(InterfacyParser):
         description: str | None = None,
         epilog: str | None = None,
         type_parser: StrToTypeParser | None = None,
-        theme: ParserTheme | None = None,
+        help_layout: HelpLayout | None = None,
         *,
         run: bool = False,
         print_result: bool = False,
@@ -54,7 +54,7 @@ class Argparser(InterfacyParser):
         super().__init__(
             description,
             epilog,
-            theme,
+            help_layout,
             type_parser,
             run=run,
             allow_args_from_file=allow_args_from_file,
@@ -72,7 +72,9 @@ class Argparser(InterfacyParser):
         del self.type_parser.parsers[list]
 
     def _new_parser(self, name: str | None = None):
-        return ArgumentParser(name, formatter_class=self.formatter_class)
+        return ArgumentParser(
+            name, formatter_class=self.formatter_class, help_layout=self.help_layout
+        )
 
     def _add_parameter_to_parser(
         self,
@@ -100,7 +102,7 @@ class Argparser(InterfacyParser):
         parser = parser or self._new_parser()
 
         if function.has_docstring:
-            parser.description = self.theme.format_description(function.description)
+            parser.description = self.help_layout.format_description(function.description)
 
         for param in function.params:
             self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
@@ -125,7 +127,7 @@ class Argparser(InterfacyParser):
             self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
 
         if method.has_docstring:
-            parser.description = self.theme.format_description(method.description)
+            parser.description = self.help_layout.format_description(method.description)
 
         return parser
 
@@ -139,8 +141,8 @@ class Argparser(InterfacyParser):
         parser = parser or self._new_parser()
 
         if cls.has_docstring:
-            parser.description = self.theme.format_description(cls.description)
-        parser.epilog = self.theme.get_help_for_class(cls)  # type: ignore
+            parser.description = self.help_layout.format_description(cls.description)
+        parser.epilog = self.help_layout.get_help_for_class(cls)  # type: ignore
 
         if cls.has_init and not cls.is_initialized:
             for param in cls.get_method("__init__").params:
@@ -178,7 +180,7 @@ class Argparser(InterfacyParser):
 
         """
         extra: dict[str, Any] = {}
-        extra["help"] = self.theme.get_help_for_parameter(param)
+        extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
 
         if param.is_typed:
             t_origin = type_origin(param.type)
@@ -194,7 +196,7 @@ class Argparser(InterfacyParser):
             else:
                 extra["type"] = self.type_parser.get_parse_func(param.type)
 
-        if self.theme.clear_metavar:
+        if self.help_layout.clear_metavar:
             if not param.is_required:
                 extra["metavar"] = "\b"
 

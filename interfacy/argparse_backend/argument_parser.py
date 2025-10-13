@@ -141,6 +141,8 @@ class ArgumentParser(argparse.ArgumentParser):
         nest_separator: str = "__",
         nest_path: list[str] | None = None,
         exit_on_error: bool = True,
+        *,
+        help_layout: Any | None = None,
     ) -> None:
         """
         Parser for converting command-line strings into Python objects.
@@ -162,6 +164,7 @@ class ArgumentParser(argparse.ArgumentParser):
             nest_separator (str, optional): Separator for nested arguments. Defaults to "__".
             nest_path (list[str] | None, optional): Path components for nested arguments. Defaults to None.
             exit_on_error (bool, optional): Whether ArgumentParser exits with error info when an error occurs.
+            help_layout (HelpLayout | None, optional): Layout configuration for help text formatting. Defaults to None.
         """
         if parents is None:
             parents = []
@@ -186,6 +189,16 @@ class ArgumentParser(argparse.ArgumentParser):
             allow_abbrev=allow_abbrev,
         )
         self.register("action", "parsers", NestedSubParsersAction)
+        self._interfacy_help_layout = help_layout
+
+    def _get_formatter(self):  # type: ignore
+        formatter = self.formatter_class(self.prog)  # type: ignore[arg-type]
+        if hasattr(formatter, "set_help_layout"):
+            try:
+                formatter.set_help_layout(self._interfacy_help_layout)
+            except Exception:
+                pass
+        return formatter
 
     def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
         logger.info(f"Adding subparsers with kwargs={kwargs}")

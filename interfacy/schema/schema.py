@@ -8,8 +8,8 @@ from typing import Any
 
 from objinspect import Class, Function, Method
 
+from interfacy.appearance.layout import HelpLayout
 from interfacy.pipe import PipeTargets
-from interfacy.themes import ParserTheme
 
 
 class ArgumentKind(str, Enum):
@@ -57,7 +57,7 @@ class Command:
     cli_name: str
     aliases: tuple[str, ...]
     raw_description: str | None
-    theme: ParserTheme | None = None
+    help_layout: HelpLayout | None = None
     pipe_targets: PipeTargets | None = None
     parameters: list[Argument] = field(default_factory=list)
     initializer: list[Argument] = field(default_factory=list)
@@ -68,9 +68,9 @@ class Command:
     def description(self) -> str | None:
         if self.raw_description is None:
             return None
-        if self.theme is None:
+        if self.help_layout is None:
             return self.raw_description
-        return self.theme.format_description(self.raw_description)
+        return self.help_layout.format_description(self.raw_description)
 
     @cached_property
     def epilog(self) -> str | None:
@@ -85,7 +85,7 @@ class ParserSchema:
     command_key: str | None
     allow_args_from_file: bool
     pipe_targets: PipeTargets | None
-    theme: ParserTheme
+    theme: HelpLayout
     commands_help: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 

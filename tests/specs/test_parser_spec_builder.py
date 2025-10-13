@@ -29,7 +29,7 @@ def parser():
     return Argparser(
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
-        theme=None,
+        help_layout=None,
     )
 
 
@@ -141,7 +141,7 @@ def test_multi_command_records_aliases_and_pipe_targets():
     parser = Argparser(
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
-        theme=None,
+        help_layout=None,
         pipe_targets="result",
     )
     parser.add_command(pow, aliases=("p",))
@@ -194,7 +194,7 @@ def test_keyword_only_strategy_keeps_argument_metadata():
     parser = Argparser(
         flag_strategy=DefaultFlagStrategy(style="keyword_only"),
         sys_exit_enabled=False,
-        theme=None,
+        help_layout=None,
     )
     parser.add_command(pow)
 

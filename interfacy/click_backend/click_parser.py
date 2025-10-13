@@ -8,10 +8,10 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
+from interfacy.appearance.layout import HelpLayout
 from interfacy.core import InterfacyParser
 from interfacy.naming import AbbreviationGenerator, FlagStrategy, NameMapping
 from interfacy.pipe import PipeTargets
-from interfacy.themes import ParserTheme
 from interfacy.util import inverted_bool_flag_name
 
 
@@ -133,7 +133,7 @@ class ClickParser(InterfacyParser):
         description: str | None = None,
         epilog: str | None = None,
         type_parser: StrToTypeParser | None = None,
-        theme: ParserTheme | None = None,
+        help_layout: HelpLayout | None = None,
         *,
         run: bool = False,
         print_result: bool = False,
@@ -149,7 +149,7 @@ class ClickParser(InterfacyParser):
         super().__init__(
             description,
             epilog,
-            theme,
+            help_layout,
             type_parser,
             pipe_targets=None,
             allow_args_from_file=allow_args_from_file,
@@ -251,7 +251,7 @@ class ClickParser(InterfacyParser):
     ) -> ClickOption | ClickArgument:
         name = self.flag_strategy.argument_translator.translate(param.name)
         extras: dict = {
-            "help": self.theme.get_help_for_parameter(param),
+            "help": self.help_layout.get_help_for_parameter(param),
             "metavar": name,
         }
 
@@ -310,7 +310,9 @@ class ClickParser(InterfacyParser):
         if taken_flags is None:
             taken_flags = [*self.RESERVED_FLAGS]
         command_name = self.flag_strategy.command_translator.translate(fn.name)
-        description = self.theme.format_description(fn.description) if fn.has_docstring else None
+        description = (
+            self.help_layout.format_description(fn.description) if fn.has_docstring else None
+        )
         params = [self._get_param(param, taken_flags, command_name=fn.name) for param in fn.params]
         callback = self._generate_callback(fn, instance_callback)
         command = ClickCommand(
@@ -322,7 +324,9 @@ class ClickParser(InterfacyParser):
         return command
 
     def parser_from_class(self, cls: Class):  # type:ignore
-        description = self.theme.format_description(cls.description) if cls.has_docstring else None
+        description = (
+            self.help_layout.format_description(cls.description) if cls.has_docstring else None
+        )
         command_name = self.flag_strategy.command_translator.translate(cls.name)
         params = []
         if cls.init_method and not cls.is_initialized:

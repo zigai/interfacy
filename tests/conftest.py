@@ -144,7 +144,7 @@ def argparse_req_pos():
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
         full_error_traceback=True,
-        theme=None,
+        help_layout=None,
         print_result=True,
     )
 
@@ -155,6 +155,6 @@ def argparse_kw_only():
         flag_strategy=DefaultFlagStrategy(style="keyword_only"),
         sys_exit_enabled=False,
         full_error_traceback=True,
-        theme=None,
+        help_layout=None,
         print_result=True,
     )

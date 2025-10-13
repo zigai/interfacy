@@ -24,7 +24,7 @@ def build_parser_with_custom_name(custom_name: str) -> tuple[Argparser, argparse
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
         full_error_traceback=True,
-        theme=None,
+        help_layout=None,
         print_result=False,
     )
 
@@ -45,7 +45,7 @@ def build_parser_with_aliases(aliases: list[str]) -> tuple[Argparser, argparse.A
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
         full_error_traceback=True,
-        theme=None,
+        help_layout=None,
         print_result=False,
     )
 
