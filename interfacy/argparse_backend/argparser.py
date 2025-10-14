@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 from objinspect import Class, Function, Method, Parameter
-from objinspect.typing import type_args, type_origin
+from objinspect.typing import type_args
 from strto import StrToTypeParser
 
 from interfacy.appearance.layout import HelpLayout
@@ -24,6 +24,7 @@ from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
+from interfacy.util import extract_optional_union_list, is_list_or_list_alias
 
 logger = get_logger(__name__)
 
@@ -183,16 +184,21 @@ class Argparser(InterfacyParser):
         extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
 
         if param.is_typed:
-            t_origin = type_origin(param.type)
-            is_list_alias = t_origin is list
+            optional_union_list = extract_optional_union_list(param.type)
+            list_annotation: Any | None = None
+            element_type: Any | None = None
 
-            if is_list_alias or param.type is list:
+            if optional_union_list:
+                list_annotation, element_type = optional_union_list
+            elif is_list_or_list_alias(param.type):
+                list_annotation = param.type
+                list_args = type_args(param.type)
+                element_type = list_args[0] if list_args else None
+
+            if list_annotation is not None:
                 extra["nargs"] = "*"
-
-            if is_list_alias:
-                t_args = type_args(param.type)
-                assert t_args
-                extra["type"] = self.type_parser.get_parse_func(t_args[0])
+                if element_type is not None:
+                    extra["type"] = self.type_parser.get_parse_func(element_type)
             else:
                 extra["type"] = self.type_parser.get_parse_func(param.type)
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter
-from objinspect.typing import get_choices, type_args, type_origin
+from objinspect.typing import get_choices, type_args
 
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy.pipe import PipeTargets
@@ -17,7 +17,11 @@ from interfacy.schema.schema import (
     ParserSchema,
     ValueShape,
 )
-from interfacy.util import inverted_bool_flag_name
+from interfacy.util import (
+    extract_optional_union_list,
+    inverted_bool_flag_name,
+    is_list_or_list_alias,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.core import InterfacyParser
@@ -320,22 +324,33 @@ class ParserSchemaBuilder:
         parsed_type: type[Any] | None = param.type if param.is_typed else None
         choices = get_choices(param.type) if param.is_typed else None
         boolean_behavior: BooleanBehavior | None = None
+        is_optional_union_list = False
 
         if param.is_typed:
-            t_origin = type_origin(param.type)
-            is_list_alias = t_origin is list
+            optional_union_list = extract_optional_union_list(param.type)
+            list_annotation: Any | None = None
+            element_type: Any | None = None
 
-            if is_list_alias or param.type is list:
+            if optional_union_list:
+                list_annotation, element_type = optional_union_list
+                is_optional_union_list = True
+            elif is_list_or_list_alias(param.type):
+                list_annotation = param.type
+                element_args = type_args(param.type)
+                element_type = element_args[0] if element_args else None
+
+            if list_annotation is not None:
                 value_shape = ValueShape.LIST
                 nargs = "*"
-                if is_list_alias:
-                    t_args = type_args(param.type)
-                    if t_args:
-                        parsed_type = t_args[0]
-                        parser_func = self.parser.type_parser.get_parse_func(t_args[0])
-
-                elif param.type is list:
+                if element_type is not None:
+                    parsed_type = element_type
+                    parser_func = self.parser.type_parser.get_parse_func(element_type)
+                else:
+                    parsed_type = None
                     parser_func = None
+
+                if is_optional_union_list and not param.has_default:
+                    default_value = []
 
             elif param.type is bool:
                 value_shape = ValueShape.FLAG
@@ -380,7 +395,7 @@ class ParserSchemaBuilder:
                 nargs = "?"
             required = False
         else:
-            required = param.is_required
+            required = False if is_optional_union_list else param.is_required
 
         return Argument(
             name=param.name,

@@ -17,6 +17,10 @@ from tests.conftest import (
 )
 
 
+def function_optional_list_union(values: list[int] | None):
+    return values or []
+
+
 def doc_summary(obj) -> str | None:
     doc = inspect.getdoc(obj)
     if not doc:
@@ -228,3 +232,26 @@ def test_optional_list_argument_metadata(parser: Argparser):
     assert argument.value_shape is ValueShape.LIST
     assert argument.nargs == "*"
     assert argument.default == [1, 2]
+
+
+class TestOptionalUnionListArg:
+    """Optional list annotations, eg. list | None, should still behave like lists"""
+
+    def test_optional_union_list_argument_detected_as_list(self, parser: Argparser):
+        parser.add_command(function_optional_list_union)
+
+        schema = parser.build_parser_schema()
+        argument = schema.commands["function-optional-list-union"].parameters[0]
+
+        assert argument.value_shape is ValueShape.LIST
+        assert argument.nargs == "*"
+
+        assert parser.parse_args(["1"])["values"] == [1]
+        assert parser.parse_args(["1", "2"])["values"] == [1, 2]
+        assert parser.parse_args([])["values"] == []
+
+    def test_optional_union_list_parsed_correctly(self, parser: Argparser):
+        parser.add_command(function_optional_list_union)
+        assert parser.parse_args(["1"])["values"] == [1]
+        assert parser.parse_args(["1", "2"])["values"] == [1, 2]
+        assert parser.parse_args([])["values"] == []

@@ -1,7 +1,8 @@
 from collections.abc import Callable
+from types import NoneType
 from typing import Any
 
-from objinspect.typing import type_origin
+from objinspect.typing import is_union_type, type_args, type_origin
 
 
 def simplified_type_name(name: str) -> str:
@@ -18,6 +19,26 @@ def is_list_or_list_alias(t: type) -> bool:
         return True
     t_origin = type_origin(t)
     return t_origin is list
+
+
+def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
+    """
+    If the annotation represents `list[T] | None` or `Optional[list[T]]`, return the list annotation together with its element type.
+    Otherwise `None`.
+    """
+    if not is_union_type(t):
+        return None
+
+    union_args = type_args(t)
+    if not any(arg is NoneType for arg in union_args):
+        return None
+
+    for arg in union_args:
+        if is_list_or_list_alias(arg):
+            element_args = type_args(arg)
+            element_type = element_args[0] if element_args else None
+            return arg, element_type
+    return None
 
 
 def show_result(result: Any, handler: Callable = print) -> None:
@@ -41,6 +62,7 @@ def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
 __all__ = [
     "simplified_type_name",
     "is_list_or_list_alias",
+    "extract_optional_union_list",
     "show_result",
     "inverted_bool_flag_name",
 ]
