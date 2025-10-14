@@ -194,6 +194,15 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             "metavar": action.metavar or action.dest,
         }
 
+        styled_cols = layout._build_styled_columns(flag_short, flag_long, flag, is_option)
+        values.update(styled_cols)
+
+        values["desc_line"] = description
+        if values.get("required"):
+            values["desc_line"] = f"{description} {values['required']}"
+
+        values["details"] = ""
+
         try:
             rendered = template.format(**values)
         except Exception:

@@ -5,9 +5,9 @@ from interfacy.appearance.layout import InterfacyLayout
 
 
 class Aligned(InterfacyLayout):
-    short_flag_width: int = 10
-    long_flag_width: int = 22
-    pos_flag_width: int = 34
+    short_flag_width: int = 6
+    long_flag_width: int = 18
+    pos_flag_width: int = 24
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description}"
     format_positional = "{flag_col}{description}"
@@ -16,9 +16,9 @@ class Aligned(InterfacyLayout):
 
 
 class AlignedTyped(InterfacyLayout):
-    short_flag_width: int = 10
-    long_flag_width: int = 22
-    pos_flag_width: int = 34
+    short_flag_width: int = 6
+    long_flag_width: int = 18
+    pos_flag_width: int = 24
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]"
     format_positional = "{flag_col}{description} [type: {type}]"
@@ -31,9 +31,9 @@ class Modern(InterfacyLayout):
     default_field_width = 8
     default_label_for_help = "default"
 
-    short_flag_width: int = 8
-    long_flag_width: int = 20
-    pos_flag_width: int = 34
+    short_flag_width: int = 6
+    long_flag_width: int = 18
+    pos_flag_width: int = 24
 
     format_option = "{flag_short_col}{flag_long_col} {desc_line}{details}"
     format_positional = "{flag_col} {desc_line}{details}"

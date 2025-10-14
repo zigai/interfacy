@@ -50,12 +50,13 @@ class HelpLayout:
     default_field_width: int = 7
     default_label_for_help: str = "default"
     include_metavar_in_flag_display: bool = True
-    short_flag_width: int = 12
-    long_flag_width: int = 26
-    pos_flag_width: int = 40
+    short_flag_width: int = 6
+    long_flag_width: int = 18
+    pos_flag_width: int = 24
+    min_total_flag_width: int = 24
     PRE_FMT_PREFIX = "\x00FMT:"
 
-    layout_mode: Literal["auto", "adaptive", "template"] = "auto"  # how help rows are produced
+    layout_mode: Literal["auto", "adaptive", "template"] = "auto"
 
     def format_description(self, description: str) -> str:
         return description
@@ -288,6 +289,55 @@ class HelpLayout:
     def _build_extra(self, param: Parameter) -> str:
         return HelpLayout._get_param_extra_help(self, param)
 
+    def _build_styled_columns(
+        self, flag_short: str, flag_long: str, flag: str, is_option: bool
+    ) -> dict[str, str]:
+        """
+        Build styled flag strings with proper column padding.
+        Accounts for ANSI color codes when calculating padding.
+        """
+        styled_values = {}
+
+        styled_values["flag_short_styled"] = (
+            with_style(flag_short, self.style.flag_short) if flag_short else ""
+        )
+        styled_values["flag_long_styled"] = (
+            with_style(flag_long, self.style.flag_long) if flag_long else ""
+        )
+
+        if not is_option and flag:
+            styled_values["flag_styled"] = with_style(flag, self.style.flag_positional)
+        else:
+            styled_parts = [
+                p
+                for p in (styled_values["flag_short_styled"], styled_values["flag_long_styled"])
+                if p
+            ]
+            styled_values["flag_styled"] = ", ".join(styled_parts) if styled_parts else flag
+
+        if flag_short:
+            fs = styled_values["flag_short_styled"]
+            pad = max(0, self.short_flag_width - ansi_len(fs))
+            styled_values["flag_short_col"] = f"{fs}{' ' * pad}"
+        else:
+            styled_values["flag_short_col"] = " " * self.short_flag_width
+
+        if flag_long:
+            fl = styled_values["flag_long_styled"]
+            pad = max(0, self.long_flag_width - ansi_len(fl))
+            styled_values["flag_long_col"] = f"{fl}{' ' * pad}"
+        else:
+            styled_values["flag_long_col"] = " " * self.long_flag_width
+
+        if flag:
+            fp = styled_values["flag_styled"]
+            pad = max(0, self.pos_flag_width - ansi_len(fp))
+            styled_values["flag_col"] = f"{fp}{' ' * pad}"
+        else:
+            styled_values["flag_col"] = " " * self.pos_flag_width
+
+        return styled_values
+
     def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
         flag, flag_short, flag_long, is_option = self._build_flag_parts(param, flags)
 
@@ -332,40 +382,7 @@ class HelpLayout:
             "metavar": (param.name or "value").upper(),
         }
 
-        values["flag_short_styled"] = (
-            with_style(flag_short, self.style.flag_short) if flag_short else ""
-        )
-        values["flag_long_styled"] = (
-            with_style(flag_long, self.style.flag_long) if flag_long else ""
-        )
-        if not is_option and flag:
-            values["flag_styled"] = with_style(flag, self.style.flag_positional)
-        else:
-            styled_parts = [
-                p for p in (values["flag_short_styled"], values["flag_long_styled"]) if p
-            ]
-            values["flag_styled"] = ", ".join(styled_parts) if styled_parts else flag
-
-        if flag_short:
-            fs = values["flag_short_styled"]
-            pad = max(0, self.short_flag_width - ansi_len(fs))
-            values["flag_short_col"] = f"{fs}{' ' * pad}"
-        else:
-            values["flag_short_col"] = " " * self.short_flag_width
-
-        if flag_long:
-            fl = values["flag_long_styled"]
-            pad = max(0, self.long_flag_width - ansi_len(fl))
-            values["flag_long_col"] = f"{fl}{' ' * pad}"
-        else:
-            values["flag_long_col"] = " " * self.long_flag_width
-
-        if not is_option and flag:
-            fp = values["flag_styled"]
-            pad = max(0, self.pos_flag_width - ansi_len(fp))
-            values["flag_col"] = f"{fp}{' ' * pad}"
-        else:
-            values["flag_col"] = " " * self.pos_flag_width
+        values.update(self._build_styled_columns(flag_short, flag_long, flag, is_option))
 
         return values
 
@@ -373,8 +390,10 @@ class HelpLayout:
 class InterfacyLayout(HelpLayout):
     """Default Interfacy layout"""
 
-    format_option = "{flag_styled:<40} {description} {extra}"
-    format_positional = "{flag_styled:<40} {description}"
+    pos_flag_width: int = 24
+
+    format_option = "{flag_col}{description} {extra}"
+    format_positional = "{flag_col}{description}"
     include_metavar_in_flag_display = False
     layout_mode = "template"
     required_indicator: str = "(" + colored("*", color="red") + ")"
