@@ -52,9 +52,12 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if not action.help:
             return f"{' ' * indent_len}{action_header}\n"
 
-        term_width = os.get_terminal_size().columns
-        help_width = term_width - help_position - indent_len
+        try:
+            term_width = os.get_terminal_size().columns
+        except (OSError, AttributeError):
+            term_width = 80
 
+        help_width = term_width - help_position - indent_len
         help_text = self._expand_help(action)
 
         # preformatted line support from theme/arg schema
@@ -112,6 +115,27 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 s for s in action.option_strings if s.startswith("-") and not s.startswith("--")
             ]
             longs = [s for s in action.option_strings if s.startswith("--")]
+
+            is_bool = isinstance(action, argparse._StoreTrueAction) or (
+                isinstance(action, argparse.BooleanOptionalAction)
+            )
+            if is_bool and longs:
+                base_flag = None
+                no_flag = None
+                for flag in longs:
+                    if flag.startswith("--no-"):
+                        no_flag = flag
+                    else:
+                        base_flag = flag
+
+                default_val = action.default
+                if default_val is True and no_flag:  # default is True: show --no- flag
+                    primary_long = no_flag
+                else:  # default is False/None: show positive flag
+                    primary_long = base_flag or longs[0]
+
+                longs = [primary_long]
+
             flag_short = (shorts[0] + (f" {args_string}" if args_string else "")) if shorts else ""
             flag_long = (longs[0] + (f" {args_string}" if args_string else "")) if longs else ""
             flag = ", ".join([p for p in (flag_short, flag_long) if p])

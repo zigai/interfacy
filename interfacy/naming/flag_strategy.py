@@ -99,13 +99,32 @@ class DefaultFlagStrategy(FlagStrategy):
             flag_long = f"--{name}".strip()
 
         flags = (flag_long,)
-        if is_bool_flag:
-            return flags
 
-        if flag_short := abbrev_gen.generate(name, taken_flags):
+        abbrev_name = name
+        is_inverted = False
+
+        if is_bool_flag:
+            default_value = param.default if param.has_default else False
+            if default_value is True:
+                abbrev_name = f"no-{name}"
+                is_inverted = True
+
+        if flag_short := abbrev_gen.generate(abbrev_name, taken_flags):
             flag_short = flag_short.strip()
-            if flag_short != name:
+            if is_inverted and len(flag_short) == 1:
+                name_parts = abbrev_name.split("-")
+                multi_char = "".join([p[0] for p in name_parts if p])
+
+                if multi_char not in taken_flags and len(multi_char) > 1:
+                    taken_flags.remove(flag_short)
+                    taken_flags.append(multi_char)
+                    flag_short = multi_char
+                else:
+                    flag_short = None
+
+            if flag_short and flag_short != name and flag_short != abbrev_name:
                 flags = (f"-{flag_short}", flag_long)
+
         return flags
 
 

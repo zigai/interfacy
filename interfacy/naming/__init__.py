@@ -1,13 +1,17 @@
-from .abbreviations import AbbreviationGenerator, DefaultAbbreviationGenerator, NoAbbreviations
-from .command_naming import CommandNameRegistry
-from .flag_strategy import (
+from interfacy.naming.abbreviations import (
+    AbbreviationGenerator,
+    DefaultAbbreviationGenerator,
+    NoAbbreviations,
+)
+from interfacy.naming.command_naming import CommandNameRegistry
+from interfacy.naming.flag_strategy import (
     DefaultFlagStrategy,
     FlagStrategy,
     FlagStyle,
     TranslationMode,
     build_name_mapping,
 )
-from .name_mapping import NameMapping, reverse_translations
+from interfacy.naming.name_mapping import NameMapping, reverse_translations
 
 __all__ = [
     "AbbreviationGenerator",

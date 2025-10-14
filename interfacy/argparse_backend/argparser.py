@@ -183,7 +183,8 @@ class Argparser(InterfacyParser):
         extra: dict[str, Any] = {}
         extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
 
-        if param.is_typed:
+        is_bool_param = param.is_typed and param.type is bool
+        if param.is_typed and not is_bool_param:
             optional_union_list = extract_optional_union_list(param.type)
             list_annotation: Any | None = None
             element_type: Any | None = None
@@ -202,7 +203,7 @@ class Argparser(InterfacyParser):
             else:
                 extra["type"] = self.type_parser.get_parse_func(param.type)
 
-        if self.help_layout.clear_metavar:
+        if self.help_layout.clear_metavar and not is_bool_param:
             if not param.is_required:
                 extra["metavar"] = "\b"
 
@@ -212,8 +213,7 @@ class Argparser(InterfacyParser):
             if not is_positional:
                 extra["required"] = param.is_required
 
-        # Handle boolean parameters
-        if param.is_typed and param.type is bool:
+        if is_bool_param:
             extra["action"] = argparse.BooleanOptionalAction
             if not param.is_required:
                 extra["default"] = param.default
@@ -221,19 +221,20 @@ class Argparser(InterfacyParser):
                 extra["default"] = False
             return extra
 
-        # Add default value
         if not param.is_required:
             extra["default"] = param.default
         return extra
 
     def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
         kwargs: dict[str, Any] = {"help": arg.help or ""}
-        if arg.metavar:
+        is_boolean_flag = arg.value_shape == ValueShape.FLAG
+
+        if arg.metavar and not is_boolean_flag:
             kwargs["metavar"] = arg.metavar
-        if arg.nargs:
+        if arg.nargs and not is_boolean_flag:
             kwargs["nargs"] = arg.nargs
 
-        if arg.value_shape == ValueShape.FLAG:
+        if is_boolean_flag:
             kwargs["action"] = argparse.BooleanOptionalAction
             if arg.boolean_behavior is not None:
                 kwargs["default"] = arg.boolean_behavior.default

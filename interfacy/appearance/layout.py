@@ -20,9 +20,9 @@ class InterfacyColors:
     description: TextStyle = TextStyle(color="white")
     string: TextStyle = TextStyle(color="yellow")
     extra_data: TextStyle = TextStyle(color="gray")
-    flag_short: TextStyle = TextStyle(color="light_cyan")
-    flag_long: TextStyle = TextStyle(color="light_blue")
-    flag_positional: TextStyle = TextStyle(color="light_cyan")
+    flag_short: TextStyle = TextStyle(color="white")
+    flag_long: TextStyle = TextStyle(color="white")
+    flag_positional: TextStyle = TextStyle(color="white")
 
 
 class HelpLayout:
@@ -215,6 +215,37 @@ class HelpLayout:
         alias_text = ", ".join(aliases)
         return f"{name} ({alias_text})"
 
+    def _get_primary_boolean_flag(self, param: Parameter, flags: tuple[str, ...]) -> str:
+        """
+        Determine the primary boolean flag to display based on the default value.
+
+        For boolean parameters, show the flag that represents the "action" to take:
+        - If default is True, show --no-flag
+        - If default is False or None, show --flag
+        """
+        longs = [f for f in flags if f.startswith("--")]
+        if not longs:
+            return flags[0] if flags else ""
+
+        base_flag = None
+        no_flag = None
+
+        for flag in longs:
+            if flag.startswith("--no-"):
+                no_flag = flag
+            else:
+                base_flag = flag
+
+        if base_flag and not no_flag:
+            no_flag = f"--no-{base_flag[2:]}"
+
+        default_value = param.default if param.has_default else False
+
+        if default_value is True and no_flag:
+            return no_flag
+
+        return base_flag or longs[0]
+
     def _build_flag_parts(
         self, param: Parameter, flags: tuple[str, ...]
     ) -> tuple[str, str, str, bool]:
@@ -230,13 +261,24 @@ class HelpLayout:
         else:  # Always show uppercase name for positional arguments
             metavar = (param.name or "value").upper()
 
-        def with_meta(flag: str) -> str:
+        def with_metavar(flag: str) -> str:
             return f"{flag} {metavar}" if metavar else flag
 
-        flag_short = with_meta(shorts[0]) if shorts else ""
-        flag_long = with_meta(longs[0]) if longs else ""
+        is_bool_param = param.is_typed and param.type is bool
+        if is_bool_param:
+            primary_flag = self._get_primary_boolean_flag(param, flags)
+            flag_short = shorts[0] if shorts else ""
+            flag_long = primary_flag
+            if flag_short:
+                joined = f"{flag_short}, {flag_long}"
+            else:
+                joined = flag_long
+            return joined, flag_short, flag_long, is_option
 
-        if is_option:  # Join short and long forms with a comma and space
+        flag_short = with_metavar(shorts[0]) if shorts else ""
+        flag_long = with_metavar(longs[0]) if longs else ""
+
+        if is_option:
             joined = ", ".join([p for p in (flag_short, flag_long) if p])
         else:
             joined = metavar or (param.name or "")
@@ -299,8 +341,10 @@ class HelpLayout:
         if not is_option and flag:
             values["flag_styled"] = with_style(flag, self.style.flag_positional)
         else:
-            values["flag_styled"] = flag
-            values["flag_styled"] = flag
+            styled_parts = [
+                p for p in (values["flag_short_styled"], values["flag_long_styled"]) if p
+            ]
+            values["flag_styled"] = ", ".join(styled_parts) if styled_parts else flag
 
         if flag_short:
             fs = values["flag_short_styled"]
@@ -329,10 +373,10 @@ class HelpLayout:
 class InterfacyLayout(HelpLayout):
     """Default Interfacy layout"""
 
-    format_option = "{flag:<40} {description} {extra}"
-    format_positional = "{flag:<40} {description}"
+    format_option = "{flag_styled:<40} {description} {extra}"
+    format_positional = "{flag_styled:<40} {description}"
     include_metavar_in_flag_display = False
-    layout_mode = "adaptive"
+    layout_mode = "template"
     required_indicator: str = "(" + colored("*", color="red") + ")"
 
 

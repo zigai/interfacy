@@ -5,17 +5,23 @@ from interfacy.appearance.layout import InterfacyLayout
 
 
 class Aligned(InterfacyLayout):
-    format_option = "{flag_short:<10} {flag_long:<22} [{default_padded}] {description}"
-    format_positional = "{flag:<34} {description}"
+    short_flag_width: int = 10
+    long_flag_width: int = 22
+    pos_flag_width: int = 34
+
+    format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description}"
+    format_positional = "{flag_col}{description}"
     include_metavar_in_flag_display = False
     layout_mode = "template"
 
 
 class AlignedTyped(InterfacyLayout):
-    format_option = (
-        "{flag_short:<10} {flag_long:<22} [{default_padded}] {description} [type: {type}]"
-    )
-    format_positional = "{flag:<34} {description} [type: {type}]"
+    short_flag_width: int = 10
+    long_flag_width: int = 22
+    pos_flag_width: int = 34
+
+    format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]"
+    format_positional = "{flag_col}{description} [type: {type}]"
     include_metavar_in_flag_display = False
     layout_mode = "template"
 
@@ -25,9 +31,9 @@ class Modern(InterfacyLayout):
     default_field_width = 8
     default_label_for_help = "default"
 
-    short_flag_width: int = 12
-    long_flag_width: int = 26
-    pos_flag_width: int = 40
+    short_flag_width: int = 8
+    long_flag_width: int = 20
+    pos_flag_width: int = 34
 
     format_option = "{flag_short_col}{flag_long_col} {desc_line}{details}"
     format_positional = "{flag_col} {desc_line}{details}"
