@@ -90,7 +90,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
             fromfile_prefix_chars (str | None, optional): Characters prefixing files with arguments. Defaults to None.
             argument_default (Any, optional): Default value for all arguments. Defaults to None.
             conflict_handler (str, optional): How to handle conflicts. Defaults to "error".
-            add_help (bool, optional): Add -h/-help option. Defaults to True.
+            add_help (bool, optional): Add a --help option. Defaults to True.
             allow_abbrev (bool, optional): Allow abbreviated long options. Defaults to True.
             exit_on_error (bool, optional): Exit with error info on error. Defaults to True.
             nest_dir (str | None, optional): Custom nesting directory name. Defaults to name if not provided.
@@ -158,7 +158,7 @@ class ArgumentParser(argparse.ArgumentParser):
             fromfile_prefix_chars (str, optional): Characters that prefix files containing additional arguments.
             argument_default (Any, optional): The default value for all arguments.
             conflict_handler (str, optional): String indicating how to handle conflicts.
-            add_help (bool, optional): Whether to add a -h/-help option.
+            add_help (bool, optional): Whether to add a --help option.
             allow_abbrev (bool, optional): Whether to allow long options to be abbreviated unambiguously.
             nest_dir (str | None, optional): Custom nesting directory name. Defaults to None.
             nest_separator (str, optional): Separator for nested arguments. Defaults to "__".
@@ -184,10 +184,19 @@ class ArgumentParser(argparse.ArgumentParser):
             fromfile_prefix_chars=fromfile_prefix_chars,
             argument_default=argument_default,
             conflict_handler=conflict_handler,
-            add_help=add_help,
+            add_help=False,
             exit_on_error=exit_on_error,
             allow_abbrev=allow_abbrev,
         )
+        self.add_help = add_help
+        if add_help:
+            default_prefix = "-" if "-" in self.prefix_chars else self.prefix_chars[0]
+            self.add_argument(
+                default_prefix * 2 + "help",
+                action="help",
+                default=argparse.SUPPRESS,
+                help=argparse._("show this help message and exit"),
+            )
         self.register("action", "parsers", NestedSubParsersAction)
         self._interfacy_help_layout = help_layout
 

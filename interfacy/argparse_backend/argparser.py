@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 
 class Argparser(InterfacyParser):
-    RESERVED_FLAGS: ClassVar[list[str]] = ["h", "help"]
+    RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
     COMMAND_KEY = "command"
 
     def __init__(
