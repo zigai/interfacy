@@ -9,8 +9,8 @@ class Aligned(InterfacyLayout):
     long_flag_width: int = 18
     pos_flag_width: int = 24
 
-    format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description}"
-    format_positional = "{flag_col}{description}"
+    format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
+    format_positional = "{flag_col}{description}{choices_block}"
     include_metavar_in_flag_display = False
     layout_mode = "template"
 
@@ -20,8 +20,8 @@ class AlignedTyped(InterfacyLayout):
     long_flag_width: int = 18
     pos_flag_width: int = 24
 
-    format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]"
-    format_positional = "{flag_col}{description} [type: {type}]"
+    format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]{choices_block}"
+    format_positional = "{flag_col}{description} [type: {type}]{choices_block}"
     include_metavar_in_flag_display = False
     layout_mode = "template"
 

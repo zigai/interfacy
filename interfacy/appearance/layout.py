@@ -358,15 +358,17 @@ class HelpLayout:
         default_padded = f"{' ' * pad}{styled_default}"
         default = styled_default
 
-        if param.is_typed and param.type is not bool:
-            t_str = colored_type(param.type, self.style.type)
-        else:
-            t_str = ""
-
         choices = get_choices(param.type) if param.is_typed else None
         choices_str = ""
         if choices:
             choices_str = ", ".join([with_style(str(i), self.style.string) for i in choices])
+        choices_label = with_style("choices:", self.style.extra_data) if choices_str else ""
+        choices_block = " [" + choices_label + " " + choices_str + "]" if choices_str else ""
+
+        if param.is_typed and param.type is not bool and not choices:
+            t_str = colored_type(param.type, self.style.type)
+        else:  # Hide type when choices are shown
+            t_str = ""
 
         values: dict[str, str] = {
             "flag": flag,
@@ -377,6 +379,8 @@ class HelpLayout:
             "default": default,
             "default_padded": default_padded,
             "choices": choices_str,
+            "choices_label": choices_label,
+            "choices_block": choices_block,
             "extra": self._build_extra(param),
             "required": self.required_indicator if param.is_required else "",
             "metavar": (param.name or "value").upper(),

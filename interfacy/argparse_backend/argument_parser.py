@@ -39,6 +39,8 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         required: bool = False,
         help: str | None = None,
         metavar: str | None = None,
+        formatter_class: type[argparse.HelpFormatter] | None = None,
+        help_layout: Any | None = None,
     ) -> None:
         super().__init__(
             option_strings,
@@ -51,6 +53,8 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         )
         self.base_nest_path_components = base_nest_path
         self.nest_separator = nest_separator
+        self._child_formatter_class = formatter_class or InterfacyHelpFormatter
+        self._child_help_layout = help_layout
 
     def add_parser(  # type: ignore
         self,
@@ -63,7 +67,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         description: str | None = None,
         epilog: str | None = None,
         parents: Sequence[argparse.ArgumentParser] = (),
-        formatter_class: type[argparse.HelpFormatter] = argparse.HelpFormatter,
+        formatter_class: type[argparse.HelpFormatter] | None = None,
         prefix_chars: str = "-",
         fromfile_prefix_chars: str | None = None,
         argument_default: Any = None,
@@ -99,6 +103,8 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         Returns:
             NestedArgumentParser: A new parser for the subcommand.
         """
+        kwargs.setdefault("help_layout", self._child_help_layout)
+
         return super().add_parser(
             name,
             help=help,
@@ -108,7 +114,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
             description=description,
             epilog=epilog,
             parents=parents,
-            formatter_class=formatter_class,
+            formatter_class=formatter_class or self._child_formatter_class,
             prefix_chars=prefix_chars,
             fromfile_prefix_chars=fromfile_prefix_chars,
             argument_default=argument_default,
@@ -217,7 +223,12 @@ class ArgumentParser(argparse.ArgumentParser):
             kwargs[DEST_KEY] = nested_dest
 
         kwargs.update(
-            {"base_nest_path": self.nest_path_components, "nest_separator": self.nest_separator}
+            {
+                "base_nest_path": self.nest_path_components,
+                "nest_separator": self.nest_separator,
+                "formatter_class": self.formatter_class,
+                "help_layout": getattr(self, "_interfacy_help_layout", None),
+            }
         )
         return super().add_subparsers(**kwargs)  # type: ignore
 

@@ -355,11 +355,13 @@ class Argparser(InterfacyParser):
             cli_name = namespace[self.COMMAND_KEY]
             canonical = self.name_registry.canonical_for(cli_name) or cli_name
             namespace[self.COMMAND_KEY] = canonical
-            command_args_key = canonical if canonical in namespace else cli_name
-            if command_args_key not in namespace:
-                raise InvalidCommandError(cli_name)
-            if command_args_key != canonical:
-                namespace[canonical] = namespace.pop(command_args_key)
+
+            if canonical in namespace:
+                pass
+            elif cli_name in namespace:
+                namespace[canonical] = namespace.pop(cli_name)
+            else:
+                namespace[canonical] = {}
 
         return namespace
 
