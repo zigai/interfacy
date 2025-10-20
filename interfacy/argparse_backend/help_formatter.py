@@ -36,10 +36,45 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         default = self._get_default_metavar_for_optional(action)
         args_string = self._format_args(action, default)
 
+        try:  # show --no-flag when default=True
+            import argparse as _argparse
+
+            is_bool = isinstance(action, _argparse._StoreTrueAction) or isinstance(
+                action, _argparse.BooleanOptionalAction
+            )
+        except Exception:
+            is_bool = False
+
+        if is_bool:
+            shorts = [
+                s for s in action.option_strings if s.startswith("-") and not s.startswith("--")
+            ]
+            longs = [s for s in action.option_strings if s.startswith("--")]
+
+            base_flag = None
+            no_flag = None
+            for flag in longs:
+                if flag.startswith("--no-"):
+                    no_flag = flag
+                else:
+                    base_flag = flag
+
+            if base_flag and not no_flag:
+                no_flag = f"--no-{base_flag[2:]}"
+
+            default_val = getattr(action, "default", False)
+            primary_long = (
+                no_flag if bool(default_val) else (base_flag or (longs[0] if longs else ""))
+            )
+
+            if shorts:
+                return shorts[0] + (f", {primary_long}" if primary_long else "")
+            return primary_long
+
         if len(action.option_strings) == 1:
             return action.option_strings[0] + (f" {args_string}" if args_string else "")
 
-        return f"{action.option_strings[0]}, {action.option_strings[1]}"
+        return ", ".join(action.option_strings) + (f" {args_string}" if args_string else "")
 
     def _format_action(self, action):
         action_header = self._format_action_invocation(action)

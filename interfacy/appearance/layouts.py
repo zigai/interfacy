@@ -1,7 +1,10 @@
+from typing import Literal
+
 from objinspect import Parameter
 from stdl.st import with_style
 
-from interfacy.appearance.layout import InterfacyLayout
+from interfacy.appearance.colors import NoColor
+from interfacy.appearance.layout import HelpLayout, InterfacyLayout
 
 
 class Aligned(InterfacyLayout):
@@ -77,7 +80,35 @@ class Modern(InterfacyLayout):
         return values
 
 
+class ArgparseLayout(HelpLayout):
+    """Layout that follows the default ``argparse`` help output."""
+
+    style = NoColor()
+
+    include_metavar_in_flag_display = True
+    required_indicator: str = ""
+    enable_required_indicator: bool = False
+    default_label_for_help: str = ""
+    clear_metavar: bool = False
+
+    help_position: int = 24  # type:ignore
+    layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
+
+    def get_help_for_parameter(
+        self,
+        param: Parameter,
+        flags: tuple[str, ...] | None = None,
+    ) -> str:
+        description = param.description or ""
+        if param.has_default:
+            if len(description):
+                description += ". "
+            description += f"Defaults to {param.default}."
+        return description
+
+
 __all__ = [
+    "ArgparseLayout",
     "Aligned",
     "AlignedTyped",
     "Modern",
