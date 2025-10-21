@@ -4,8 +4,9 @@ import re
 import textwrap
 from typing import TYPE_CHECKING
 
-from objinspect.util import colored_type
 from stdl.st import ansi_len, with_style
+
+from interfacy.util import format_type_for_help
 
 if TYPE_CHECKING:
     from interfacy.appearance.layout import HelpLayout
@@ -184,12 +185,16 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if description:
             description = with_style(description, style.description)
 
-        t_str = ""
-        if action.type not in (None, str, int, float, bool):
-            try:
-                t_str = colored_type(action.type, style.type)
-            except Exception:
-                t_str = ""
+        type_str = ""
+        try:
+            if action.type in (None, bool):
+                type_str = ""
+            elif action.type in (str, int, float):
+                type_str = ""
+            else:
+                type_str = format_type_for_help(action.type, style.type)
+        except Exception:
+            type_str = ""
 
         default_val = action.default
         is_bool = isinstance(action, argparse._StoreTrueAction) or (
@@ -220,7 +225,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             "flag_short": flag_short,
             "flag_long": flag_long,
             "description": description,
-            "type": t_str,
+            "type": type_str,
             "default": default,
             "default_padded": default_padded,
             "choices": "",

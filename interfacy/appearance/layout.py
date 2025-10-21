@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices
-from objinspect.util import colored_type
 from stdl.st import TextStyle, ansi_len, colored, with_style
 
 from interfacy.naming import CommandNameRegistry, FlagStrategy
+from interfacy.util import format_type_for_help
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.schema.schema import Command
@@ -213,9 +213,8 @@ class HelpLayout:
                     param_info += ", " + default_text
                     default_added = True
             else:
-                param_info = with_style(self.prefix_type, self.style.extra_data) + colored_type(
-                    param.type, self.style.type
-                )
+                type_str = format_type_for_help(param.type, self.style.type)
+                param_info = with_style(self.prefix_type, self.style.extra_data) + type_str
 
             parts.append(param_info)
 
@@ -392,7 +391,7 @@ class HelpLayout:
         choices_block = " [" + choices_label + " " + choices_str + "]" if choices_str else ""
 
         if param.is_typed and param.type is not bool and not choices:
-            t_str = colored_type(param.type, self.style.type)
+            t_str = format_type_for_help(param.type, self.style.type)
         else:  # Hide type when choices are shown
             t_str = ""
 
