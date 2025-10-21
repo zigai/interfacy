@@ -27,7 +27,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
     def _format_args(self, action, default_metavar: str):
         result = super()._format_args(action, default_metavar)
-        return result.strip()
+        # Treat the special "\b" metavar (used to hide metavars) as empty
+        cleaned = result.replace("\b", "").strip()
+        return cleaned
 
     def _format_action_invocation(self, action):
         if not action.option_strings:
@@ -291,6 +293,8 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             detail_parts.append(with_style("type:", style.extra_data) + " " + type_str)
 
         choices_str = ""
+        choices_label = ""
+        choices_block = ""
 
         try:
             if action.choices:
@@ -300,32 +304,32 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
         if choices_str:
             choices_styled = ", ".join([with_style(str(i), style.string) for i in action.choices])
-            detail_parts.append(with_style("choices:", style.extra_data) + " " + choices_styled)
+            choices_label = with_style("choices:", style.extra_data)
+            choices_block = f" [{choices_label} {choices_styled}]"
+            detail_parts.append(choices_label + " " + choices_styled)
 
         if detail_parts:
             is_option = bool(action.option_strings)
             if is_option:
                 pad_count = layout.short_flag_width + layout.long_flag_width + 2
             else:
-                pad_count = layout.pos_flag_width + 1
+                pad_count = layout.pos_flag_width + 2
             arrow = with_style("↳", style.extra_data)
             details_text = with_style(" | ", style.extra_data).join(detail_parts)
             values["details"] = "\n" + (" " * pad_count) + f"{arrow} " + details_text
         else:
             values["details"] = ""
 
+        values["choices"] = choices_str
+        values["choices_label"] = choices_label
+        values["choices_block"] = choices_block
+
         try:
             rendered = template.format(**values)
         except Exception:
             rendered = f"{values['flag']:<40} {values['description']}"
 
-        # Clean up empty type markers like " [type: ]" and drop metavars when disabled
         rendered = re.sub(r"\s*\[type:\s*\]", "", rendered)
-        if not include_meta:
-            rendered = re.sub(r"(\-\w+)\s+[A-Z][A-Z0-9_-]*", r"\1", rendered)
-            rendered = re.sub(
-                r"(\-\-[A-Za-z0-9][A-Za-z0-9\-]*)\s+[A-Z][A-Z0-9_-]*", r"\1", rendered
-            )
         return rendered
 
     def _fill_text(self, text, width, indent):

@@ -64,7 +64,7 @@ class Modern(InterfacyLayout):
             if is_option:
                 pad_count = self.short_flag_width + self.long_flag_width + 2
             else:
-                pad_count = self.pos_flag_width + 1
+                pad_count = self.pos_flag_width + 2
 
             arrow = with_style("↳", self.style.extra_data)
             details_text = with_style(" | ", self.style.extra_data).join(detail_parts)

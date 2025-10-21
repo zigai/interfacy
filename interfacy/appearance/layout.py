@@ -207,11 +207,6 @@ class HelpLayout:
 
         if "[type:" in rendered and "type" in values and not values["type"]:
             rendered = re.sub(r"\s*\[type:\s*\]", "", rendered)
-        if not self.include_metavar_in_flag_display:
-            rendered = re.sub(r"(\-\w+)\s+[A-Z][A-Z0-9_-]*", r"\1", rendered)
-            rendered = re.sub(
-                r"(\-\-[A-Za-z0-9][A-Za-z0-9\-]*)\s+[A-Z][A-Z0-9_-]*", r"\1", rendered
-            )
 
         return f"{self.PRE_FMT_PREFIX}{rendered}"
 
