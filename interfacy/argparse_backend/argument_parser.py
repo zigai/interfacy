@@ -197,12 +197,7 @@ class ArgumentParser(argparse.ArgumentParser):
         self.add_help = add_help
         if add_help:
             default_prefix = "-" if "-" in self.prefix_chars else self.prefix_chars[0]
-            help_flags: list[str] = []
-
-            if default_prefix == "-":
-                help_flags.append(f"{default_prefix}h")
-
-            help_flags.append(default_prefix * 2 + "help")
+            help_flags: list[str] = [default_prefix * 2 + "help"]
 
             self.add_argument(
                 *help_flags,
