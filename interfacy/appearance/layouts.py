@@ -99,7 +99,7 @@ class ArgparseLayout(HelpLayout):
         param: Parameter,
         flags: tuple[str, ...] | None = None,
     ) -> str:
-        description = param.description or ""
+        description = self.format_description(param.description or "")
         if param.has_default:
             if len(description):
                 description += ". "

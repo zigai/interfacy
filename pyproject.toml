@@ -1,7 +1,7 @@
 
 [project]
 name = "interfacy"
-version = "0.3.3"
+version = "0.3.4"
 description = "Interfacy is a library for automatically generating CLI applications from Python functions, methods, classes, or instances using their type annotations and docstrings."
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }

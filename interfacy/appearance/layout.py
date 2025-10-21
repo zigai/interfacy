@@ -1,4 +1,5 @@
 import re
+from re import Match
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from objinspect import Class, Function, Method, Parameter
@@ -58,8 +59,31 @@ class HelpLayout:
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
 
+    # "bold":  remove backticks in docstring and make text bold
+    # "strip": remove backticks in docstring and leave plain text
+    doc_inline_code_mode: Literal["bold", "strip"] = "bold"
+
+    def _format_doc_text(self, text: str) -> str:
+        """Format inline code spans wrapped in backticks in docstrings."""
+        if not text:
+            return text
+
+        def strip_triple_backtick(match: Match[str]) -> str:
+            return match.group(1)
+
+        text = re.sub(r"```[a-zA-Z0-9_+\-]*\n([\s\S]*?)```", strip_triple_backtick, text)
+
+        def fmt(match: Match[str]) -> str:
+            content = match.group(2)
+            if self.doc_inline_code_mode == "bold":
+                return colored(content, style="bold")
+            return content
+
+        text = re.sub(r"(`{1,2})([^`]+?)\1", fmt, text)
+        return text
+
     def format_description(self, description: str) -> str:
-        return description
+        return self._format_doc_text(description)
 
     def get_help_for_parameter(
         self,
@@ -76,13 +100,15 @@ class HelpLayout:
 
         if param.type is bool:
             if param.description is not None:
-                description = param.description
+                description = self._format_doc_text(param.description)
                 if not description.endswith((".", "?", "!")):
                     description = description + "."
                 parts.append(f"{with_style(description, self.style.description)}")
         else:
             if param.description is not None:
-                parts.append(f"{with_style(param.description, self.style.description)} ")
+                parts.append(
+                    f"{with_style(self._format_doc_text(param.description), self.style.description)} "
+                )
             parts.append(self._get_param_extra_help(param))
 
         text = "".join(parts)
@@ -341,7 +367,7 @@ class HelpLayout:
     def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
         flag, flag_short, flag_long, is_option = self._build_flag_parts(param, flags)
 
-        description = param.description or ""
+        description = self._format_doc_text(param.description or "")
         if description and not description.endswith((".", "?", "!")) and param.type is bool:
             description += "."
         description = with_style(description, self.style.description)
