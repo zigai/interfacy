@@ -38,23 +38,12 @@ class Modern(InterfacyLayout):
     long_flag_width: int = 18
     pos_flag_width: int = 24
 
-    format_option = "{flag_short_col}{flag_long_col} {desc_line}{details}"
-    format_positional = "{flag_col} {desc_line}{details}"
+    format_option = "{flag_short_col}{flag_long_col}  {description}{details}"
+    format_positional = "{flag_col} {description}{details}"
     layout_mode = "template"
 
     def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:  # type: ignore[override]
         values = super()._build_values(param, flags)
-
-        desc_line = values.get("description", "")
-        if values.get("required"):
-            desc_line = f"{desc_line} {values['required']}"
-        values["desc_line"] = desc_line
-
-        is_option = bool(values.get("flag_short") or values.get("flag_long"))
-        if is_option:
-            pad_count = self.short_flag_width + self.long_flag_width + 1 + 2
-        else:
-            pad_count = self.pos_flag_width + 1 + 2
 
         detail_parts: list[str] = []
         if values.get("default"):
@@ -71,6 +60,12 @@ class Modern(InterfacyLayout):
             )
 
         if detail_parts:
+            is_option = bool(values.get("flag_short") or values.get("flag_long"))
+            if is_option:
+                pad_count = self.short_flag_width + self.long_flag_width + 2
+            else:
+                pad_count = self.pos_flag_width + 1
+
             arrow = with_style("↳", self.style.extra_data)
             details_text = with_style(" | ", self.style.extra_data).join(detail_parts)
             values["details"] = "\n" + (" " * pad_count) + f"{arrow} " + details_text

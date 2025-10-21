@@ -96,10 +96,12 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         help_width = term_width - help_position - indent_len
         help_text = self._expand_help(action)
 
-        # preformatted line support from theme/arg schema
         if isinstance(help_text, str) and help_text.startswith(self.PRE_FMT_PREFIX):
             formatted = help_text[len(self.PRE_FMT_PREFIX) :]
-            return f"{' ' * indent_len}{formatted}\n"
+            indent = " " * indent_len
+            lines = str(formatted).splitlines()
+            lines = [indent + line for line in lines]
+            return "\n".join(lines) + "\n"
 
         # If help_layout chooses template layout, build preformatted output for all actions (including -h)
         if help_layout is not None:
@@ -109,7 +111,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             if use_template:
                 formatted = self._format_with_layout_template(action, help_layout, help_text)
                 if formatted is not None:
-                    return f"{' ' * indent_len}{formatted}\n"
+                    indent = " " * indent_len
+                    lines = str(formatted).splitlines()
+                    lines = [indent + line for line in lines]
+                    return "\n".join(lines) + "\n"
         padding_len = help_position - len(action_header) - indent_len
 
         # respect terminal width
@@ -181,9 +186,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             flag_long = ""
             flag = metavar
 
-        description = help_text or ""
-        if description:
-            description = with_style(description, style.description)
+        raw_description = help_text or ""
 
         type_str = ""
         try:
@@ -219,6 +222,49 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         pad = max(0, width - ansi_len(styled_default))
         default_padded = f"{' ' * pad}{styled_default}"
         default = styled_default
+        styled_cols = layout._build_styled_columns(flag_short, flag_long, flag, is_option)
+        indent_len = 2  # must match the indent used in _format_action
+
+        try:
+            term_width = os.get_terminal_size().columns
+        except (OSError, AttributeError):
+            term_width = 80
+
+        if is_option:
+            col_width = (
+                ansi_len(styled_cols.get("flag_short_col", ""))
+                + ansi_len(styled_cols.get("flag_long_col", ""))
+                + 1
+            )
+        else:
+            col_width = ansi_len(styled_cols.get("flag_col", "")) + 1
+
+        wrap_width = max(10, term_width - indent_len - col_width)
+        desc_lines: list[str] = []
+
+        if raw_description:
+            for word in raw_description.split():
+                if not desc_lines:
+                    desc_lines.append(word)
+                else:
+                    if len(desc_lines[-1]) + 1 + len(word) <= wrap_width:
+                        desc_lines[-1] = f"{desc_lines[-1]} {word}"
+                    else:
+                        desc_lines.append(word)
+
+        req_indicator = (action.required and layout.required_indicator) or ""
+
+        if desc_lines:
+            styled_desc_lines = [with_style(l, style.description) for l in desc_lines]
+            first = styled_desc_lines[0] + (f" {req_indicator}" if req_indicator else "")
+            cont_indent = " " * (indent_len + col_width)
+            if len(styled_desc_lines) > 1:
+                rest = [cont_indent + l for l in styled_desc_lines[1:]]
+                description = "\n".join([first, *rest])
+            else:
+                description = first
+        else:
+            description = ""
 
         values = {
             "flag": flag,
@@ -230,18 +276,43 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             "default_padded": default_padded,
             "choices": "",
             "extra": "",
-            "required": (getattr(action, "required", False) and layout.required_indicator) or "",
+            "required": req_indicator,
             "metavar": action.metavar or action.dest,
         }
 
-        styled_cols = layout._build_styled_columns(flag_short, flag_long, flag, is_option)
         values.update(styled_cols)
-
         values["desc_line"] = description
-        if values.get("required"):
-            values["desc_line"] = f"{description} {values['required']}"
 
-        values["details"] = ""
+        detail_parts: list[str] = []
+
+        if default:
+            detail_parts.append(with_style("default:", style.extra_data) + " " + default)
+        if type_str:
+            detail_parts.append(with_style("type:", style.extra_data) + " " + type_str)
+
+        choices_str = ""
+
+        try:
+            if action.choices:
+                choices_str = ", ".join([str(i) for i in action.choices])
+        except Exception:
+            choices_str = ""
+
+        if choices_str:
+            choices_styled = ", ".join([with_style(str(i), style.string) for i in action.choices])
+            detail_parts.append(with_style("choices:", style.extra_data) + " " + choices_styled)
+
+        if detail_parts:
+            is_option = bool(action.option_strings)
+            if is_option:
+                pad_count = layout.short_flag_width + layout.long_flag_width + 2
+            else:
+                pad_count = layout.pos_flag_width + 1
+            arrow = with_style("↳", style.extra_data)
+            details_text = with_style(" | ", style.extra_data).join(detail_parts)
+            values["details"] = "\n" + (" " * pad_count) + f"{arrow} " + details_text
+        else:
+            values["details"] = ""
 
         try:
             rendered = template.format(**values)

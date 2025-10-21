@@ -181,7 +181,10 @@ class Argparser(InterfacyParser):
 
         """
         extra: dict[str, Any] = {}
-        extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
+        if self.help_layout._use_template_layout():  # type: ignore[attr-defined]
+            extra["help"] = self.help_layout.get_help_for_parameter(param, None)
+        else:
+            extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
 
         is_bool_param = param.is_typed and param.type is bool
         if param.is_typed and not is_bool_param:

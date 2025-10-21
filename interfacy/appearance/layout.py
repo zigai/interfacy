@@ -1,3 +1,4 @@
+import os
 import re
 from re import Match
 from typing import TYPE_CHECKING, ClassVar, Literal
@@ -149,10 +150,57 @@ class HelpLayout:
             return HelpLayout.get_help_for_parameter(self, param, None)
 
         values = self._build_values(param, flags)
+
+        DESC_TOKEN = "<<__DESC__>>"
+        probe_vals = dict(values)
+        probe_vals["description"] = DESC_TOKEN
+        try:
+            probe_render = template.format(**probe_vals)
+            token_idx = probe_render.find(DESC_TOKEN)
+        except Exception:
+            probe_render = ""
+            token_idx = -1
+
+        if token_idx != -1:
+            prefix_str = probe_render[:token_idx]
+            prefix_width = ansi_len(prefix_str)
+
+            try:
+                term_width = os.get_terminal_size().columns
+            except (OSError, AttributeError):
+                term_width = 80
+
+            indent_len = 2  # argparse adds a fixed two-space indent for each help line
+            wrap_width = max(10, term_width - indent_len - prefix_width)
+
+            raw_desc = self._format_doc_text(param.description or "")
+
+            wrapped: list[str] = []
+            for word in raw_desc.split():
+                if not wrapped:
+                    wrapped.append(word)
+                else:
+                    if len(wrapped[-1]) + 1 + len(word) <= wrap_width:
+                        wrapped[-1] = f"{wrapped[-1]} {word}"
+                    else:
+                        wrapped.append(word)
+
+            if wrapped:
+                cont_indent = " " * prefix_width
+                styled_lines = [with_style(wrapped[0], self.style.description)]
+                if len(wrapped) > 1:
+                    styled_lines.extend(
+                        [
+                            cont_indent + with_style(line, self.style.description)
+                            for line in wrapped[1:]
+                        ]
+                    )
+                values["description"] = "\n".join(styled_lines)
+
         try:
             rendered = template.format(**values)
         except Exception:
-            rendered = f"{values['flag']:<40} {values['description']} {values['extra']}"
+            rendered = f"{values['flag']:<40} {values['description']} {values.get('extra', '')}"
 
         if param.is_required and values.get("required") and values["required"] not in rendered:
             rendered = f"{rendered} {values['required']}"
