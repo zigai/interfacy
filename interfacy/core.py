@@ -10,7 +10,7 @@ from stdl.fs import read_piped
 from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
-from interfacy.appearance.layout import HelpLayout, InterfacyLayout
+from interfacy.appearance.layouts import HelpLayout, InterfacyLayout
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import (

@@ -1,10 +1,30 @@
 from typing import Literal
 
 from objinspect import Parameter
-from stdl.st import with_style
+from stdl.st import colored, with_style
 
 from interfacy.appearance.colors import NoColor
-from interfacy.appearance.layout import HelpLayout, InterfacyLayout
+from interfacy.appearance.layout import HelpLayout
+
+
+class InterfacyLayout(HelpLayout):
+    """Default Interfacy layout"""
+
+    pos_flag_width: int = 24
+
+    column_gap: str = "    "
+    format_option = "{flag_col}{column_gap}{description}{extra}"
+    format_positional = "{flag_col}{column_gap}{description}"
+    include_metavar_in_flag_display = False
+    layout_mode = "template"
+    required_indicator: str = "(" + colored("*", color="red") + ")"
+
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        values = super()._build_values(param, flags)
+        values["column_gap"] = self.column_gap
+        extra = values.get("extra", "")
+        values["extra"] = f" {extra}" if extra else ""
+        return values
 
 
 class Aligned(InterfacyLayout):
@@ -86,7 +106,7 @@ class ArgparseLayout(HelpLayout):
     default_label_for_help: str = ""
     clear_metavar: bool = False
 
-    help_position: int = 24  # type:ignore
+    help_position: int = 28  # type:ignore
     layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
 
     def get_help_for_parameter(
@@ -107,4 +127,5 @@ __all__ = [
     "Aligned",
     "AlignedTyped",
     "Modern",
+    "InterfacyLayout",
 ]

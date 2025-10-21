@@ -1,5 +1,11 @@
-from interfacy.appearance.layout import HelpLayout, InterfacyColors, InterfacyLayout
-from interfacy.appearance.layouts import Aligned, AlignedTyped, ArgparseLayout, Modern
+from interfacy.appearance.layout import HelpLayout, InterfacyColors
+from interfacy.appearance.layouts import (
+    Aligned,
+    AlignedTyped,
+    ArgparseLayout,
+    InterfacyLayout,
+    Modern,
+)
 
 __all__ = [
     "InterfacyColors",

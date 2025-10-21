@@ -459,20 +459,7 @@ class HelpLayout:
         return values
 
 
-class InterfacyLayout(HelpLayout):
-    """Default Interfacy layout"""
-
-    pos_flag_width: int = 24
-
-    format_option = "{flag_col}{description} {extra}"
-    format_positional = "{flag_col}{description}"
-    include_metavar_in_flag_display = False
-    layout_mode = "template"
-    required_indicator: str = "(" + colored("*", color="red") + ")"
-
-
 __all__ = [
     "InterfacyColors",
     "HelpLayout",
-    "InterfacyLayout",
 ]
