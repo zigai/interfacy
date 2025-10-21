@@ -391,16 +391,16 @@ class HelpLayout:
         choices_block = " [" + choices_label + " " + choices_str + "]" if choices_str else ""
 
         if param.is_typed and param.type is not bool and not choices:
-            t_str = format_type_for_help(param.type, self.style.type)
+            type_str = format_type_for_help(param.type, self.style.type)
         else:  # Hide type when choices are shown
-            t_str = ""
+            type_str = ""
 
         values: dict[str, str] = {
             "flag": flag,
             "flag_short": flag_short,
             "flag_long": flag_long,
             "description": description,
-            "type": t_str,
+            "type": type_str,
             "default": default,
             "default_padded": default_padded,
             "choices": choices_str,

@@ -21,14 +21,14 @@ def simplified_type_name(name: str) -> str:
     name = re.sub(r"\s+", " ", name)
     optional_suffix = False  # Handle Optional[...] and Union[..., None] forms
 
-    m = re.fullmatch(r"Optional\[(.*)\]", name)  # Optional[T]
-    if m:
-        name = m.group(1)
+    match = re.fullmatch(r"Optional\[(.*)\]", name)  # Optional[T]
+    if match:
+        name = match.group(1)
         optional_suffix = True
 
-    m = re.fullmatch(r"Union\[(.*)\]", name)  # Union[T, None] or Union[None, T]
-    if m:
-        args = [a.strip() for a in m.group(1).split(",")]
+    match = re.fullmatch(r"Union\[(.*)\]", name)  # Union[T, None] or Union[None, T]
+    if match:
+        args = [a.strip() for a in match.group(1).split(",")]
         if "None" in args and len(args) == 2:
             args = [a for a in args if a != "None"]
             name = args[0] if args else name
