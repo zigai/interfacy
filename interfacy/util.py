@@ -99,7 +99,10 @@ def format_type_for_help(annotation: Any, style: Any) -> str:
     - falling back gracefully if coloring fails
     """
     if isinstance(annotation, str):
-        return with_style(simplified_type_name(annotation), style)
+        name = simplified_type_name(annotation)
+        if name.endswith("?"):
+            return with_style(name[:-1], style) + "?"
+        return with_style(name, style)
 
     try:
         if is_union_type(annotation):  # Optional union types (T | None)
@@ -107,14 +110,15 @@ def format_type_for_help(annotation: Any, style: Any) -> str:
             if len(args) == 2 and any(a is NoneType for a in args):
                 base = next((a for a in args if a is not NoneType), None)
                 if base is None:
-                    return with_style("Any?", style)
+                    return with_style("Any", style) + "?"
                 try:
                     base_str = colored_type(base, style)
                 except Exception:
                     base_str = with_style(
                         simplified_type_name(getattr(base, "__name__", str(base))), style
                     )
-                return f"{base_str}{with_style('?', style)}"
+                # Color only the base type and leave '?' unstyled
+                return f"{base_str}?"
     except Exception:
         pass
 
@@ -125,7 +129,10 @@ def format_type_for_help(annotation: Any, style: Any) -> str:
             name = getattr(annotation, "__name__", str(annotation))
         except Exception:
             name = str(annotation)
-        return with_style(simplified_type_name(name), style)
+        simple = simplified_type_name(name)
+        if simple.endswith("?"):
+            return with_style(simple[:-1], style) + "?"
+        return with_style(simple, style)
 
 
 __all__ = [
