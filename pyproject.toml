@@ -1,7 +1,7 @@
 
 [project]
 name = "interfacy"
-version = "0.3.4"
+version = "0.3.5"
 description = "Interfacy is a library for automatically generating CLI applications from Python functions, methods, classes, or instances using their type annotations and docstrings."
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
@@ -38,11 +38,13 @@ keywords = [
 [project.optional-dependencies]
 full = ["argcomplete", "click"]
 click = ["click"]
-test = ["pytest"]
-dev = ["pytest", "black", "ruff", "pre-commit"]
+test = ["pytest", "coverage"]
+dev = ["pytest", "black", "ruff", "pre-commit", "coverage", "mypy"]
 
 [project.urls]
 Repository = "https://github.com/zigai/interfacy"
+Issues = "https://github.com/zigai/interfacy/issues"
+Homepage = "https://github.com/zigai/interfacy"
 
 [build-system]
 requires = ["hatchling"]
@@ -51,9 +53,40 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["interfacy"]
 
-[tool.black]
-line-length = 100
-target_version = ['py310', 'py311', 'py312', 'py313']
+[tool.hatch.envs.test]
+features = ["test"]
+installer = "uv"
+
+[[tool.hatch.envs.test.matrix]]
+python = ["3.10", "3.11", "3.12", "3.13"]
+
+[tool.hatch.envs.test.scripts]
+test = "pytest {args}"
+cov = "coverage run -m pytest {args}"
+
+[tool.coverage.run]
+source = ["interfacy"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover"]
+omit = ["tests/*", "tests/**"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["interfacy"]
+exclude = ["^tests/"]
+
+disallow_untyped_defs = true
+disallow_untyped_calls = true
+disallow_any_generics = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_configs = true
+strict_equality = true
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
@@ -127,34 +160,8 @@ ignore = [
     "N806",
     "UP007",
     "UP038",
-    "E741",
 ]
-isort = { known-first-party = ["interfacy", 'tests'] }
-pydocstyle = { convention = 'google' }
-exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
-    "tests/*",
-    "tests/**/*",
-]
+exclude = ["build", "tests/**"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = [
@@ -166,14 +173,10 @@ exclude = [
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
-line-ending = "auto"
+line-ending = "lf"
 
-[tool.hatch.envs.test]
-features = ["test"]
-installer = "uv"
+[tool.ruff.lint.isort]
+known-first-party = ["interfacy", "tests"]
 
-[[tool.hatch.envs.test.matrix]]
-python = ["3.10", "3.11", "3.12", "3.13"]
-
-[tool.hatch.envs.test.scripts]
-test = "pytest -v"
+[tool.ruff.lint.pydocstyle]
+convention = "google"
