@@ -44,14 +44,14 @@ clean:
 
 # static type check with mypy
 typecheck: _require-uv
-	uv run mypy
+    uv run mypy
 
 # check code for common misspellings
 spell:
     codespell
 
 # run all quality checks
-check: format lint coverage typecheck
+check: format lint coverage typecheck spell
 
 # list available recipes
 help:
