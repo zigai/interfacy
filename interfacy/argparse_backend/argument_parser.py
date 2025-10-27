@@ -149,6 +149,7 @@ class ArgumentParser(argparse.ArgumentParser):
         exit_on_error: bool = True,
         *,
         help_layout: Any | None = None,
+        color: bool | None = None,
     ) -> None:
         """
         Parser for converting command-line strings into Python objects.
@@ -171,6 +172,7 @@ class ArgumentParser(argparse.ArgumentParser):
             nest_path (list[str] | None, optional): Path components for nested arguments. Defaults to None.
             exit_on_error (bool, optional): Whether ArgumentParser exits with error info when an error occurs.
             help_layout (HelpLayout | None, optional): Layout configuration for help text formatting. Defaults to None.
+            color (bool | None, optional): Whether argparse should emit colorized help (Python >= 3.14). Defaults to None.
         """
         if parents is None:
             parents = []
@@ -179,21 +181,32 @@ class ArgumentParser(argparse.ArgumentParser):
         self.nest_separator = nest_separator
         self._original_destinations: dict[str, str] = {}  # nested_dest: original_dest
 
-        super().__init__(
-            prog=prog,
-            usage=usage,
-            description=description,
-            epilog=epilog,
-            parents=parents,
-            formatter_class=formatter_class,
-            prefix_chars=prefix_chars,
-            fromfile_prefix_chars=fromfile_prefix_chars,
-            argument_default=argument_default,
-            conflict_handler=conflict_handler,
-            add_help=False,
-            exit_on_error=exit_on_error,
-            allow_abbrev=allow_abbrev,
-        )
+        base_init_kwargs: dict[str, Any] = {
+            "prog": prog,
+            "usage": usage,
+            "description": description,
+            "epilog": epilog,
+            "parents": parents,
+            "formatter_class": formatter_class,
+            "prefix_chars": prefix_chars,
+            "fromfile_prefix_chars": fromfile_prefix_chars,
+            "argument_default": argument_default,
+            "conflict_handler": conflict_handler,
+            "add_help": False,
+            "exit_on_error": exit_on_error,
+            "allow_abbrev": allow_abbrev,
+        }
+
+        if color is not None:
+            base_init_kwargs["color"] = color
+
+        try:
+            super().__init__(**base_init_kwargs)
+        except TypeError as exc:
+            if "color" not in base_init_kwargs or "color" not in str(exc):
+                raise
+            base_init_kwargs.pop("color")
+            super().__init__(**base_init_kwargs)
         self.add_help = add_help
         if add_help:
             default_prefix = "-" if "-" in self.prefix_chars else self.prefix_chars[0]
