@@ -257,11 +257,11 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         req_indicator = (action.required and layout.required_indicator) or ""
 
         if desc_lines:
-            styled_desc_lines = [with_style(l, style.description) for l in desc_lines]
+            styled_desc_lines = [with_style(line, style.description) for line in desc_lines]
             first = styled_desc_lines[0] + (f" {req_indicator}" if req_indicator else "")
             cont_indent = " " * (indent_len + col_width)
             if len(styled_desc_lines) > 1:
-                rest = [cont_indent + l for l in styled_desc_lines[1:]]
+                rest = [cont_indent + line for line in styled_desc_lines[1:]]
                 description = "\n".join([first, *rest])
             else:
                 description = first
