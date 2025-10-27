@@ -46,6 +46,10 @@ clean:
 typecheck: _require-uv
 	uv run mypy
 
+# check code for common misspellings
+spell:
+    codespell
+
 # run all quality checks
 check: format lint coverage typecheck
 
@@ -56,4 +60,3 @@ help:
 alias fmt := format
 alias cov := coverage
 alias mypy := typecheck
-alias type := typecheck

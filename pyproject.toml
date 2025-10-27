@@ -69,7 +69,12 @@ source = ["interfacy"]
 branch = true
 
 [tool.coverage.report]
-exclude_lines = ["pragma: no cover"]
+exclude_lines = [
+    "pragma: no cover",
+    'raise NotImplementedError',
+    'if TYPE_CHECKING:',
+    'if typing.TYPE_CHECKING:',
+]
 omit = ["tests/*", "tests/**"]
 
 [tool.mypy]
@@ -180,3 +185,6 @@ known-first-party = ["interfacy", "tests"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.codespell]
+skip = '.git,uv.lock'
