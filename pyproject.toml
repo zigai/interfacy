@@ -7,7 +7,11 @@ authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["stdl>=0.6.3", "objinspect>=0.3.0", "strto>=0.2.2"]
+dependencies = [
+    "stdl>=0.6.4",
+    "objinspect>=0.3.1",
+    "strto>=0.2.3",
+]
 
 classifiers = [
     "Intended Audience :: Developers",
