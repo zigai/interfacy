@@ -1,3 +1,4 @@
+import inspect
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method
@@ -75,9 +76,36 @@ class ArgparseRunner:
         raise InvalidCommandError(command.obj)
 
     def run_function(self, func: Function | Method, args: dict) -> Any:
-        func_args, func_kwargs = split_args_kwargs(args, func)
-        logger.info(f"Calling function '{func.name}' with args: {func_args}, kwargs: {func_kwargs}")
-        result = func.call(*func_args, **func_kwargs)
+        positional_args = []
+        keyword_args = {}
+
+        for param in func.params:
+            if (
+                param.name not in args
+                and param.kind != inspect.Parameter.VAR_POSITIONAL
+                and param.kind != inspect.Parameter.VAR_KEYWORD
+            ):
+                continue
+
+            val = args.get(param.name)
+            if param.kind == inspect.Parameter.POSITIONAL_ONLY:
+                positional_args.append(val)
+            elif param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
+                keyword_args[param.name] = val
+            elif param.kind == inspect.Parameter.VAR_POSITIONAL:
+                if val:
+                    positional_args.extend(val)
+            elif param.kind == inspect.Parameter.KEYWORD_ONLY:
+                keyword_args[param.name] = val
+            elif param.kind == inspect.Parameter.VAR_KEYWORD:
+                if val:
+                    keyword_args.update(val)
+
+        logger.info(
+            f"Calling function '{func.name}' with args: {positional_args}, kwargs: {keyword_args}"
+        )
+        result = func.call(*positional_args, **keyword_args)
+
         logger.info(f"Result: {result}")
         return result
 
