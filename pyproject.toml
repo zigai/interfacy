@@ -1,17 +1,13 @@
 
 [project]
 name = "interfacy"
-version = "0.3.5"
+version = "0.3.6"
 description = "Interfacy is a library for automatically generating CLI applications from Python functions, methods, classes, or instances using their type annotations and docstrings."
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "stdl>=0.6.4",
-    "objinspect>=0.3.1",
-    "strto>=0.2.3",
-]
+dependencies = ["stdl>=0.6.6", "objinspect>=0.3.1", "strto>=0.2.3"]
 
 classifiers = [
     "Intended Audience :: Developers",
@@ -40,10 +36,18 @@ keywords = [
 
 
 [project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",
+    "black",
+    "ruff",
+    "pre-commit",
+    "coverage",
+    "mypy",
+]
 full = ["argcomplete", "click"]
 click = ["click"]
-test = ["pytest", "coverage"]
-dev = ["pytest", "black", "ruff", "pre-commit", "coverage", "mypy"]
+test = ["pytest", "pytest-mock", "coverage"]
 
 [project.urls]
 Repository = "https://github.com/zigai/interfacy"
@@ -106,6 +110,7 @@ select = [
     "E",       # Pycodestyle (Error)
     'I',       # isort
     'D',       # pydocstyle
+    'D213',    # pydocstyle
     'UP',      # pyupgrade
     'YTT',     # flake8-2020
     'B',       # flake8-bugbear
