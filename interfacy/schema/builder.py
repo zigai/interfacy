@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -19,7 +20,9 @@ from interfacy.schema.schema import (
 )
 from interfacy.util import (
     extract_optional_union_list,
+    get_fixed_tuple_info,
     inverted_bool_flag_name,
+    is_fixed_tuple,
     is_list_or_list_alias,
 )
 
@@ -57,6 +60,7 @@ class ParserSchemaBuilder:
             pipe_targets=self.parser.pipe_targets_default,
             theme=self.parser.help_layout,
             commands_help=commands_help,
+            metadata=dict(getattr(self.parser, "metadata", {})),
         )
 
     def build_command_spec_for(
@@ -319,14 +323,22 @@ class ParserSchemaBuilder:
 
         parser_func: Callable[[str], Any] | None = None
         value_shape = ValueShape.SINGLE
-        nargs: str | None = None
+        nargs: str | int | None = None
         default_value: Any = param.default if param.has_default else None
         parsed_type: type[Any] | None = param.type if param.is_typed else None
         choices = get_choices(param.type) if param.is_typed else None
         boolean_behavior: BooleanBehavior | None = None
         is_optional_union_list = False
+        tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
 
-        if param.is_typed:
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            value_shape = ValueShape.LIST
+            nargs = "*"
+            default_value = ()  # Empty tuple as default for *args
+            if param.is_typed:
+                parsed_type = param.type
+                parser_func = self.parser.type_parser.get_parse_func(param.type)
+        elif param.is_typed:
             optional_union_list = extract_optional_union_list(param.type)
             list_annotation: Any | None = None
             element_type: Any | None = None
@@ -351,6 +363,33 @@ class ParserSchemaBuilder:
 
                 if is_optional_union_list and not param.has_default:
                     default_value = []
+
+            elif is_fixed_tuple(param.type):
+                tuple_info = get_fixed_tuple_info(param.type)
+                if tuple_info:
+                    element_count, element_types = tuple_info
+                    value_shape = ValueShape.TUPLE
+                    nargs = element_count
+
+                    first_type = element_types[0]
+                    all_same_type = all(t == first_type for t in element_types)
+
+                    if all_same_type:
+                        parsed_type = first_type
+                        element_parser = self.parser.type_parser.get_parse_func(first_type)
+
+                        def make_tuple_parser(
+                            elem_parser: Callable[[str], Any],
+                        ) -> Callable[[str], Any]:
+                            return elem_parser
+
+                        parser_func = make_tuple_parser(element_parser)
+                    else:
+                        tuple_element_parsers = tuple(
+                            self.parser.type_parser.get_parse_func(t) for t in element_types
+                        )
+                        parsed_type = str
+                        parser_func = None
 
             elif param.type is bool:
                 value_shape = ValueShape.FLAG
@@ -414,6 +453,7 @@ class ParserSchemaBuilder:
             choices=choices,
             accepts_stdin=accepts_stdin,
             pipe_required=pipe_required,
+            tuple_element_parsers=tuple_element_parsers,
         )
 
     def _resolve_cli_name(

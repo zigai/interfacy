@@ -23,7 +23,13 @@ from interfacy.exceptions import (
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
-from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
+from interfacy.schema.schema import (
+    Argument,
+    ArgumentKind,
+    Command,
+    ParserSchema,
+    ValueShape,
+)
 from interfacy.util import extract_optional_union_list, is_list_or_list_alias
 
 logger = get_logger(__name__)
@@ -365,6 +371,45 @@ class Argparser(InterfacyParser):
                 namespace[canonical] = namespace.pop(cli_name)
             else:
                 namespace[canonical] = {}
+
+        namespace = self._convert_tuple_args(namespace)
+        return namespace
+
+    def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
+        """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""
+        schema = self.build_parser_schema()
+
+        def convert_tuple(arg: Argument, val: list[Any]) -> tuple[Any, ...]:
+            if arg.tuple_element_parsers:
+                return tuple(
+                    parser(v) for parser, v in zip(arg.tuple_element_parsers, val, strict=False)
+                )
+            return tuple(val)
+
+        for command in schema.commands.values():
+            for arg in command.initializer:
+                if arg.value_shape == ValueShape.TUPLE and arg.name in namespace:
+                    val = namespace[arg.name]
+                    if isinstance(val, list):
+                        namespace[arg.name] = convert_tuple(arg, val)
+
+            for arg in command.parameters:
+                if arg.value_shape == ValueShape.TUPLE and arg.name in namespace:
+                    val = namespace[arg.name]
+                    if isinstance(val, list):
+                        namespace[arg.name] = convert_tuple(arg, val)
+
+            if command.subcommands:
+                for subcmd in command.subcommands.values():
+                    cmd_key = self.COMMAND_KEY
+                    if cmd_key in namespace and subcmd.cli_name in namespace:
+                        sub_ns = namespace[subcmd.cli_name]
+                        if isinstance(sub_ns, dict):
+                            for arg in subcmd.parameters:
+                                if arg.value_shape == ValueShape.TUPLE and arg.name in sub_ns:
+                                    val = sub_ns[arg.name]
+                                    if isinstance(val, list):
+                                        sub_ns[arg.name] = convert_tuple(arg, val)
 
         return namespace
 

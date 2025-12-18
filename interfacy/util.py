@@ -53,6 +53,48 @@ def is_list_or_list_alias(t: type) -> bool:
     return t_origin is list
 
 
+def is_fixed_tuple(t: type) -> bool:
+    """
+    Check if the type annotation is a fixed-length tuple (e.g., tuple[str, str]).
+
+    Returns False for:
+    - Variable-length tuples: tuple[int, ...]
+    - Bare tuple without type args
+    - Non-tuple types
+    """
+    t_origin = type_origin(t)
+    if t_origin is not tuple:
+        return False
+
+    args = type_args(t)
+    if not args:
+        return False
+
+    if len(args) == 2 and args[1] is Ellipsis:  # Variable-length tuple: tuple[T, ...]
+        return False
+
+    return True
+
+
+def get_fixed_tuple_info(t: type) -> tuple[int, tuple[type, ...]] | None:
+    """
+    Extract information from a fixed-length tuple type annotation.
+
+    Returns:
+        A tuple of (element_count, element_types) for fixed-length tuples,
+        or None if not a fixed-length tuple.
+
+    Example:
+        tuple[str, str] -> (2, (str, str))
+        tuple[int, str, float] -> (3, (int, str, float))
+    """
+    if not is_fixed_tuple(t):
+        return None
+
+    args = type_args(t)
+    return len(args), tuple(args)
+
+
 def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
     """
     If the annotation represents `list[T] | None` or `Optional[list[T]]`, return the list annotation together with its element type.
@@ -115,10 +157,10 @@ def format_type_for_help(annotation: Any, style: Any) -> str:
                     base_str = colored_type(base, style)
                 except Exception:
                     base_str = with_style(
-                        simplified_type_name(getattr(base, "__name__", str(base))), style
+                        simplified_type_name(getattr(base, "__name__", str(base))),
+                        style,
                     )
-                # Color only the base type and leave '?' unstyled
-                return f"{base_str}?"
+                return f"{base_str}?"  # Color only the base type and leave '?' unstyled
     except Exception:
         pass
 
@@ -138,6 +180,8 @@ def format_type_for_help(annotation: Any, style: Any) -> str:
 __all__ = [
     "simplified_type_name",
     "is_list_or_list_alias",
+    "is_fixed_tuple",
+    "get_fixed_tuple_info",
     "extract_optional_union_list",
     "show_result",
     "inverted_bool_flag_name",

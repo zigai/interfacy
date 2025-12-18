@@ -20,6 +20,7 @@ class ArgumentKind(str, Enum):
 class ValueShape(str, Enum):
     SINGLE = "single"
     LIST = "list"
+    TUPLE = "tuple"
     FLAG = "flag"
 
 
@@ -43,11 +44,12 @@ class Argument:
     type: type[Any] | None
     parser: Callable[[str], Any] | None
     metavar: str | None = None
-    nargs: str | None = None
+    nargs: str | int | None = None
     boolean_behavior: BooleanBehavior | None = None
     choices: Sequence[Any] | None = None
     accepts_stdin: bool = False
     pipe_required: bool = False
+    tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
 
 
 @dataclass
