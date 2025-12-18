@@ -1,5 +1,6 @@
 import enum
-from typing import Literal
+from pathlib import Path
+from typing import Dict, List, Literal, Optional, Union
 
 import pytest
 
@@ -86,50 +87,147 @@ class Color(enum.Enum):
 ColorLiteral = Literal["RED", "GREEN", "BLUE"]
 
 
-def function_enum_arg(color: Color):
+def fn_enum_arg(color: Color):
     print(f"Value: {color.value}, Name: {color.name}")
     return color
 
 
-def function_literal_arg(color: ColorLiteral):
+def fn_literal_arg(color: ColorLiteral):
     print(f"Value: {color}")
     return color
 
 
-def function_bool_required(value: bool):
+def fn_enum_optional(color: Color | None = None):
+    print(f"Value: {color}")
+    return color
+
+
+def fn_literal_optional(color: ColorLiteral | None = None):
+    print(f"Value: {color}")
+    return color
+
+
+def fn_bool_required(value: bool):
     print(f"Value: {value}")
     return value
 
 
-def function_bool_default_true(value: bool = True):
+def fn_bool_default_true(value: bool = True):
     print(f"Value: {value}")
     return value
 
 
-def function_bool_default_false(value: bool = False):
+def fn_bool_default_false(value: bool = False):
     print(f"Value: {value}")
     return value
 
 
-def function_bool_short_flag(x: bool = False):
+def fn_bool_short_flag(x: bool = False):
     print(f"Value: {x}")
     return x
 
 
-def function_list_int(values: list[int]):
+def fn_list_int(values: list[int]):
     print(values)
     return values
 
 
-def function_list_with_default(values: list[int] = [1, 2]):  # noqa: B006 - intentional for tests
+def fn_list_with_default(values: list[int] = [1, 2]):  # noqa: B006 - intentional for tests
     print(values)
     return values
 
 
-def function_two_lists(strings: list[str], ints: list[int]) -> tuple[int, int]:
+def fn_two_lists(strings: list[str], ints: list[int]) -> tuple[int, int]:
     print(strings, f"({len(strings)})")
     print(ints, f"({len(ints)})")
     return len(strings), len(ints)
+
+
+def fn_list_str(items: list[str]):
+    """Required list of strings."""
+    return items
+
+
+def fn_list_str_optional(items: list[str] | None = None):
+    """Optional union list of strings (defaults to None)."""
+    return items
+
+
+def fn_list_int_optional(values: list[int] | None = None):
+    """Optional union list of ints (defaults to None)."""
+    return values
+
+
+def fn_str_required(name: str) -> str:
+    return name
+
+
+def fn_str_optional(name: str = "default") -> str:
+    return name
+
+
+def fn_float_required(value: float) -> float:
+    return value
+
+
+def fn_path_required(path: Path) -> Path:
+    return path
+
+
+def fn_optional_str(value: str | None = None) -> str | None:
+    return value
+
+
+def fn_optional_int(value: int | None = None) -> int | None:
+    return value
+
+
+def fn_mixed_optional(
+    required: str,
+    optional_int: int | None = None,
+    optional_str: str = "default",
+) -> dict[str, object]:
+    return {
+        "required": required,
+        "optional_int": optional_int,
+        "optional_str": optional_str,
+    }
+
+
+def fn_positional_only(a: int, b: int, /) -> int:
+    return a + b
+
+
+def fn_keyword_only(*, a: int, b: int) -> int:
+    return a + b
+
+
+def fn_varargs(*args: int) -> int:
+    return sum(args)
+
+
+def fn_kwargs(**kwargs: str) -> dict[str, str]:
+    return kwargs
+
+
+def fn_all_zones(a: int, /, b: int, *, c: int) -> int:
+    return a + b + c
+
+
+def fn_legacy_list(x: List[int]) -> List[int]:
+    return x
+
+
+def fn_legacy_dict(x: Dict[str, int]) -> Dict[str, int]:
+    return x
+
+
+def fn_legacy_optional(x: Optional[int] = None) -> Optional[int]:
+    return x
+
+
+def fn_legacy_union(x: Union[int, str]) -> Union[int, str]:
+    return x
 
 
 @pytest.fixture

@@ -8,16 +8,16 @@ from interfacy.schema.schema import ArgumentKind, ValueShape
 from tests.conftest import (
     Color,
     Math,
-    function_bool_default_true,
-    function_bool_short_flag,
-    function_enum_arg,
-    function_list_int,
-    function_list_with_default,
+    fn_bool_default_true,
+    fn_bool_short_flag,
+    fn_enum_arg,
+    fn_list_int,
+    fn_list_with_default,
     pow,
 )
 
 
-def function_optional_list_union(values: list[int] | None):
+def fn_optional_list_union(values: list[int] | None):
     return values or []
 
 
@@ -38,6 +38,7 @@ def parser():
 
 
 def test_function_command_includes_positional_and_option(parser: Argparser):
+    """Verify that function-based commands include both positional and optional arguments."""
     parser.add_command(pow)
 
     schema = parser.build_parser_schema()
@@ -73,6 +74,7 @@ def test_function_command_includes_positional_and_option(parser: Argparser):
 
 
 def test_class_command_exposes_initializer_and_subcommands(parser: Argparser):
+    """Verify that class-based commands expose initializer parameters and subcommands."""
     parser.add_command(Math)
 
     schema = parser.build_parser_schema()
@@ -101,10 +103,11 @@ def test_class_command_exposes_initializer_and_subcommands(parser: Argparser):
 
 
 def test_boolean_argument_annotated_with_boolean_behavior(parser: Argparser):
-    parser.add_command(function_bool_default_true)
+    """Verify that boolean arguments are annotated with correct boolean behavior metadata."""
+    parser.add_command(fn_bool_default_true)
 
     schema = parser.build_parser_schema()
-    command = schema.commands["function-bool-default-true"]
+    command = schema.commands["fn-bool-default-true"]
     argument = command.parameters[0]
 
     assert argument.flags == ("-nv", "--value")
@@ -117,10 +120,11 @@ def test_boolean_argument_annotated_with_boolean_behavior(parser: Argparser):
 
 
 def test_list_argument_uses_list_shape(parser: Argparser):
-    parser.add_command(function_list_int)
+    """Verify that list type arguments use the LIST value shape."""
+    parser.add_command(fn_list_int)
 
     schema = parser.build_parser_schema()
-    command = schema.commands["function-list-int"]
+    command = schema.commands["fn-list-int"]
     argument = command.parameters[0]
 
     assert argument.flags == ("values",)
@@ -130,6 +134,7 @@ def test_list_argument_uses_list_shape(parser: Argparser):
 
 
 def test_bound_method_command_omits_initializer(parser: Argparser):
+    """Verify that commands from bound methods omit the class initializer."""
     math = Math(rounding=2)
     parser.add_command(math.pow)
 
@@ -142,6 +147,7 @@ def test_bound_method_command_omits_initializer(parser: Argparser):
 
 
 def test_multi_command_records_aliases_and_pipe_targets():
+    """Verify that multi-command specs record aliases and pipe targets correctly."""
     parser = Argparser(
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
         sys_exit_enabled=False,
@@ -149,7 +155,7 @@ def test_multi_command_records_aliases_and_pipe_targets():
         pipe_targets="result",
     )
     parser.add_command(pow, aliases=("p",))
-    parser.add_command(function_bool_default_true, name="booler")
+    parser.add_command(fn_bool_default_true, name="booler")
 
     schema = parser.build_parser_schema()
     assert schema.is_multi_command is True
@@ -166,6 +172,7 @@ def test_multi_command_records_aliases_and_pipe_targets():
 
 
 def test_command_pipe_targets_flagged_on_arguments(parser: Argparser):
+    """Verify that pipe targets are correctly flagged on specific arguments."""
     parser.add_command(pow, pipe_targets="base")
 
     schema = parser.build_parser_schema()
@@ -183,10 +190,11 @@ def test_command_pipe_targets_flagged_on_arguments(parser: Argparser):
 
 
 def test_enum_argument_populates_choices(parser: Argparser):
-    parser.add_command(function_enum_arg)
+    """Verify that Enum arguments populate choices from Enum members."""
+    parser.add_command(fn_enum_arg)
 
     schema = parser.build_parser_schema()
-    command = schema.commands["function-enum-arg"]
+    command = schema.commands["fn-enum-arg"]
     argument = command.parameters[0]
 
     assert argument.choices == tuple(member.name for member in Color)
@@ -195,6 +203,7 @@ def test_enum_argument_populates_choices(parser: Argparser):
 
 
 def test_keyword_only_strategy_keeps_argument_metadata():
+    """Verify that the keyword-only strategy preserves argument metadata."""
     parser = Argparser(
         flag_strategy=DefaultFlagStrategy(style="keyword_only"),
         sys_exit_enabled=False,
@@ -211,10 +220,11 @@ def test_keyword_only_strategy_keeps_argument_metadata():
 
 
 def test_boolean_short_flag_has_no_negative_form(parser: Argparser):
-    parser.add_command(function_bool_short_flag)
+    """Verify that boolean arguments with only short flags do not support negative forms."""
+    parser.add_command(fn_bool_short_flag)
 
     schema = parser.build_parser_schema()
-    argument = schema.commands["function-bool-short-flag"].parameters[0]
+    argument = schema.commands["fn-bool-short-flag"].parameters[0]
 
     assert argument.flags == ("-x",)
     assert argument.boolean_behavior is not None
@@ -223,10 +233,11 @@ def test_boolean_short_flag_has_no_negative_form(parser: Argparser):
 
 
 def test_optional_list_argument_metadata(parser: Argparser):
-    parser.add_command(function_list_with_default)
+    """Verify metadata for optional list arguments with defaults."""
+    parser.add_command(fn_list_with_default)
 
     schema = parser.build_parser_schema()
-    argument = schema.commands["function-list-with-default"].parameters[0]
+    argument = schema.commands["fn-list-with-default"].parameters[0]
 
     assert argument.flags == ("-v", "--values")
     assert argument.value_shape is ValueShape.LIST
@@ -238,10 +249,11 @@ class TestOptionalUnionListArg:
     """Optional list annotations, eg. list | None, should still behave like lists"""
 
     def test_optional_union_list_argument_detected_as_list(self, parser: Argparser):
-        parser.add_command(function_optional_list_union)
+        """Verify that Optional[List] union arguments are detected as lists."""
+        parser.add_command(fn_optional_list_union)
 
         schema = parser.build_parser_schema()
-        argument = schema.commands["function-optional-list-union"].parameters[0]
+        argument = schema.commands["fn-optional-list-union"].parameters[0]
 
         assert argument.value_shape is ValueShape.LIST
         assert argument.nargs == "*"
@@ -251,7 +263,8 @@ class TestOptionalUnionListArg:
         assert parser.parse_args([])["values"] == []
 
     def test_optional_union_list_parsed_correctly(self, parser: Argparser):
-        parser.add_command(function_optional_list_union)
+        """Verify correct parsing of Optional[List] union arguments."""
+        parser.add_command(fn_optional_list_union)
         assert parser.parse_args(["1"])["values"] == [1]
         assert parser.parse_args(["1", "2"])["values"] == [1, 2]
         assert parser.parse_args([])["values"] == []
