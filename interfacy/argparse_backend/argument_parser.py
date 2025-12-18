@@ -78,7 +78,8 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         nest_dir: str | None = None,
         **kwargs: Any,
     ) -> "ArgumentParser":
-        """Creates and returns a new parser for a subcommand with nesting support.
+        """
+        Creates and returns a new parser for a subcommand with nesting support.
 
         Args:
             name (str): Name of the subcommand.

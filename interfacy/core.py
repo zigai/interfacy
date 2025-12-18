@@ -73,6 +73,7 @@ class InterfacyParser:
         self._pipe_target_overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
         self._pipe_buffer: str | None | object = PIPE_UNSET
         self.result_display_fn = print_result_func
+        self.metadata: dict[str, Any] = {}
 
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file
@@ -163,7 +164,8 @@ class InterfacyParser:
         subcommand: str | None = None,
         **normalization_kwargs,
     ) -> PipeTargets:
-        """Configure default pipe targets.
+        """
+        Configure default pipe targets.
 
         If ``command`` is provided, the configuration applies only to that command name
         (and optionally one of its subcommands). Otherwise it becomes the global default

@@ -8,7 +8,7 @@ class NameMapping:
     def __init__(
         self, translation_fn: Callable[[str], str], ignored: set[str] | None = None
     ) -> None:
-        self.translation_fn = translation_fn
+        self.translation_fn: Callable[[str], str] = translation_fn
         self.ignored_names: set[str] = ignored if ignored is not None else set()
         self.translations: dict[str, str] = {}
 
@@ -34,7 +34,7 @@ class NameMapping:
         return name in self.translations
 
 
-def reverse_translations(args: dict[str, str], translator: NameMapping) -> dict[str, Any]:
+def reverse_translations(args: dict[str, Any], translator: NameMapping) -> dict[str, Any]:
     reversed_args: dict[str, Any] = {}
     for key, value in args.items():
         canonical = translator.reverse(key)
