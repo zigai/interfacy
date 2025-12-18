@@ -182,11 +182,38 @@ def _split_list_values(chunk: str, delimiter: str | None) -> list[str]:
 
 
 def is_cli_supplied(value: Any, parameter: Parameter) -> bool:
+    """
+    Check if a value was explicitly provided via CLI.
+
+    For collection types (list, tuple, set), argparse returns an empty collection when nargs='*' and no CLI args are provided.
+    """
     if value is None:
         return False
+
+    if parameter.is_typed and _is_empty_collection_from_argparse(value, parameter.type):
+        return False
+
     if parameter.has_default and value == parameter.default:
         return False
+
     return True
+
+
+def _is_empty_collection_from_argparse(value: Any, param_type: Any) -> bool:
+    """Check if value is an empty collection from argparse nargs='*'."""
+    if value not in ([], (), set()):
+        return False
+
+    if is_list_or_list_alias(param_type):
+        return True
+
+    origin = getattr(param_type, "__origin__", None)
+    if origin in (tuple, set):
+        return True
+    if param_type in (tuple, set):
+        return True
+
+    return False
 
 
 def parse_list(
