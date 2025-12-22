@@ -1,4 +1,5 @@
 import enum
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Union
 
@@ -76,6 +77,89 @@ class Math:
             float: Difference of a and b.
         """
         return self._round(a - b)
+
+
+def greet(name: str) -> str:
+    """Return a friendly greeting."""
+    return f"Hello, {name}!"
+
+
+class TextTools:
+    """String utilities with a configurable prefix."""
+
+    def __init__(self, prefix: str = "hi-") -> None:
+        self.prefix = prefix
+
+    def join(self, a: str, b: str, sep: str = " ") -> str:
+        return f"{a}{sep}{b}"
+
+    def prefix_text(self, text: str) -> str:
+        return f"{self.prefix}{text}"
+
+    def _helper(self, text: str) -> str:
+        return text.strip()
+
+    @staticmethod
+    def repeat(text: str, times: int = 2) -> str:
+        return text * times
+
+    @classmethod
+    def tool_name(cls) -> str:
+        return cls.__name__
+
+    @property
+    def label(self) -> str:
+        return f"prefix-{self.prefix}"
+
+
+class Empty:
+    """No public methods."""
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def _private(self) -> int:
+        return self.value
+
+
+class BaseOperation:
+    """For inheritance tests."""
+
+    def execute(self, x: int) -> int:
+        return x + 1
+
+    def describe(self) -> str:
+        return "base"
+
+
+class DerivedOperation(BaseOperation):
+    """Overrides execute, adds extra."""
+
+    def execute(self, x: int) -> int:
+        return x * 2
+
+    def extra(self) -> str:
+        return "extra"
+
+
+class AbstractProcessor(ABC):
+    """Abstract processor for testing."""
+
+    @abstractmethod
+    def process(self, data: str) -> str: ...
+
+    @abstractmethod
+    def validate(self, data: str) -> bool: ...
+
+
+class ConcreteProcessor(AbstractProcessor):
+    """Concrete implementation of abstract class."""
+
+    def process(self, data: str) -> str:
+        return data.upper()
+
+    def validate(self, data: str) -> bool:
+        return bool(data)
 
 
 class Color(enum.Enum):
