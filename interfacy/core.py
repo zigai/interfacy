@@ -63,6 +63,8 @@ class InterfacyParser:
         abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable = print,
+        include_inherited_methods: bool = False,
+        include_classmethods: bool = False,
     ) -> None:
         self.description = description
         self.epilog = epilog
@@ -74,6 +76,8 @@ class InterfacyParser:
         self._pipe_buffer: str | None | object = PIPE_UNSET
         self.result_display_fn = print_result_func
         self.metadata: dict[str, Any] = {}
+        self.include_inherited_methods = include_inherited_methods
+        self.include_classmethods = include_classmethods
 
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file
@@ -100,7 +104,16 @@ class InterfacyParser:
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
     ) -> "Command":
-        obj = inspect(command, inherited=False)
+        obj = inspect(
+            command,
+            init=True,
+            public=True,
+            inherited=self.include_inherited_methods,
+            static_methods=True,
+            classmethod=self.include_classmethods,
+            protected=False,
+            private=False,
+        )
 
         canonical_name, command_aliases = self.name_registry.register(
             default_name=obj.name,
