@@ -56,6 +56,8 @@ class Argparser(InterfacyParser):
         abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable = print,
+        include_inherited_methods: bool = False,
+        include_classmethods: bool = False,
         formatter_class=InterfacyHelpFormatter,
     ) -> None:
         super().__init__(
@@ -73,6 +75,8 @@ class Argparser(InterfacyParser):
             print_result_func=print_result_func,
             full_error_traceback=full_error_traceback,
             sys_exit_enabled=sys_exit_enabled,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
         )
         self.formatter_class = formatter_class
         self._parser = None

@@ -145,6 +145,8 @@ class ClickParser(InterfacyParser):
         abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_targets: PipeTargets | dict[str, str] | str | None = None,
         print_result_func: Callable = print,
+        include_inherited_methods: bool = False,
+        include_classmethods: bool = False,
     ) -> None:
         super().__init__(
             description,
@@ -158,6 +160,8 @@ class ClickParser(InterfacyParser):
             flag_strategy=flag_strategy,
             tab_completion=tab_completion,
             abbreviation_gen=abbreviation_gen,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
         )
         self.main_parser = click.Group(name="main")
         self.args = UNSET
