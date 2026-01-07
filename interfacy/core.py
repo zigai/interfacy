@@ -11,7 +11,11 @@ from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
 from interfacy.appearance.layouts import HelpLayout, InterfacyLayout
-from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
+from interfacy.exceptions import (
+    ConfigurationError,
+    DuplicateCommandError,
+    InvalidCommandError,
+)
 from interfacy.logger import get_logger
 from interfacy.naming import (
     AbbreviationGenerator,
@@ -39,6 +43,7 @@ class ExitCode(IntEnum):
     ERR_PARSING = auto()
     ERR_RUNTIME = auto()
     ERR_RUNTIME_INTERNAL = auto()
+    INTERRUPTED = 130  # Unix convention: 128 + SIGINT (2)
 
 
 class InterfacyParser:
@@ -65,6 +70,9 @@ class InterfacyParser:
         print_result_func: Callable = print,
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
+        on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
+        silent_interrupt: bool = False,
+        reraise_interrupt: bool = False,
     ) -> None:
         self.description = description
         self.epilog = epilog
@@ -85,6 +93,9 @@ class InterfacyParser:
         self.enable_tab_completion = tab_completion
         self.sys_exit_enabled = sys_exit_enabled
         self.display_result = print_result
+        self.on_interrupt = on_interrupt
+        self.silent_interrupt = silent_interrupt
+        self.reraise_interrupt = reraise_interrupt
 
         self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator()
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
@@ -376,6 +387,14 @@ class InterfacyParser:
         message += f"{colored(exception_str, color='red')}"
         message = f"[{self.logger_message_tag}] {message}"
         message = colored(message, color="red")
+        print(message, file=sys.stderr)
+
+    def log_interrupt(self) -> None:
+        """Log a message when the CLI is interrupted by user."""
+        if self.silent_interrupt:
+            return
+        message = f"[{self.logger_message_tag}] Interrupted"
+        message = colored(message, color="yellow")
         print(message, file=sys.stderr)
 
     def build_parser_schema(self) -> "ParserSchema":

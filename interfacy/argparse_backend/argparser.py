@@ -1,5 +1,7 @@
 import argparse
+import signal
 import sys
+import time
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
@@ -58,6 +60,9 @@ class Argparser(InterfacyParser):
         print_result_func: Callable = print,
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
+        on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
+        silent_interrupt: bool = False,
+        reraise_interrupt: bool = False,
         formatter_class=InterfacyHelpFormatter,
     ) -> None:
         super().__init__(
@@ -77,9 +82,13 @@ class Argparser(InterfacyParser):
             sys_exit_enabled=sys_exit_enabled,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,
+            on_interrupt=on_interrupt,
+            silent_interrupt=silent_interrupt,
+            reraise_interrupt=reraise_interrupt,
         )
         self.formatter_class = formatter_class
         self._parser = None
+        self._last_interrupt_time: float = 0.0
         del self.type_parser.parsers[list]
 
     def _new_parser(self, name: str | None = None):
@@ -417,7 +426,28 @@ class Argparser(InterfacyParser):
 
         return namespace
 
+    def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
+        """Handle KeyboardInterrupt with callback, logging, and optional re-raise."""
+        if self.on_interrupt is not None:
+            self.on_interrupt(exc)
+        self.log_interrupt()
+        self.exit(ExitCode.INTERRUPTED)
+        if self.reraise_interrupt:
+            raise exc
+        return exc
+
     def run(self, *commands: Callable | type | object, args: list[str] | None = None) -> Any:
+        original_handler = signal.getsignal(signal.SIGINT)
+
+        def sigint_handler(signum, frame):
+            now = time.time()
+            if now - self._last_interrupt_time < 1.0:  # Double Ctrl+C: force immediate exit
+                sys.exit(ExitCode.INTERRUPTED)
+            self._last_interrupt_time = now
+            raise KeyboardInterrupt()
+
+        signal.signal(signal.SIGINT, sigint_handler)
+
         try:
             self.reset_piped_input()
             for cmd in commands:
@@ -436,7 +466,12 @@ class Argparser(InterfacyParser):
             self.log_exception(e)
             self.exit(ExitCode.ERR_PARSING)
             return e
+        except KeyboardInterrupt as e:
+            return self._handle_interrupt(e)
+        finally:
+            signal.signal(signal.SIGINT, original_handler)
 
+        signal.signal(signal.SIGINT, sigint_handler)
         try:
             runner = ArgparseRunner(
                 namespace=namespace,
@@ -449,11 +484,14 @@ class Argparser(InterfacyParser):
             self.log_exception(e)
             self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
             return e
-
+        except KeyboardInterrupt as e:
+            return self._handle_interrupt(e)
         except Exception as e:
             self.log_exception(e)
             self.exit(ExitCode.ERR_RUNTIME)
             return e
+        finally:
+            signal.signal(signal.SIGINT, original_handler)
 
         if self.display_result:
             self.result_display_fn(result)

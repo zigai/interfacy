@@ -36,3 +36,9 @@ class PipeInputError(InterfacyError):
         self.parameter = parameter
         prefix = "stdin" if parameter == "stdin" else f"parameter '{parameter}'"
         super().__init__(f"Pipe input error for {prefix}: {message}")
+
+
+class InterfacyInterrupted(InterfacyError):
+    """Raised when the CLI is interrupted by user (Ctrl+C from terminal)."""
+
+    pass
