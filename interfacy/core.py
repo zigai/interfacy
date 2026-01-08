@@ -28,6 +28,7 @@ from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.schema.builder import ParserSchemaBuilder
 
 if TYPE_CHECKING:
+    from interfacy.group import CommandGroup
     from interfacy.schema.schema import Command, ParserSchema
 
 
@@ -115,6 +116,11 @@ class InterfacyParser:
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
     ) -> "Command":
+        from interfacy.group import CommandGroup
+
+        if isinstance(command, CommandGroup):
+            return self.add_group(command, name=name, description=description, aliases=aliases)
+
         obj = inspect(
             command,
             init=True,
@@ -160,6 +166,50 @@ class InterfacyParser:
         )
         self.commands[canonical_name] = command
         logger.debug(f"Added command: {command}")
+        return command
+
+    def add_group(
+        self,
+        group: "CommandGroup",
+        name: str | None = None,
+        description: str | None = None,
+        aliases: Sequence[str] | None = None,
+    ) -> "Command":
+        """
+        Add a CommandGroup to the parser for deeply nested CLI structures.
+
+        Args:
+            group: The CommandGroup to add
+            name: Override the group name
+            description: Override the description
+            aliases: Alternative names for this group
+
+        Returns:
+            The Command schema for the group
+        """
+        combined_aliases: list[str] = list(aliases or [])
+        for alias in group.aliases:
+            if alias not in combined_aliases:
+                combined_aliases.append(alias)
+
+        canonical_name, command_aliases = self.name_registry.register(
+            default_name=group.name,
+            explicit_name=name,
+            aliases=combined_aliases if combined_aliases else None,
+        )
+
+        if canonical_name in self.commands:
+            raise DuplicateCommandError(canonical_name)
+
+        builder = ParserSchemaBuilder(self)
+        command = builder.build_from_group(group, canonical_name=canonical_name)
+
+        if description is not None:
+            command.raw_description = description
+
+        command.aliases = tuple(command_aliases)
+        self.commands[canonical_name] = command
+        logger.debug(f"Added group: {command}")
         return command
 
     def get_commands(self) -> list["Command"]:
