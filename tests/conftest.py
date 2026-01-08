@@ -314,6 +314,43 @@ def fn_legacy_union(x: Union[int, str]) -> Union[int, str]:
     return x
 
 
+def attach(container: str) -> str:
+    """Attach to a container."""
+    return f"Attached to {container}"
+
+
+def detach(container: str) -> str:
+    """Detach from a container."""
+    return f"Detached from {container}"
+
+
+class Container:
+    """Container management commands."""
+
+    def __init__(self, format: str = "table") -> None:
+        self.format = format
+
+    def run(self, image: str) -> str:
+        return f"Running {image} with format {self.format}"
+
+    def stop(self, name: str) -> str:
+        return f"Stopped {name}"
+
+
+class Database:
+    """Database connection for testing instances."""
+
+    def __init__(self, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+
+    def query(self, sql: str) -> str:
+        return f"Query on {self.host}:{self.port}: {sql}"
+
+    def ping(self) -> str:
+        return f"Pong from {self.host}:{self.port}"
+
+
 @pytest.fixture
 def parser(request):
     fixture_name = request.param
