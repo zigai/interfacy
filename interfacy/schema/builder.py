@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
+from inspect import Parameter as StdParameter
 from typing import TYPE_CHECKING, Any
 
-from objinspect import Class, Function, Method, Parameter
+from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import get_choices, type_args
 
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
@@ -28,6 +28,7 @@ from interfacy.util import (
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.core import InterfacyParser
+    from interfacy.group import CommandEntry, CommandGroup
 
 
 @dataclass
@@ -37,13 +38,18 @@ class ParserSchemaBuilder:
     def build(self) -> ParserSchema:
         commands: dict[str, Command] = {}
         for canonical_name, command in self.parser.commands.items():
-            rebuilt = self.build_command_spec_for(
-                command.obj,
-                canonical_name=command.canonical_name,
-                description=command.raw_description,
-                aliases=command.aliases,
-            )
-            commands[canonical_name] = rebuilt
+            if command.command_type in ("group", "instance") or (
+                not command.is_leaf and command.obj is None
+            ):
+                commands[canonical_name] = command
+            else:
+                rebuilt = self.build_command_spec_for(
+                    command.obj,
+                    canonical_name=command.canonical_name,
+                    description=command.raw_description,
+                    aliases=command.aliases,
+                )
+                commands[canonical_name] = rebuilt
 
         commands_help = None
         if len(commands) > 1:
@@ -331,7 +337,7 @@ class ParserSchemaBuilder:
         is_optional_union_list = False
         tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
 
-        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+        if param.kind == StdParameter.VAR_POSITIONAL:
             value_shape = ValueShape.LIST
             nargs = "*"
             default_value = ()  # Empty tuple as default for *args
@@ -455,6 +461,247 @@ class ParserSchemaBuilder:
             pipe_required=pipe_required,
             tuple_element_parsers=tuple_element_parsers,
         )
+
+    def build_from_group(
+        self,
+        group: CommandGroup,
+        parent_path: tuple[str, ...] = (),
+        canonical_name: str | None = None,
+    ) -> Command:
+        """Build Command schema from a CommandGroup (manual construction)."""
+        cli_name = canonical_name or self.parser.flag_strategy.command_translator.translate(
+            group.name
+        )
+        current_path = (*parent_path, cli_name)
+
+        initializer: list[Argument] = []
+        if group._group_args_source is not None:
+            initializer = self._build_args_from_source(group._group_args_source)
+
+        subcommands: dict[str, Command] = {}
+
+        for name, subgroup in group._subgroups.items():
+            sub_cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            subcommands[sub_cli_name] = self.build_from_group(subgroup, current_path)
+
+        for name, entry in group._commands.items():
+            sub_cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            subcommands[sub_cli_name] = self._build_command_entry(entry, current_path)
+
+        raw_epilog = None
+        if subcommands:
+            raw_epilog = self._build_group_epilog(subcommands)
+
+        return Command(
+            obj=None,
+            canonical_name=cli_name,
+            cli_name=cli_name,
+            aliases=group.aliases,
+            raw_description=group.description,
+            parameters=[],
+            initializer=initializer,
+            subcommands=subcommands if subcommands else None,
+            raw_epilog=raw_epilog,
+            help_layout=self.parser.help_layout,
+            command_type="group",
+            is_leaf=False,
+            parent_path=parent_path,
+        )
+
+    def _build_args_from_source(self, source: type | Callable) -> list[Argument]:
+        """Build argument list from a class __init__ or callable signature."""
+        obj = inspect(source, init=True)
+        taken_flags = [*self.parser.RESERVED_FLAGS]
+
+        if isinstance(obj, Class) and obj.init_method:
+            return [
+                self._argument_from_parameter(param, taken_flags, set())
+                for param in obj.init_method.params
+            ]
+        elif isinstance(obj, Function):
+            return [
+                self._argument_from_parameter(param, taken_flags, set()) for param in obj.params
+            ]
+        return []
+
+    def _build_command_entry(
+        self,
+        entry: CommandEntry,
+        parent_path: tuple[str, ...],
+    ) -> Command:
+        """Build Command from a CommandEntry (function/class/instance)."""
+        if entry.is_instance:
+            return self._build_from_instance(entry, parent_path)
+        elif isinstance(entry.obj, type):
+            return self._build_from_class_recursive(entry, parent_path)
+        else:
+            obj = inspect(entry.obj)
+            if isinstance(obj, (Function, Method)):
+                return self._function_spec(
+                    obj,
+                    canonical_name=entry.name,
+                    description=entry.description,
+                    aliases=entry.aliases,
+                )
+            raise InvalidCommandError(entry.obj)
+
+    def _build_from_instance(
+        self,
+        entry: CommandEntry,
+        parent_path: tuple[str, ...],
+    ) -> Command:
+        """Build from a class instance - methods as commands, no __init__ args."""
+        instance = entry.obj
+        cls = inspect(
+            type(instance),
+            init=False,
+            public=True,
+            inherited=self.parser.include_inherited_methods,
+            static_methods=True,
+            classmethod=self.parser.include_classmethods,
+        )
+
+        subcommands: dict[str, Command] = {}
+        for method in cls.methods:
+            if method.name.startswith("_") or method.name in self.parser.method_skips:
+                continue
+            method_cli_name = self.parser.flag_strategy.command_translator.translate(method.name)
+            subcommands[method_cli_name] = self._function_spec(
+                method,
+                canonical_name=None,
+                description=None,
+                aliases=(),
+                cli_name_override=method_cli_name,
+            )
+
+        cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
+        raw_description = entry.description or (cls.description if cls.has_docstring else None)
+
+        raw_epilog = None
+        if subcommands:
+            raw_epilog = self._build_group_epilog(subcommands)
+
+        return Command(
+            obj=cls,
+            canonical_name=cli_name,
+            cli_name=cli_name,
+            aliases=entry.aliases,
+            raw_description=raw_description,
+            parameters=[],
+            initializer=[],
+            subcommands=subcommands if subcommands else None,
+            raw_epilog=raw_epilog,
+            help_layout=self.parser.help_layout,
+            command_type="instance",
+            is_leaf=False,
+            is_instance=True,
+            parent_path=parent_path,
+            stored_instance=instance,
+        )
+
+    def _build_from_class_recursive(
+        self,
+        entry: CommandEntry,
+        parent_path: tuple[str, ...],
+    ) -> Command:
+        """Build from a class - methods AND nested classes (recursive)."""
+        from interfacy.group import CommandEntry as CE
+
+        cls = inspect(
+            entry.obj,
+            init=True,
+            public=True,
+            inherited=self.parser.include_inherited_methods,
+            static_methods=True,
+            classmethod=self.parser.include_classmethods,
+        )
+
+        cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
+        current_path = (*parent_path, cli_name)
+
+        taken_flags = [*self.parser.RESERVED_FLAGS]
+        command_key = self.parser.COMMAND_KEY
+        if command_key:
+            taken_flags.append(command_key)
+
+        initializer: list[Argument] = []
+        if cls.has_init and not cls.is_initialized:
+            initializer = [
+                self._argument_from_parameter(param, taken_flags, set())
+                for param in cls.get_method("__init__").params
+            ]
+
+        subcommands: dict[str, Command] = {}
+
+        for method in cls.methods:
+            if method.name.startswith("_") or method.name in self.parser.method_skips:
+                continue
+            method_cli_name = self.parser.flag_strategy.command_translator.translate(method.name)
+            subcommands[method_cli_name] = self._function_spec(
+                method,
+                canonical_name=None,
+                description=None,
+                aliases=(),
+                cli_name_override=method_cli_name,
+            )
+
+        for attr_name in dir(entry.obj):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(entry.obj, attr_name, None)
+            if attr is None:
+                continue
+            if isinstance(attr, type):
+                nested_entry = CE(
+                    obj=attr,
+                    name=attr_name,
+                    description=None,
+                    aliases=(),
+                    is_instance=False,
+                )
+                nested_cli_name = self.parser.flag_strategy.command_translator.translate(attr_name)
+                subcommands[nested_cli_name] = self._build_from_class_recursive(
+                    nested_entry, current_path
+                )
+
+        raw_description = entry.description or (cls.description if cls.has_docstring else None)
+
+        raw_epilog = None
+        if subcommands:
+            raw_epilog = self._build_group_epilog(subcommands)
+
+        return Command(
+            obj=cls,
+            canonical_name=cli_name,
+            cli_name=cli_name,
+            aliases=entry.aliases,
+            raw_description=raw_description,
+            parameters=[],
+            initializer=initializer,
+            subcommands=subcommands if subcommands else None,
+            raw_epilog=raw_epilog,
+            help_layout=self.parser.help_layout,
+            command_type="class",
+            is_leaf=False,
+            parent_path=parent_path,
+        )
+
+    def _build_group_epilog(self, subcommands: dict[str, Command]) -> str:
+        """Build epilog text listing available subcommands."""
+        lines = ["commands:"]
+        max_name_len = max(len(cmd.cli_name) for cmd in subcommands.values()) if subcommands else 0
+        ljust = max(20, max_name_len + 4)
+
+        for cmd in subcommands.values():
+            name_col = f"   {cmd.cli_name}".ljust(ljust)
+            desc = cmd.raw_description or ""
+            if desc:
+                first_line = desc.split("\n")[0].strip()
+                lines.append(f"{name_col} {first_line}")
+            else:
+                lines.append(name_col)
+
+        return "\n".join(lines)
 
     def _resolve_cli_name(
         self,
