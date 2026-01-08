@@ -4,12 +4,14 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Any
+from typing import Any, Literal
 
 from objinspect import Class, Function, Method
 
 from interfacy.appearance.layout import HelpLayout
 from interfacy.pipe import PipeTargets
+
+CommandType = Literal["function", "method", "class", "group", "instance"]
 
 
 class ArgumentKind(str, Enum):
@@ -54,7 +56,7 @@ class Argument:
 
 @dataclass
 class Command:
-    obj: Class | Function | Method
+    obj: Class | Function | Method | None
     canonical_name: str
     cli_name: str
     aliases: tuple[str, ...]
@@ -65,6 +67,11 @@ class Command:
     initializer: list[Argument] = field(default_factory=list)
     subcommands: dict[str, Command] | None = None
     raw_epilog: str | None = None
+    command_type: CommandType = "function"
+    is_leaf: bool = True
+    is_instance: bool = False
+    parent_path: tuple[str, ...] = ()
+    stored_instance: object | None = None
 
     @cached_property
     def description(self) -> str | None:
@@ -120,6 +127,7 @@ __all__ = [
     "Argument",
     "BooleanBehavior",
     "Command",
+    "CommandType",
     "ParserSchema",
     "ValueShape",
 ]
