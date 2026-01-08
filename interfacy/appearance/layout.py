@@ -219,14 +219,20 @@ class HelpLayout:
         ljust = max(self.min_ljust, max_display)
         lines = [self.commands_title]
         for name, command in commands.items():
-            lines.append(
-                self.get_command_description(
-                    command.obj,
-                    ljust,
-                    name,
-                    command.aliases,
+            if command.obj is None:
+                command_name = self._format_command_display_name(name, command.aliases)
+                name_column = f"   {command_name}".ljust(ljust)
+                description = command.raw_description or ""
+                lines.append(f"{name_column} {with_style(description, self.style.description)}")
+            else:
+                lines.append(
+                    self.get_command_description(
+                        command.obj,
+                        ljust,
+                        name,
+                        command.aliases,
+                    )
                 )
-            )
         return "\n".join(lines)
 
     def _use_template_layout(self) -> bool:
