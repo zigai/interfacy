@@ -276,9 +276,33 @@ class Argparser(InterfacyParser):
         logger.info(f"Adding argument flags={argument.flags}, kwargs={kwargs}")
         parser.add_argument(*argument.flags, **kwargs)
 
-    def _apply_command_schema(self, parser: ArgumentParser, command: Command) -> None:
+    def _apply_command_schema(
+        self,
+        parser: ArgumentParser,
+        command: Command,
+        *,
+        depth: int = 0,
+    ) -> None:
         if command.description:
             parser.description = command.description
+
+        if not command.is_leaf and command.subcommands:
+            for argument in command.initializer:
+                self._add_argument_from_schema(parser, argument)
+
+            if command.epilog:
+                parser.epilog = command.epilog
+
+            dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
+            subparsers = parser.add_subparsers(dest=dest, required=True)
+            for sub_cmd in command.subcommands.values():
+                subparser = subparsers.add_parser(
+                    sub_cmd.cli_name,
+                    description=sub_cmd.description,
+                    aliases=list(sub_cmd.aliases) if sub_cmd.aliases else [],
+                )
+                self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
+            return
 
         if isinstance(command.obj, Class):
             for argument in command.initializer:
@@ -287,14 +311,15 @@ class Argparser(InterfacyParser):
             if command.epilog:
                 parser.epilog = command.epilog
 
-            subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
+            dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
+            subparsers = parser.add_subparsers(dest=dest, required=True)
             if command.subcommands:
                 for sub_cmd in command.subcommands.values():
                     subparser = subparsers.add_parser(
                         sub_cmd.cli_name,
                         description=sub_cmd.description,
                     )
-                    self._apply_command_schema(subparser, sub_cmd)
+                    self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
             return
 
         if isinstance(command.obj, Method) and command.initializer:
@@ -307,7 +332,10 @@ class Argparser(InterfacyParser):
     def _build_from_schema(self, schema: ParserSchema) -> ArgumentParser:
         parser = self._new_parser()
 
-        if schema.is_multi_command:
+        single_cmd = next(iter(schema.commands.values())) if len(schema.commands) == 1 else None
+        single_group = single_cmd if single_cmd and not single_cmd.is_leaf else None
+
+        if schema.is_multi_command or single_group:
             subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
             for _, cmd in schema.commands.items():
                 subparser = subparsers.add_parser(

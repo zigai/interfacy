@@ -9,12 +9,14 @@ from interfacy.exceptions import ConfigurationError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import reverse_translations
 from interfacy.pipe import apply_pipe_values
-from interfacy.schema.schema import Command
+from interfacy.schema.schema import Argument, Command
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
 
 logger = get_logger(__name__)
+
+COMMAND_KEY_BASE = "command"
 
 
 class ArgparseRunner:
@@ -30,13 +32,18 @@ class ArgparseRunner:
         self.args = args
         self.builder = builder
         self.COMMAND_KEY = self.builder.COMMAND_KEY
+        self._instance_chain: list[Any] = []
 
-    def run(self):
+    def run(self) -> Any:
         commands = self.builder.commands
         if len(commands) == 0:
             raise ConfigurationError("No commands were provided")
         if len(commands) == 1:
-            return self.run_command(self.builder.get_commands()[0], self.namespace)
+            command = self.builder.get_commands()[0]
+            if not command.is_leaf:
+                group_args = self.namespace.get(command.canonical_name, {})
+                return self._run_with_chain(command, group_args, depth=0)
+            return self.run_command(command, self.namespace)
         return self.run_multiple(commands)
 
     def _apply_pipe(
@@ -169,5 +176,113 @@ class ArgparseRunner:
     def run_multiple(self, commands: dict[str, Command]) -> Any:
         command_name = self.namespace[self.COMMAND_KEY]
         command = self.builder.get_command_by_cli_name(command_name)
-        args = self.namespace[command.canonical_name]
+        args = self.namespace.get(command.canonical_name, {})
+
+        if not command.is_leaf:
+            return self._run_with_chain(command, args, depth=0)
         return self.run_command(command, args)
+
+    def _run_with_chain(
+        self,
+        command: Command,
+        args: dict[str, Any],
+        depth: int,
+        parent_instance: Any = None,
+    ) -> Any:
+        """
+        Execute a command with chain instantiation support.
+
+        For groups/classes: instantiate at this level, then recurse to subcommand.
+        For leaf commands: execute with the accumulated instance chain.
+        """
+        current_instance = parent_instance
+
+        if command.is_instance and command.stored_instance is not None:
+            current_instance = command.stored_instance
+
+        elif command.command_type == "class" and command.obj is not None:
+            cls = command.obj
+            if isinstance(cls, Class):
+                cls.is_initialized = False
+                cls.instance = None
+                init_args = self._extract_init_args(args, command.initializer)
+                if init_args:
+                    init_a, init_kw = split_args_kwargs(init_args, cls.init_method)
+                    cls.init(*init_a, **init_kw)
+                else:
+                    cls.init()
+                current_instance = cls.instance
+
+                if parent_instance is not None:
+                    try:
+                        current_instance._parent = parent_instance
+                    except AttributeError:
+                        pass
+
+        if command.is_leaf:
+            return self._execute_leaf(command, args, current_instance)
+
+        dest_key = f"{COMMAND_KEY_BASE}_{depth}" if depth > 0 else COMMAND_KEY_BASE
+        if dest_key not in args:
+            raise ConfigurationError(
+                f"No subcommand specified for '{command.cli_name}'. "
+                f"Available: {', '.join(command.subcommands.keys()) if command.subcommands else 'none'}"
+            )
+
+        subcommand_name = args[dest_key]
+
+        if command.subcommands is None:
+            raise ConfigurationError(f"Command '{command.cli_name}' has no subcommands")
+
+        subcommand = None
+        for sub_cmd in command.subcommands.values():
+            if sub_cmd.cli_name == subcommand_name:
+                subcommand = sub_cmd
+                break
+            if subcommand_name in sub_cmd.aliases:
+                subcommand = sub_cmd
+                break
+
+        if subcommand is None:
+            raise ConfigurationError(f"Unknown subcommand '{subcommand_name}'")
+
+        subcommand_args = args.get(subcommand.cli_name, args.get(subcommand_name, {}))
+        if not isinstance(subcommand_args, dict):
+            subcommand_args = {}
+
+        return self._run_with_chain(subcommand, subcommand_args, depth + 1, current_instance)
+
+    def _extract_init_args(
+        self,
+        args: dict[str, Any],
+        initializer: list[Argument],
+    ) -> dict[str, Any]:
+        """Extract arguments belonging to this level's initializer."""
+        param_names = {arg.name for arg in initializer}
+        return {k: v for k, v in args.items() if k in param_names}
+
+    def _execute_leaf(
+        self,
+        command: Command,
+        args: dict[str, Any],
+        instance: Any | None,
+    ) -> Any:
+        """Execute a leaf command (function or method)."""
+        obj = command.obj
+
+        if isinstance(obj, Method):
+            if instance is not None:
+                args = self._apply_pipe(command, args)
+                method_args, method_kwargs = split_args_kwargs(args, obj)
+                logger.info(
+                    f"Calling method '{obj.name}' on instance with args: {method_args}, kwargs: {method_kwargs}"
+                )
+                return obj.func(instance, *method_args, **method_kwargs)
+            args = self._apply_pipe(command, args)
+            return self.run_method(obj, args)
+
+        if isinstance(obj, Function):
+            args = self._apply_pipe(command, args)
+            return self.run_function(obj, args)
+
+        raise InvalidCommandError(obj)
