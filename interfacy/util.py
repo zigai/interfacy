@@ -7,6 +7,8 @@ from objinspect.typing import is_union_type, type_args, type_origin
 from objinspect.util import colored_type
 from stdl.st import with_style
 
+from interfacy import console
+
 
 def simplified_type_name(name: str) -> str:
     """
@@ -116,15 +118,7 @@ def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
 
 
 def show_result(result: Any, handler: Callable = print) -> None:
-    if isinstance(result, list):
-        for i in result:
-            handler(i)
-    elif isinstance(result, dict):
-        from pprint import pprint
-
-        pprint(result)
-    else:
-        handler(result)
+    console.display_result(result, handler=handler)
 
 
 def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:

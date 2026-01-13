@@ -5,11 +5,10 @@ from enum import IntEnum, auto
 from typing import TYPE_CHECKING, Any, ClassVar, Final
 
 from objinspect import Class, Function, Method, Parameter, inspect
-from objinspect.typing import type_name
 from stdl.fs import read_piped
-from stdl.st import colored, terminal_link
 from strto import StrToTypeParser, get_parser
 
+from interfacy import console
 from interfacy.appearance.layouts import HelpLayout, InterfacyLayout
 from interfacy.exceptions import (
     ConfigurationError,
@@ -411,41 +410,17 @@ class InterfacyParser:
     def install_tab_completion(self, *args, **kwargs) -> None: ...
 
     def log(self, message: str) -> None:
-        print(f"[{self.logger_message_tag}] {message}", file=sys.stdout)
+        console.log(self.logger_message_tag, message)
 
     def log_error(self, message: str) -> None:
-        message = f"[{self.logger_message_tag}] {message}"
-        message = colored(message, color="red")
-        print(message, file=sys.stderr)
+        console.log_error(self.logger_message_tag, message)
 
     def log_exception(self, e: Exception) -> None:
-        import sys
-        import traceback
-
-        if self.full_error_traceback:
-            print(traceback.format_exc(), file=sys.stderr)
-
-        message = ""
-        tb = e.__traceback__
-
-        exception_str = type_name(str(type(e))) + ": " + str(e)
-        if tb:
-            file_info = f"{terminal_link(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}"
-            message += file_info
-            message += " "
-
-        message += f"{colored(exception_str, color='red')}"
-        message = f"[{self.logger_message_tag}] {message}"
-        message = colored(message, color="red")
-        print(message, file=sys.stderr)
+        console.log_exception(self.logger_message_tag, e, full_traceback=self.full_error_traceback)
 
     def log_interrupt(self) -> None:
         """Log a message when the CLI is interrupted by user."""
-        if self.silent_interrupt:
-            return
-        message = f"[{self.logger_message_tag}] Interrupted"
-        message = colored(message, color="yellow")
-        print(message, file=sys.stderr)
+        console.log_interrupt(self.logger_message_tag, silent=self.silent_interrupt)
 
     def build_parser_schema(self) -> "ParserSchema":
         builder = ParserSchemaBuilder(self)
