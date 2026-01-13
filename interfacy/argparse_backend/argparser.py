@@ -14,6 +14,7 @@ from interfacy.argparse_backend.argument_parser import ArgumentParser, namespace
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
 from interfacy.core import ExitCode, InterfacyParser
+from interfacy import console
 from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
@@ -63,8 +64,37 @@ class Argparser(InterfacyParser):
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
         silent_interrupt: bool = False,
         reraise_interrupt: bool = False,
+        use_global_config: bool = False,
         formatter_class=InterfacyHelpFormatter,
     ) -> None:
+        if use_global_config:
+            from interfacy.cli.config import apply_config_defaults, load_config
+
+            overrides = apply_config_defaults(
+                load_config(),
+                {
+                    "flag_strategy": flag_strategy,
+                    "help_layout": help_layout,
+                    "print_result": print_result,
+                    "full_error_traceback": full_error_traceback,
+                    "tab_completion": tab_completion,
+                    "allow_args_from_file": allow_args_from_file,
+                    "include_inherited_methods": include_inherited_methods,
+                    "include_classmethods": include_classmethods,
+                    "silent_interrupt": silent_interrupt,
+                },
+            )
+
+            flag_strategy = overrides["flag_strategy"]
+            help_layout = overrides["help_layout"]
+            print_result = overrides["print_result"]
+            full_error_traceback = overrides["full_error_traceback"]
+            tab_completion = overrides["tab_completion"]
+            allow_args_from_file = overrides["allow_args_from_file"]
+            include_inherited_methods = overrides["include_inherited_methods"]
+            include_classmethods = overrides["include_classmethods"]
+            silent_interrupt = overrides["silent_interrupt"]
+
         super().__init__(
             description,
             epilog,
@@ -374,10 +404,9 @@ class Argparser(InterfacyParser):
             import argcomplete
 
         except ImportError:
-            print(
+            console.warn(
                 "argcomplete not installed. Tab completion not available."
-                " Install with 'pip install argcomplete'",
-                file=sys.stderr,
+                " Install with 'pip install argcomplete'"
             )
             return
 
