@@ -3,8 +3,7 @@ import pytest
 from interfacy import CommandGroup
 from interfacy.core import InterfacyParser
 from interfacy.exceptions import ConfigurationError
-from tests.conftest import (Container, Database, Math, attach, detach, greet,
-                            pow)
+from tests.conftest import Container, Database, Math, attach, detach, greet, pow
 
 
 class TestBasicGroupConstruction:

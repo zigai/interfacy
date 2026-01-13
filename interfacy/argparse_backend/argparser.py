@@ -9,12 +9,12 @@ from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import type_args
 from strto import StrToTypeParser
 
+from interfacy import console
 from interfacy.appearance.layout import HelpLayout
 from interfacy.argparse_backend.argument_parser import ArgumentParser, namespace_to_dict
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
 from interfacy.core import ExitCode, InterfacyParser
-from interfacy import console
 from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
