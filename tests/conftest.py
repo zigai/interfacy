@@ -1,9 +1,9 @@
 import enum
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Dict, List, Literal, Optional, Union
 
 import pytest
+from stdl.fs import File
 
 from interfacy.argparse_backend import Argparser
 from interfacy.naming import DefaultFlagStrategy
@@ -254,7 +254,7 @@ def fn_float_required(value: float) -> float:
     return value
 
 
-def fn_path_required(path: Path) -> Path:
+def fn_path_required(path: File) -> File:
     return path
 
 
