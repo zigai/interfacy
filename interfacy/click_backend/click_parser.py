@@ -8,7 +8,7 @@ from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser
 
-from interfacy.appearance.layout import HelpLayout
+from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.core import InterfacyParser
 from interfacy.naming import AbbreviationGenerator, FlagStrategy, NameMapping
 from interfacy.pipe import PipeTargets
@@ -135,6 +135,7 @@ class ClickParser(InterfacyParser):
         type_parser: StrToTypeParser | None = None,
         help_layout: HelpLayout | None = None,
         *,
+        help_colors: InterfacyColors | None = None,
         run: bool = False,
         print_result: bool = False,
         tab_completion: bool = False,
@@ -153,6 +154,7 @@ class ClickParser(InterfacyParser):
             epilog,
             help_layout,
             type_parser,
+            help_colors=help_colors,
             pipe_targets=None,
             allow_args_from_file=allow_args_from_file,
             print_result=print_result,
