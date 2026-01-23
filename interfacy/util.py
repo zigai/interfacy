@@ -120,15 +120,18 @@ def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
     return None
 
 
-def _normalize_enum_choices(choices: list[Any]) -> list[Any] | None:
+def _normalize_enum_choices(choices: list[Any], *, for_display: bool) -> list[Any] | None:
     normalized: list[Any] = []
     for choice in choices:
         if choice is None:
             continue
         if isinstance(choice, Enum):
-            value = choice.value
-            if isinstance(value, (str, int, float, bool)):
-                normalized.append(value)
+            if for_display:
+                value = choice.value
+                if isinstance(value, str):
+                    normalized.append(value)
+                else:
+                    normalized.append(choice.name)
             else:
                 normalized.append(choice.name)
         else:
@@ -157,7 +160,7 @@ def _parse_literal_choices_from_string(annotation: str) -> list[Any] | None:
     return [value for value in parsed if value is not None] or None
 
 
-def get_annotation_choices(annotation: Any) -> list[Any] | None:
+def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> list[Any] | None:
     """
     Return a normalized list of choices for a type annotation.
 
@@ -167,7 +170,7 @@ def get_annotation_choices(annotation: Any) -> list[Any] | None:
         return None
 
     if isinstance(annotation, type) and issubclass(annotation, Enum):
-        return _normalize_enum_choices(list(annotation))
+        return _normalize_enum_choices(list(annotation), for_display=for_display)
 
     if isinstance(annotation, str):
         literal_choices = _parse_literal_choices_from_string(annotation)
@@ -186,7 +189,7 @@ def get_annotation_choices(annotation: Any) -> list[Any] | None:
     try:
         raw = objinspect_get_choices(annotation)
         if raw:
-            normalized = _normalize_enum_choices(list(raw))
+            normalized = _normalize_enum_choices(list(raw), for_display=for_display)
             if normalized:
                 return normalized
     except Exception:
@@ -195,9 +198,9 @@ def get_annotation_choices(annotation: Any) -> list[Any] | None:
     return None
 
 
-def get_param_choices(param: Any) -> list[Any] | None:
+def get_param_choices(param: Any, *, for_display: bool = False) -> list[Any] | None:
     """Return choices for an objinspect Parameter, falling back to inferred Enum types."""
-    choices = get_annotation_choices(getattr(param, "type", None))
+    choices = get_annotation_choices(getattr(param, "type", None), for_display=for_display)
     if choices:
         return choices
 
@@ -216,7 +219,7 @@ def get_param_choices(param: Any) -> list[Any] | None:
     if inferred is None:
         return None
 
-    return get_annotation_choices(inferred)
+    return get_annotation_choices(inferred, for_display=for_display)
 
 
 def format_default_for_help(value: Any) -> str:

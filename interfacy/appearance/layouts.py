@@ -204,7 +204,7 @@ class ClapLayout(HelpLayout):
                 parts.append(f"[{label} {value}]")
 
             if param.is_typed:
-                choices = get_param_choices(param)
+                choices = get_param_choices(param, for_display=True)
                 if choices:
                     label = "possible values:"
                     values = ", ".join([with_style(str(i), self.style.string) for i in choices])

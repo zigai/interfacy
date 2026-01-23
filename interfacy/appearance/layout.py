@@ -453,9 +453,9 @@ class HelpLayout:
         parts: list[str] = []
         default_added = False
         if param.is_typed and not self._param_is_bool(param):
-            if choices := get_param_choices(param):
+            if choices := get_param_choices(param, for_display=True):
                 param_info = self.prefix_choices + ", ".join(
-                    [with_style(i, self.style.string) for i in choices]
+                    [with_style(str(i), self.style.string) for i in choices]
                 )
                 if not param.is_required:
                     default_text = self.prefix_default + with_style(
@@ -634,7 +634,7 @@ class HelpLayout:
         default_padded = f"{' ' * pad}{styled_default}"
         default = styled_default
 
-        choices = get_param_choices(param) if param.is_typed else None
+        choices = get_param_choices(param, for_display=True) if param.is_typed else None
         choices_str = ""
         if choices:
             choices_str = ", ".join([with_style(str(i), self.style.string) for i in choices])
