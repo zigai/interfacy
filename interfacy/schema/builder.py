@@ -6,7 +6,7 @@ from inspect import Parameter as StdParameter
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter, inspect
-from objinspect.typing import get_choices, type_args
+from objinspect.typing import type_args
 from stdl.st import ansi_len, with_style
 
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
@@ -22,6 +22,7 @@ from interfacy.schema.schema import (
 from interfacy.util import (
     extract_optional_union_list,
     get_fixed_tuple_info,
+    get_param_choices,
     inverted_bool_flag_name,
     is_fixed_tuple,
     is_list_or_list_alias,
@@ -360,7 +361,7 @@ class ParserSchemaBuilder:
         nargs: str | int | None = None
         default_value: Any = param.default if param.has_default else None
         parsed_type: type[Any] | None = annotation if param.is_typed else None
-        choices = get_choices(annotation) if param.is_typed else None
+        choices = get_param_choices(param) if param.is_typed else None
         boolean_behavior: BooleanBehavior | None = None
         is_optional_union_list = False
         tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
