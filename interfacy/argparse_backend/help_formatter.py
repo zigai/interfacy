@@ -2,11 +2,13 @@ import argparse
 import os
 import re
 import textwrap
+from inspect import Parameter as StdParameter
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from stdl.st import ansi_len, with_style
 
-from interfacy.util import format_type_for_help
+from interfacy.util import format_default_for_help, format_type_for_help
 
 if TYPE_CHECKING:
     from interfacy.appearance.layout import HelpLayout
@@ -64,7 +66,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             and default_val is not None
             and default_val is not argparse.SUPPRESS
         ):
-            return str(default_val)
+            return format_default_for_help(default_val)
         return ""
 
     def _compute_default_field_width(
@@ -204,6 +206,32 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         help_width = term_width - help_position - indent_len
         help_text = self._expand_help(action)
 
+        if (
+            help_layout is not None
+            and isinstance(help_text, str)
+            and not help_text.startswith(self.PRE_FMT_PREFIX)
+            and set(action.option_strings) & {"-h", "--help"}
+            and help_layout._use_template_layout()
+        ):
+            param_stub = SimpleNamespace(
+                name="help",
+                kind=StdParameter.KEYWORD_ONLY,
+                description=help_text,
+                is_typed=False,
+                type=None,
+                is_required=False,
+                has_default=False,
+                default=None,
+                is_optional=False,
+            )
+            formatted = help_layout.format_parameter(param_stub, tuple(action.option_strings))
+            if isinstance(formatted, str) and formatted.startswith(self.PRE_FMT_PREFIX):
+                formatted = formatted[len(self.PRE_FMT_PREFIX) :]
+                indent = " " * indent_len
+                lines = str(formatted).splitlines()
+                lines = [indent + line for line in lines]
+                return "\n".join(lines) + "\n"
+
         if isinstance(help_text, str) and help_text.startswith(self.PRE_FMT_PREFIX):
             formatted = help_text[len(self.PRE_FMT_PREFIX) :]
             indent = " " * indent_len
@@ -259,7 +287,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         include_meta = layout.include_metavar_in_flag_display
         if is_option:
             default_metavar = self._get_default_metavar_for_optional(action)
-            args_string = self._format_args(action, default_metavar) if include_meta else ""
+            metavar = action.metavar or default_metavar
+            args_string = self._format_args(action, metavar) if include_meta else ""
+            if args_string and getattr(layout, "dashify_metavar", False):
+                args_string = args_string.replace("_", "-")
             shorts = [
                 s for s in action.option_strings if s.startswith("-") and not s.startswith("--")
             ]
@@ -295,6 +326,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             flag = metavar
 
         raw_description = help_text or ""
+        description = ""
 
         type_str = ""
         try:
@@ -319,7 +351,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             and default_val is not None
             and default_val is not argparse.SUPPRESS
         ):
-            default_raw = str(default_val)
+            default_raw = format_default_for_help(default_val)
 
         # Special-case help action to hide default label
         if set(action.option_strings) & {"-h", "--help"}:
@@ -389,7 +421,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
         if default_overflow:
             arrow = with_style("→", style.extra_data)
-            overflow_label = with_style("default:", style.extra_data)
+            overflow_label = "default:"
             overflow_value = with_style(default_overflow, style.default)
             overflow_line = f"{arrow} {overflow_label} {overflow_value}"
             if description:
@@ -412,7 +444,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         }
 
         if hasattr(layout, "column_gap"):
-            values["column_gap"] = layout.column_gap
+            gap = layout.column_gap
+            if getattr(layout, "collapse_gap_when_no_description", False) and not description:
+                gap = getattr(layout, "no_description_gap", "") if values.get("extra") else ""
+            values["column_gap"] = gap
 
         values.update(styled_cols)
         values["desc_line"] = description
@@ -420,9 +455,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         detail_parts: list[str] = []
 
         if default:
-            detail_parts.append(with_style("default:", style.extra_data) + " " + default)
+            detail_parts.append("default: " + default)
         if type_str:
-            detail_parts.append(with_style("type:", style.extra_data) + " " + type_str)
+            detail_parts.append("type: " + type_str)
 
         choices_str = ""
         choices_label = ""
@@ -434,9 +469,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         except Exception:
             choices_str = ""
 
+        choices_styled = ""
         if choices_str:
             choices_styled = ", ".join([with_style(str(i), style.string) for i in action.choices])
-            choices_label = with_style("choices:", style.extra_data)
+            choices_label = "choices:"
             choices_block = f" [{choices_label} {choices_styled}]"
             detail_parts.append(choices_label + " " + choices_styled)
 
@@ -455,6 +491,19 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         values["choices"] = choices_str
         values["choices_label"] = choices_label
         values["choices_block"] = choices_block
+        if getattr(layout, "use_action_extra", False):
+            extra_parts: list[str] = []
+            if default and not is_bool:
+                label_text = getattr(layout, "default_label_text", "default:")
+                extra_parts.append(f"[{label_text} {default}]")
+            if choices_str:
+                label_text = getattr(layout, "choices_label_text", "choices:")
+                extra_parts.append(f"[{label_text} {choices_styled}]")
+            if extra_parts:
+                joiner = " ".join(extra_parts)
+                values["extra"] = f" {joiner}" if description else joiner
+            else:
+                values["extra"] = ""
 
         try:
             rendered = template.format(**values)
@@ -462,6 +511,12 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             rendered = f"{values['flag']:<40} {values['description']}"
 
         rendered = re.sub(r"\s*\[type:\s*\]", "", rendered)
+        if (
+            is_option
+            and set(action.option_strings) & {"-h", "--help"}
+            and getattr(layout, "suppress_empty_default_brackets_for_help", False)
+        ):
+            rendered = re.sub(r"\[\s*\]\s*", "", rendered)
         return rendered
 
     def _fill_text(self, text, width, indent):
