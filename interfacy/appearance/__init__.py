@@ -3,6 +3,7 @@ from interfacy.appearance.layouts import (
     Aligned,
     AlignedTyped,
     ArgparseLayout,
+    ClapLayout,
     InterfacyLayout,
     Modern,
 )
@@ -15,4 +16,5 @@ __all__ = [
     "AlignedTyped",
     "Modern",
     "ArgparseLayout",
+    "ClapLayout",
 ]

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter, inspect
 from objinspect.typing import get_choices, type_args
+from stdl.st import ansi_len, with_style
 
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy.pipe import PipeTargets
@@ -721,12 +722,23 @@ class ParserSchemaBuilder:
 
     def _build_group_epilog(self, subcommands: dict[str, Command]) -> str:
         """Build epilog text listing available subcommands."""
-        lines = ["commands:"]
+        layout = self.parser.help_layout
+        title = getattr(layout, "commands_title", "commands:")
+        if hasattr(layout, "_format_commands_title"):
+            try:
+                title = layout._format_commands_title()
+            except Exception:
+                title = getattr(layout, "commands_title", "commands:")
+        lines = [title]
         max_name_len = max(len(cmd.cli_name) for cmd in subcommands.values()) if subcommands else 0
         ljust = self.parser.help_layout.get_commands_ljust(max_name_len)
+        name_style = getattr(layout, "command_name_style", None)
 
         for cmd in subcommands.values():
-            name_col = f"   {cmd.cli_name}".ljust(ljust)
+            raw_name = cmd.cli_name
+            styled_name = with_style(raw_name, name_style) if name_style else raw_name
+            pad = max(0, ljust - (3 + ansi_len(styled_name)))
+            name_col = f"   {styled_name}{' ' * pad}"
             desc = cmd.raw_description or ""
             if desc:
                 first_line = desc.split("\n")[0].strip()

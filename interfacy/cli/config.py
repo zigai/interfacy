@@ -12,6 +12,7 @@ from interfacy.appearance.layouts import (
     Aligned,
     AlignedTyped,
     ArgparseLayout,
+    ClapLayout,
     InterfacyLayout,
     Modern,
 )
@@ -146,6 +147,7 @@ def _resolve_help_layout(value: Any) -> HelpLayout | None:
             "alignedtype": AlignedTyped,
             "modern": Modern,
             "argparse": ArgparseLayout,
+            "clap": ClapLayout,
         }
         key = _normalize_name(value)
         if key in lookup:

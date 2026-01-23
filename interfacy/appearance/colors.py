@@ -27,8 +27,23 @@ class Aurora(InterfacyColors):
     flag_positional = TextStyle(color="light_cyan")
 
 
+class ClapColors(InterfacyColors):
+    """Colors that mimic clap's default styled output."""
+
+    type = TextStyle(color="green")
+    default = TextStyle(color="cyan")
+    description = TextStyle(color="white")
+    string = TextStyle(color="cyan")
+    extra_data = TextStyle(color="white")
+
+    flag_short = TextStyle(color="cyan", style="bold")
+    flag_long = TextStyle(color="cyan", style="bold")
+    flag_positional = TextStyle(color="cyan", style="bold")
+
+
 __all__ = [
     "InterfacyColors",
     "NoColor",
     "Aurora",
+    "ClapColors",
 ]

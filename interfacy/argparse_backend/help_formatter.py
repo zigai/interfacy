@@ -22,6 +22,28 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
 
+    def start_section(self, heading):  # type: ignore[override]
+        layout = self._get_help_layout()
+        if layout is not None and heading not in (None, argparse.SUPPRESS):
+            title_map = getattr(layout, "section_title_map", None)
+            heading_text = str(heading).strip()
+            heading_key = heading_text.rstrip(":").strip().lower()
+            if isinstance(title_map, dict):
+                mapped = (
+                    title_map.get(heading)
+                    or title_map.get(heading_text)
+                    or title_map.get(heading_key)
+                )
+                if mapped:
+                    heading = mapped
+            heading_style = getattr(layout, "section_heading_style", None)
+            if heading_style is not None:
+                try:
+                    heading = with_style(str(heading), heading_style)
+                except Exception:
+                    pass
+        return super().start_section(heading)
+
     def _layout_uses_default_column(self, layout: "HelpLayout") -> bool:
         template = layout.format_option or ""
         return "{default_padded}" in template
@@ -462,6 +484,16 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         """
         if prefix is None:
             prefix = "usage: "
+
+        layout = self._get_help_layout()
+        if layout is not None:
+            custom_prefix = getattr(layout, "usage_prefix", None)
+            if custom_prefix is not None:
+                prefix = custom_prefix
+                usage_style = getattr(layout, "usage_style", None)
+                if usage_style is not None:
+                    prefix = with_style(prefix, usage_style)
+
         # if usage is specified, use that
         if usage is not None:
             usage = usage % dict(prog=self._prog)
@@ -487,7 +519,8 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
             # wrap the usage parts if it's too long
             text_width = self._width - self._current_indent
-            if len(prefix) + len(usage) > text_width:
+            prefix_len = ansi_len(prefix)
+            if prefix_len + len(usage) > text_width:
                 # break usage into wrappable parts
                 part_regexp = r"\(.*?\)+(?=\s|$)|" r"\[.*?\]+(?=\s|$)|" r"\S+"
                 opt_usage = format(optionals, groups)
@@ -503,7 +536,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 def get_lines(parts, indent, prefix=None):
                     lines, line = [], []
                     if prefix is not None:
-                        line_len = len(prefix) - 1
+                        line_len = ansi_len(prefix) - 1
                     else:
                         line_len = len(indent) - 1
                     for part in parts:
@@ -520,8 +553,8 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     return lines
 
                 # if prog is short, follow it with optionals or positionals
-                if len(prefix) + len(prog) <= 0.75 * text_width:
-                    indent = " " * (len(prefix) + len(prog) + 1)
+                if prefix_len + len(prog) <= 0.75 * text_width:
+                    indent = " " * (prefix_len + len(prog) + 1)
                     if opt_parts:
                         lines = get_lines([prog, *opt_parts], indent, prefix)
                         lines.extend(get_lines(pos_parts, indent))
@@ -532,7 +565,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
                 # if prog is long, put it on its own line
                 else:
-                    indent = " " * len(prefix)
+                    indent = " " * prefix_len
                     parts = opt_parts + pos_parts
                     lines = get_lines(parts, indent)
                     if len(lines) > 1:
@@ -542,5 +575,18 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     lines = [prog, *lines]
 
                 usage = "\n".join(lines)
+
+        if layout is not None:
+            custom_prefix = getattr(layout, "usage_prefix", None)
+            if isinstance(usage, str) and custom_prefix is not None:
+                usage = re.sub(
+                    r"^(?:\x1b\[[0-9;]*m)*\s*usage:\s*",
+                    "",
+                    usage,
+                    flags=re.IGNORECASE,
+                )
+            usage_text_style = getattr(layout, "usage_text_style", None)
+            if usage_text_style is not None and isinstance(usage, str):
+                usage = with_style(usage, usage_text_style)
 
         return f"{prefix}{usage}\n\n"
