@@ -10,7 +10,7 @@ from objinspect.typing import type_args
 from strto import StrToTypeParser
 
 from interfacy import console
-from interfacy.appearance.layout import HelpLayout
+from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.argparse_backend.argument_parser import ArgumentParser, namespace_to_dict
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
@@ -49,6 +49,7 @@ class Argparser(InterfacyParser):
         type_parser: StrToTypeParser | None = None,
         help_layout: HelpLayout | None = None,
         *,
+        help_colors: InterfacyColors | None = None,
         run: bool = False,
         print_result: bool = False,
         tab_completion: bool = False,
@@ -100,6 +101,7 @@ class Argparser(InterfacyParser):
             epilog,
             help_layout,
             type_parser,
+            help_colors=help_colors,
             run=run,
             allow_args_from_file=allow_args_from_file,
             flag_strategy=flag_strategy,
