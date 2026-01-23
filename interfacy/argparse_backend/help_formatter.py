@@ -14,12 +14,96 @@ if TYPE_CHECKING:
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
     PRE_FMT_PREFIX = "\x00FMT:"
+    DEFAULT_TERM_RATIO = 5
 
     def set_help_layout(self, help_layout: "HelpLayout") -> None:
         self._interfacy_help_layout = help_layout
 
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
+
+    def _layout_uses_default_column(self, layout: "HelpLayout") -> bool:
+        template = layout.format_option or ""
+        return "{default_padded}" in template
+
+    def _get_default_raw(self, action: argparse.Action, layout: "HelpLayout") -> str:
+        if set(action.option_strings) & {"-h", "--help"}:
+            return ""
+
+        is_bool = isinstance(action, argparse._StoreTrueAction) or (
+            isinstance(action, argparse.BooleanOptionalAction)
+        )
+        default_val = getattr(action, "default", None)
+        if is_bool:
+            return "true" if bool(default_val) else "false"
+
+        if (
+            action.option_strings
+            and default_val is not None
+            and default_val is not argparse.SUPPRESS
+        ):
+            return str(default_val)
+        return ""
+
+    def _compute_default_field_width(
+        self,
+        actions: list[argparse.Action],
+        layout: "HelpLayout",
+    ) -> int | None:
+        if not self._layout_uses_default_column(layout):
+            return None
+
+        defaults = [self._get_default_raw(action, layout) for action in actions]
+        lengths = [len(d) for d in defaults if d]
+        base_width = (
+            layout._get_default_field_width_base()
+            if hasattr(layout, "_get_default_field_width_base")
+            else layout.default_field_width
+        )
+        if not lengths:
+            return base_width
+
+        try:
+            term_width = os.get_terminal_size().columns
+        except (OSError, AttributeError):
+            term_width = 80
+
+        ratio = getattr(layout, "default_field_width_term_ratio", self.DEFAULT_TERM_RATIO)
+        term_cap = max(base_width, term_width // max(1, ratio))
+        soft_ratio = getattr(layout, "default_field_width_soft_ratio", 8)
+        soft_cap = max(base_width, term_width // max(1, soft_ratio))
+        effective_cap = min(term_cap, soft_cap)
+        max_cap = getattr(layout, "default_field_width_max", None)
+        if max_cap is not None:
+            effective_cap = min(effective_cap, max_cap)
+
+        candidates = [length for length in lengths if length <= effective_cap]
+        if not candidates:
+            return base_width
+
+        candidates.sort()
+        count = len(candidates)
+        small_size = getattr(layout, "default_field_width_small_sample_size", 6)
+        if count <= small_size:
+            width = max(candidates)
+        else:
+            percentile = getattr(layout, "default_field_width_percentile", 0.75)
+            percentile = min(max(percentile, 0.0), 1.0)
+            idx = max(0, min(count - 1, int((percentile * count + 0.999999) - 1)))
+            width = candidates[idx]
+        return max(base_width, width)
+
+    def prepare_layout(self, actions):
+        layout = self._get_help_layout()
+        if layout is None:
+            return
+
+        if not self._layout_uses_default_column(layout):
+            return
+
+        computed = self._compute_default_field_width(actions, layout)
+        if computed is not None:
+            layout.default_field_width = computed
 
     def _split_lines(self, text, width):
         # return text.splitlines()
@@ -215,9 +299,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         ):
             default_raw = str(default_val)
 
-        # Special-case help action to show [default]
+        # Special-case help action to hide default label
         if set(action.option_strings) & {"-h", "--help"}:
-            default_raw = layout.default_label_for_help
+            default_raw = ""
 
         width = layout.default_field_width
         styled_default = with_style(default_raw, style.default) if default_raw else ""
@@ -242,6 +326,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             col_width = ansi_len(styled_cols.get("flag_col", "")) + 1
 
         wrap_width = max(10, term_width - indent_len - col_width)
+        cont_indent = " " * (indent_len + col_width)
         desc_lines: list[str] = []
 
         if raw_description:
@@ -259,7 +344,6 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if desc_lines:
             styled_desc_lines = [with_style(line, style.description) for line in desc_lines]
             first = styled_desc_lines[0] + (f" {req_indicator}" if req_indicator else "")
-            cont_indent = " " * (indent_len + col_width)
             if len(styled_desc_lines) > 1:
                 rest = [cont_indent + line for line in styled_desc_lines[1:]]
                 description = "\n".join([first, *rest])
@@ -267,6 +351,29 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 description = first
         else:
             description = ""
+
+        default_overflow = ""
+        if default_raw and "{default_padded}" in template and ansi_len(styled_default) > width:
+            overflow_mode = getattr(layout, "default_overflow_mode", "newline")
+            if overflow_mode == "inline":
+                default_overflow = ""
+                default_padded = styled_default
+                default = styled_default
+            else:
+                default_overflow = default_raw
+                styled_default = ""
+                default_padded = " " * width
+                default = ""
+
+        if default_overflow:
+            arrow = with_style("→", style.extra_data)
+            overflow_label = with_style("default:", style.extra_data)
+            overflow_value = with_style(default_overflow, style.default)
+            overflow_line = f"{arrow} {overflow_label} {overflow_value}"
+            if description:
+                description = f"{description}\n{cont_indent}{overflow_line}"
+            else:
+                description = f"\n{cont_indent}{overflow_line}"
 
         values = {
             "flag": flag,
@@ -281,6 +388,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             "required": req_indicator,
             "metavar": action.metavar or action.dest,
         }
+
+        if hasattr(layout, "column_gap"):
+            values["column_gap"] = layout.column_gap
 
         values.update(styled_cols)
         values["desc_line"] = description

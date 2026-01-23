@@ -324,7 +324,11 @@ class Argparser(InterfacyParser):
                 parser.epilog = command.epilog
 
             dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
-            subparsers = parser.add_subparsers(dest=dest, required=True)
+            subparsers = parser.add_subparsers(
+                dest=dest,
+                required=True,
+                help=argparse.SUPPRESS if command.epilog else None,
+            )
             for sub_cmd in command.subcommands.values():
                 subparser = subparsers.add_parser(
                     sub_cmd.cli_name,
@@ -342,7 +346,11 @@ class Argparser(InterfacyParser):
                 parser.epilog = command.epilog
 
             dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
-            subparsers = parser.add_subparsers(dest=dest, required=True)
+            subparsers = parser.add_subparsers(
+                dest=dest,
+                required=True,
+                help=argparse.SUPPRESS if command.epilog else None,
+            )
             if command.subcommands:
                 for sub_cmd in command.subcommands.values():
                     subparser = subparsers.add_parser(
@@ -366,7 +374,11 @@ class Argparser(InterfacyParser):
         single_group = single_cmd if single_cmd and not single_cmd.is_leaf else None
 
         if schema.is_multi_command or single_group:
-            subparsers = parser.add_subparsers(dest=self.COMMAND_KEY, required=True)
+            subparsers = parser.add_subparsers(
+                dest=self.COMMAND_KEY,
+                required=True,
+                help=argparse.SUPPRESS if schema.commands_help else None,
+            )
             for _, cmd in schema.commands.items():
                 subparser = subparsers.add_parser(
                     cmd.cli_name,

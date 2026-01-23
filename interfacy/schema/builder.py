@@ -24,6 +24,7 @@ from interfacy.util import (
     inverted_bool_flag_name,
     is_fixed_tuple,
     is_list_or_list_alias,
+    simplified_type_name,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -68,6 +69,17 @@ class ParserSchemaBuilder:
             commands_help=commands_help,
             metadata=dict(getattr(self.parser, "metadata", {})),
         )
+
+    def _prepare_layout_for_params(self, params: list[Parameter]) -> None:
+        if not params:
+            return
+        layout = self.parser.help_layout
+        if layout is None:
+            return
+        try:
+            layout.prepare_default_field_width_for_params(params)
+        except Exception:
+            return
 
     def build_command_spec_for(
         self,
@@ -124,6 +136,7 @@ class ParserSchemaBuilder:
 
         pipe_param_names = pipe_config.targeted_parameters() if pipe_config else set()
 
+        self._prepare_layout_for_params(function.params)
         parameters = [
             self._argument_from_parameter(param, taken_flags, pipe_param_names)
             for param in function.params
@@ -173,11 +186,16 @@ class ParserSchemaBuilder:
             )
         init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
 
+        init_params: list[Parameter] = []
         if (init := Class(method.cls).init_method) and not is_initialized:
+            init_params = init.params
+            self._prepare_layout_for_params([*init_params, *method.params])
             initializer = [
                 self._argument_from_parameter(param, taken_flags, init_pipe_names)
                 for param in init.params
             ]
+        else:
+            self._prepare_layout_for_params(method.params)
 
         method_pipe_config = None
         if canonical_name is not None:
@@ -248,6 +266,7 @@ class ParserSchemaBuilder:
             )
 
         if cls.has_init and not cls.is_initialized:
+            self._prepare_layout_for_params(cls.get_method("__init__").params)
             init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
             initializer = [
                 self._argument_from_parameter(param, taken_flags, init_pipe_names)
@@ -314,6 +333,14 @@ class ParserSchemaBuilder:
         taken_flags: list[str],
         pipe_param_names: set[str] | None = None,
     ) -> Argument:
+        annotation = param.type
+        if isinstance(annotation, str):
+            simple_name = simplified_type_name(annotation)
+            base_name = simple_name[:-1] if simple_name.endswith("?") else simple_name
+            builtin_map = {"bool": bool, "int": int, "float": float, "str": str}
+            if base_name in builtin_map:
+                annotation = builtin_map[base_name]
+
         translated_name = self.parser.flag_strategy.argument_translator.translate(param.name)
         if translated_name in taken_flags:
             raise ReservedFlagError(translated_name)
@@ -331,8 +358,8 @@ class ParserSchemaBuilder:
         value_shape = ValueShape.SINGLE
         nargs: str | int | None = None
         default_value: Any = param.default if param.has_default else None
-        parsed_type: type[Any] | None = param.type if param.is_typed else None
-        choices = get_choices(param.type) if param.is_typed else None
+        parsed_type: type[Any] | None = annotation if param.is_typed else None
+        choices = get_choices(annotation) if param.is_typed else None
         boolean_behavior: BooleanBehavior | None = None
         is_optional_union_list = False
         tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
@@ -342,19 +369,20 @@ class ParserSchemaBuilder:
             nargs = "*"
             default_value = ()  # Empty tuple as default for *args
             if param.is_typed:
-                parsed_type = param.type
-                parser_func = self.parser.type_parser.get_parse_func(param.type)
+                parsed_type = annotation
+                if annotation is not str:
+                    parser_func = self.parser.type_parser.get_parse_func(annotation)
         elif param.is_typed:
-            optional_union_list = extract_optional_union_list(param.type)
+            optional_union_list = extract_optional_union_list(annotation)
             list_annotation: Any | None = None
             element_type: Any | None = None
 
             if optional_union_list:
                 list_annotation, element_type = optional_union_list
                 is_optional_union_list = True
-            elif is_list_or_list_alias(param.type):
-                list_annotation = param.type
-                element_args = type_args(param.type)
+            elif is_list_or_list_alias(annotation):
+                list_annotation = annotation
+                element_args = type_args(annotation)
                 element_type = element_args[0] if element_args else None
 
             if list_annotation is not None:
@@ -362,7 +390,8 @@ class ParserSchemaBuilder:
                 nargs = "*"
                 if element_type is not None:
                     parsed_type = element_type
-                    parser_func = self.parser.type_parser.get_parse_func(element_type)
+                    if element_type is not str:
+                        parser_func = self.parser.type_parser.get_parse_func(element_type)
                 else:
                     parsed_type = None
                     parser_func = None
@@ -370,8 +399,8 @@ class ParserSchemaBuilder:
                 if is_optional_union_list and not param.has_default:
                     default_value = []
 
-            elif is_fixed_tuple(param.type):
-                tuple_info = get_fixed_tuple_info(param.type)
+            elif is_fixed_tuple(annotation):
+                tuple_info = get_fixed_tuple_info(annotation)
                 if tuple_info:
                     element_count, element_types = tuple_info
                     value_shape = ValueShape.TUPLE
@@ -397,7 +426,7 @@ class ParserSchemaBuilder:
                         parsed_type = str
                         parser_func = None
 
-            elif param.type is bool:
+            elif annotation is bool:
                 value_shape = ValueShape.FLAG
                 supports_negative = any(flag.startswith("--") for flag in flags)
                 negative_form = None
@@ -415,7 +444,8 @@ class ParserSchemaBuilder:
                     default=default_value,
                 )
             else:
-                parser_func = self.parser.type_parser.get_parse_func(param.type)
+                if annotation is not str:
+                    parser_func = self.parser.type_parser.get_parse_func(annotation)
 
         if not param.is_required and param.is_typed and param.type is not bool:
             default_value = param.default
@@ -514,11 +544,13 @@ class ParserSchemaBuilder:
         taken_flags = [*self.parser.RESERVED_FLAGS]
 
         if isinstance(obj, Class) and obj.init_method:
+            self._prepare_layout_for_params(obj.init_method.params)
             return [
                 self._argument_from_parameter(param, taken_flags, set())
                 for param in obj.init_method.params
             ]
         elif isinstance(obj, Function):
+            self._prepare_layout_for_params(obj.params)
             return [
                 self._argument_from_parameter(param, taken_flags, set()) for param in obj.params
             ]
@@ -626,6 +658,7 @@ class ParserSchemaBuilder:
 
         initializer: list[Argument] = []
         if cls.has_init and not cls.is_initialized:
+            self._prepare_layout_for_params(cls.get_method("__init__").params)
             initializer = [
                 self._argument_from_parameter(param, taken_flags, set())
                 for param in cls.get_method("__init__").params
@@ -690,7 +723,7 @@ class ParserSchemaBuilder:
         """Build epilog text listing available subcommands."""
         lines = ["commands:"]
         max_name_len = max(len(cmd.cli_name) for cmd in subcommands.values()) if subcommands else 0
-        ljust = max(20, max_name_len + 4)
+        ljust = self.parser.help_layout.get_commands_ljust(max_name_len)
 
         for cmd in subcommands.values():
             name_col = f"   {cmd.cli_name}".ljust(ljust)

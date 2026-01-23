@@ -31,6 +31,8 @@ class Aligned(InterfacyLayout):
     short_flag_width: int = 6
     long_flag_width: int = 18
     pos_flag_width: int = 24
+    default_field_width_max: int = 12
+    default_overflow_mode: Literal["inline", "newline"] = "inline"
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
     format_positional = "{flag_col}{description}{choices_block}"
@@ -42,6 +44,8 @@ class AlignedTyped(InterfacyLayout):
     short_flag_width: int = 6
     long_flag_width: int = 18
     pos_flag_width: int = 24
+    default_field_width_max: int = 12
+    default_overflow_mode: Literal["inline", "newline"] = "inline"
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]{choices_block}"
     format_positional = "{flag_col}{description} [type: {type}]{choices_block}"
@@ -88,7 +92,12 @@ class Modern(InterfacyLayout):
 
             arrow = with_style("↳", self.style.extra_data)
             details_text = with_style(" | ", self.style.extra_data).join(detail_parts)
-            values["details"] = "\n" + (" " * pad_count) + f"{arrow} " + details_text
+            raw_desc = self._format_doc_text(param.description or "")
+            if not raw_desc.strip():
+                inline_arrow = with_style("→", self.style.extra_data)
+                values["details"] = f"{inline_arrow} {details_text}"
+            else:
+                values["details"] = "\n" + (" " * pad_count) + f"{arrow} " + details_text
         else:
             values["details"] = ""
 

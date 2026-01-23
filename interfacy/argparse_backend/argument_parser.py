@@ -210,8 +210,11 @@ class ArgumentParser(argparse.ArgumentParser):
             super().__init__(**base_init_kwargs)
         self.add_help = add_help
         if add_help:
-            default_prefix = "-" if "-" in self.prefix_chars else self.prefix_chars[0]
-            help_flags: list[str] = [default_prefix * 2 + "help"]
+            if "-" in self.prefix_chars:
+                help_flags = ["--help"]
+            else:
+                default_prefix = self.prefix_chars[0]
+                help_flags = [default_prefix * 2 + "help"]
 
             self.add_argument(
                 *help_flags,
@@ -227,6 +230,11 @@ class ArgumentParser(argparse.ArgumentParser):
         if hasattr(formatter, "set_help_layout"):
             try:
                 formatter.set_help_layout(self._interfacy_help_layout)
+            except Exception:
+                pass
+        if hasattr(formatter, "prepare_layout"):
+            try:
+                formatter.prepare_layout(self._actions)
             except Exception:
                 pass
         return formatter
@@ -400,6 +408,14 @@ class ArgumentParser(argparse.ArgumentParser):
             raise argparse.ArgumentError(action, msg)
 
         except (TypeError, ValueError):
-            t = type_name(str(parse_func.keywords["t"]))
-            raise argparse.ArgumentError(action, f"invalid {t} value: '{arg_string}'")
+            t = None
+            if hasattr(parse_func, "keywords"):
+                try:
+                    t = parse_func.keywords.get("t")
+                except Exception:
+                    t = None
+            if t is None:
+                t = action.type if action.type is not None else "value"
+            t_name = type_name(str(t))
+            raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'")
         return result

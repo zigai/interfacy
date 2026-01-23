@@ -1,5 +1,6 @@
 import os
 import re
+from inspect import Parameter as StdParameter
 from re import Match
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -8,7 +9,7 @@ from objinspect.typing import get_choices
 from stdl.st import TextStyle, ansi_len, colored, with_style
 
 from interfacy.naming import CommandNameRegistry, FlagStrategy
-from interfacy.util import format_type_for_help
+from interfacy.util import format_type_for_help, simplified_type_name
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.schema.schema import Command
@@ -50,6 +51,12 @@ class HelpLayout:
     format_positional: str | None = None
     help_position: int | None = None
     default_field_width: int = 7
+    default_field_width_max: int | None = None
+    default_field_width_term_ratio: int = 5
+    default_field_width_soft_ratio: int = 8
+    default_field_width_percentile: float = 0.75
+    default_field_width_small_sample_size: int = 6
+    default_overflow_mode: Literal["inline", "newline"] = "newline"
     default_label_for_help: str = "default"
     include_metavar_in_flag_display: bool = True
     short_flag_width: int = 6
@@ -63,6 +70,91 @@ class HelpLayout:
     # "bold":  remove backticks in docstring and make text bold
     # "strip": remove backticks in docstring and leave plain text
     doc_inline_code_mode: Literal["bold", "strip"] = "bold"
+
+    def _get_default_field_width_base(self) -> int:
+        base = getattr(self, "_default_field_width_base", None)
+        if base is None:
+            base = self.default_field_width
+            self._default_field_width_base = base
+        return base
+
+    def _compute_default_field_width_for_len(self, max_len: int) -> int:
+        base_width = self._get_default_field_width_base()
+        if max_len <= 0:
+            return base_width
+
+        try:
+            term_width = os.get_terminal_size().columns
+        except (OSError, AttributeError):
+            term_width = 80
+
+        ratio = max(1, getattr(self, "default_field_width_term_ratio", 5))
+        term_cap = max(base_width, term_width // ratio)
+        if self.default_field_width_max is not None:
+            term_cap = min(term_cap, self.default_field_width_max)
+
+        width = min(max_len, term_cap)
+        return max(base_width, width)
+
+    def _compute_default_field_width_from_lengths(self, lengths: list[int]) -> int:
+        base_width = self._get_default_field_width_base()
+        if not lengths:
+            return base_width
+
+        try:
+            term_width = os.get_terminal_size().columns
+        except (OSError, AttributeError):
+            term_width = 80
+
+        ratio = max(1, getattr(self, "default_field_width_term_ratio", 5))
+        term_cap = max(base_width, term_width // ratio)
+        soft_ratio = max(1, getattr(self, "default_field_width_soft_ratio", 8))
+        soft_cap = max(base_width, term_width // soft_ratio)
+        effective_cap = min(term_cap, soft_cap)
+        if self.default_field_width_max is not None:
+            effective_cap = min(effective_cap, self.default_field_width_max)
+
+        candidates = [length for length in lengths if length <= effective_cap]
+        if not candidates:
+            return base_width
+
+        candidates.sort()
+        count = len(candidates)
+        if count <= self.default_field_width_small_sample_size:
+            width = max(candidates)
+        else:
+            percentile = min(max(self.default_field_width_percentile, 0.0), 1.0)
+            idx = max(0, min(count - 1, int((percentile * count + 0.999999) - 1)))
+            width = candidates[idx]
+        return max(base_width, width)
+
+    def prepare_default_field_width_for_params(self, params: list[Parameter]) -> None:
+        if not self._use_template_layout():
+            return
+
+        template = self.format_option or self.format_positional or ""
+        if "{default_padded}" not in template:
+            return
+
+        defaults: list[str] = []
+        for param in params:
+            if self._param_is_bool(param):
+                val = param.default if param.has_default else False
+                defaults.append("true" if bool(val) else "false")
+            elif not param.is_required and param.default is not None:
+                defaults.append(str(param.default))
+
+        lengths = [len(d) for d in defaults if d]
+        self.default_field_width = self._compute_default_field_width_from_lengths(lengths)
+
+    def _param_is_bool(self, param: Parameter) -> bool:
+        if param.type is bool:
+            return True
+        if isinstance(param.type, str):
+            name = simplified_type_name(param.type)
+            base = name[:-1] if name.endswith("?") else name
+            return base == "bool"
+        return False
 
     def _format_doc_text(self, text: str) -> str:
         """Format inline code spans wrapped in backticks in docstrings."""
@@ -95,11 +187,13 @@ class HelpLayout:
             return self.format_parameter(param, flags)
 
         # legacy behavior
-        if param.is_required and not param.is_typed:
+        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
+        is_required = param.is_required and not is_varargs
+        if is_required and not param.is_typed:
             return ""
         parts: list[str] = []
 
-        if param.type is bool:
+        if self._param_is_bool(param):
             if param.description is not None:
                 description = self._format_doc_text(param.description)
                 if not description.endswith((".", "?", "!")):
@@ -113,7 +207,7 @@ class HelpLayout:
             parts.append(self._get_param_extra_help(param))
 
         text = "".join(parts)
-        if param.is_required:
+        if is_required:
             if self.required_indicator_pos == "left":
                 text = f"{self.required_indicator} {text}"
             else:
@@ -134,7 +228,15 @@ class HelpLayout:
         return f"{name_column} {with_style(description, self.style.description)}"
 
     def get_help_for_class(self, command: Class) -> str:
-        ljust = self._get_ljust(command.methods)  # type: ignore
+        display_names: list[str] = []
+        for method in command.methods:
+            if method.name in self.command_skips:
+                continue
+            method_name = self.flag_generator.command_translator.translate(method.name)
+            display_names.append(self._format_command_display_name(method_name, ()))
+
+        max_display = max([len(name) for name in display_names], default=0)
+        ljust = self.get_commands_ljust(max_display)
         lines = [self.commands_title]
         for method in command.methods:
             if method.name in self.command_skips:
@@ -150,6 +252,20 @@ class HelpLayout:
             return HelpLayout.get_help_for_parameter(self, param, None)
 
         values = self._build_values(param, flags)
+        default_overflow = ""
+        skip_wrap = False
+        if "{default_padded}" in template:
+            styled_default = values.get("default", "")
+            if styled_default and ansi_len(styled_default) > self.default_field_width:
+                overflow_mode = getattr(self, "default_overflow_mode", "newline")
+                if overflow_mode == "inline":
+                    values["default"] = styled_default
+                    values["default_padded"] = styled_default
+                    skip_wrap = True
+                else:
+                    default_overflow = styled_default
+                    values["default"] = ""
+                    values["default_padded"] = " " * self.default_field_width
 
         DESC_TOKEN = "<<__DESC__>>"
         probe_vals = dict(values)
@@ -164,6 +280,7 @@ class HelpLayout:
         if token_idx != -1:
             prefix_str = probe_render[:token_idx]
             prefix_width = ansi_len(prefix_str)
+            cont_indent = " " * prefix_width
 
             try:
                 term_width = os.get_terminal_size().columns
@@ -185,8 +302,7 @@ class HelpLayout:
                     else:
                         wrapped.append(word)
 
-            if wrapped:
-                cont_indent = " " * prefix_width
+            if wrapped and not skip_wrap:
                 styled_lines = [with_style(wrapped[0], self.style.description)]
                 if len(wrapped) > 1:
                     styled_lines.extend(
@@ -197,12 +313,23 @@ class HelpLayout:
                     )
                 values["description"] = "\n".join(styled_lines)
 
+            if default_overflow:
+                arrow = with_style("→", self.style.extra_data)
+                label = with_style("default:", self.style.extra_data)
+                overflow_line = f"{arrow} {label} {default_overflow}"
+                if values["description"]:
+                    values["description"] = f"{values['description']}\n{cont_indent}{overflow_line}"
+                else:
+                    values["description"] = f"\n{cont_indent}{overflow_line}"
+
         try:
             rendered = template.format(**values)
         except Exception:
             rendered = f"{values['flag']:<40} {values['description']} {values.get('extra', '')}"
 
-        if param.is_required and values.get("required") and values["required"] not in rendered:
+        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
+        is_required = param.is_required and not is_varargs
+        if is_required and values.get("required") and values["required"] not in rendered:
             rendered = f"{rendered} {values['required']}"
 
         if "[type:" in rendered and "type" in values and not values["type"]:
@@ -216,7 +343,7 @@ class HelpLayout:
             for cmd in commands.values()
         ]
         max_display = max([len(name) for name in display_names], default=0)
-        ljust = max(self.min_ljust, max_display)
+        ljust = self.get_commands_ljust(max_display)
         lines = [self.commands_title]
         for name, command in commands.items():
             if command.obj is None:
@@ -244,13 +371,84 @@ class HelpLayout:
         has_templates = bool(self.format_option or self.format_positional)
         return has_templates
 
-    def _get_ljust(self, commands: list[Class | Function | Method]) -> int:
-        return max(self.min_ljust, max([len(i.name) for i in commands]))
+    def _command_layout_probe_values(self) -> dict[str, str]:
+        values = {
+            "flag": "",
+            "flag_short": "",
+            "flag_long": "",
+            "flag_short_col": " " * self.short_flag_width,
+            "flag_long_col": " " * self.long_flag_width,
+            "flag_col": " " * self.pos_flag_width,
+            "description": "",
+            "type": "",
+            "default": "",
+            "default_padded": " " * self.default_field_width,
+            "choices": "",
+            "choices_label": "",
+            "choices_block": "",
+            "extra": "",
+            "details": "",
+            "required": "",
+            "metavar": "",
+        }
+        if hasattr(self, "column_gap"):
+            values["column_gap"] = self.column_gap
+        return values
+
+    def _get_template_token_index(self, token_name: str) -> int | None:
+        if not self._use_template_layout():
+            return None
+
+        template = self.format_option or self.format_positional
+        if not template:
+            return None
+
+        token = f"<<__{token_name}__>>"
+        values = self._command_layout_probe_values()
+        values[token_name] = token
+
+        try:
+            probe_render = template.format(**values)
+            token_idx = probe_render.find(token)
+        except Exception:
+            token_idx = -1
+
+        if token_idx == -1:
+            return None
+
+        if token_name == "default_padded" and token_idx > 0 and probe_render[token_idx - 1] == "[":
+            return token_idx - 1
+
+        return token_idx
+
+    def _get_commands_prefix_len(self) -> int | None:
+        if not self._use_template_layout():
+            return None
+
+        template = self.format_option or self.format_positional
+        if not template:
+            return None
+
+        return self._get_template_token_index("description")
+
+    def get_commands_ljust(self, max_display_len: int) -> int:
+        base = max(self.min_ljust, max_display_len + 3)
+        default_idx = self._get_template_token_index("default_padded")
+        prefix_len = self._get_commands_prefix_len()
+        align_idx = default_idx if default_idx is not None else prefix_len
+
+        if align_idx is None:
+            if isinstance(self.help_position, int):
+                desired = self.help_position - 1
+                return max(base, desired)
+            return base
+        desired = align_idx + 1  # align to target column (indent=2)
+        return max(base, desired)
 
     def _get_param_extra_help(self, param: Parameter) -> str:
         parts: list[str] = []
         default_added = False
-        if param.is_typed and param.type is not bool:
+        if param.is_typed and not self._param_is_bool(param):
             if choices := get_choices(param.type):
                 param_info = with_style(self.prefix_choices, self.style.extra_data) + ", ".join(
                     [with_style(i, self.style.string) for i in choices]
@@ -270,7 +468,7 @@ class HelpLayout:
         if (
             param.is_optional
             and param.default is not None
-            and param.type is not bool
+            and not self._param_is_bool(param)
             and not default_added
         ):
             parts.append(", ")
@@ -329,7 +527,7 @@ class HelpLayout:
         is_option = any(f.startswith("-") for f in flags)
 
         metavar = ""
-        needs_value = param.is_typed and param.type is not bool
+        needs_value = param.is_typed and not self._param_is_bool(param)
         if is_option:
             if needs_value and self.include_metavar_in_flag_display:
                 metavar = (param.name or "value").upper()
@@ -339,7 +537,7 @@ class HelpLayout:
         def with_metavar(flag: str) -> str:
             return f"{flag} {metavar}" if metavar else flag
 
-        is_bool_param = param.is_typed and param.type is bool
+        is_bool_param = param.is_typed and self._param_is_bool(param)
         if is_bool_param:
             primary_flag = self._get_primary_boolean_flag(param, flags)
             flag_short = shorts[0] if shorts else ""
@@ -416,12 +614,12 @@ class HelpLayout:
         flag, flag_short, flag_long, is_option = self._build_flag_parts(param, flags)
 
         description = self._format_doc_text(param.description or "")
-        if description and not description.endswith((".", "?", "!")) and param.type is bool:
+        if description and not description.endswith((".", "?", "!")) and self._param_is_bool(param):
             description += "."
         description = with_style(description, self.style.description)
 
         default_raw = ""
-        if param.type is bool:
+        if self._param_is_bool(param):
             val = param.default if param.has_default else False
             default_raw = "true" if bool(val) else "false"
         elif not param.is_required and param.default is not None:
@@ -439,10 +637,13 @@ class HelpLayout:
         choices_label = with_style("choices:", self.style.extra_data) if choices_str else ""
         choices_block = " [" + choices_label + " " + choices_str + "]" if choices_str else ""
 
-        if param.is_typed and param.type is not bool and not choices:
+        if param.is_typed and not self._param_is_bool(param) and not choices:
             type_str = format_type_for_help(param.type, self.style.type)
         else:  # Hide type when choices are shown
             type_str = ""
+
+        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
+        is_required = param.is_required and not is_varargs
 
         values: dict[str, str] = {
             "flag": flag,
@@ -456,7 +657,7 @@ class HelpLayout:
             "choices_label": choices_label,
             "choices_block": choices_block,
             "extra": self._build_extra(param),
-            "required": self.required_indicator if param.is_required else "",
+            "required": self.required_indicator if is_required else "",
             "metavar": (param.name or "value").upper(),
         }
 
