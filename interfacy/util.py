@@ -1,9 +1,12 @@
+import ast
 import re
 from collections.abc import Callable
+from enum import Enum
 from types import NoneType
-from typing import Any
+from typing import Any, Literal
 
-from objinspect.typing import is_union_type, type_args, type_origin
+from objinspect.typing import get_choices as objinspect_get_choices
+from objinspect.typing import get_literal_choices, is_union_type, type_args, type_origin
 from objinspect.util import colored_type
 from stdl.st import with_style
 
@@ -117,6 +120,114 @@ def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
     return None
 
 
+def _normalize_enum_choices(choices: list[Any]) -> list[Any] | None:
+    normalized: list[Any] = []
+    for choice in choices:
+        if choice is None:
+            continue
+        if isinstance(choice, Enum):
+            value = choice.value
+            if isinstance(value, (str, int, float, bool)):
+                normalized.append(value)
+            else:
+                normalized.append(choice.name)
+        else:
+            normalized.append(choice)
+
+    return normalized or None
+
+
+def _parse_literal_choices_from_string(annotation: str) -> list[Any] | None:
+    match = re.search(r"Literal\[(.*)\]", annotation)
+    if not match:
+        return None
+
+    inner = match.group(1).strip()
+    if not inner:
+        return None
+
+    try:
+        parsed = ast.literal_eval(f"({inner})")
+    except Exception:
+        return None
+
+    if not isinstance(parsed, tuple):
+        parsed = (parsed,)
+
+    return [value for value in parsed if value is not None] or None
+
+
+def get_annotation_choices(annotation: Any) -> list[Any] | None:
+    """
+    Return a normalized list of choices for a type annotation.
+
+    Uses objinspect's choices detection and adds support for Literals and Enums.
+    """
+    if annotation is None:
+        return None
+
+    if isinstance(annotation, type) and issubclass(annotation, Enum):
+        return _normalize_enum_choices(list(annotation))
+
+    if isinstance(annotation, str):
+        literal_choices = _parse_literal_choices_from_string(annotation)
+        if literal_choices:
+            return literal_choices
+        return None
+
+    if type_origin(annotation) is Literal:
+        try:
+            raw = get_literal_choices(annotation)
+            if raw:
+                return [value for value in raw if value is not None] or None
+        except Exception:
+            return None
+
+    try:
+        raw = objinspect_get_choices(annotation)
+        if raw:
+            normalized = _normalize_enum_choices(list(raw))
+            if normalized:
+                return normalized
+    except Exception:
+        return None
+
+    return None
+
+
+def get_param_choices(param: Any) -> list[Any] | None:
+    """Return choices for an objinspect Parameter, falling back to inferred Enum types."""
+    choices = get_annotation_choices(getattr(param, "type", None))
+    if choices:
+        return choices
+
+    inferred = None
+    if hasattr(param, "get_infered_type"):
+        try:
+            inferred = param.get_infered_type()
+        except Exception:
+            inferred = None
+
+    if inferred is None and getattr(param, "has_default", False):
+        default = getattr(param, "default", None)
+        if isinstance(default, Enum):
+            inferred = type(default)
+
+    if inferred is None:
+        return None
+
+    return get_annotation_choices(inferred)
+
+
+def format_default_for_help(value: Any) -> str:
+    if isinstance(value, Enum):
+        raw = value.value
+        if isinstance(raw, (str, int, float, bool)):
+            return str(raw)
+        return value.name
+    return str(value)
+
+
 def show_result(result: Any, handler: Callable = print) -> None:
     console.display_result(result, handler=handler)
 
@@ -177,6 +288,9 @@ __all__ = [
     "is_fixed_tuple",
     "get_fixed_tuple_info",
     "extract_optional_union_list",
+    "get_annotation_choices",
+    "get_param_choices",
+    "format_default_for_help",
     "show_result",
     "inverted_bool_flag_name",
     "format_type_for_help",
