@@ -2,11 +2,11 @@ from inspect import Parameter as StdParameter
 from typing import ClassVar, Literal
 
 from objinspect import Parameter
-from objinspect.typing import get_choices
 from stdl.st import TextStyle, ansi_len, colored, with_style
 
 from interfacy.appearance.colors import ClapColors, NoColor
 from interfacy.appearance.layout import HelpLayout
+from interfacy.util import format_default_for_help, get_param_choices
 
 
 class InterfacyLayout(HelpLayout):
@@ -35,6 +35,7 @@ class Aligned(InterfacyLayout):
     pos_flag_width: int = 24
     default_field_width_max: int = 12
     default_overflow_mode: Literal["inline", "newline"] = "inline"
+    suppress_empty_default_brackets_for_help: ClassVar[bool] = True
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
     format_positional = "{flag_col}{description}{choices_block}"
@@ -48,6 +49,7 @@ class AlignedTyped(InterfacyLayout):
     pos_flag_width: int = 24
     default_field_width_max: int = 12
     default_overflow_mode: Literal["inline", "newline"] = "inline"
+    suppress_empty_default_brackets_for_help: ClassVar[bool] = True
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]{choices_block}"
     format_positional = "{flag_col}{description} [type: {type}]{choices_block}"
@@ -73,17 +75,13 @@ class Modern(InterfacyLayout):
 
         detail_parts: list[str] = []
         if values.get("default"):
-            detail_parts.append(
-                with_style("default:", self.style.extra_data) + " " + values["default"]
-            )
+            detail_parts.append("default: " + values["default"])
 
         if values.get("type"):
-            detail_parts.append(with_style("type:", self.style.extra_data) + " " + values["type"])
+            detail_parts.append("type: " + values["type"])
 
         if values.get("choices"):
-            detail_parts.append(
-                with_style("choices:", self.style.extra_data) + " " + values["choices"]
-            )
+            detail_parts.append("choices: " + values["choices"])
 
         if detail_parts:
             is_option = bool(values.get("flag_short") or values.get("flag_long"))
@@ -125,6 +123,10 @@ class ClapLayout(HelpLayout):
     usage_text_style = TextStyle(color="cyan", style="bold")
     placeholder_style = TextStyle(color="cyan", style="bold")
     command_name_style = TextStyle(color="cyan", style="bold")
+    use_action_extra: ClassVar[bool] = True
+    choices_label_text: ClassVar[str] = "possible values:"
+    default_label_text: ClassVar[str] = "default:"
+    dashify_metavar: ClassVar[bool] = True
 
     commands_title: str = "Commands:"
     required_indicator: str = ""
@@ -134,12 +136,17 @@ class ClapLayout(HelpLayout):
     doc_inline_code_mode: Literal["bold", "strip"] = "strip"
 
     pos_flag_width: int = 26
-    format_option = "{flag_col}  {description}{extra}"
-    format_positional = "{flag_col}  {description}{extra}"
+    column_gap: ClassVar[str] = "  "
+    no_description_gap: ClassVar[str] = "  "
+    collapse_gap_when_no_description: ClassVar[bool] = False
+    format_option = "{flag_col}{column_gap}{description}{extra}"
+    format_positional = "{flag_col}{column_gap}{description}{extra}"
     layout_mode = "template"
 
     def _format_metavar(self, name: str, *, is_varargs: bool) -> str:
         text = name.upper()
+        if self.dashify_metavar:
+            text = text.replace("_", "-")
         if is_varargs:
             text = f"{text}..."
         return f"<{text}>"
@@ -193,13 +200,13 @@ class ClapLayout(HelpLayout):
         if not self._param_is_bool(param):
             if not param.is_required and param.default is not None:
                 label = with_style("default:", self.style.extra_data)
-                value = with_style(str(param.default), self.style.default)
+                value = with_style(format_default_for_help(param.default), self.style.default)
                 parts.append(f"[{label} {value}]")
 
             if param.is_typed:
-                choices = get_choices(param.type)
+                choices = get_param_choices(param)
                 if choices:
-                    label = with_style("possible values:", self.style.extra_data)
+                    label = "possible values:"
                     values = ", ".join([with_style(str(i), self.style.string) for i in choices])
                     parts.append(f"[{label} {values}]")
 
@@ -260,6 +267,20 @@ class ClapLayout(HelpLayout):
             styled_values["flag_col"] = " " * self.pos_flag_width
 
         return styled_values
+
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        values = super()._build_values(param, flags)
+        desc = values.get("description", "")
+        extra = values.get("extra", "")
+        if not desc.strip() and extra.startswith(" "):
+            extra = extra[1:]
+
+        if self.collapse_gap_when_no_description and not desc.strip():
+            values["column_gap"] = self.no_description_gap if extra else ""
+        else:
+            values["column_gap"] = self.column_gap
+        values["extra"] = extra
+        return values
 
     def get_command_description(
         self,
