@@ -5,11 +5,15 @@ from re import Match
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from objinspect import Class, Function, Method, Parameter
-from objinspect.typing import get_choices
 from stdl.st import TextStyle, ansi_len, colored, with_style
 
 from interfacy.naming import CommandNameRegistry, FlagStrategy
-from interfacy.util import format_type_for_help, simplified_type_name
+from interfacy.util import (
+    format_default_for_help,
+    format_type_for_help,
+    get_param_choices,
+    simplified_type_name,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.schema.schema import Command
@@ -142,7 +146,7 @@ class HelpLayout:
                 val = param.default if param.has_default else False
                 defaults.append("true" if bool(val) else "false")
             elif not param.is_required and param.default is not None:
-                defaults.append(str(param.default))
+                defaults.append(format_default_for_help(param.default))
 
         lengths = [len(d) for d in defaults if d]
         self.default_field_width = self._compute_default_field_width_from_lengths(lengths)
@@ -449,19 +453,19 @@ class HelpLayout:
         parts: list[str] = []
         default_added = False
         if param.is_typed and not self._param_is_bool(param):
-            if choices := get_choices(param.type):
-                param_info = with_style(self.prefix_choices, self.style.extra_data) + ", ".join(
+            if choices := get_param_choices(param):
+                param_info = self.prefix_choices + ", ".join(
                     [with_style(i, self.style.string) for i in choices]
                 )
                 if not param.is_required:
-                    default_text = with_style(
-                        self.prefix_default, self.style.extra_data
-                    ) + with_style(str(param.default), self.style.default)
+                    default_text = self.prefix_default + with_style(
+                        format_default_for_help(param.default), self.style.default
+                    )
                     param_info += ", " + default_text
                     default_added = True
             else:
                 type_str = format_type_for_help(param.type, self.style.type)
-                param_info = with_style(self.prefix_type, self.style.extra_data) + type_str
+                param_info = self.prefix_type + type_str
 
             parts.append(param_info)
 
@@ -473,8 +477,8 @@ class HelpLayout:
         ):
             parts.append(", ")
             parts.append(
-                with_style(self.prefix_default, self.style.extra_data)
-                + with_style(str(param.default), self.style.default)
+                self.prefix_default
+                + with_style(format_default_for_help(param.default), self.style.default)
             )
 
         if not parts:
@@ -623,18 +627,18 @@ class HelpLayout:
             val = param.default if param.has_default else False
             default_raw = "true" if bool(val) else "false"
         elif not param.is_required and param.default is not None:
-            default_raw = str(param.default)
+            default_raw = format_default_for_help(param.default)
 
         styled_default = with_style(default_raw, self.style.default) if default_raw else ""
         pad = max(0, self.default_field_width - ansi_len(styled_default))
         default_padded = f"{' ' * pad}{styled_default}"
         default = styled_default
 
-        choices = get_choices(param.type) if param.is_typed else None
+        choices = get_param_choices(param) if param.is_typed else None
         choices_str = ""
         if choices:
             choices_str = ", ".join([with_style(str(i), self.style.string) for i in choices])
-        choices_label = with_style("choices:", self.style.extra_data) if choices_str else ""
+        choices_label = "choices:" if choices_str else ""
         choices_block = " [" + choices_label + " " + choices_str + "]" if choices_str else ""
 
         if param.is_typed and not self._param_is_bool(param) and not choices:
