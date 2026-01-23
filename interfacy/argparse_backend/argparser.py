@@ -76,6 +76,7 @@ class Argparser(InterfacyParser):
                 {
                     "flag_strategy": flag_strategy,
                     "help_layout": help_layout,
+                    "help_colors": help_colors,
                     "print_result": print_result,
                     "full_error_traceback": full_error_traceback,
                     "tab_completion": tab_completion,
@@ -83,11 +84,13 @@ class Argparser(InterfacyParser):
                     "include_inherited_methods": include_inherited_methods,
                     "include_classmethods": include_classmethods,
                     "silent_interrupt": silent_interrupt,
+                    "abbreviation_gen": abbreviation_gen,
                 },
             )
 
             flag_strategy = overrides["flag_strategy"]
             help_layout = overrides["help_layout"]
+            help_colors = overrides["help_colors"]
             print_result = overrides["print_result"]
             full_error_traceback = overrides["full_error_traceback"]
             tab_completion = overrides["tab_completion"]
@@ -95,6 +98,7 @@ class Argparser(InterfacyParser):
             include_inherited_methods = overrides["include_inherited_methods"]
             include_classmethods = overrides["include_classmethods"]
             silent_interrupt = overrides["silent_interrupt"]
+            abbreviation_gen = overrides["abbreviation_gen"]
 
         super().__init__(
             description,
