@@ -9,6 +9,7 @@ from stdl.fs import read_piped
 from strto import StrToTypeParser, get_parser
 
 from interfacy import console
+from interfacy.appearance.layout import InterfacyColors
 from interfacy.appearance.layouts import HelpLayout, InterfacyLayout
 from interfacy.exceptions import (
     ConfigurationError,
@@ -58,6 +59,7 @@ class InterfacyParser:
         help_layout: HelpLayout | None = None,
         type_parser: StrToTypeParser | None = None,
         *,
+        help_colors: InterfacyColors | None = None,
         run: bool = False,
         print_result: bool = False,
         tab_completion: bool = False,
@@ -101,6 +103,9 @@ class InterfacyParser:
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
         self.flag_strategy = flag_strategy or DefaultFlagStrategy()
         self.help_layout = help_layout or InterfacyLayout()
+        if help_colors is not None:
+            self.help_layout.style = help_colors
+        self.help_colors = self.help_layout.style
         self.help_layout.flag_generator = self.flag_strategy
         self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
         self.help_layout.name_registry = self.name_registry
