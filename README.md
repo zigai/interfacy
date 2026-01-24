@@ -5,18 +5,18 @@
 [![Downloads](https://static.pepy.tech/badge/interfacy)](https://pepy.tech/project/interfacy)
 [![license](https://img.shields.io/github/license/zigai/interfacy.svg)](https://github.com/zigai/interfacy/blob/main/LICENSE)
 
-Interfacy is a library for automatically generating CLI applications from Python functions, methods, classes, or instances using their type annotations and docstrings.
+Interfacy is a CLI framework for building command-line interfaces from Python functions, classes, and class instances using type annotations and docstrings.
 
 ## Features
 
-- CLI generation from functions, methods, classes, or instances.
-- Argument type inference from annotations.
-- Required parameters as positionals or flags.
-- Subcommands with optional aliases.
-- Multiple help text themes.
-- Stdin piping support.
-- Optional tab completion via argcomplete.
-- Support for user-defined type parsers.
+- Generate CLIs from functions, class methods, or class instances.
+- Nested subcommands and command groups with aliases.
+- Type inference from annotations, with support for custom parsers.
+- Multiple help layouts and color themes.
+- Optional class initializer arguments exposed as CLI options.
+- Argparse-compatible backend, including a drop-in `ArgumentParser` replacement.
+- Stdin piping support with configurable routing to parameters.
+- Optional tab completion via `argcomplete`.
 
 ## Installation
 
@@ -30,7 +30,7 @@ pip install interfacy
 uv add interfacy
 ```
 
-### From Source
+### From source
 
 ```bash
 pip install git+https://github.com/zigai/interfacy.git
@@ -40,16 +40,33 @@ pip install git+https://github.com/zigai/interfacy.git
 uv add "git+https://github.com/zigai/interfacy.git"
 ```
 
-## Example
+## Quick start
 
 ```python
+from interfacy import Argparser
+
 def greet(name: str, times: int = 1) -> None:
     for _ in range(times):
         print(f"Hello, {name}!")
 
 if __name__ == "__main__":
-    from interfacy import Argparser
-    Argparser(print_result=True).run(greet)
+    Argparser().run(greet)
+```
+
+## Class-based commands
+
+```python
+from interfacy import Argparser
+
+class Math:
+    def add(self, left: int, right: int) -> int:
+        return left + right
+
+    def mul(self, left: int, right: int) -> int:
+        return left * right
+
+if __name__ == "__main__":
+    Argparser(print_result=True).run(Math)
 ```
 
 ## License
