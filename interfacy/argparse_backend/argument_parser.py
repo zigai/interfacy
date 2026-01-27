@@ -419,3 +419,39 @@ class ArgumentParser(argparse.ArgumentParser):
             t_name = type_name(str(t))
             raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'")
         return result
+
+    def error(self, message: str) -> None:
+        """
+        Override argparse's default error output for missing required subcommands.
+
+        By default, argparse prints only a short usage line on errors. For CLIs built
+        around subcommands, a missing subcommand is much more useful when the full help is displayed.
+        """
+        marker = "the following arguments are required:"
+        if marker in message:
+            subparser_dests: set[str] = {
+                action.dest
+                for action in self._actions
+                if isinstance(action, argparse._SubParsersAction)
+            }
+
+            if subparser_dests:
+                missing_part = message.split(marker, 1)[1].strip()
+                missing_names = [name.strip() for name in missing_part.split(",") if name.strip()]
+                denested_missing = [
+                    self._original_destinations.get(name, name) for name in missing_names
+                ]
+                denested_subparser_dests = {
+                    self._original_destinations.get(dest, dest) for dest in subparser_dests
+                }
+
+                if any(name in denested_subparser_dests for name in denested_missing):
+                    denested_message = message
+                    for nested, original in self._original_destinations.items():
+                        denested_message = denested_message.replace(nested, original)
+
+                    self._print_message(f"{self.prog}: error: {denested_message}\n", sys.stderr)
+                    self.print_help(sys.stderr)
+                    raise SystemExit(2)
+
+        super().error(message)
