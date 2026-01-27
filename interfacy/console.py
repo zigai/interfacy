@@ -52,7 +52,7 @@ def log_exception(tag: str, exc: Exception, *, full_traceback: bool) -> None:
 def log_interrupt(tag: str, *, silent: bool) -> None:
     if silent:
         return
-    message = f"[{tag}] Interrupted"
+    message = f"\n[{tag}] Interrupted"
     message = colored(message, color="yellow")
     error(message)
 
