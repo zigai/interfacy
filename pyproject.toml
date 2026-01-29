@@ -1,8 +1,8 @@
 
 [project]
 name = "interfacy"
-version = "0.3.9"
-description = "Interfacy is a library for automatically generating CLI applications from Python functions, methods, classes, or instances using their type annotations and docstrings."
+version = "0.3.10"
+description = "CLI framework for building command-line interfaces from Python functions, classes, and class instances"
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 classifiers = [
+    "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -27,6 +28,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: User Interfaces",
     "Typing :: Typed",
 ]
 
@@ -38,6 +41,7 @@ keywords = [
     "cli-generator",
     "cli-builder",
     "cli-framework",
+    "type-hints",
 ]
 
 [project.scripts]
