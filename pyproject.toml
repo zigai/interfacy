@@ -49,15 +49,7 @@ interfacy = "interfacy.cli.main:main"
 
 
 [project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-mock",
-    "black",
-    "ruff",
-    "pre-commit",
-    "coverage",
-    "mypy",
-]
+dev = ["pytest", "pytest-mock", "ruff", "pre-commit", "coverage", "mypy"]
 full = ["argcomplete", "click"]
 click = ["click"]
 test = ["pytest", "pytest-mock", "coverage"]
