@@ -1,5 +1,6 @@
 import ast
 import re
+import typing
 from collections.abc import Callable
 from enum import Enum
 from types import NoneType
@@ -120,6 +121,20 @@ def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
     return None
 
 
+def resolve_type_alias(annotation: Any) -> Any:
+    """Resolve PEP 695 type aliases to their underlying value when possible."""
+    type_alias_type = getattr(typing, "TypeAliasType", None)
+    if type_alias_type is None:
+        return annotation
+
+    while isinstance(annotation, type_alias_type):
+        try:
+            annotation = annotation.__value__
+        except Exception:
+            break
+    return annotation
+
+
 def _normalize_enum_choices(choices: list[Any], *, for_display: bool) -> list[Any] | None:
     normalized: list[Any] = []
     for choice in choices:
@@ -168,6 +183,8 @@ def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> lis
     """
     if annotation is None:
         return None
+
+    annotation = resolve_type_alias(annotation)
 
     if isinstance(annotation, type) and issubclass(annotation, Enum):
         return _normalize_enum_choices(list(annotation), for_display=for_display)
@@ -291,6 +308,7 @@ __all__ = [
     "is_fixed_tuple",
     "get_fixed_tuple_info",
     "extract_optional_union_list",
+    "resolve_type_alias",
     "get_annotation_choices",
     "get_param_choices",
     "format_default_for_help",

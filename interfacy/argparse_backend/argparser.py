@@ -35,7 +35,12 @@ from interfacy.schema.schema import (
     ParserSchema,
     ValueShape,
 )
-from interfacy.util import extract_optional_union_list, is_list_or_list_alias
+from interfacy.util import (
+    extract_optional_union_list,
+    get_param_choices,
+    is_list_or_list_alias,
+    resolve_type_alias,
+)
 
 logger = get_logger(__name__)
 
@@ -243,17 +248,18 @@ class Argparser(InterfacyParser):
         else:
             extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
 
-        is_bool_param = param.is_typed and param.type is bool
+        annotation = resolve_type_alias(param.type) if param.is_typed else None
+        is_bool_param = param.is_typed and annotation is bool
         if param.is_typed and not is_bool_param:
-            optional_union_list = extract_optional_union_list(param.type)
+            optional_union_list = extract_optional_union_list(annotation)
             list_annotation: Any | None = None
             element_type: Any | None = None
 
             if optional_union_list:
                 list_annotation, element_type = optional_union_list
-            elif is_list_or_list_alias(param.type):
-                list_annotation = param.type
-                list_args = type_args(param.type)
+            elif is_list_or_list_alias(annotation):
+                list_annotation = annotation
+                list_args = type_args(annotation)
                 element_type = list_args[0] if list_args else None
 
             if list_annotation is not None:
@@ -261,7 +267,10 @@ class Argparser(InterfacyParser):
                 if element_type is not None:
                     extra["type"] = self.type_parser.get_parse_func(element_type)
             else:
-                extra["type"] = self.type_parser.get_parse_func(param.type)
+                extra["type"] = self.type_parser.get_parse_func(annotation)
+
+            if choices := get_param_choices(param, for_display=False):
+                extra["choices"] = self._coerce_choices_for_parser(choices, extra.get("type"))
 
         if self.help_layout.clear_metavar and not is_bool_param:
             if not param.is_required:
@@ -301,6 +310,8 @@ class Argparser(InterfacyParser):
         else:
             if arg.parser is not None:
                 kwargs["type"] = arg.parser
+            if arg.choices:
+                kwargs["choices"] = self._coerce_choices_for_parser(arg.choices, arg.parser)
             if not arg.required:
                 kwargs["default"] = arg.default
 
@@ -313,6 +324,23 @@ class Argparser(InterfacyParser):
         kwargs = self._argument_kwargs(argument)
         logger.info(f"Adding argument flags={argument.flags}, kwargs={kwargs}")
         parser.add_argument(*argument.flags, **kwargs)
+
+    @staticmethod
+    def _coerce_choices_for_parser(
+        choices: Sequence[Any] | None, parser: Callable[[str], Any] | None
+    ) -> Sequence[Any] | None:
+        if not choices or parser is None:
+            return choices
+        if not all(isinstance(choice, str) for choice in choices):
+            return choices
+
+        converted: list[Any] = []
+        for choice in choices:
+            try:
+                converted.append(parser(choice))
+            except Exception:
+                return choices
+        return converted
 
     def _apply_command_schema(
         self,

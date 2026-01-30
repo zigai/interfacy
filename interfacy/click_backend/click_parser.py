@@ -12,7 +12,7 @@ from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.core import InterfacyParser
 from interfacy.naming import AbbreviationGenerator, FlagStrategy, NameMapping
 from interfacy.pipe import PipeTargets
-from interfacy.util import inverted_bool_flag_name
+from interfacy.util import inverted_bool_flag_name, resolve_type_alias
 
 
 class ClickHelpFormatter(click.HelpFormatter):
@@ -262,7 +262,8 @@ class ClickParser(InterfacyParser):
         }
 
         if param.is_typed:
-            parse_fn = self.type_parser.get_parse_func(param.type)
+            annotation = resolve_type_alias(param.type)
+            parse_fn = self.type_parser.get_parse_func(annotation)
             parse_fn = ClickFuncParamType(parse_fn, f"parse_{name}")
             extras["type"] = parse_fn
 

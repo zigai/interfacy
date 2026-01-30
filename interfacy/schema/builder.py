@@ -26,6 +26,7 @@ from interfacy.util import (
     inverted_bool_flag_name,
     is_fixed_tuple,
     is_list_or_list_alias,
+    resolve_type_alias,
     simplified_type_name,
 )
 
@@ -335,7 +336,7 @@ class ParserSchemaBuilder:
         taken_flags: list[str],
         pipe_param_names: set[str] | None = None,
     ) -> Argument:
-        annotation = param.type
+        annotation = resolve_type_alias(param.type)
         if isinstance(annotation, str):
             simple_name = simplified_type_name(annotation)
             base_name = simple_name[:-1] if simple_name.endswith("?") else simple_name
@@ -451,7 +452,7 @@ class ParserSchemaBuilder:
                 if annotation is not str:
                     parser_func = self.parser.type_parser.get_parse_func(annotation)
 
-        if not param.is_required and param.is_typed and param.type is not bool:
+        if not param.is_required and param.is_typed and annotation is not bool:
             default_value = param.default
 
         metavar = None

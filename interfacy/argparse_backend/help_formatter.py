@@ -3,6 +3,7 @@ import os
 import re
 import textwrap
 from collections.abc import Iterable
+from enum import Enum
 from inspect import Parameter as StdParameter
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -453,12 +454,13 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         values.update(styled_cols)
         values["desc_line"] = description
 
-        detail_parts: list[str] = []
-
-        if default:
-            detail_parts.append("default: " + default)
-        if type_str:
-            detail_parts.append("type: " + type_str)
+        def format_choice(value: object) -> str:
+            if isinstance(value, Enum):
+                raw = value.value
+                if isinstance(raw, str):
+                    return raw
+                return value.name
+            return str(value)
 
         choices_str = ""
         choices_label = ""
@@ -466,13 +468,26 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
         try:
             if action.choices:
-                choices_str = ", ".join([str(i) for i in action.choices])
+                choices_str = ", ".join([format_choice(i) for i in action.choices])
         except Exception:
             choices_str = ""
 
+        if choices_str and getattr(layout, "hide_type_when_choices", True):
+            type_str = ""
+            values["type"] = ""
+
+        detail_parts: list[str] = []
+
+        if default:
+            detail_parts.append("default: " + default)
+        if type_str:
+            detail_parts.append("type: " + type_str)
+
         choices_styled = ""
         if choices_str:
-            choices_styled = ", ".join([with_style(str(i), style.string) for i in action.choices])
+            choices_styled = ", ".join(
+                [with_style(format_choice(i), style.string) for i in action.choices]
+            )
             choices_label = "choices:"
             choices_block = f" [{choices_label} {choices_styled}]"
             detail_parts.append(choices_label + " " + choices_styled)
