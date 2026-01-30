@@ -397,7 +397,7 @@ class ArgumentParser(argparse.ArgumentParser):
             kwargs["metavar"] = original_dest.upper()
         return kwargs
 
-    def _get_value(self, action, arg_string):
+    def _get_value(self, action: argparse.Action, arg_string: str) -> Any:
         parse_func = self._registry_get("type", action.type, action.type)
         if not callable(parse_func):
             raise argparse.ArgumentError(action, f"{parse_func!r} is not callable")

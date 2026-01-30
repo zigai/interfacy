@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import signal
 import sys
@@ -63,10 +65,10 @@ class Argparser(InterfacyParser):
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
-        silent_interrupt: bool = False,
+        silent_interrupt: bool = True,
         reraise_interrupt: bool = False,
         use_global_config: bool = False,
-        formatter_class=InterfacyHelpFormatter,
+        formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
     ) -> None:
         if use_global_config:
             from interfacy.cli.config import apply_config_defaults, load_config
@@ -127,7 +129,7 @@ class Argparser(InterfacyParser):
         self._last_interrupt_time: float = 0.0
         del self.type_parser.parsers[list]
 
-    def _new_parser(self, name: str | None = None):
+    def _new_parser(self, name: str | None = None) -> ArgumentParser:
         return ArgumentParser(
             name, formatter_class=self.formatter_class, help_layout=self.help_layout
         )
@@ -137,7 +139,7 @@ class Argparser(InterfacyParser):
         param: Parameter,
         parser: ArgumentParser,
         taken_flags: list[str],
-    ):
+    ) -> argparse.Action:
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
 
@@ -191,7 +193,7 @@ class Argparser(InterfacyParser):
         self,
         cls: Class,
         parser: ArgumentParser | None = None,
-        subparser=None,
+        subparser: argparse._SubParsersAction[ArgumentParser] | None = None,
     ) -> ArgumentParser:
         """Create an ArgumentParser from a Class"""
         parser = parser or self._new_parser()
@@ -514,7 +516,7 @@ class Argparser(InterfacyParser):
     def run(self, *commands: Callable | type | object, args: list[str] | None = None) -> Any:
         original_handler = signal.getsignal(signal.SIGINT)
 
-        def sigint_handler(signum, frame):
+        def sigint_handler(signum: int, frame: Any) -> None:
             now = time.time()
             if now - self._last_interrupt_time < 1.0:  # Double Ctrl+C: force immediate exit
                 sys.exit(ExitCode.INTERRUPTED)

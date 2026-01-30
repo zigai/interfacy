@@ -3,7 +3,7 @@ class InterfacyError(Exception):
 
 
 class UnsupportedParameterTypeError(InterfacyError):
-    def __init__(self, t):
+    def __init__(self, t: type) -> None:
         self.param_t = t
         super().__init__(f"Parameter of type '{t}' is not supported")
 
@@ -15,13 +15,13 @@ class ReservedFlagError(InterfacyError):
 
 
 class InvalidCommandError(InterfacyError):
-    def __init__(self, command):
+    def __init__(self, command: str) -> None:
         self.command = command
         super().__init__(f"'{command}' is not a valid command")
 
 
 class DuplicateCommandError(InterfacyError):
-    def __init__(self, command):
+    def __init__(self, command: str) -> None:
         self.command = command
         super().__init__(f"Duplicate command '{command}'")
 

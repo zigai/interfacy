@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import textwrap
+from collections.abc import Iterable
 from inspect import Parameter as StdParameter
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -24,7 +25,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
 
-    def start_section(self, heading):  # type: ignore[override]
+    def start_section(self, heading: str | None) -> None:  # type: ignore[override]
         layout = self._get_help_layout()
         if layout is not None and heading not in (None, argparse.SUPPRESS):
             title_map = getattr(layout, "section_title_map", None)
@@ -117,7 +118,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             width = candidates[idx]
         return max(base_width, width)
 
-    def prepare_layout(self, actions):
+    def prepare_layout(self, actions: list[argparse.Action]) -> None:
         layout = self._get_help_layout()
         if layout is None:
             return
@@ -129,17 +130,17 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if computed is not None:
             layout.default_field_width = computed
 
-    def _split_lines(self, text, width):
+    def _split_lines(self, text: str, width: int) -> list[str]:
         # return text.splitlines()
         return [text]
 
-    def _format_args(self, action, default_metavar: str):
+    def _format_args(self, action: argparse.Action, default_metavar: str) -> str:
         result = super()._format_args(action, default_metavar)
         # Treat the special "\b" metavar (used to hide metavars) as empty
         cleaned = result.replace("\b", "").strip()
         return cleaned
 
-    def _format_action_invocation(self, action):
+    def _format_action_invocation(self, action: argparse.Action) -> str:
         if not action.option_strings:
             metavar = self._format_args(action, action.dest)
             return metavar or action.dest
@@ -187,7 +188,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
         return ", ".join(action.option_strings) + (f" {args_string}" if args_string else "")
 
-    def _format_action(self, action):
+    def _format_action(self, action: argparse.Action) -> str:
         action_header = self._format_action_invocation(action)
         help_layout = self._get_help_layout()
         help_position = self._action_max_length + 4
@@ -519,7 +520,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             rendered = re.sub(r"\[\s*\]\s*", "", rendered)
         return rendered
 
-    def _fill_text(self, text, width, indent):
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
         """
         Doesn't strip whitespace from the beginning of the line when formatting help text.
         Code from: https://stackoverflow.com/a/74368128/18588657
@@ -532,7 +533,13 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         text = "\n".join(text)  # Join the lines again
         return text
 
-    def _format_usage(self, usage, actions, groups, prefix):
+    def _format_usage(
+        self,
+        usage: str | None,
+        actions: Iterable[argparse.Action],
+        groups: Iterable[argparse._MutuallyExclusiveGroup],
+        prefix: str | None,
+    ) -> str:
         """
         Making sure that doesn't crash your program if your terminal window isn't wide enough.
         Explained here: https://stackoverflow.com/a/50394665/18588657
@@ -588,7 +595,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 # assert " ".join(pos_parts) == pos_usage
 
                 # helper for wrapping lines
-                def get_lines(parts, indent, prefix=None):
+                def get_lines(
+                    parts: list[str], indent: str, prefix: str | None = None
+                ) -> list[str]:
                     lines, line = [], []
                     if prefix is not None:
                         line_len = ansi_len(prefix) - 1

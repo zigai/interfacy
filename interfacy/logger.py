@@ -17,7 +17,7 @@ LEVEL_COLORS = {
 }
 
 
-def _get_level():
+def _get_level() -> int:
     level_name = os.getenv("INTERFACY_LOG") or "NOTSET"
     level_name = "INFO" if level_name == 1 else level_name
     return _nameToLevel.get(level_name, logging.NOTSET)
@@ -35,7 +35,7 @@ def get_logger(name: str) -> logging.Logger:
 
 
 class _ClickableFormatter(logging.Formatter):
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         filename = os.path.basename(record.pathname)
         label = f"{filename}:{record.lineno}"
         record.clickable_path = terminal_link(f"{record.pathname}:{record.lineno}", label)

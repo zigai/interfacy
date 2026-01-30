@@ -13,6 +13,7 @@ from interfacy.schema.schema import Argument, Command
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
+    from interfacy.argparse_backend.argument_parser import ArgumentParser
 
 logger = get_logger(__name__)
 
@@ -22,10 +23,10 @@ COMMAND_KEY_BASE = "command"
 class ArgparseRunner:
     def __init__(
         self,
-        namespace: dict,
+        namespace: dict[str, Any],
         builder: "Argparser",
         args: list[str],
-        parser,
+        parser: "ArgumentParser",
     ) -> None:
         self._parser = parser
         self.namespace = namespace

@@ -75,7 +75,7 @@ class InterfacyParser:
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
-        silent_interrupt: bool = False,
+        silent_interrupt: bool = True,
         reraise_interrupt: bool = False,
     ) -> None:
         self.description = description
@@ -273,11 +273,11 @@ class InterfacyParser:
 
     def pipe_to(
         self,
-        targets,
+        targets: PipeTargets | dict[str, Any] | Sequence[str] | str,
         *,
         command: str | None = None,
         subcommand: str | None = None,
-        **normalization_kwargs,
+        **normalization_kwargs: Any,
     ) -> PipeTargets:
         """
         Configure default pipe targets.
@@ -440,16 +440,16 @@ class InterfacyParser:
         raise NotImplementedError
 
     @abstractmethod
-    def parser_from_function(self, *args, **kwargs) -> Any: ...
+    def parser_from_function(self, *args: Any, **kwargs: Any) -> Any: ...
 
     @abstractmethod
-    def parser_from_class(self, *args, **kwargs) -> Any: ...
+    def parser_from_class(self, *args: Any, **kwargs: Any) -> Any: ...
 
     @abstractmethod
-    def parser_from_multiple_commands(self, *args, **kwargs) -> Any: ...
+    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> Any: ...
 
     @abstractmethod
-    def install_tab_completion(self, *args, **kwargs) -> None: ...
+    def install_tab_completion(self, *args: Any, **kwargs: Any) -> None: ...
 
     def log(self, message: str) -> None:
         console.log(self.logger_message_tag, message)
@@ -462,7 +462,7 @@ class InterfacyParser:
 
     def log_interrupt(self) -> None:
         """Log a message when the CLI is interrupted by user."""
-        console.log_interrupt(self.logger_message_tag, silent=self.silent_interrupt)
+        console.log_interrupt(silent=self.silent_interrupt)
 
     def build_parser_schema(self) -> "ParserSchema":
         builder = ParserSchemaBuilder(self)

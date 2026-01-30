@@ -1,12 +1,15 @@
 from inspect import Parameter as StdParameter
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
-from objinspect import Parameter
+from objinspect import Class, Function, Method, Parameter
 from stdl.st import TextStyle, ansi_len, colored, with_style
 
 from interfacy.appearance.colors import ClapColors, NoColor
 from interfacy.appearance.layout import HelpLayout
 from interfacy.util import format_default_for_help, get_param_choices
+
+if TYPE_CHECKING:
+    from interfacy.schema.schema import Command
 
 
 class InterfacyLayout(HelpLayout):
@@ -284,7 +287,7 @@ class ClapLayout(HelpLayout):
 
     def get_command_description(
         self,
-        command,
+        command: Class | Function | Method,
         ljust: int,
         name: str | None = None,
         aliases: tuple[str, ...] = (),
@@ -303,7 +306,7 @@ class ClapLayout(HelpLayout):
             return with_style(self.commands_title, heading_style)
         return self.commands_title
 
-    def get_help_for_class(self, command) -> str:  # type: ignore[override]
+    def get_help_for_class(self, command: Class) -> str:  # type: ignore[override]
         display_names: list[str] = []
         for method in command.methods:
             if method.name in self.command_skips:
@@ -321,7 +324,7 @@ class ClapLayout(HelpLayout):
             lines.append(self.get_command_description(method, ljust, method_name))
         return "\n".join(lines)
 
-    def get_help_for_multiple_commands(self, commands) -> str:  # type: ignore[override]
+    def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:  # type: ignore[override]
         display_names = [
             self._format_command_display_name(cmd.cli_name, cmd.aliases)
             for cmd in commands.values()
