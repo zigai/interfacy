@@ -198,6 +198,8 @@ class ArgumentParser(argparse.ArgumentParser):
             "allow_abbrev": allow_abbrev,
         }
 
+        if color is None and sys.version_info >= (3, 14):
+            color = False
         if color is not None:
             base_init_kwargs["color"] = color
 
