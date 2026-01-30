@@ -1,9 +1,9 @@
 # Interfacy
 
+[![Tests](https://github.com/zigai/interfacy/actions/workflows/tests.yml/badge.svg)](https://github.com/zigai/interfacy/actions/workflows/tests.yml)
 [![PyPI version](https://badge.fury.io/py/interfacy.svg)](https://badge.fury.io/py/interfacy)
 ![Supported versions](https://img.shields.io/badge/python-3.10+-blue.svg)
 [![Downloads](https://static.pepy.tech/badge/interfacy)](https://pepy.tech/project/interfacy)
-[![Tests](https://github.com/zigai/interfacy/actions/workflows/tests.yml/badge.svg)](https://github.com/zigai/interfacy/actions/workflows/tests.yml)
 [![license](https://img.shields.io/github/license/zigai/interfacy.svg)](https://github.com/zigai/interfacy/blob/main/LICENSE)
 
 Interfacy is a CLI framework for building command-line interfaces from Python functions, classes, and class instances using type annotations and docstrings.
