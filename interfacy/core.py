@@ -2,7 +2,7 @@ import sys
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, Any, ClassVar, Final
+from typing import TYPE_CHECKING, Any, ClassVar, Final, TypeVar
 
 from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 
 COMMAND_KEY: Final[str] = "command"
 PIPE_UNSET = ...
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 logger = get_logger(__name__)
 
@@ -171,6 +173,41 @@ class InterfacyParser:
         self.commands[canonical_name] = command
         logger.debug(f"Added command: {command}")
         return command
+
+    def command(
+        self,
+        name: str | None = None,
+        description: str | None = None,
+        aliases: Sequence[str] | None = None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
+    ) -> Callable[[F], F]:
+        """
+        Decorator to register a command with the parser.
+
+        This is syntactic sugar for `add_command()` that allows decorator-style
+        command registration. The decorated function/class remains unchanged.
+
+        Args:
+            name: Override the command name (defaults to function/class name).
+            description: Override the description (defaults to docstring).
+            aliases: Alternative names for this command.
+            pipe_targets: Configure stdin piping for this command.
+
+        Returns:
+            A decorator that registers the callable and returns it unchanged.
+        """
+
+        def decorator(func: F) -> F:
+            self.add_command(
+                command=func,
+                name=name,
+                description=description,
+                aliases=aliases,
+                pipe_targets=pipe_targets,
+            )
+            return func
+
+        return decorator
 
     def add_group(
         self,

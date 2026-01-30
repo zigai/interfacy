@@ -58,15 +58,38 @@ if __name__ == "__main__":
 ```python
 from interfacy import Argparser
 
-class Math:
-    def add(self, left: int, right: int) -> int:
-        return left + right
+class Calculator:
+    def add(self, a: int, b: int) -> int:
+        return a + b
 
-    def mul(self, left: int, right: int) -> int:
-        return left * right
+    def mul(self, a: int, b: int) -> int:
+        return a * b
 
 if __name__ == "__main__":
-    Argparser(print_result=True).run(Math)
+    Argparser(print_result=True).run(Calculator)
+```
+
+## Decorator-based commands
+
+```python
+from interfacy import Argparser
+
+parser = Argparser()
+
+@parser.command()
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+@parser.command(name="calc", aliases=["c"])
+class Calculator:
+    def add(self, a: int, b: int) -> int:
+        return a + b
+
+    def mul(self, a: int, b: int) -> int:
+        return a * b
+
+if __name__ == "__main__":
+    parser.run()
 ```
 
 ## License
