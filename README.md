@@ -108,13 +108,6 @@ options:
   --user.address.zip          Postal or ZIP code. [type: int]
 ```
 
-Call it:
-
-```bash
-python app.py greet --user.name Alice --user.age 30
-python app.py greet --user.name Alice --user.age 30 --user.address.city Austin --user.address.zip 78701
-```
-
 ## Class-based commands
 
 ```python
