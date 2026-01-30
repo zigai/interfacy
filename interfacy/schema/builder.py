@@ -361,9 +361,9 @@ class ParserSchemaBuilder:
         nargs: str | int | None = None
         default_value: Any = param.default if param.has_default else None
         parsed_type: type[Any] | None = annotation if param.is_typed else None
-        choices = get_param_choices(param, for_display=False) if param.is_typed else None
-        if choices is not None:
-            choices = tuple(choices)
+        choices: tuple[Any, ...] | None = None
+        if param.is_typed and (raw_choices := get_param_choices(param, for_display=False)):
+            choices = tuple(raw_choices)
         boolean_behavior: BooleanBehavior | None = None
         is_optional_union_list = False
         tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None

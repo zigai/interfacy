@@ -98,7 +98,7 @@ class DefaultFlagStrategy(FlagStrategy):
         else:
             flag_long = f"--{name}".strip()
 
-        flags = (flag_long,)
+        flags: tuple[str, ...] = (flag_long,)
 
         abbrev_name = name
         is_inverted = False

@@ -70,7 +70,7 @@ def _setup_logger(logger: logging.Logger) -> None:
     logger.setLevel(level)
 
     if ENABLED:
-        handler = logging.StreamHandler()
+        handler: logging.Handler = logging.StreamHandler()
         handler.setLevel(level)
         formatter = _ClickableFormatter(
             fmt="%(colored_levelname)s | %(name_location)s | %(message)s",

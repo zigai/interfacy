@@ -324,7 +324,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             metavar = action.metavar or action.dest
             flag_short = ""
             flag_long = ""
-            flag = metavar
+            flag = " ".join(metavar) if isinstance(metavar, tuple) else metavar
 
         raw_description = help_text or ""
         description = ""

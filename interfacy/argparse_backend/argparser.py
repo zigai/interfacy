@@ -125,7 +125,7 @@ class Argparser(InterfacyParser):
             reraise_interrupt=reraise_interrupt,
         )
         self.formatter_class = formatter_class
-        self._parser = None
+        self._parser: ArgumentParser | None = None
         self._last_interrupt_time: float = 0.0
         del self.type_parser.parsers[list]
 

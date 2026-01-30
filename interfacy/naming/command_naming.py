@@ -46,9 +46,9 @@ class CommandNameRegistry:
             tuple[str, tuple[str, ...]]: Pair containing the canonical (authoritative) CLI name and the alias tuple.
         """
         if isinstance(aliases, str):
-            alias_tuple = (aliases,)
+            alias_tuple: tuple[str, ...] = (aliases,)
         else:
-            alias_tuple = tuple(aliases or ())
+            alias_tuple: tuple[str, ...] = tuple(aliases or ())
 
         canonical = explicit_name or self._translator.translate(default_name)
         self._ensure_unique(canonical, alias_tuple)
