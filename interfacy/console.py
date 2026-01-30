@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from objinspect.typing import type_name
-from stdl.st import colored, terminal_link
+from stdl.st import colored
 
 
 def info(message: str) -> None:
@@ -34,17 +34,8 @@ def log_exception(tag: str, exc: Exception, *, full_traceback: bool) -> None:
     if full_traceback:
         error(traceback.format_exc())
 
-    message = ""
-    tb = exc.__traceback__
-
     exception_str = type_name(str(type(exc))) + ": " + str(exc)
-    if tb:
-        file_info = f"{terminal_link(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}"
-        message += file_info
-        message += " "
-
-    message += f"{colored(exception_str, color='red')}"
-    message = f"[{tag}] {message}"
+    message = f"[{tag}] {colored(exception_str, color='red')}"
     message = colored(message, color="red")
     error(message)
 
