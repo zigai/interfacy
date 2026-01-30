@@ -39,8 +39,8 @@ def test_list_default_not_shared(builder_parser: FakeParser):
     builder = ParserSchemaBuilder(builder_parser)
     taken = [*builder_parser.RESERVED_FLAGS]
 
-    arg1 = builder._argument_from_parameter(param, taken[:])
-    arg2 = builder._argument_from_parameter(param, taken[:])
+    arg1 = builder._argument_from_parameter(param, taken[:])[0]
+    arg2 = builder._argument_from_parameter(param, taken[:])[0]
 
     # Either None (preserved) or different [] instances
     assert arg1.default is not arg2.default or arg1.default is None

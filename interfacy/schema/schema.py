@@ -12,6 +12,7 @@ from interfacy.appearance.layout import HelpLayout
 from interfacy.pipe import PipeTargets
 
 CommandType = Literal["function", "method", "class", "group", "instance"]
+MODEL_DEFAULT_UNSET: object = object()
 
 
 class ArgumentKind(str, Enum):
@@ -52,6 +53,11 @@ class Argument:
     accepts_stdin: bool = False
     pipe_required: bool = False
     tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
+    is_expanded_from: str | None = None
+    expansion_path: tuple[str, ...] = ()
+    original_model_type: type | None = None
+    parent_is_optional: bool = False
+    model_default: Any = MODEL_DEFAULT_UNSET
 
 
 @dataclass
@@ -128,6 +134,7 @@ __all__ = [
     "BooleanBehavior",
     "Command",
     "CommandType",
+    "MODEL_DEFAULT_UNSET",
     "ParserSchema",
     "ValueShape",
 ]

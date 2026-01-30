@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import argparse
 from collections.abc import Callable
-from dataclasses import dataclass
-from inspect import Parameter as StdParameter
+from dataclasses import MISSING, dataclass, fields, is_dataclass
+from inspect import Parameter as InspectParameter
+from types import NoneType
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter, inspect
-from objinspect.typing import type_args
+from objinspect.typing import is_union_type, type_args
 from stdl.st import ansi_len, with_style
 
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy.pipe import PipeTargets
 from interfacy.schema.schema import (
+    MODEL_DEFAULT_UNSET,
     Argument,
     ArgumentKind,
     BooleanBehavior,
@@ -33,6 +36,28 @@ from interfacy.util import (
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.core import InterfacyParser
     from interfacy.group import CommandEntry, CommandGroup
+
+
+@dataclass
+class _ParamSpec:
+    name: str
+    type: Any
+    is_typed: bool
+    has_default: bool
+    default: Any
+    is_required: bool
+    is_optional: bool
+    kind: InspectParameter
+    description: str | None = None
+
+
+@dataclass
+class _ModelFieldSpec:
+    name: str
+    annotation: Any
+    required: bool
+    default: Any
+    description: str | None = None
 
 
 @dataclass
@@ -141,8 +166,9 @@ class ParserSchemaBuilder:
 
         self._prepare_layout_for_params(function.params)
         parameters = [
-            self._argument_from_parameter(param, taken_flags, pipe_param_names)
+            arg
             for param in function.params
+            for arg in self._argument_from_parameter(param, taken_flags, pipe_param_names)
         ]
         raw_description = (
             description
@@ -194,8 +220,9 @@ class ParserSchemaBuilder:
             init_params = init.params
             self._prepare_layout_for_params([*init_params, *method.params])
             initializer = [
-                self._argument_from_parameter(param, taken_flags, init_pipe_names)
+                arg
                 for param in init.params
+                for arg in self._argument_from_parameter(param, taken_flags, init_pipe_names)
             ]
         else:
             self._prepare_layout_for_params(method.params)
@@ -212,8 +239,9 @@ class ParserSchemaBuilder:
         pipe_param_names = method_pipe_config.targeted_parameters() if method_pipe_config else set()
 
         parameters = [
-            self._argument_from_parameter(param, taken_flags, pipe_param_names)
+            arg
             for param in method.params
+            for arg in self._argument_from_parameter(param, taken_flags, pipe_param_names)
         ]
 
         raw_description = (
@@ -272,8 +300,9 @@ class ParserSchemaBuilder:
             self._prepare_layout_for_params(cls.get_method("__init__").params)
             init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
             initializer = [
-                self._argument_from_parameter(param, taken_flags, init_pipe_names)
+                arg
                 for param in cls.get_method("__init__").params
+                for arg in self._argument_from_parameter(param, taken_flags, init_pipe_names)
             ]
 
         subcommands: dict[str, Command] = {}
@@ -335,7 +364,7 @@ class ParserSchemaBuilder:
         param: Parameter,
         taken_flags: list[str],
         pipe_param_names: set[str] | None = None,
-    ) -> Argument:
+    ) -> list[Argument]:
         annotation = resolve_type_alias(param.type)
         if isinstance(annotation, str):
             simple_name = simplified_type_name(annotation)
@@ -343,6 +372,16 @@ class ParserSchemaBuilder:
             builtin_map = {"bool": bool, "int": int, "float": float, "str": str}
             if base_name in builtin_map:
                 annotation = builtin_map[base_name]
+
+        if param.is_typed:
+            model_type, is_optional_model = self._unwrap_optional(annotation)
+            if self._should_expand_model(model_type):
+                return self._expand_model_parameter(
+                    param=param,
+                    model_type=model_type,
+                    is_optional_model=is_optional_model,
+                    taken_flags=taken_flags,
+                )
 
         translated_name = self.parser.flag_strategy.argument_translator.translate(param.name)
         if translated_name in taken_flags:
@@ -355,39 +394,385 @@ class ParserSchemaBuilder:
             self.parser.abbreviation_gen,
         )
         taken_flags.append(translated_name)
-        help_text = self.parser.help_layout.get_help_for_parameter(param, tuple(flags))
+
+        spec = _ParamSpec(
+            name=param.name,
+            type=annotation,
+            is_typed=param.is_typed,
+            has_default=param.has_default,
+            default=param.default if param.has_default else None,
+            is_required=param.is_required,
+            is_optional=getattr(param, "is_optional", False),
+            kind=param.kind,
+            description=param.description,
+        )
+
+        return [
+            self._argument_from_spec(
+                spec=spec,
+                translated_name=translated_name,
+                flags=flags,
+                taken_flags=taken_flags,
+                pipe_param_names=pipe_param_names,
+                allow_optional_union_list=True,
+                suppress_default=False,
+            )
+        ]
+
+    def _nested_separator(self) -> str:
+        return getattr(self.parser.flag_strategy, "nested_separator", ".")
+
+    def _unwrap_optional(self, annotation: Any) -> tuple[Any, bool]:
+        if not is_union_type(annotation):
+            return annotation, False
+        union_args = type_args(annotation)
+        if NoneType not in union_args or len(union_args) != 2:
+            return annotation, False
+        inner = next(arg for arg in union_args if arg is not NoneType)
+        return inner, True
+
+    def _is_pydantic_model(self, typ: Any) -> bool:
+        return isinstance(typ, type) and (
+            hasattr(typ, "model_fields") or hasattr(typ, "__fields__")
+        )
+
+    def _is_plain_class_model(self, typ: Any) -> bool:
+        if not isinstance(typ, type):
+            return False
+        if typ in {str, int, float, bool, bytes, list, dict, tuple, set}:
+            return False
+        try:
+            cls_info = Class(
+                typ,
+                init=True,
+                public=True,
+                inherited=True,
+                static_methods=True,
+                protected=False,
+                private=False,
+                classmethod=True,
+            )
+        except Exception:
+            return False
+        init_method = cls_info.init_method
+        if init_method is None:
+            return False
+        params = [
+            p
+            for p in init_method.params
+            if p.kind not in (InspectParameter.VAR_POSITIONAL, InspectParameter.VAR_KEYWORD)
+        ]
+        return len(params) > 0
+
+    def _should_expand_model(self, param_type: Any) -> bool:
+        if not getattr(self.parser, "expand_model_params", True):
+            return False
+        if not isinstance(param_type, type):
+            return False
+        if is_dataclass(param_type) or self._is_pydantic_model(param_type):
+            return True
+        return self._is_plain_class_model(param_type)
+
+    def _get_model_fields(self, model_type: type) -> list[_ModelFieldSpec]:
+        if is_dataclass(model_type):
+            arg_docs = self._parse_docstring_args(model_type.__doc__)
+            result: list[_ModelFieldSpec] = []
+            for f in fields(model_type):
+                required = f.default is MISSING and f.default_factory is MISSING
+                default = None
+                if f.default is not MISSING:
+                    default = f.default
+                elif f.default_factory is not MISSING:  # type: ignore[comparison-overlap]
+                    default = f.default_factory  # type: ignore[assignment]
+                description = None
+                if isinstance(f.metadata, dict):
+                    description = f.metadata.get("description") or f.metadata.get("help")
+                if description is None:
+                    description = arg_docs.get(f.name)
+                result.append(
+                    _ModelFieldSpec(
+                        name=f.name,
+                        annotation=f.type,
+                        required=required,
+                        default=default,
+                        description=description,
+                    )
+                )
+            return result
+
+        if hasattr(model_type, "model_fields"):
+            result = []
+            field_map = getattr(model_type, "model_fields", {}) or {}
+            for name, info in field_map.items():
+                annotation = getattr(info, "annotation", None)
+                if annotation is None and hasattr(model_type, "__annotations__"):
+                    annotation = model_type.__annotations__.get(name)
+                required = False
+                if hasattr(info, "is_required"):
+                    try:
+                        required = bool(info.is_required())  # type: ignore[operator]
+                    except TypeError:
+                        required = bool(info.is_required)  # type: ignore[truthy-bool]
+                default = getattr(info, "default", None)
+                if required:
+                    default = None
+                description = getattr(info, "description", None)
+                result.append(
+                    _ModelFieldSpec(
+                        name=name,
+                        annotation=annotation,
+                        required=required,
+                        default=default,
+                        description=description,
+                    )
+                )
+            return result
+
+        if hasattr(model_type, "__fields__"):
+            result = []
+            field_map = getattr(model_type, "__fields__", {}) or {}
+            for name, info in field_map.items():
+                annotation = getattr(info, "outer_type_", None) or getattr(info, "type_", None)
+                required = bool(getattr(info, "required", False))
+                default = getattr(info, "default", None)
+                if required:
+                    default = None
+                description = None
+                if hasattr(info, "field_info"):
+                    description = getattr(info.field_info, "description", None)
+                result.append(
+                    _ModelFieldSpec(
+                        name=name,
+                        annotation=annotation,
+                        required=required,
+                        default=default,
+                        description=description,
+                    )
+                )
+            return result
+
+        if self._is_plain_class_model(model_type):
+            result = []
+            class_docs = self._parse_docstring_args(model_type.__doc__)
+            cls_info = Class(
+                model_type,
+                init=True,
+                public=True,
+                inherited=True,
+                static_methods=True,
+                protected=False,
+                private=False,
+                classmethod=True,
+            )
+            init_method = cls_info.init_method
+            if init_method is None:
+                return []
+            for param in init_method.params:
+                if param.kind in (InspectParameter.VAR_POSITIONAL, InspectParameter.VAR_KEYWORD):
+                    continue
+                annotation = param.type if param.is_typed else None
+                description = param.description or class_docs.get(param.name)
+                default = param.default if param.has_default else None
+                result.append(
+                    _ModelFieldSpec(
+                        name=param.name,
+                        annotation=annotation,
+                        required=param.is_required,
+                        default=default,
+                        description=description,
+                    )
+                )
+            return result
+
+        return []
+
+    def _parse_docstring_args(self, docstring: str | None) -> dict[str, str]:
+        if not docstring:
+            return {}
+
+        import docstring_parser
+
+        parsed = docstring_parser.parse(docstring)
+        return {
+            param.arg_name: (param.description or "").strip()
+            for param in parsed.params
+            if param.arg_name
+        }
+
+    def _expand_model_parameter(
+        self,
+        *,
+        param: Parameter,
+        model_type: type,
+        is_optional_model: bool,
+        taken_flags: list[str],
+    ) -> list[Argument]:
+        translated_name = self.parser.flag_strategy.argument_translator.translate(param.name)
+        if translated_name in taken_flags:
+            raise ReservedFlagError(translated_name)
+        taken_flags.append(translated_name)
+
+        model_default = param.default if param.has_default else MODEL_DEFAULT_UNSET
+        max_depth = getattr(self.parser, "model_expansion_max_depth", 3)
+        return self._expand_model_fields(
+            model_type=model_type,
+            root_name=param.name,
+            path=(param.name,),
+            taken_flags=taken_flags,
+            depth=1,
+            max_depth=max_depth,
+            parent_optional=is_optional_model,
+            parent_has_default=param.has_default,
+            original_model_type=model_type,
+            model_default=model_default,
+        )
+
+    def _expand_model_fields(
+        self,
+        *,
+        model_type: type,
+        root_name: str,
+        path: tuple[str, ...],
+        taken_flags: list[str],
+        depth: int,
+        max_depth: int,
+        parent_optional: bool,
+        parent_has_default: bool,
+        original_model_type: type,
+        model_default: Any,
+    ) -> list[Argument]:
+        nested_separator = self._nested_separator()
+        arguments: list[Argument] = []
+        for field in self._get_model_fields(model_type):
+            annotation = resolve_type_alias(field.annotation)
+            if isinstance(annotation, str):
+                simple_name = simplified_type_name(annotation)
+                base_name = simple_name[:-1] if simple_name.endswith("?") else simple_name
+                builtin_map = {"bool": bool, "int": int, "float": float, "str": str}
+                if base_name in builtin_map:
+                    annotation = builtin_map[base_name]
+
+            inner_type, is_optional_model = self._unwrap_optional(annotation)
+            new_path = (*path, field.name)
+
+            if self._should_expand_model(inner_type) and depth < max_depth:
+                arguments.extend(
+                    self._expand_model_fields(
+                        model_type=inner_type,
+                        root_name=root_name,
+                        path=new_path,
+                        taken_flags=taken_flags,
+                        depth=depth + 1,
+                        max_depth=max_depth,
+                        parent_optional=parent_optional or is_optional_model,
+                        parent_has_default=parent_has_default,
+                        original_model_type=original_model_type,
+                        model_default=model_default,
+                    )
+                )
+                continue
+
+            translated_path = tuple(
+                self.parser.flag_strategy.argument_translator.translate(part) for part in new_path
+            )
+            display_name = nested_separator.join(translated_path)
+            if display_name in taken_flags:
+                raise ReservedFlagError(display_name)
+            taken_flags.append(display_name)
+
+            arg_name = nested_separator.join(new_path)
+            flags = (f"--{display_name}",)
+
+            is_required = field.required and not (
+                parent_optional or is_optional_model or parent_has_default
+            )
+            spec = _ParamSpec(
+                name=arg_name,
+                type=annotation,
+                is_typed=annotation is not None,
+                has_default=not field.required,
+                default=field.default,
+                is_required=is_required,
+                is_optional=is_optional_model,
+                kind=InspectParameter.POSITIONAL_OR_KEYWORD,
+                description=field.description,
+            )
+
+            spec.description = field.description or field.name
+
+            arguments.append(
+                self._argument_from_spec(
+                    spec=spec,
+                    translated_name=display_name,
+                    flags=flags,
+                    taken_flags=taken_flags,
+                    pipe_param_names=None,
+                    allow_optional_union_list=False,
+                    suppress_default=True,
+                    force_optional=False,
+                    help_text=None,
+                    is_expanded_from=root_name,
+                    expansion_path=new_path,
+                    original_model_type=original_model_type,
+                    parent_is_optional=parent_optional,
+                    model_default=model_default,
+                )
+            )
+
+        return arguments
+
+    def _argument_from_spec(
+        self,
+        *,
+        spec: _ParamSpec,
+        translated_name: str,
+        flags: tuple[str, ...],
+        taken_flags: list[str],
+        pipe_param_names: set[str] | None,
+        allow_optional_union_list: bool,
+        suppress_default: bool,
+        force_optional: bool = False,
+        help_text: str | None = None,
+        is_expanded_from: str | None = None,
+        expansion_path: tuple[str, ...] = (),
+        original_model_type: type | None = None,
+        parent_is_optional: bool = False,
+        model_default: Any = MODEL_DEFAULT_UNSET,
+    ) -> Argument:
+        if help_text is None:
+            help_text = self.parser.help_layout.get_help_for_parameter(spec, tuple(flags))
 
         parser_func: Callable[[str], Any] | None = None
         value_shape = ValueShape.SINGLE
         nargs: str | int | None = None
-        default_value: Any = param.default if param.has_default else None
-        parsed_type: type[Any] | None = annotation if param.is_typed else None
+        default_value: Any = spec.default if spec.has_default else None
+        parsed_type: type[Any] | None = spec.type if spec.is_typed else None
         choices: tuple[Any, ...] | None = None
-        if param.is_typed and (raw_choices := get_param_choices(param, for_display=False)):
+        if spec.is_typed and (raw_choices := get_param_choices(spec, for_display=False)):
             choices = tuple(raw_choices)
         boolean_behavior: BooleanBehavior | None = None
         is_optional_union_list = False
         tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
 
-        if param.kind == StdParameter.VAR_POSITIONAL:
+        if spec.kind == InspectParameter.VAR_POSITIONAL:
             value_shape = ValueShape.LIST
             nargs = "*"
             default_value = ()  # Empty tuple as default for *args
-            if param.is_typed:
-                parsed_type = annotation
-                if annotation is not str:
-                    parser_func = self.parser.type_parser.get_parse_func(annotation)
-        elif param.is_typed:
-            optional_union_list = extract_optional_union_list(annotation)
+            if spec.is_typed:
+                parsed_type = spec.type
+                if spec.type is not str:
+                    parser_func = self.parser.type_parser.get_parse_func(spec.type)
+        elif spec.is_typed:
+            optional_union_list = extract_optional_union_list(spec.type)
             list_annotation: Any | None = None
             element_type: Any | None = None
 
             if optional_union_list:
                 list_annotation, element_type = optional_union_list
                 is_optional_union_list = True
-            elif is_list_or_list_alias(annotation):
-                list_annotation = annotation
-                element_args = type_args(annotation)
+            elif is_list_or_list_alias(spec.type):
+                list_annotation = spec.type
+                element_args = type_args(spec.type)
                 element_type = element_args[0] if element_args else None
 
             if list_annotation is not None:
@@ -401,11 +786,11 @@ class ParserSchemaBuilder:
                     parsed_type = None
                     parser_func = None
 
-                if is_optional_union_list and not param.has_default:
+                if is_optional_union_list and not spec.has_default and allow_optional_union_list:
                     default_value = []
 
-            elif is_fixed_tuple(annotation):
-                tuple_info = get_fixed_tuple_info(annotation)
+            elif is_fixed_tuple(spec.type):
+                tuple_info = get_fixed_tuple_info(spec.type)
                 if tuple_info:
                     element_count, element_types = tuple_info
                     value_shape = ValueShape.TUPLE
@@ -431,7 +816,7 @@ class ParserSchemaBuilder:
                         parsed_type = str
                         parser_func = None
 
-            elif annotation is bool:
+            elif spec.type is bool:
                 value_shape = ValueShape.FLAG
                 supports_negative = any(flag.startswith("--") for flag in flags)
                 negative_form = None
@@ -441,7 +826,7 @@ class ParserSchemaBuilder:
                     long_name = long_flags[0][2:] if long_flags else translated_name
                     negative_form = f"--{inverted_bool_flag_name(long_name)}"
 
-                default_value = param.default if param.has_default else False
+                default_value = spec.default if spec.has_default else False
 
                 boolean_behavior = BooleanBehavior(
                     supports_negative=supports_negative,
@@ -449,22 +834,22 @@ class ParserSchemaBuilder:
                     default=default_value,
                 )
             else:
-                if annotation is not str:
-                    parser_func = self.parser.type_parser.get_parse_func(annotation)
+                if spec.type is not str:
+                    parser_func = self.parser.type_parser.get_parse_func(spec.type)
 
-        if not param.is_required and param.is_typed and annotation is not bool:
-            default_value = param.default
+        if not spec.is_required and spec.is_typed and spec.type is not bool:
+            default_value = spec.default
 
         metavar = None
-        if self.parser.help_layout.clear_metavar and not param.is_required:
+        if self.parser.help_layout.clear_metavar and not spec.is_required:
             metavar = "\b"
 
         kind = ArgumentKind.POSITIONAL
         if any(flag.startswith("-") for flag in flags):
             kind = ArgumentKind.OPTION
 
-        accepts_stdin = pipe_param_names is not None and param.name in pipe_param_names
-        pipe_required = accepts_stdin and param.is_required
+        accepts_stdin = pipe_param_names is not None and spec.name in pipe_param_names
+        pipe_required = accepts_stdin and spec.is_required
 
         if accepts_stdin:
             if (
@@ -475,10 +860,25 @@ class ParserSchemaBuilder:
                 nargs = "?"
             required = False
         else:
-            required = False if is_optional_union_list else param.is_required
+            if allow_optional_union_list:
+                required = False if is_optional_union_list else spec.is_required
+            else:
+                required = spec.is_required
+
+        if force_optional:
+            required = False
+
+        if suppress_default and not required:
+            default_value = argparse.SUPPRESS
+            if boolean_behavior is not None:
+                boolean_behavior = BooleanBehavior(
+                    supports_negative=boolean_behavior.supports_negative,
+                    negative_form=boolean_behavior.negative_form,
+                    default=argparse.SUPPRESS,
+                )
 
         return Argument(
-            name=param.name,
+            name=spec.name,
             display_name=translated_name,
             kind=kind,
             value_shape=value_shape,
@@ -495,6 +895,11 @@ class ParserSchemaBuilder:
             accepts_stdin=accepts_stdin,
             pipe_required=pipe_required,
             tuple_element_parsers=tuple_element_parsers,
+            is_expanded_from=is_expanded_from,
+            expansion_path=expansion_path,
+            original_model_type=original_model_type,
+            parent_is_optional=parent_is_optional,
+            model_default=model_default,
         )
 
     def build_from_group(
@@ -551,13 +956,16 @@ class ParserSchemaBuilder:
         if isinstance(obj, Class) and obj.init_method:
             self._prepare_layout_for_params(obj.init_method.params)
             return [
-                self._argument_from_parameter(param, taken_flags, set())
+                arg
                 for param in obj.init_method.params
+                for arg in self._argument_from_parameter(param, taken_flags, set())
             ]
         elif isinstance(obj, Function):
             self._prepare_layout_for_params(obj.params)
             return [
-                self._argument_from_parameter(param, taken_flags, set()) for param in obj.params
+                arg
+                for param in obj.params
+                for arg in self._argument_from_parameter(param, taken_flags, set())
             ]
         return []
 
@@ -665,8 +1073,9 @@ class ParserSchemaBuilder:
         if cls.has_init and not cls.is_initialized:
             self._prepare_layout_for_params(cls.get_method("__init__").params)
             initializer = [
-                self._argument_from_parameter(param, taken_flags, set())
+                arg
                 for param in cls.get_method("__init__").params
+                for arg in self._argument_from_parameter(param, taken_flags, set())
             ]
 
         subcommands: dict[str, Command] = {}
@@ -763,3 +1172,6 @@ class ParserSchemaBuilder:
         if canonical_name:
             return canonical_name
         return fallback
+
+
+__all__ = ["ParserSchemaBuilder"]

@@ -1,15 +1,19 @@
 import inspect
+from dataclasses import asdict, fields, is_dataclass
+from types import NoneType
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
+from objinspect.typing import is_union_type, type_args
 
 from interfacy.exceptions import ConfigurationError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import reverse_translations
 from interfacy.pipe import apply_pipe_values
-from interfacy.schema.schema import Argument, Command
+from interfacy.schema.schema import MODEL_DEFAULT_UNSET, Argument, Command
+from interfacy.util import resolve_type_alias
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
@@ -75,9 +79,13 @@ class ArgparseRunner:
         obj = command.obj
         if isinstance(obj, Function):
             args = self._apply_pipe(command, args)
+            args = self._reconstruct_expanded_models(args, self._arguments_for(command))
             return self.run_function(obj, args)
         if isinstance(obj, Method):
             args = self._apply_pipe(command, args)
+            args = self._reconstruct_expanded_models(
+                args, [*self._initializer_for(command), *self._arguments_for(command)]
+            )
             return self.run_method(obj, args)
         if isinstance(obj, Class):
             return self.run_class(command, args)
@@ -161,6 +169,7 @@ class ArgparseRunner:
         if not cls.is_initialized and not method.is_static:
             if cls.init_method:
                 args = self._apply_pipe(command, args, subcommand="__init__")
+                args = self._reconstruct_expanded_models(args, self._initializer_for(command))
                 init_args, init_kwargs = split_args_kwargs(args, cls.init_method)
                 logger.info(f"__init__ method args: {init_args}, kwargs: {init_kwargs}")
                 cls.init(*init_args, **init_kwargs)
@@ -168,6 +177,11 @@ class ArgparseRunner:
                 cls.init()
 
         command_args = self._apply_pipe(command, command_args, subcommand=command_name)
+        subcommand_spec = self._schema_subcommand_for(command, command_name)
+        if subcommand_spec is not None:
+            command_args = self._reconstruct_expanded_models(
+                command_args, subcommand_spec.parameters
+            )
         method_args, method_kwargs = split_args_kwargs(command_args, method)
         logger.info(
             f"Calling method '{method.name}' with args: {method_args}, kwargs: {method_kwargs}"
@@ -197,6 +211,10 @@ class ArgparseRunner:
         For leaf commands: execute with the accumulated instance chain.
         """
         current_instance = parent_instance
+
+        initializer = self._initializer_for(command)
+        if initializer:
+            args = self._reconstruct_expanded_models(args, initializer)
 
         if command.is_instance and command.stored_instance is not None:
             current_instance = command.stored_instance
@@ -274,16 +292,278 @@ class ArgparseRunner:
         if isinstance(obj, Method):
             if instance is not None:
                 args = self._apply_pipe(command, args)
+                args = self._reconstruct_expanded_models(
+                    args, [*self._initializer_for(command), *self._arguments_for(command)]
+                )
                 method_args, method_kwargs = split_args_kwargs(args, obj)
                 logger.info(
                     f"Calling method '{obj.name}' on instance with args: {method_args}, kwargs: {method_kwargs}"
                 )
                 return obj.func(instance, *method_args, **method_kwargs)
             args = self._apply_pipe(command, args)
+            args = self._reconstruct_expanded_models(
+                args, [*self._initializer_for(command), *self._arguments_for(command)]
+            )
             return self.run_method(obj, args)
 
         if isinstance(obj, Function):
             args = self._apply_pipe(command, args)
+            args = self._reconstruct_expanded_models(args, self._arguments_for(command))
             return self.run_function(obj, args)
 
         raise InvalidCommandError(obj)
+
+    def _reconstruct_expanded_models(
+        self,
+        args: dict[str, Any],
+        arguments: list[Argument],
+    ) -> dict[str, Any]:
+        expanded = [arg for arg in arguments if arg.is_expanded_from]
+        if not expanded:
+            return args
+
+        grouped: dict[str, list[Argument]] = {}
+        for arg in expanded:
+            if arg.is_expanded_from is None:
+                continue
+            grouped.setdefault(arg.is_expanded_from, []).append(arg)
+
+        for root_name, group in grouped.items():
+            model_type = group[0].original_model_type
+            if model_type is None:
+                continue
+
+            if root_name in args and not any(arg.name in args for arg in group):
+                continue
+
+            model_default = group[0].model_default
+            has_model_default = model_default is not MODEL_DEFAULT_UNSET
+            values, provided = self._collect_model_values(args, group)
+            if not provided:
+                if has_model_default:
+                    args[root_name] = model_default
+                elif any(arg.parent_is_optional for arg in group):
+                    args[root_name] = None
+                else:
+                    args[root_name] = self._build_model_instance(model_type, values)
+            else:
+                if has_model_default and model_default is not None:
+                    base_values = self._model_instance_to_values(model_type, model_default)
+                    merged = self._deep_merge(base_values, values)
+                    args[root_name] = self._build_model_instance(model_type, merged)
+                else:
+                    args[root_name] = self._build_model_instance(model_type, values)
+
+            for arg in group:
+                args.pop(arg.name, None)
+
+        return args
+
+    def _schema_command_for(self, command: Command) -> Command | None:
+        schema = getattr(self.builder, "_last_schema", None)
+        if schema is None:
+            return None
+        return schema.commands.get(command.canonical_name)
+
+    def _arguments_for(self, command: Command) -> list[Argument]:
+        schema_cmd = self._schema_command_for(command)
+        if schema_cmd is None:
+            return command.parameters
+        return schema_cmd.parameters
+
+    def _initializer_for(self, command: Command) -> list[Argument]:
+        schema_cmd = self._schema_command_for(command)
+        if schema_cmd is None:
+            return command.initializer
+        return schema_cmd.initializer
+
+    def _schema_subcommand_for(self, command: Command, name: str) -> Command | None:
+        schema_cmd = self._schema_command_for(command)
+        if schema_cmd is None or not schema_cmd.subcommands:
+            return None
+        for sub_cmd in schema_cmd.subcommands.values():
+            if sub_cmd.cli_name == name or name in sub_cmd.aliases:
+                return sub_cmd
+        return None
+
+    def _deep_merge(self, base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in updates.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = self._deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    def _model_instance_to_values(self, model_type: type, instance: Any) -> dict[str, Any]:
+        if instance is None:
+            return {}
+        if is_dataclass(model_type):
+            return asdict(instance)
+        if hasattr(instance, "model_dump"):
+            return instance.model_dump()
+        if hasattr(instance, "dict"):
+            return instance.dict()
+        if hasattr(instance, "__dict__"):
+            values: dict[str, Any] = {}
+            for key, value in vars(instance).items():
+                if self._is_model_type(type(value)):
+                    values[key] = self._model_instance_to_values(type(value), value)
+                else:
+                    values[key] = value
+            return values
+        if self._is_plain_class_model(model_type):
+            values: dict[str, Any] = {}
+            for key in self._plain_class_param_annotations(model_type).keys():
+                try:
+                    values[key] = getattr(instance, key)
+                except AttributeError:
+                    continue
+            return values
+        return {}
+
+    def _collect_model_values(
+        self,
+        args: dict[str, Any],
+        expanded_args: list[Argument],
+    ) -> tuple[dict[str, Any], bool]:
+        values: dict[str, Any] = {}
+        provided = False
+
+        for arg in expanded_args:
+            if arg.name not in args:
+                continue
+            provided = True
+            path = arg.expansion_path[1:] if arg.expansion_path else ()
+            if not path:
+                continue
+            current = values
+            for part in path[:-1]:
+                current = current.setdefault(part, {})
+            current[path[-1]] = args[arg.name]
+
+        return values, provided
+
+    def _build_model_instance(self, model_type: type, values: dict[str, Any]) -> Any:
+        if is_dataclass(model_type):
+            kwargs: dict[str, Any] = {}
+            for field in fields(model_type):
+                if field.name in values:
+                    kwargs[field.name] = self._coerce_model_value(field.type, values[field.name])
+            return model_type(**kwargs)
+
+        if hasattr(model_type, "model_fields"):
+            kwargs = self._coerce_pydantic_values(model_type, values)
+            return model_type(**kwargs)
+
+        if hasattr(model_type, "__fields__"):
+            kwargs = self._coerce_pydantic_values(model_type, values)
+            return model_type(**kwargs)
+
+        if self._is_plain_class_model(model_type):
+            annotations = self._plain_class_param_annotations(model_type)
+            kwargs: dict[str, Any] = {}
+            for key, value in values.items():
+                ann = annotations.get(key)
+                kwargs[key] = self._coerce_model_value(ann, value)
+            return model_type(**kwargs)
+
+        return values
+
+    def _coerce_pydantic_values(self, model_type: type, values: dict[str, Any]) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {}
+        field_map = getattr(model_type, "model_fields", None) or getattr(
+            model_type, "__fields__", {}
+        )
+        for name, info in field_map.items():
+            if name not in values:
+                continue
+            annotation = getattr(info, "annotation", None)
+            if annotation is None:
+                annotation = getattr(info, "outer_type_", None) or getattr(info, "type_", None)
+            kwargs[name] = self._coerce_model_value(annotation, values[name])
+        return kwargs
+
+    def _coerce_model_value(self, annotation: Any, value: Any) -> Any:
+        if value is None:
+            return None
+
+        inner, is_optional = self._unwrap_optional(annotation)
+        if isinstance(value, dict) and self._is_model_type(inner):
+            if not value and is_optional:
+                return None
+            return self._build_model_instance(inner, value)
+        return value
+
+    def _unwrap_optional(self, annotation: Any) -> tuple[Any, bool]:
+        annotation = resolve_type_alias(annotation)
+        if not is_union_type(annotation):
+            return annotation, False
+        union_args = type_args(annotation)
+        if NoneType not in union_args or len(union_args) != 2:
+            return annotation, False
+        inner = next(arg for arg in union_args if arg is not NoneType)
+        return inner, True
+
+    def _is_model_type(self, annotation: Any) -> bool:
+        if not isinstance(annotation, type):
+            return False
+        if (
+            is_dataclass(annotation)
+            or hasattr(annotation, "model_fields")
+            or hasattr(annotation, "__fields__")
+        ):
+            return True
+        return self._is_plain_class_model(annotation)
+
+    def _is_plain_class_model(self, annotation: Any) -> bool:
+        if not isinstance(annotation, type):
+            return False
+        if annotation in {str, int, float, bool, bytes, list, dict, tuple, set}:
+            return False
+        try:
+            cls_info = Class(
+                annotation,
+                init=True,
+                public=True,
+                inherited=True,
+                static_methods=True,
+                protected=False,
+                private=False,
+                classmethod=True,
+            )
+        except Exception:
+            return False
+        init_method = cls_info.init_method
+        if init_method is None:
+            return False
+        params = [
+            p
+            for p in init_method.params
+            if p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+        ]
+        return len(params) > 0
+
+    def _plain_class_param_annotations(self, model_type: type) -> dict[str, Any]:
+        try:
+            cls_info = Class(
+                model_type,
+                init=True,
+                public=True,
+                inherited=True,
+                static_methods=True,
+                protected=False,
+                private=False,
+                classmethod=True,
+            )
+        except Exception:
+            return {}
+        init_method = cls_info.init_method
+        if init_method is None:
+            return {}
+        annotations: dict[str, Any] = {}
+        for param in init_method.params:
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            annotations[param.name] = param.type if param.is_typed else None
+        return annotations

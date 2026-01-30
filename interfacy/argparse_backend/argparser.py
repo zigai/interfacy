@@ -72,6 +72,8 @@ class Argparser(InterfacyParser):
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
         silent_interrupt: bool = True,
         reraise_interrupt: bool = False,
+        expand_model_params: bool = True,
+        model_expansion_max_depth: int = 3,
         use_global_config: bool = False,
         formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
     ) -> None:
@@ -92,6 +94,8 @@ class Argparser(InterfacyParser):
                     "include_classmethods": include_classmethods,
                     "silent_interrupt": silent_interrupt,
                     "abbreviation_gen": abbreviation_gen,
+                    "expand_model_params": expand_model_params,
+                    "model_expansion_max_depth": model_expansion_max_depth,
                 },
             )
 
@@ -106,6 +110,8 @@ class Argparser(InterfacyParser):
             include_classmethods = overrides["include_classmethods"]
             silent_interrupt = overrides["silent_interrupt"]
             abbreviation_gen = overrides["abbreviation_gen"]
+            expand_model_params = overrides["expand_model_params"]
+            model_expansion_max_depth = overrides["model_expansion_max_depth"]
 
         super().__init__(
             description,
@@ -128,10 +134,13 @@ class Argparser(InterfacyParser):
             on_interrupt=on_interrupt,
             silent_interrupt=silent_interrupt,
             reraise_interrupt=reraise_interrupt,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=model_expansion_max_depth,
         )
         self.formatter_class = formatter_class
         self._parser: ArgumentParser | None = None
         self._last_interrupt_time: float = 0.0
+        self._last_schema: ParserSchema | None = None
         del self.type_parser.parsers[list]
 
     def _new_parser(self, name: str | None = None) -> ArgumentParser:
@@ -465,6 +474,7 @@ class Argparser(InterfacyParser):
             raise ConfigurationError("No commands were provided")
 
         schema = self.build_parser_schema()
+        self._last_schema = schema
         parser = self._build_from_schema(schema)
 
         if self.enable_tab_completion:
@@ -495,7 +505,7 @@ class Argparser(InterfacyParser):
 
     def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""
-        schema = self.build_parser_schema()
+        schema = getattr(self, "_last_schema", None) or self.build_parser_schema()
 
         def convert_tuple(arg: Argument, val: list[Any]) -> tuple[Any, ...]:
             if arg.tuple_element_parsers:

@@ -8,9 +8,9 @@ license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "stdl>=0.6.7",
-    "objinspect>=0.3.4",
-    "strto>=0.2.5",
+    "stdl>=0.6.8",
+    "objinspect>=0.4.1",
+    "strto>=0.2.6",
     "tomlkit>=0.12",
     "tomli>=2.0; python_version < '3.11'",
 ]

@@ -77,6 +77,8 @@ class InterfacyParser:
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
         silent_interrupt: bool = True,
         reraise_interrupt: bool = False,
+        expand_model_params: bool = True,
+        model_expansion_max_depth: int = 3,
     ) -> None:
         self.description = description
         self.epilog = epilog
@@ -90,6 +92,8 @@ class InterfacyParser:
         self.metadata: dict[str, Any] = {}
         self.include_inherited_methods = include_inherited_methods
         self.include_classmethods = include_classmethods
+        self.expand_model_params = expand_model_params
+        self.model_expansion_max_depth = model_expansion_max_depth
 
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file

@@ -3,6 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/interfacy.svg)](https://badge.fury.io/py/interfacy)
 ![Supported versions](https://img.shields.io/badge/python-3.10+-blue.svg)
 [![Downloads](https://static.pepy.tech/badge/interfacy)](https://pepy.tech/project/interfacy)
+[![Tests](https://github.com/zigai/interfacy/actions/workflows/tests.yml/badge.svg)](https://github.com/zigai/interfacy/actions/workflows/tests.yml)
 [![license](https://img.shields.io/github/license/zigai/interfacy.svg)](https://github.com/zigai/interfacy/blob/main/LICENSE)
 
 Interfacy is a CLI framework for building command-line interfaces from Python functions, classes, and class instances using type annotations and docstrings.
@@ -12,6 +13,7 @@ Interfacy is a CLI framework for building command-line interfaces from Python fu
 - Generate CLIs from functions, class methods, or class instances.
 - Nested subcommands and command groups with aliases.
 - Type inference from annotations, with support for custom parsers.
+- `--help` text generated from docstrings.
 - Multiple help layouts and color themes.
 - Optional class initializer arguments exposed as CLI options.
 - Argparse-compatible backend, including a drop-in `ArgumentParser` replacement.
@@ -51,6 +53,66 @@ def greet(name: str, times: int = 1) -> None:
 
 if __name__ == "__main__":
     Argparser().run(greet)
+```
+
+## Classes as flags
+
+```python
+from dataclasses import dataclass
+from interfacy import Argparser
+
+@dataclass
+class Address:
+    """Mailing address data for a user.
+
+    Args:
+        city: City name.
+        zip: Postal or ZIP code.
+    """
+    city: str
+    zip: int
+
+@dataclass
+class User:
+    """User profile information for the CLI.
+
+    Args:
+        name: Display name.
+        age: Age in years.
+        address: Optional mailing address details.
+    """
+    name: str
+    age: int
+    address: Address | None = None
+
+def greet(user: User) -> str:
+    if user.address is None:
+        return f"Hello {user.name}, age {user.age}"
+    return f"Hello {user.name}, age {user.age} from {user.address.city} {user.address.zip}"
+
+if __name__ == "__main__":
+    Argparser(print_result=True).run(greet)
+```
+
+Help output:
+
+```text
+usage: app.py greet [--help] --user.name USER.NAME --user.age USER.AGE
+                    [--user.address.city] [--user.address.zip]
+
+options:
+  --help                      show this help message and exit
+  --user.name                 Display name. [type: str] (*)
+  --user.age                  Age in years. [type: int] (*)
+  --user.address.city         City name. [type: str]
+  --user.address.zip          Postal or ZIP code. [type: int]
+```
+
+Call it:
+
+```bash
+python app.py greet --user.name Alice --user.age 30
+python app.py greet --user.name Alice --user.age 30 --user.address.city Austin --user.address.zip 78701
 ```
 
 ## Class-based commands

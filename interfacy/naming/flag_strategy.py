@@ -47,9 +47,11 @@ class DefaultFlagStrategy(FlagStrategy):
         self,
         style: FlagStyle = "required_positional",
         translation_mode: TranslationMode = "kebab",
+        nested_separator: str = ".",
     ) -> None:
         self.style = style
         self.translation_mode = translation_mode
+        self.nested_separator = nested_separator
         self._nargs_list_count = 0
 
         self.argument_translator = build_name_mapping(self.translation_mode)
