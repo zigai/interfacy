@@ -30,7 +30,7 @@ class Aurora(InterfacyColors):
 class ClapColors(InterfacyColors):
     """Colors that mimic clap's default styled output."""
 
-    type = TextStyle(color="green")
+    type = TextStyle(color="light_green")
     default = TextStyle(color="cyan")
     description = TextStyle(color="white")
     string = TextStyle(color="cyan")

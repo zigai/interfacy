@@ -121,8 +121,8 @@ class ClapLayout(HelpLayout):
         "commands": "Commands",
         "commands:": "Commands",
     }
-    section_heading_style = TextStyle(color="green", style="bold")
-    usage_style = TextStyle(color="green", style="bold")
+    section_heading_style = TextStyle(color="light_green", style="bold")
+    usage_style = TextStyle(color="light_green", style="bold")
     usage_text_style = TextStyle(color="cyan", style="bold")
     placeholder_style = TextStyle(color="cyan", style="bold")
     command_name_style = TextStyle(color="cyan", style="bold")
