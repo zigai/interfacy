@@ -21,7 +21,6 @@ class Aurora(InterfacyColors):
     description = TextStyle(color="white")
     string = TextStyle(color="yellow")
     extra_data = TextStyle(color="gray")
-
     flag_short = TextStyle(color="light_cyan")
     flag_long = TextStyle(color="light_blue")
     flag_positional = TextStyle(color="light_cyan")
