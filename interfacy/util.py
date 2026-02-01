@@ -6,6 +6,7 @@ from enum import Enum
 from types import NoneType
 from typing import Any, Literal
 
+from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices as objinspect_get_choices
 from objinspect.typing import get_literal_choices, is_union_type, type_args, type_origin
 from objinspect.util import colored_type
@@ -133,6 +134,63 @@ def resolve_type_alias(annotation: Any) -> Any:
         except Exception:
             break
     return annotation
+
+
+def resolve_objinspect_annotations(obj: Function | Method | Class) -> None:
+    """Resolve string/forward-ref annotations for objinspect objects in-place."""
+
+    def resolve_callable_hints(
+        fn: Callable, *, owner_cls: type | object | None = None
+    ) -> dict[str, Any] | None:
+        globalns = getattr(fn, "__globals__", None)
+        localns: dict[str, Any] | None = None
+        if owner_cls is not None:
+            if not isinstance(owner_cls, type):
+                owner_cls = type(owner_cls)
+            localns = dict(vars(owner_cls))
+            localns.setdefault(owner_cls.__name__, owner_cls)
+        try:
+            return typing.get_type_hints(
+                fn,
+                globalns=globalns,
+                localns=localns,
+                include_extras=True,
+            )
+        except TypeError:
+            try:
+                return typing.get_type_hints(fn, globalns=globalns, localns=localns)
+            except Exception:
+                return None
+        except Exception:
+            return None
+
+    def apply_hints(params: list[Parameter], hints: dict[str, Any]) -> None:
+        for param in params:
+            if param.name in hints:
+                param.type = hints[param.name]
+
+    if isinstance(obj, Function):
+        hints = resolve_callable_hints(obj.func)
+        if hints:
+            apply_hints(obj.params, hints)
+        return
+
+    if isinstance(obj, Method):
+        hints = resolve_callable_hints(obj.func, owner_cls=obj.cls)
+        if hints:
+            apply_hints(obj.params, hints)
+        return
+
+    if isinstance(obj, Class):
+        if obj.init_method is not None:
+            hints = resolve_callable_hints(obj.init_method.func, owner_cls=obj.cls)
+            if hints:
+                apply_hints(obj.init_method.params, hints)
+
+        for method in obj.methods:
+            hints = resolve_callable_hints(method.func, owner_cls=obj.cls)
+            if hints:
+                apply_hints(method.params, hints)
 
 
 def _normalize_enum_choices(choices: list[Any], *, for_display: bool) -> list[Any] | None:
@@ -309,6 +367,7 @@ __all__ = [
     "get_fixed_tuple_info",
     "extract_optional_union_list",
     "resolve_type_alias",
+    "resolve_objinspect_annotations",
     "get_annotation_choices",
     "get_param_choices",
     "format_default_for_help",

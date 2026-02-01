@@ -567,3 +567,9 @@ class ArgparseRunner:
                 continue
             annotations[param.name] = param.type if param.is_typed else None
         return annotations
+
+
+__all__ = [
+    "ArgparseRunner",
+    "COMMAND_KEY_BASE",
+]

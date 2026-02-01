@@ -613,3 +613,6 @@ class Argparser(InterfacyParser):
 
         self.exit(ExitCode.SUCCESS)
         return result
+
+
+__all__ = ["Argparser"]

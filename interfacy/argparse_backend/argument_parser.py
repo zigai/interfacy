@@ -457,3 +457,13 @@ class ArgumentParser(argparse.ArgumentParser):
                     raise SystemExit(2)
 
         super().error(message)
+
+
+__all__ = [
+    "ActionType",
+    "ArgumentParser",
+    "DEST_KEY",
+    "NargsPattern",
+    "NestedSubParsersAction",
+    "namespace_to_dict",
+]

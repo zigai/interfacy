@@ -665,7 +665,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     flags=re.IGNORECASE,
                 )
             usage_text_style = getattr(layout, "usage_text_style", None)
-            if usage_text_style is not None and isinstance(usage, str):
-                usage = with_style(usage, usage_text_style)
+        if usage_text_style is not None and isinstance(usage, str):
+            usage = with_style(usage, usage_text_style)
 
         return f"{prefix}{usage}\n\n"
+
+
+__all__ = ["InterfacyHelpFormatter"]
