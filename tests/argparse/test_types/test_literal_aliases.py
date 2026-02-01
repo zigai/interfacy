@@ -31,6 +31,21 @@ def _build_pep695_alias_fn():
     return namespace["fn"]
 
 
+def _build_future_annotations_alias_fn():
+    namespace: dict[str, Any] = {}
+    code = "\n".join(
+        [
+            "from __future__ import annotations",
+            "from typing import Literal",
+            "StartTarget = Literal['backend', 'frontend']",
+            "def fn(target: StartTarget = 'backend'):",
+            "    return target",
+        ]
+    )
+    exec(code, namespace, namespace)
+    return namespace["fn"]
+
+
 @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
 def test_literal_assignment_alias_parsing(parser: InterfacyParser):
     fn = _build_assignment_alias_fn()
@@ -101,3 +116,39 @@ def test_pep695_literal_alias_rejects_invalid_choice(parser: InterfacyParser):
 
     with pytest.raises(SystemExit):
         parser.parse_args(["--log-level", "TRACE"])
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+def test_future_annotations_literal_alias_parsing(parser: InterfacyParser):
+    fn = _build_future_annotations_alias_fn()
+    parser.add_command(fn)
+
+    match parser.flag_strategy.style:
+        case "required_positional":
+            args = ["--target", "backend"]
+        case "keyword_only":
+            args = ["--target", "backend"]
+        case _:
+            pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+    assert parser.run(args=args) == "backend"
+
+
+@pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+def test_future_annotations_literal_alias_populates_choices(parser: InterfacyParser):
+    fn = _build_future_annotations_alias_fn()
+    parser.add_command(fn)
+
+    arg_parser = parser.build_parser()
+    action = next(a for a in arg_parser._actions if getattr(a, "dest", None) == "target")
+    assert action.choices is not None
+    assert set(action.choices) == {"backend", "frontend"}
+
+
+@pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+def test_future_annotations_literal_alias_rejects_invalid_choice(parser: InterfacyParser):
+    fn = _build_future_annotations_alias_fn()
+    parser.add_command(fn)
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--target", "unknown"])
