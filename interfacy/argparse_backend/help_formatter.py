@@ -655,6 +655,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
                 usage = "\n".join(lines)
 
+        usage_text_style = None
         if layout is not None:
             custom_prefix = getattr(layout, "usage_prefix", None)
             if isinstance(usage, str) and custom_prefix is not None:
