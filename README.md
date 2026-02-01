@@ -14,6 +14,7 @@ Interfacy is a CLI framework for building command-line interfaces from Python fu
 - Nested subcommands and command groups with aliases.
 - Type inference from annotations, with support for custom parsers.
 - `--help` text generated from docstrings.
+- Run a target callable directly from the CLI (e.g. `interfacy path.py:main`).
 - Multiple help layouts and color themes.
 - Optional class initializer arguments exposed as CLI options.
 - Argparse-compatible backend, including a drop-in `ArgumentParser` replacement.
@@ -145,6 +146,27 @@ class Calculator:
 
 if __name__ == "__main__":
     parser.run()
+```
+
+## CLI entrypoint
+
+Use the CLI entrypoint to run a target callable from a module or file, or to inspect its help:
+
+```text
+usage: interfacy [--help] [--version] [--config-paths] [TARGET] ...
+
+Interfacy is a CLI framework for building command-line interfaces from Python callables.
+
+positional arguments:
+  TARGET                      Python file or module with a symbol (e.g. main.py:main or pkg.cli:app).
+  ARGS                        Arguments passed through to the target command.
+
+options:
+  --help                      show this help message and exit
+  --version                   show version and exit.
+  --config-paths              print config file search paths and exit.
+
+Use 'interfacy TARGET --help' to display the help text for the target.
 ```
 
 ## License
