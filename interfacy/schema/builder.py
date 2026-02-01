@@ -63,9 +63,17 @@ class _ModelFieldSpec:
 
 @dataclass
 class ParserSchemaBuilder:
+    """
+    Build parser schemas from inspected commands.
+
+    Attributes:
+        parser (InterfacyParser): Source parser providing commands and layout settings.
+    """
+
     parser: InterfacyParser
 
     def build(self) -> ParserSchema:
+        """Build a ParserSchema for all registered commands."""
         commands: dict[str, Command] = {}
         for canonical_name, command in self.parser.commands.items():
             if command.command_type in ("group", "instance") or (
@@ -118,6 +126,15 @@ class ParserSchemaBuilder:
         description: str | None = None,
         aliases: tuple[str, ...] = (),
     ) -> Command:
+        """
+        Build a Command schema for a callable or class.
+
+        Args:
+            obj (Class | Function | Method): Inspected target to convert.
+            canonical_name (str): Canonical command name.
+            description (str | None): Optional description override.
+            aliases (tuple[str, ...]): Alternate command names.
+        """
         resolve_objinspect_annotations(obj)
         if isinstance(obj, Function):
             return self._function_spec(

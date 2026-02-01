@@ -1,37 +1,51 @@
 class InterfacyError(Exception):
+    """Base exception for Interfacy errors."""
+
     pass
 
 
 class UnsupportedParameterTypeError(InterfacyError):
+    """Raise when a parameter type is unsupported by the parser."""
+
     def __init__(self, t: type) -> None:
         self.param_t = t
         super().__init__(f"Parameter of type '{t}' is not supported")
 
 
 class ReservedFlagError(InterfacyError):
+    """Raise when a flag name collides with a reserved flag."""
+
     def __init__(self, flag: str):
         self.flag = flag
         super().__init__(f"Flag name '{flag}' is already reserved for a different flag")
 
 
 class InvalidCommandError(InterfacyError):
+    """Raise when a command name is not registered."""
+
     def __init__(self, command: str) -> None:
         self.command = command
         super().__init__(f"'{command}' is not a valid command")
 
 
 class DuplicateCommandError(InterfacyError):
+    """Raise when a command name is registered more than once."""
+
     def __init__(self, command: str) -> None:
         self.command = command
         super().__init__(f"Duplicate command '{command}'")
 
 
 class ConfigurationError(InterfacyError):
+    """Raise for invalid configuration values."""
+
     def __init__(self, message: str) -> None:
         super().__init__(message)
 
 
 class PipeInputError(InterfacyError):
+    """Raise when piped stdin cannot be applied to parameters."""
+
     def __init__(self, parameter: str, message: str) -> None:
         self.parameter = parameter
         prefix = "stdin" if parameter == "stdin" else f"parameter '{parameter}'"

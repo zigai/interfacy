@@ -42,6 +42,8 @@ logger = get_logger(__name__)
 
 
 class ExitCode(IntEnum):
+    """Exit code constants used by Interfacy."""
+
     SUCCESS = 0
     ERR_INVALID_ARGS = auto()
     ERR_PARSING = auto()
@@ -51,6 +53,34 @@ class ExitCode(IntEnum):
 
 
 class InterfacyParser:
+    """
+    Base parser interface for building CLI commands from callables.
+
+    Args:
+        description (str | None): CLI description shown in help output.
+        epilog (str | None): Epilog text shown after help output.
+        help_layout (HelpLayout | None): Help layout implementation.
+        type_parser (StrToTypeParser | None): Parser registry for typed arguments.
+        help_colors (InterfacyColors | None): Override help color theme.
+        run (bool): Whether to auto-run after command registration.
+        print_result (bool): Whether to print returned results.
+        tab_completion (bool): Whether to enable tab completion.
+        full_error_traceback (bool): Whether to print full tracebacks.
+        allow_args_from_file (bool): Allow @file argument expansion.
+        sys_exit_enabled (bool): Whether to call sys.exit on completion.
+        flag_strategy (FlagStrategy | None): Flag naming and style strategy.
+        abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
+        pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
+        print_result_func (Callable): Function used to print results.
+        include_inherited_methods (bool): Include inherited methods for class commands.
+        include_classmethods (bool): Include classmethods as commands.
+        on_interrupt (Callable[[KeyboardInterrupt], None] | None): Interrupt callback.
+        silent_interrupt (bool): Suppress interrupt message output.
+        reraise_interrupt (bool): Re-raise KeyboardInterrupt after handling.
+        expand_model_params (bool): Expand model parameters into nested flags.
+        model_expansion_max_depth (int): Max depth for model expansion.
+    """
+
     RESERVED_FLAGS: ClassVar[list[str]] = []
     logger_message_tag: str = "interfacy"
     COMMAND_KEY: Final[str] = "command"
@@ -127,6 +157,19 @@ class InterfacyParser:
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
     ) -> "Command":
+        """
+        Register a command callable or group with the parser.
+
+        Args:
+            command (Callable | Any): Function, class, instance, or CommandGroup.
+            name (str | None): Optional CLI name override.
+            description (str | None): Optional description override.
+            aliases (Sequence[str] | None): Alternative CLI names.
+            pipe_targets (PipeTargets | dict[str, Any] | Sequence[str] | str | None): Pipe config.
+
+        Raises:
+            DuplicateCommandError: If the command name is already registered.
+        """
         from interfacy.group import CommandGroup
 
         if isinstance(command, CommandGroup):
@@ -260,18 +303,35 @@ class InterfacyParser:
         return command
 
     def get_commands(self) -> list["Command"]:
+        """Return the list of registered commands."""
         return list(self.commands.values())
 
     def get_command_by_cli_name(self, cli_name: str) -> "Command":
+        """
+        Return the command for a CLI name or alias.
+
+        Args:
+            cli_name (str): CLI name to resolve.
+
+        Raises:
+            InvalidCommandError: If the name cannot be resolved.
+        """
         canonical = self.name_registry.canonical_for(cli_name)
         if canonical is None:
             raise InvalidCommandError(cli_name)
         return self.commands[canonical]
 
     def get_args(self) -> list[str]:
+        """Return CLI arguments from sys.argv."""
         return sys.argv[1:]
 
     def exit(self, code: ExitCode) -> ExitCode:
+        """
+        Exit or return the provided code depending on configuration.
+
+        Args:
+            code (ExitCode): Exit code to use.
+        """
         logger.info(f"Exit code: {code}")
         if self.sys_exit_enabled:
             sys.exit(code)
@@ -307,6 +367,13 @@ class InterfacyParser:
         *,
         subcommand: str | None = None,
     ) -> PipeTargets | None:
+        """
+        Resolve pipe target configuration for a command.
+
+        Args:
+            command (Command): Command schema to resolve.
+            subcommand (str | None): Optional subcommand name.
+        """
         names: list[str] = []
         if command.canonical_name:
             names.append(command.canonical_name)
@@ -358,6 +425,16 @@ class InterfacyParser:
         subcommand: str | None = None,
         include_default: bool = True,
     ) -> PipeTargets | None:
+        """
+        Resolve pipe targets by name variants and aliases.
+
+        Args:
+            canonical_name (str): Canonical command name.
+            obj_name (str | None): Object name to match.
+            aliases (tuple[str, ...]): Alternative names to match.
+            subcommand (str | None): Optional subcommand name.
+            include_default (bool): Whether to fall back to defaults.
+        """
         names: list[str] = [canonical_name]
         if obj_name and obj_name not in names:
             names.append(obj_name)
@@ -374,6 +451,7 @@ class InterfacyParser:
         return self.pipe_targets_default if include_default else None
 
     def read_piped_input(self) -> str | None:
+        """Read and cache stdin content if available."""
         if self._pipe_buffer is PIPE_UNSET:
             piped = read_piped()
             self._pipe_buffer = piped if piped else None
@@ -381,6 +459,7 @@ class InterfacyParser:
         return self._pipe_buffer if self._pipe_buffer is not PIPE_UNSET else None
 
     def reset_piped_input(self) -> None:
+        """Clear any cached stdin content."""
         self._pipe_buffer = PIPE_UNSET
 
     def get_parameters_for(
@@ -389,6 +468,13 @@ class InterfacyParser:
         *,
         subcommand: str | None = None,
     ) -> dict[str, Parameter]:
+        """
+        Return parameter metadata for a command or subcommand.
+
+        Args:
+            command (Command): Command schema to inspect.
+            subcommand (str | None): Optional subcommand name.
+        """
         obj = command.obj
 
         if isinstance(obj, Function):
@@ -430,6 +516,13 @@ class InterfacyParser:
         )
 
     def parser_from_command(self, command: Function | Method | Class, main: bool = False) -> Any:
+        """
+        Build a parser object from an inspected command.
+
+        Args:
+            command (Function | Method | Class): Inspected command object.
+            main (bool): Whether this is the main parser instance.
+        """
         resolve_objinspect_annotations(command)
         if isinstance(command, (Function, Method)):
             return self.parser_from_function(command, taken_flags=[*self.RESERVED_FLAGS])
@@ -441,30 +534,93 @@ class InterfacyParser:
         return method.name.startswith("_")
 
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
+        """
+        Parse CLI args into a nested dict keyed by command name.
+
+        Args:
+            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
+        """
         raise NotImplementedError
 
     def run(self, *commands: Callable, args: list[str] | None = None) -> Any:
+        """
+        Register commands, parse args, and execute the selected command.
+
+        Args:
+            *commands (Callable): Commands to register.
+            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
+        """
         raise NotImplementedError
 
     @abstractmethod
-    def parser_from_function(self, *args: Any, **kwargs: Any) -> Any: ...
+    def parser_from_function(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Build a parser from a function or method.
+
+        Args:
+            *args (Any): Positional arguments forwarded to the implementation.
+            **kwargs (Any): Keyword arguments forwarded to the implementation.
+        """
+        ...
 
     @abstractmethod
-    def parser_from_class(self, *args: Any, **kwargs: Any) -> Any: ...
+    def parser_from_class(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Build a parser from a class command.
+
+        Args:
+            *args (Any): Positional arguments forwarded to the implementation.
+            **kwargs (Any): Keyword arguments forwarded to the implementation.
+        """
+        ...
 
     @abstractmethod
-    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> Any: ...
+    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Build a parser from multiple commands.
+
+        Args:
+            *args (Any): Positional arguments forwarded to the implementation.
+            **kwargs (Any): Keyword arguments forwarded to the implementation.
+        """
+        ...
 
     @abstractmethod
-    def install_tab_completion(self, *args: Any, **kwargs: Any) -> None: ...
+    def install_tab_completion(self, *args: Any, **kwargs: Any) -> None:
+        """
+        Install tab completion for a parser instance.
+
+        Args:
+            *args (Any): Positional arguments forwarded to the implementation.
+            **kwargs (Any): Keyword arguments forwarded to the implementation.
+        """
+        ...
 
     def log(self, message: str) -> None:
+        """
+        Log an informational message using the console helpers.
+
+        Args:
+            message (str): Message text to log.
+        """
         console.log(self.logger_message_tag, message)
 
     def log_error(self, message: str) -> None:
+        """
+        Log an error message using the console helpers.
+
+        Args:
+            message (str): Message text to log.
+        """
         console.log_error(self.logger_message_tag, message)
 
     def log_exception(self, e: Exception) -> None:
+        """
+        Log an exception using the console helpers.
+
+        Args:
+            e (Exception): Exception to log.
+        """
         console.log_exception(self.logger_message_tag, e, full_traceback=self.full_error_traceback)
 
     def log_interrupt(self) -> None:
@@ -472,6 +628,7 @@ class InterfacyParser:
         console.log_interrupt(silent=self.silent_interrupt)
 
     def build_parser_schema(self) -> "ParserSchema":
+        """Build and return a ParserSchema for current commands."""
         builder = ParserSchemaBuilder(self)
         return builder.build()
 

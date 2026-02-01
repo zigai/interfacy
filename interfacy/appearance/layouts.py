@@ -33,6 +33,8 @@ class InterfacyLayout(HelpLayout):
 
 
 class Aligned(InterfacyLayout):
+    """Layout with aligned default column and compact flag spacing."""
+
     short_flag_width: int = 6
     long_flag_width: int = 18
     pos_flag_width: int = 24
@@ -47,6 +49,8 @@ class Aligned(InterfacyLayout):
 
 
 class AlignedTyped(InterfacyLayout):
+    """Aligned layout that includes explicit type display."""
+
     short_flag_width: int = 6
     long_flag_width: int = 18
     pos_flag_width: int = 24
@@ -61,6 +65,8 @@ class AlignedTyped(InterfacyLayout):
 
 
 class Modern(InterfacyLayout):
+    """Modern layout with inline detail rows for defaults and types."""
+
     include_metavar_in_flag_display = False
     default_field_width = 8
     default_label_for_help = "default"
@@ -292,6 +298,15 @@ class ClapLayout(HelpLayout):
         name: str | None = None,
         aliases: tuple[str, ...] = (),
     ) -> str:  # type: ignore[override]
+        """
+        Return a styled command description line.
+
+        Args:
+            command (Class | Function | Method): Command to describe.
+            ljust (int): Column width for the name.
+            name (str | None): Override display name.
+            aliases (tuple[str, ...]): Alternate CLI names.
+        """
         name = name or command.name
         command_name = self._format_command_display_name(name, aliases)
         name_styled = with_style(command_name, self.style.flag_long)
@@ -307,6 +322,12 @@ class ClapLayout(HelpLayout):
         return self.commands_title
 
     def get_help_for_class(self, command: Class) -> str:  # type: ignore[override]
+        """
+        Build help text for class subcommands with styled headings.
+
+        Args:
+            command (Class): Inspected class command.
+        """
         display_names: list[str] = []
         for method in command.methods:
             if method.name in self.command_skips:
@@ -325,6 +346,12 @@ class ClapLayout(HelpLayout):
         return "\n".join(lines)
 
     def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:  # type: ignore[override]
+        """
+        Build a styled command listing for multiple commands.
+
+        Args:
+            commands (dict[str, Command]): Command map keyed by name.
+        """
         display_names = [
             self._format_command_display_name(cmd.cli_name, cmd.aliases)
             for cmd in commands.values()
@@ -369,6 +396,13 @@ class ArgparseLayout(HelpLayout):
         param: Parameter,
         flags: tuple[str, ...] | None = None,
     ) -> str:
+        """
+        Return help text following argparse's default style.
+
+        Args:
+            param (Parameter): Parameter metadata.
+            flags (tuple[str, ...] | None): CLI flags for display.
+        """
         description = self.format_description(param.description or "")
         if param.has_default:
             if len(description):

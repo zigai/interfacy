@@ -33,6 +33,45 @@ class InterfacyColors:
 
 
 class HelpLayout:
+    """
+    Base class for formatting CLI help output.
+
+    Attributes:
+        style (InterfacyColors): Color theme for styled output.
+        commands_title (str): Heading for command listings.
+        prefix_choices (str): Prefix label for choice lists.
+        prefix_default (str): Prefix label for default values.
+        prefix_type (str): Prefix label for type display.
+        required_indicator (str): Marker for required parameters.
+        clear_metavar (bool): Hide metavar for optional args when possible.
+        simplify_types (bool): Simplify rendered type names.
+        enable_required_indicator (bool): Toggle required indicator display.
+        required_indicator_pos (Literal["left", "right"]): Required indicator placement.
+        min_ljust (int): Minimum left-justify width for command listings.
+        command_skips (list[str]): Method names to skip in listings.
+        flag_generator (FlagStrategy): Flag strategy used for display.
+        name_registry (CommandNameRegistry | None): Registry for canonical names.
+        format_option (str | None): Template for option help lines.
+        format_positional (str | None): Template for positional help lines.
+        help_position (int | None): Column where help text starts.
+        default_field_width (int): Width for default value column.
+        default_field_width_max (int | None): Max width for default column.
+        default_field_width_term_ratio (int): Terminal width ratio for defaults.
+        default_field_width_soft_ratio (int): Soft ratio for defaults.
+        default_field_width_percentile (float): Percentile used for width sampling.
+        default_field_width_small_sample_size (int): Small sample size threshold.
+        default_overflow_mode (Literal["inline", "newline"]): Default overflow behavior.
+        default_label_for_help (str): Label used for defaults in help.
+        include_metavar_in_flag_display (bool): Include metavar in flag display.
+        short_flag_width (int): Width for short flag column.
+        long_flag_width (int): Width for long flag column.
+        pos_flag_width (int): Width for positional column.
+        min_total_flag_width (int): Minimum total width for flags.
+        PRE_FMT_PREFIX (str): Prefix used for preformatted help blocks.
+        layout_mode (Literal["auto", "adaptive", "template"]): Layout selection mode.
+        doc_inline_code_mode (Literal["bold", "strip"]): Inline code rendering mode.
+    """
+
     style: InterfacyColors = InterfacyColors()
 
     commands_title: str = "commands:"
@@ -133,6 +172,12 @@ class HelpLayout:
         return max(base_width, width)
 
     def prepare_default_field_width_for_params(self, params: list[Parameter]) -> None:
+        """
+        Compute default column width from parameter defaults.
+
+        Args:
+            params (list[Parameter]): Parameters to inspect.
+        """
         if not self._use_template_layout():
             return
 
@@ -180,6 +225,12 @@ class HelpLayout:
         return text
 
     def format_description(self, description: str) -> str:
+        """
+        Format a description string for help output.
+
+        Args:
+            description (str): Raw description text.
+        """
         return self._format_doc_text(description)
 
     def get_help_for_parameter(
@@ -187,6 +238,13 @@ class HelpLayout:
         param: Parameter,
         flags: tuple[str, ...] | None = None,
     ) -> str:
+        """
+        Return help text for a parameter.
+
+        Args:
+            param (Parameter): Parameter metadata.
+            flags (tuple[str, ...] | None): CLI flags for display, if any.
+        """
         if flags is not None and self._use_template_layout():
             return self.format_parameter(param, flags)
 
@@ -225,6 +283,15 @@ class HelpLayout:
         name: str | None = None,
         aliases: tuple[str, ...] = (),
     ) -> str:
+        """
+        Format a command description line for listings.
+
+        Args:
+            command (Class | Function | Method): Command to describe.
+            ljust (int): Column width for the name.
+            name (str | None): Override display name.
+            aliases (tuple[str, ...]): Alternate CLI names.
+        """
         name = name or command.name
         command_name = self._format_command_display_name(name, aliases)
         name_column = f"   {command_name}".ljust(ljust)
@@ -232,6 +299,12 @@ class HelpLayout:
         return f"{name_column} {with_style(description, self.style.description)}"
 
     def get_help_for_class(self, command: Class) -> str:
+        """
+        Build help text for class subcommands.
+
+        Args:
+            command (Class): Inspected class command.
+        """
         display_names: list[str] = []
         for method in command.methods:
             if method.name in self.command_skips:
@@ -250,6 +323,13 @@ class HelpLayout:
         return "\n".join(lines)
 
     def format_parameter(self, param: Parameter, flags: tuple[str, ...]) -> str:
+        """
+        Format a parameter using the active layout template.
+
+        Args:
+            param (Parameter): Parameter metadata.
+            flags (tuple[str, ...]): CLI flags for the parameter.
+        """
         _, _, _, is_option = self._build_flag_parts(param, flags)
         template = self.format_option if is_option else self.format_positional
         if not template:
@@ -342,6 +422,12 @@ class HelpLayout:
         return f"{self.PRE_FMT_PREFIX}{rendered}"
 
     def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:
+        """
+        Build a command listing for multiple top-level commands.
+
+        Args:
+            commands (dict[str, Command]): Command map keyed by name.
+        """
         display_names = [
             self._format_command_display_name(cmd.cli_name, cmd.aliases)
             for cmd in commands.values()
@@ -436,6 +522,12 @@ class HelpLayout:
         return self._get_template_token_index("description")
 
     def get_commands_ljust(self, max_display_len: int) -> int:
+        """
+        Compute the left-justify width for command listings.
+
+        Args:
+            max_display_len (int): Maximum display name length.
+        """
         base = max(self.min_ljust, max_display_len + 3)
         default_idx = self._get_template_token_index("default_padded")
         prefix_len = self._get_commands_prefix_len()

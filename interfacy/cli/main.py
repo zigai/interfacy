@@ -85,12 +85,19 @@ def _resolve_symbol(module: ModuleType, symbol_ref: str) -> object:
 
 
 def resolve_target(target: str) -> object:
+    """
+    Resolve a module or file target to a Python object.
+
+    Args:
+        target (str): Target spec "module:object" or "path.py:object".
+    """
     module_ref, symbol_ref = _split_target(target)
     module = _load_module(module_ref)
     return _resolve_symbol(module, symbol_ref)
 
 
 def resolve_entrypoint_settings() -> dict[str, Any]:
+    """Return config-derived defaults for the CLI entrypoint."""
     return apply_config_defaults(
         load_config(),
         {
@@ -118,6 +125,12 @@ def _resolve_help_layout(settings: dict[str, Any]) -> InterfacyLayout:
 
 
 def build_parser(settings: dict[str, Any]) -> ArgumentParser:
+    """
+    Build the entrypoint ArgumentParser for the Interfacy CLI.
+
+    Args:
+        settings (dict[str, Any]): Resolved configuration settings.
+    """
     description = (
         "Interfacy is a CLI framework for building command-line interfaces from Python callables."
     )
@@ -154,6 +167,12 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
 
 
 def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build keyword arguments for Argparser based on settings.
+
+    Args:
+        settings (dict[str, Any]): Resolved configuration settings.
+    """
     kwargs: dict[str, Any] = {}
     help_layout = settings.get("help_layout")
     help_colors = settings.get("help_colors")
@@ -221,6 +240,12 @@ def _apply_settings_to_parser(parser: InterfacyParser, settings: dict[str, Any])
 
 
 def main(argv: Sequence[str] | None = None) -> ExitCode:
+    """
+    Run the Interfacy CLI entrypoint.
+
+    Args:
+        argv (Sequence[str] | None): Argument list to parse. Defaults to sys.argv.
+    """
     settings = resolve_entrypoint_settings()
     parser = build_parser(settings)
     args = parser.parse_args(argv)

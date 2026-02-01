@@ -25,6 +25,16 @@ COMMAND_KEY_BASE = "command"
 
 
 class ArgparseRunner:
+    """
+    Execute parsed CLI commands against inspected callables.
+
+    Args:
+        namespace (dict[str, Any]): Parsed argument namespace.
+        builder (Argparser): Parser instance that built the schema.
+        args (list[str]): Raw CLI arguments.
+        parser (ArgumentParser): ArgumentParser used for parsing.
+    """
+
     def __init__(
         self,
         namespace: dict[str, Any],
@@ -40,6 +50,7 @@ class ArgparseRunner:
         self._instance_chain: list[Any] = []
 
     def run(self) -> Any:
+        """Execute commands based on the parsed namespace."""
         commands = self.builder.commands
         if len(commands) == 0:
             raise ConfigurationError("No commands were provided")
@@ -76,6 +87,13 @@ class ArgparseRunner:
         )
 
     def run_command(self, command: Command, args: dict[str, Any]) -> Any:
+        """
+        Dispatch a command to its underlying callable.
+
+        Args:
+            command (Command): Command schema to execute.
+            args (dict[str, Any]): Parsed arguments for the command.
+        """
         obj = command.obj
         if isinstance(obj, Function):
             args = self._apply_pipe(command, args)
@@ -92,6 +110,13 @@ class ArgparseRunner:
         raise InvalidCommandError(command.obj)
 
     def run_function(self, func: Function | Method, args: dict) -> Any:
+        """
+        Invoke a function or method with parsed arguments.
+
+        Args:
+            func (Function | Method): Callable to execute.
+            args (dict): Parsed argument mapping.
+        """
         positional_args = []
         keyword_args = {}
 
@@ -126,6 +151,13 @@ class ArgparseRunner:
         return result
 
     def run_method(self, method: Method, args: dict) -> Any:
+        """
+        Invoke a method, instantiating its class if needed.
+
+        Args:
+            method (Method): Method to execute.
+            args (dict): Parsed argument mapping.
+        """
         cli_args = reverse_translations(args, self.builder.flag_strategy.argument_translator)
         instance = method.class_instance
         if instance:
@@ -150,6 +182,13 @@ class ArgparseRunner:
         return instance.call_method(method.name, *method_args, **method_kwargs)
 
     def run_class(self, command: Command, args: dict) -> Any:
+        """
+        Execute a class subcommand, instantiating as necessary.
+
+        Args:
+            command (Command): Command schema for the class.
+            args (dict): Parsed argument mapping containing subcommand data.
+        """
         cls = command.obj
         if not isinstance(cls, Class):
             raise TypeError(f"Expected {Class}, got {type(cls)}")
@@ -189,6 +228,12 @@ class ArgparseRunner:
         return cls.call_method(method.name, *method_args, **method_kwargs)
 
     def run_multiple(self, commands: dict[str, Command]) -> Any:
+        """
+        Execute one of multiple registered commands.
+
+        Args:
+            commands (dict[str, Command]): Command mapping by canonical name.
+        """
         command_name = self.namespace[self.COMMAND_KEY]
         command = self.builder.get_command_by_cli_name(command_name)
         args = self.namespace.get(command.canonical_name, {})

@@ -16,6 +16,8 @@ class NoColor(InterfacyColors):
 
 
 class Aurora(InterfacyColors):
+    """Color theme inspired by aurora palettes."""
+
     type = TextStyle(color="light_cyan")
     default = TextStyle(color="light_magenta")
     description = TextStyle(color="white")

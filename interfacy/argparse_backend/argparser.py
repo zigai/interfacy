@@ -46,6 +46,36 @@ logger = get_logger(__name__)
 
 
 class Argparser(InterfacyParser):
+    """
+    Argparse-backed Interfacy parser implementation.
+
+    Args:
+        description (str | None): CLI description shown in help output.
+        epilog (str | None): Epilog text shown after help output.
+        type_parser (StrToTypeParser | None): Parser registry for typed arguments.
+        help_layout (HelpLayout | None): Help layout implementation.
+        help_colors (InterfacyColors | None): Override help color theme.
+        run (bool): Whether to auto-run after command registration.
+        print_result (bool): Whether to print returned results.
+        tab_completion (bool): Whether to enable tab completion.
+        full_error_traceback (bool): Whether to print full tracebacks.
+        allow_args_from_file (bool): Allow @file argument expansion.
+        sys_exit_enabled (bool): Whether to call sys.exit on completion.
+        flag_strategy (FlagStrategy | None): Flag naming and style strategy.
+        abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
+        pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
+        print_result_func (Callable): Function used to print results.
+        include_inherited_methods (bool): Include inherited methods for class commands.
+        include_classmethods (bool): Include classmethods as commands.
+        on_interrupt (Callable[[KeyboardInterrupt], None] | None): Interrupt callback.
+        silent_interrupt (bool): Suppress interrupt message output.
+        reraise_interrupt (bool): Re-raise KeyboardInterrupt after handling.
+        expand_model_params (bool): Expand model parameters into nested flags.
+        model_expansion_max_depth (int): Max depth for model expansion.
+        use_global_config (bool): Apply config defaults from config file.
+        formatter_class (type[argparse.HelpFormatter]): Help formatter class.
+    """
+
     RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
     COMMAND_KEY = "command"
 
@@ -470,6 +500,7 @@ class Argparser(InterfacyParser):
         argcomplete.autocomplete(parser)
 
     def build_parser(self) -> ArgumentParser:
+        """Build and return an ArgumentParser from the current commands."""
         if not self.commands:
             raise ConfigurationError("No commands were provided")
 
@@ -482,6 +513,12 @@ class Argparser(InterfacyParser):
         return parser
 
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
+        """
+        Parse CLI args into a nested dict keyed by command name.
+
+        Args:
+            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
+        """
         args = args if args is not None else self.get_args()
         parser = self.build_parser()
         self._parser = parser
@@ -552,6 +589,13 @@ class Argparser(InterfacyParser):
         return exc
 
     def run(self, *commands: Callable | type | object, args: list[str] | None = None) -> Any:
+        """
+        Register commands, parse args, and execute the selected command.
+
+        Args:
+            *commands (Callable | type | object): Commands to register.
+            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
+        """
         original_handler = signal.getsignal(signal.SIGINT)
 
         def sigint_handler(signum: int, frame: Any) -> None:

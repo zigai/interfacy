@@ -118,14 +118,17 @@ class CommandGroup:
 
     @property
     def has_subgroups(self) -> bool:
+        """Whether this group contains nested subgroups."""
         return len(self._subgroups) > 0
 
     @property
     def has_commands(self) -> bool:
+        """Whether this group contains direct commands."""
         return len(self._commands) > 0
 
     @property
     def is_empty(self) -> bool:
+        """Whether this group has no commands or subgroups."""
         return not self.has_commands and not self.has_subgroups
 
     def __repr__(self) -> str:

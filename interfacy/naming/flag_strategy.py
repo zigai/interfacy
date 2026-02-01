@@ -19,6 +19,15 @@ NAME_TRANSLATORS: dict[TranslationMode, Callable[[str], str]] = {
 
 
 def build_name_mapping(mode: TranslationMode) -> NameMapping:
+    """
+    Build a NameMapping for a translation mode.
+
+    Args:
+        mode (TranslationMode): Translation mode to use.
+
+    Raises:
+        ValueError: If the translation mode is unsupported.
+    """
     if mode not in NAME_TRANSLATORS:
         raise ValueError(
             f"Invalid flag translation mode: {mode}. "
@@ -43,6 +52,15 @@ class FlagStrategy(Protocol):
 
 
 class DefaultFlagStrategy(FlagStrategy):
+    """
+    Default flag strategy for generating CLI flag names.
+
+    Args:
+        style (FlagStyle): Flag style for required/optional parameters.
+        translation_mode (TranslationMode): Name translation mode.
+        nested_separator (str): Separator for nested model paths.
+    """
+
     def __init__(
         self,
         style: FlagStyle = "required_positional",

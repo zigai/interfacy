@@ -30,6 +30,26 @@ from interfacy.naming.flag_strategy import (
 
 @dataclass
 class InterfacyConfig:
+    """
+    Configuration values loaded from Interfacy config files.
+
+    Attributes:
+        help_layout (str | None): Help layout name or import path.
+        help_colors (str | None): Help color theme name or import path.
+        flag_strategy (str | None): Flag strategy name or import path.
+        flag_style (FlagStyle | None): Flag style override.
+        translation_mode (TranslationMode | None): Flag translation mode.
+        abbreviation_gen (str | None): Abbreviation generator name or import path.
+        abbreviation_min_len (int | None): Minimum abbreviation length.
+        print_result (bool | None): Whether to print command results.
+        full_error_traceback (bool | None): Whether to show full tracebacks.
+        tab_completion (bool | None): Whether to enable tab completion.
+        allow_args_from_file (bool | None): Whether to allow @file args.
+        include_inherited_methods (bool | None): Include inherited methods.
+        include_classmethods (bool | None): Include classmethods.
+        silent_interrupt (bool | None): Suppress interrupt messages.
+    """
+
     help_layout: str | None = None
     help_colors: str | None = None
     flag_strategy: str | None = None
@@ -107,6 +127,16 @@ def _coerce_config(raw: dict[str, Any]) -> InterfacyConfig:
 
 
 def load_config(path: Path | None = None) -> InterfacyConfig:
+    """
+    Load Interfacy configuration from disk.
+
+    Args:
+        path (Path | None): Optional explicit config path.
+
+    Raises:
+        FileNotFoundError: If an explicit path is provided and missing.
+        ConfigurationError: If the config file is invalid.
+    """
     if path is not None:
         if not path.exists():
             raise FileNotFoundError(path)
@@ -242,6 +272,13 @@ def apply_config_defaults(
     config: InterfacyConfig | dict[str, Any],
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
+    """
+    Apply config defaults to an overrides dict.
+
+    Args:
+        config (InterfacyConfig | dict[str, Any]): Base config source.
+        overrides (dict[str, Any]): Explicit overrides to merge.
+    """
     cfg = _to_config_dict(config)
     resolved = overrides.copy()
 

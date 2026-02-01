@@ -17,16 +17,30 @@ if TYPE_CHECKING:
 
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
+    """Help formatter that integrates Interfacy layout settings."""
+
     PRE_FMT_PREFIX = "\x00FMT:"
     DEFAULT_TERM_RATIO = 5
 
     def set_help_layout(self, help_layout: "HelpLayout") -> None:
+        """
+        Attach a HelpLayout for formatting decisions.
+
+        Args:
+            help_layout (HelpLayout): Layout instance to use.
+        """
         self._interfacy_help_layout = help_layout
 
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
 
     def start_section(self, heading: str | None) -> None:  # type: ignore[override]
+        """
+        Start a help section with optional layout styling.
+
+        Args:
+            heading (str | None): Section heading text.
+        """
         layout = self._get_help_layout()
         if layout is not None and heading not in (None, argparse.SUPPRESS):
             title_map = getattr(layout, "section_title_map", None)
@@ -120,6 +134,12 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         return max(base_width, width)
 
     def prepare_layout(self, actions: list[argparse.Action]) -> None:
+        """
+        Compute layout-dependent defaults from the action list.
+
+        Args:
+            actions (list[argparse.Action]): Parser actions to inspect.
+        """
         layout = self._get_help_layout()
         if layout is None:
             return

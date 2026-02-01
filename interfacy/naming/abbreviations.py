@@ -2,8 +2,18 @@ from abc import abstractmethod
 
 
 class AbbreviationGenerator:
+    """Interface for generating short flag abbreviations."""
+
     @abstractmethod
-    def generate(self, value: str, taken: list[str]) -> str | None: ...
+    def generate(self, value: str, taken: list[str]) -> str | None:
+        """
+        Return a unique abbreviation for a value or None if unavailable.
+
+        Args:
+            value (str): Source value to abbreviate.
+            taken (list[str]): Already-reserved abbreviations. Modified in-place.
+        """
+        ...
 
 
 class DefaultAbbreviationGenerator(AbbreviationGenerator):
@@ -31,6 +41,16 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
         self.min_len = min_len
 
     def generate(self, value: str, taken: list[str]) -> str | None:
+        """
+        Generate a short unique abbreviation for a value.
+
+        Args:
+            value (str): Source value to abbreviate.
+            taken (list[str]): Already-reserved abbreviations. Modified in-place.
+
+        Raises:
+            ValueError: If the full value is already reserved as an abbreviation.
+        """
         if value in taken:
             raise ValueError(f"'{value}' is already an abbreviation")
 
@@ -56,7 +76,16 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
 
 
 class NoAbbreviations(AbbreviationGenerator):
+    """Abbreviation generator that disables short flags."""
+
     def generate(self, value: str, taken: list[str]) -> str | None:
+        """
+        Return None to indicate no abbreviation is available.
+
+        Args:
+            value (str): Source value to abbreviate.
+            taken (list[str]): Already-reserved abbreviations.
+        """
         return None
 
 

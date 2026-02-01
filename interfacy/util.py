@@ -54,6 +54,12 @@ def simplified_type_name(name: str) -> str:
 
 
 def is_list_or_list_alias(t: type) -> bool:
+    """
+    Return True if the annotation represents a list type.
+
+    Args:
+        t (type): Type annotation to inspect.
+    """
     if t is list:
         return True
     t_origin = type_origin(t)
@@ -298,6 +304,12 @@ def get_param_choices(param: Any, *, for_display: bool = False) -> list[Any] | N
 
 
 def format_default_for_help(value: Any) -> str:
+    """
+    Format a default value for display in help text.
+
+    Args:
+        value (Any): Default value to render.
+    """
     if isinstance(value, Enum):
         raw = value.value
         if isinstance(raw, (str, int, float, bool)):
@@ -307,10 +319,24 @@ def format_default_for_help(value: Any) -> str:
 
 
 def show_result(result: Any, handler: Callable = print) -> None:
+    """
+    Display a result value using the shared console helpers.
+
+    Args:
+        result (Any): Result value to display.
+        handler (Callable[[Any], Any]): Output handler for non-dict results.
+    """
     console.display_result(result, handler=handler)
 
 
 def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
+    """
+    Return the inverted boolean flag name with a prefix toggle.
+
+    Args:
+        name (str): Base flag name.
+        prefix (str): Prefix for the inverted form.
+    """
     if name.startswith(prefix):
         return name[len(prefix) :]
     return prefix + name

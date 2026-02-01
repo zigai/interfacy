@@ -39,6 +39,7 @@ class PipeTargets:
     allow_partial: bool = False
 
     def targeted_parameters(self) -> set[str]:
+        """Return the set of configured target parameter names."""
         return set(self.targets)
 
 
@@ -57,6 +58,15 @@ def parse_priority(value: str | None) -> PipePriority:
 
 
 def targets_to_list(value: Any) -> list[str]:
+    """
+    Normalize pipe target input into a list of unique names.
+
+    Args:
+        value (Any): String, sequence of strings, or other input to normalize.
+
+    Raises:
+        ConfigurationError: If the value cannot be interpreted as target names or contains invalid/duplicate entries.
+    """
     if isinstance(value, str):
         names = [value]
     elif isinstance(value, Sequence):
@@ -154,6 +164,13 @@ def build_pipe_targets_config(
 
 
 def split_data(data: str, config: PipeTargets) -> list[str]:
+    """
+    Split piped data into chunks based on the target configuration.
+
+    Args:
+        data (str): Raw stdin payload.
+        config (PipeTargets): Target configuration and delimiter settings.
+    """
     expected = len(config.targets)
     if expected <= 1:
         return [data]
@@ -222,6 +239,15 @@ def parse_list(
     delimiter: str | None,
     type_parser: StrToTypeParser,
 ) -> list[Any]:
+    """
+    Parse a delimited list value into typed elements when possible.
+
+    Args:
+        parameter (Parameter): Parameter metadata describing element types.
+        raw (str): Raw string value to parse.
+        delimiter (str | None): Delimiter for splitting list elements.
+        type_parser (StrToTypeParser): Parser registry for converting elements.
+    """
     values = _split_list_values(raw, delimiter)
     if not values:
         return []
@@ -247,6 +273,15 @@ def parse_value(
     delimiter: str | None,
     type_parser: StrToTypeParser,
 ) -> Any:
+    """
+    Parse a raw string into a typed value for a parameter.
+
+    Args:
+        parameter (Parameter): Parameter metadata describing the expected type.
+        raw (str): Raw string value to parse.
+        delimiter (str | None): Delimiter for list parsing, when applicable.
+        type_parser (StrToTypeParser): Parser registry for converting values.
+    """
     if parameter.is_typed and is_list_or_list_alias(parameter.type):
         return parse_list(parameter, raw, delimiter, type_parser)
 
@@ -264,6 +299,16 @@ def get_chunks(
     data: str,
     config: PipeTargets,
 ) -> list[str | None]:
+    """
+    Split piped data into the configured number of chunks.
+
+    Args:
+        data (str): Raw stdin payload.
+        config (PipeTargets): Target configuration and delimiter settings.
+
+    Raises:
+        PipeInputError: If chunk counts do not match required targets.
+    """
     chunks: list[str | None] = split_data(data, config)  # type:ignore
     expected = len(config.targets)
 

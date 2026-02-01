@@ -24,6 +24,12 @@ def _get_level() -> int:
 
 
 def get_logger(name: str) -> logging.Logger:
+    """
+    Return a configured logger in the interfacy namespace.
+
+    Args:
+        name (str): Logger name or module name.
+    """
     if not name.startswith(_LOGGER_PREFIX):
         logger_name = f"{_LOGGER_PREFIX}.{name}" if name != "__main__" else _LOGGER_PREFIX
     else:
@@ -36,6 +42,12 @@ def get_logger(name: str) -> logging.Logger:
 
 class _ClickableFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        """
+        Format a log record with a clickable path and padded name column.
+
+        Args:
+            record (logging.LogRecord): Log record to format.
+        """
         filename = os.path.basename(record.pathname)
         label = f"{filename}:{record.lineno}"
         record.clickable_path = terminal_link(f"{record.pathname}:{record.lineno}", label)

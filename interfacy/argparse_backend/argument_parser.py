@@ -18,6 +18,12 @@ NargsPattern = Literal["?", "*", "+"]
 
 
 def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
+    """
+    Convert an argparse Namespace into a nested dictionary.
+
+    Args:
+        namespace (Namespace): Parsed namespace to convert.
+    """
     result = {}
     for k, v in vars(namespace).items():
         if isinstance(v, Namespace):
@@ -28,6 +34,23 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
 
 
 class NestedSubParsersAction(argparse._SubParsersAction):
+    """
+    Subparser action that supports nested destination paths.
+
+    Args:
+        option_strings (list[str]): Option strings that trigger the action.
+        prog (str): Program name for help output.
+        base_nest_path (list[str]): Base nesting path components.
+        nest_separator (str): Separator for nested destination keys.
+        parser_class (type[ArgumentParser] | None): Parser class for children.
+        dest (str): Destination key for the subparser.
+        required (bool): Whether a subcommand is required.
+        help (str | None): Help text for the action.
+        metavar (str | None): Metavar for help output.
+        formatter_class (type[argparse.HelpFormatter] | None): Formatter class for children.
+        help_layout (Any | None): Layout configuration passed to children.
+    """
+
     def __init__(
         self,
         option_strings: list[str],
@@ -130,6 +153,30 @@ class NestedSubParsersAction(argparse._SubParsersAction):
 
 
 class ArgumentParser(argparse.ArgumentParser):
+    """
+    ArgumentParser with nested destinations and custom help formatting.
+
+    Args:
+        prog (str | None): Program name used in help output.
+        usage (str | None): Custom usage string.
+        description (str | None): Description text shown in help.
+        epilog (str | None): Epilog text shown after help.
+        parents (list[argparse.ArgumentParser] | None): Parent parsers to inherit args.
+        formatter_class (type[argparse.HelpFormatter]): Help formatter class.
+        prefix_chars (str): Prefix characters for options.
+        fromfile_prefix_chars (str | None): Prefix for args-from-file.
+        argument_default (Any): Default value for all arguments.
+        conflict_handler (str): Conflict resolution strategy.
+        add_help (bool): Whether to add a help option.
+        allow_abbrev (bool): Whether to allow abbreviations of long options.
+        nest_dir (str | None): Base nesting directory label.
+        nest_separator (str): Separator for nested destinations.
+        nest_path (list[str] | None): Explicit nesting path components.
+        exit_on_error (bool): Whether to exit on parse errors.
+        help_layout (Any | None): Layout configuration for help rendering.
+        color (bool | None): Force colorized help output when supported.
+    """
+
     def __init__(
         self,
         prog: str | None = None,
@@ -152,29 +199,6 @@ class ArgumentParser(argparse.ArgumentParser):
         help_layout: Any | None = None,
         color: bool | None = None,
     ) -> None:
-        """
-        Parser for converting command-line strings into Python objects.
-
-        Args:
-            prog (str, optional): The name of the program. Defaults to os.path.basename(sys.argv[0]).
-            usage (str, optional): A usage message. If not provided, auto-generated from arguments.
-            description (str, optional): A description of what the program does.
-            epilog (str, optional): Text following the argument descriptions.
-            parents (list[ArgumentParser], optional): Parsers whose arguments should be copied into this one.
-            formatter_class (type[HelpFormatter], optional): HelpFormatter class for printing help messages.
-            prefix_chars (str, optional): Characters that prefix optional arguments.
-            fromfile_prefix_chars (str, optional): Characters that prefix files containing additional arguments.
-            argument_default (Any, optional): The default value for all arguments.
-            conflict_handler (str, optional): String indicating how to handle conflicts.
-            add_help (bool, optional): Whether to add a --help option.
-            allow_abbrev (bool, optional): Whether to allow long options to be abbreviated unambiguously.
-            nest_dir (str | None, optional): Custom nesting directory name. Defaults to None.
-            nest_separator (str, optional): Separator for nested arguments. Defaults to "__".
-            nest_path (list[str] | None, optional): Path components for nested arguments. Defaults to None.
-            exit_on_error (bool, optional): Whether ArgumentParser exits with error info when an error occurs.
-            help_layout (HelpLayout | None, optional): Layout configuration for help text formatting. Defaults to None.
-            color (bool | None, optional): Whether argparse should emit colorized help (Python >= 3.14). Defaults to None.
-        """
         if parents is None:
             parents = []
         self.nest_path_components = nest_path or ([nest_dir] if nest_dir else [])
@@ -242,6 +266,12 @@ class ArgumentParser(argparse.ArgumentParser):
         return formatter
 
     def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
+        """
+        Create a nested subparser group with remapped destinations.
+
+        Args:
+            **kwargs (Any): Arguments forwarded to argparse add_subparsers.
+        """
         logger.info(f"Adding subparsers with kwargs={kwargs}")
         if DEST_KEY in kwargs:
             dest = kwargs[DEST_KEY]
@@ -263,6 +293,13 @@ class ArgumentParser(argparse.ArgumentParser):
         args: Sequence[str] | None = None,
         namespace: Namespace | None = None,
     ) -> tuple[Namespace, list[str]]:
+        """
+        Parse known args and deflatten nested destinations.
+
+        Args:
+            args (Sequence[str] | None): Argument list to parse. Defaults to sys.argv.
+            namespace (Namespace | None): Optional namespace to populate.
+        """
         parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
         logger.info(f"Initial parse result: {vars(parsed_args)}, unknown={unknown_args}")
         if parsed_args is None:
@@ -273,6 +310,12 @@ class ArgumentParser(argparse.ArgumentParser):
         return deflattened_args, unknown_args
 
     def set_defaults(self, **kwargs: Any) -> None:
+        """
+        Set defaults while respecting nested destinations.
+
+        Args:
+            **kwargs (Any): Default values keyed by original destination names.
+        """
         nested_kwargs = {
             self._get_nested_destination(dest, store=True): value for dest, value in kwargs.items()
         }
@@ -280,6 +323,12 @@ class ArgumentParser(argparse.ArgumentParser):
         super().set_defaults(**nested_kwargs)
 
     def get_default(self, dest: str) -> Any:
+        """
+        Return the default value for a destination name.
+
+        Args:
+            dest (str): Original destination name.
+        """
         nested_dest = self._get_nested_destination(dest)
         value = super().get_default(nested_dest)
         return value
