@@ -319,7 +319,7 @@ class ArgumentParser(argparse.ArgumentParser):
             # Set or merge final value
             final_component = components[-1]
             if hasattr(current, final_component):
-                logger.warning(f"Handling conflict at {final_component}")
+                logger.debug(f"Merging nested namespaces at {final_component}")
                 existing_value = getattr(current, final_component)
                 if isinstance(existing_value, Namespace) and isinstance(value, Namespace):
                     self._recursively_merge_namespaces(existing_value, value)
