@@ -26,6 +26,7 @@ from interfacy.naming import (
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.schema.builder import ParserSchemaBuilder
+from interfacy.util import resolve_objinspect_annotations
 
 if TYPE_CHECKING:
     from interfacy.group import CommandGroup
@@ -141,6 +142,7 @@ class InterfacyParser:
             protected=False,
             private=False,
         )
+        resolve_objinspect_annotations(obj)
 
         canonical_name, command_aliases = self.name_registry.register(
             default_name=obj.name,
@@ -428,6 +430,7 @@ class InterfacyParser:
         )
 
     def parser_from_command(self, command: Function | Method | Class, main: bool = False) -> Any:
+        resolve_objinspect_annotations(command)
         if isinstance(command, (Function, Method)):
             return self.parser_from_function(command, taken_flags=[*self.RESERVED_FLAGS])
         if isinstance(command, Class):

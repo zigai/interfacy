@@ -29,6 +29,7 @@ from interfacy.util import (
     inverted_bool_flag_name,
     is_fixed_tuple,
     is_list_or_list_alias,
+    resolve_objinspect_annotations,
     resolve_type_alias,
     simplified_type_name,
 )
@@ -117,6 +118,7 @@ class ParserSchemaBuilder:
         description: str | None = None,
         aliases: tuple[str, ...] = (),
     ) -> Command:
+        resolve_objinspect_annotations(obj)
         if isinstance(obj, Function):
             return self._function_spec(
                 obj,
@@ -951,6 +953,7 @@ class ParserSchemaBuilder:
     def _build_args_from_source(self, source: type | Callable) -> list[Argument]:
         """Build argument list from a class __init__ or callable signature."""
         obj = inspect(source, init=True)
+        resolve_objinspect_annotations(obj)
         taken_flags = [*self.parser.RESERVED_FLAGS]
 
         if isinstance(obj, Class) and obj.init_method:
@@ -981,6 +984,7 @@ class ParserSchemaBuilder:
             return self._build_from_class_recursive(entry, parent_path)
         else:
             obj = inspect(entry.obj)
+            resolve_objinspect_annotations(obj)
             if isinstance(obj, (Function, Method)):
                 return self._function_spec(
                     obj,
@@ -1005,6 +1009,7 @@ class ParserSchemaBuilder:
             static_methods=True,
             classmethod=self.parser.include_classmethods,
         )
+        resolve_objinspect_annotations(cls)
 
         subcommands: dict[str, Command] = {}
         for method in cls.methods:
