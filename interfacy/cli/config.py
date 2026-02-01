@@ -6,6 +6,8 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+from stdl.fs import toml_load
+
 from interfacy.appearance.colors import Aurora, NoColor
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.appearance.layouts import (
@@ -24,11 +26,6 @@ from interfacy.naming.flag_strategy import (
     FlagStyle,
     TranslationMode,
 )
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib
 
 
 @dataclass
@@ -65,42 +62,48 @@ def _default_config_paths() -> list[Path]:
 
 def _load_toml(path: Path) -> dict[str, Any]:
     try:
-        with path.open("rb") as handle:
-            return tomllib.load(handle)
-    except tomllib.TOMLDecodeError as exc:
+        return toml_load(path)
+    except Exception as exc:
         raise ConfigurationError(f"Invalid TOML in config file: {path}") from exc
 
 
-def _coerce_config(raw: dict[str, Any]) -> InterfacyConfig:
+def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
     data = dict(raw)
-    appearance = data.get("appearance")
-    if isinstance(appearance, dict):
-        data.setdefault("help_layout", appearance.get("layout"))
-        data.setdefault("help_colors", appearance.get("colors"))
 
-    flags = data.get("flags")
-    if isinstance(flags, dict):
-        data.setdefault("flag_strategy", flags.get("strategy"))
-        data.setdefault("flag_style", flags.get("style"))
-        data.setdefault("translation_mode", flags.get("translation_mode"))
+    def apply(section: str, mapping: dict[str, str]) -> None:
+        section_value = data.get(section)
+        if isinstance(section_value, dict):
+            for source_key, target_key in mapping.items():
+                if target_key not in data and source_key in section_value:
+                    data[target_key] = section_value.get(source_key)
 
-    abbreviations = data.get("abbreviations")
-    if isinstance(abbreviations, dict):
-        data.setdefault("abbreviation_gen", abbreviations.get("generator"))
-        data.setdefault("abbreviation_min_len", abbreviations.get("min_len"))
-
-    behavior = data.get("behavior")
-    if isinstance(behavior, dict):
-        data.setdefault("print_result", behavior.get("print_result"))
-        data.setdefault("full_error_traceback", behavior.get("full_error_traceback"))
-        data.setdefault("tab_completion", behavior.get("tab_completion"))
-        data.setdefault("allow_args_from_file", behavior.get("allow_args_from_file"))
-        data.setdefault("include_inherited_methods", behavior.get("include_inherited_methods"))
-        data.setdefault("include_classmethods", behavior.get("include_classmethods"))
-        data.setdefault("silent_interrupt", behavior.get("silent_interrupt"))
-    return InterfacyConfig(
-        **{k: v for k, v in data.items() if k in InterfacyConfig.__annotations__}
+    apply("appearance", {"layout": "help_layout", "colors": "help_colors"})
+    apply(
+        "flags",
+        {
+            "strategy": "flag_strategy",
+            "style": "flag_style",
+            "translation_mode": "translation_mode",
+        },
     )
+    apply("abbreviations", {"generator": "abbreviation_gen", "min_len": "abbreviation_min_len"})
+    apply(
+        "behavior",
+        {
+            "print_result": "print_result",
+            "full_error_traceback": "full_error_traceback",
+            "tab_completion": "tab_completion",
+            "allow_args_from_file": "allow_args_from_file",
+            "include_inherited_methods": "include_inherited_methods",
+            "include_classmethods": "include_classmethods",
+            "silent_interrupt": "silent_interrupt",
+        },
+    )
+    return {k: v for k, v in data.items() if k in InterfacyConfig.__annotations__}
+
+
+def _coerce_config(raw: dict[str, Any]) -> InterfacyConfig:
+    return InterfacyConfig(**_flatten_config(raw))
 
 
 def load_config(path: Path | None = None) -> InterfacyConfig:
@@ -130,51 +133,61 @@ def _import_symbol(value: str) -> Any:
         ) from exc
 
 
-def _resolve_help_layout(value: Any) -> HelpLayout | None:
+def _resolve_from_lookup(
+    value: Any,
+    *,
+    value_name: str,
+    instance_type: type,
+    lookup: dict[str, type],
+) -> Any | None:
     if value is None:
         return None
-    if isinstance(value, HelpLayout):
+    if isinstance(value, instance_type):
         return value
     if isinstance(value, str):
         if ":" in value:
             symbol = _import_symbol(value)
             return symbol() if isinstance(symbol, type) else symbol
-        lookup = {
-            "default": InterfacyLayout,
-            "interfacy": InterfacyLayout,
-            "aligned": Aligned,
-            "alignedtyped": AlignedTyped,
-            "alignedtype": AlignedTyped,
-            "modern": Modern,
-            "argparse": ArgparseLayout,
-            "clap": ClapLayout,
-        }
         key = _normalize_name(value)
-        if key in lookup:
-            return lookup[key]()
-    raise ConfigurationError(f"Unknown help_layout value: {value}")
+        resolved = lookup.get(key)
+        if resolved is not None:
+            return resolved()
+    raise ConfigurationError(f"Unknown {value_name} value: {value}")
+
+
+def _resolve_help_layout(value: Any) -> HelpLayout | None:
+    lookup = {
+        "default": InterfacyLayout,
+        "interfacy": InterfacyLayout,
+        "aligned": Aligned,
+        "alignedtyped": AlignedTyped,
+        "alignedtype": AlignedTyped,
+        "modern": Modern,
+        "argparse": ArgparseLayout,
+        "clap": ClapLayout,
+    }
+    return _resolve_from_lookup(
+        value,
+        value_name="help_layout",
+        instance_type=HelpLayout,
+        lookup=lookup,
+    )
 
 
 def _resolve_help_colors(value: Any) -> InterfacyColors | None:
-    if value is None:
-        return None
-    if isinstance(value, InterfacyColors):
-        return value
-    if isinstance(value, str):
-        if ":" in value:
-            symbol = _import_symbol(value)
-            return symbol() if isinstance(symbol, type) else symbol
-        lookup = {
-            "default": InterfacyColors,
-            "interfacy": InterfacyColors,
-            "aurora": Aurora,
-            "nocolor": NoColor,
-            "none": NoColor,
-        }
-        key = _normalize_name(value)
-        if key in lookup:
-            return lookup[key]()
-    raise ConfigurationError(f"Unknown help_colors value: {value}")
+    lookup = {
+        "default": InterfacyColors,
+        "interfacy": InterfacyColors,
+        "aurora": Aurora,
+        "nocolor": NoColor,
+        "none": NoColor,
+    }
+    return _resolve_from_lookup(
+        value,
+        value_name="help_colors",
+        instance_type=InterfacyColors,
+        lookup=lookup,
+    )
 
 
 def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy | None:
@@ -230,7 +243,7 @@ def apply_config_defaults(
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
     cfg = _to_config_dict(config)
-    resolved = dict(overrides)
+    resolved = overrides.copy()
 
     if overrides.get("help_layout") is None:
         resolved["help_layout"] = _resolve_help_layout(cfg.get("help_layout"))
@@ -258,3 +271,10 @@ def apply_config_defaults(
             resolved[key] = cfg.get(key)
 
     return resolved
+
+
+__all__ = [
+    "InterfacyConfig",
+    "apply_config_defaults",
+    "load_config",
+]
