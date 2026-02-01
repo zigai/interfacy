@@ -15,25 +15,25 @@ from tests.conftest import (
 
 
 class TestPowFunctionParsing:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_default_exponent(self, parser: InterfacyParser):
         """Verify execution of command with default values."""
         parser.add_command(pow)
         assert parser.run(args=["2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_positional(self, parser: InterfacyParser):
         """Verify execution of command with provided positional/option arguments."""
         parser.add_command(pow)
         assert parser.run(args=["2", "-e", "4"]) == 16
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_kw_only_abbrev(self, parser: InterfacyParser):
         """Verify execution of keyword-only arguments using short flags."""
         parser.add_command(pow)
         assert parser.run(args=["-b", "2", "-e", "4"]) == 16
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_kw_only_no_abbrev(self, parser: InterfacyParser):
         """Verify execution of keyword-only arguments using long flags."""
         parser.add_command(pow)
@@ -41,13 +41,13 @@ class TestPowFunctionParsing:
 
 
 class TestMathClassParsing:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_class(self, parser: InterfacyParser):
         """Verify execution of commands derived from class methods and init parameters."""
         parser.add_command(Math)
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_instance(self, parser: InterfacyParser):
         """Verify execution of commands derived from instance methods."""
         math = Math(rounding=2)
@@ -55,7 +55,7 @@ class TestMathClassParsing:
 
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_instance_method(self, parser: InterfacyParser):
         """Verify execution of a specific bound method as a command."""
         math = Math(rounding=2)
@@ -65,7 +65,7 @@ class TestMathClassParsing:
 
 
 class TestMultipleCommands:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_multiple_pow(self, parser: InterfacyParser):
         """Verify multiple command execution (routing to 'pow') with specific target commands."""
         parser.add_command(pow)
@@ -73,7 +73,7 @@ class TestMultipleCommands:
 
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_multiple_math(self, parser: InterfacyParser):
         """Verify multiple command execution (routing to 'math') with specific target commands."""
         parser.add_command(pow)
@@ -110,13 +110,13 @@ class TestBooleanFlags:
 
 
 class TestEnums:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_enum_positional(self, parser: InterfacyParser):
         """Verify execution mapping Enum arguments from positional input."""
         parser.add_command(fn_enum_arg)
         assert parser.run(args=["RED"]) == Color.RED
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_enum_kwarg(self, parser: InterfacyParser):
         """Verify execution mapping Enum arguments from flag input."""
         parser.add_command(fn_enum_arg)
@@ -124,7 +124,7 @@ class TestEnums:
 
 
 class TestLiterals:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_literal_positional(self, parser: InterfacyParser):
         # NOTE: Not implemented in original file but present in test_parsing.py?
         # Ah wait, TestLiterals in test_runner.py was just "..." in my view?
@@ -139,13 +139,13 @@ class TestLiterals:
 
 
 class TestListNargs:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_list_nargs(self, parser: InterfacyParser):
         """Verify execution collecting multiple arguments into a list."""
         parser.add_command(fn_list_int)
         assert parser.run(args=["1", "2", "3"]) == [1, 2, 3]
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_list_two_positional(self, parser: InterfacyParser):
         """Verify execution collecting multiple lists."""
         parser.add_command(fn_two_lists)
@@ -153,28 +153,28 @@ class TestListNargs:
 
 
 class TestCustomCommandNames:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_custom_command_names(self, parser: InterfacyParser):
         """Verify execution respects custom command names."""
         parser.add_command(Math, name="command1")
         parser.add_command(pow, name="command2")
         assert parser.run(args=["command2", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_custom_command_names_with_hyphen(self, parser: InterfacyParser):
         """Verify execution respects custom command names with hyphens."""
         parser.add_command(Math, name="command-1")
         parser.add_command(pow, name="command-2")
         assert parser.run(args=["command-2", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_custom_command_names_uppercase(self, parser: InterfacyParser):
         """Verify execution respects uppercase custom command names."""
         parser.add_command(Math, name="COMMAND1")
         parser.add_command(pow, name="COMMAND2")
         assert parser.run(args=["COMMAND2", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_custom_command_names_with_underscore(self, parser: InterfacyParser):
         """Verify execution respects custom command names with underscores."""
         parser.add_command(Math, name="command_1")
@@ -183,13 +183,13 @@ class TestCustomCommandNames:
 
 
 class TestMathClassParsingKwOnly:
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_from_class(self, parser: InterfacyParser):
         """Verify class-based command execution with kw-only strategy."""
         parser.add_command(Math)
         assert parser.run(args=["pow", "--base", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_from_instance(self, parser: InterfacyParser):
         """Verify instance-based command execution with kw-only strategy."""
         math = Math(rounding=2)
@@ -197,7 +197,7 @@ class TestMathClassParsingKwOnly:
 
         assert parser.run(args=["pow", "--base", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_from_instance_method(self, parser: InterfacyParser):
         """Verify bound method execution with kw-only strategy."""
         math = Math(rounding=2)
@@ -207,7 +207,7 @@ class TestMathClassParsingKwOnly:
 
 
 class TestMultipleCommandsKwOnly:
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_from_multiple_pow(self, parser: InterfacyParser):
         """Verify multiple command execution (routing to 'pow') with kw-only strategy."""
         parser.add_command(pow)
@@ -215,7 +215,7 @@ class TestMultipleCommandsKwOnly:
 
         assert parser.run(args=["pow", "--base", "2", "-e", "2"]) == 4
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_from_multiple_math(self, parser: InterfacyParser):
         """Verify multiple command execution (routing to 'math') with kw-only strategy."""
         parser.add_command(pow)
@@ -230,14 +230,14 @@ class TestMultipleCommandsKwOnly:
 
 
 class TestListNargsKwOnly:
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_list_nargs(self, parser: InterfacyParser):
         """Verify list argument execution with kw-only strategy."""
         parser.add_command(fn_list_int)
         # For kw_only, list argument 'values' becomes --values [v1 v2 ...]
         assert parser.run(args=["--values", "1", "2", "3"]) == [1, 2, 3]
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_list_two_lists(self, parser: InterfacyParser):
         """Verify execution of multiple list arguments with kw-only strategy."""
         parser.add_command(fn_two_lists)

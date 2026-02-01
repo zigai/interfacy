@@ -26,7 +26,7 @@ def fn_partial(a: str, b: str = None):
 
 
 class TestPipeExecution:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_single_target_pipe(self, parser: InterfacyParser, mocker):
         """Verify that a single argument receives piped input."""
         parser.add_command(fn_single_arg, pipe_targets="msg")
@@ -41,7 +41,7 @@ class TestPipeExecution:
         # We pass empty args list so pipe provides the value.
         assert parser.run(args=[]) == "hello world"
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_multi_target_newline(self, parser: InterfacyParser, mocker):
         """Verify checking splitting on newline."""
         parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
@@ -50,7 +50,7 @@ class TestPipeExecution:
 
         assert parser.run(args=[]) == ("foo", "bar")
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_custom_delimiter(self, parser: InterfacyParser, mocker):
         """Verify custom delimiter."""
         # Use delimiter in pipe config
@@ -78,7 +78,7 @@ class TestPipeExecution:
 
         assert parser.run(args=args) == "cli_value"
 
-    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_priority_pipe_overrides_cli(self, parser: InterfacyParser, mocker):
         """Verify pipe overrides CLI when configured."""
         # Note: priority='pipe' means pipe wins.
@@ -91,7 +91,7 @@ class TestPipeExecution:
         args = ["--msg", "cli_value"]
         assert parser.run(args=args) == "piped_value"
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_typed_conversion(self, parser: InterfacyParser, mocker):
         """Verify piped string is converted to target type (int)."""
         parser.add_command(fn_typed_arg, pipe_targets="val")
@@ -100,7 +100,7 @@ class TestPipeExecution:
 
         assert parser.run(args=[]) == 42
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_partial_chunk_error(self, parser: InterfacyParser, mocker):
         """Verify error raised when fewer chunks than targets provided."""
         parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
@@ -112,7 +112,7 @@ class TestPipeExecution:
         result = parser.run(args=[])
         assert isinstance(result, PipeInputError)
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_partial_chunk_allowed(self, parser: InterfacyParser, mocker):
         """Verify None filling when allow_partial is True."""
         # Use fn_partial which allows b=None
@@ -123,7 +123,7 @@ class TestPipeExecution:
 
         assert parser.run(args=[]) == ("one", None)
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_excess_chunk_merged(self, parser: InterfacyParser, mocker):
         """Verify excess chunks are merged into the last target."""
         parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
@@ -133,7 +133,7 @@ class TestPipeExecution:
 
         assert parser.run(args=[]) == ("one", "two\nthree")
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_complex_type_dict(self, parser: InterfacyParser, mocker):
         """Verify piped JSON string conversion to dict."""
         parser.add_command(fn_dict_arg, pipe_targets="data")
@@ -163,7 +163,7 @@ class TestPipedListInput:
     treated as 'not supplied', so default priority='cli' works correctly.
     """
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_piped_list_newline_split(self, parser: InterfacyParser, mocker):
         """Verify piped newline data splits into list elements."""
         parser.add_command(fn_list_pipe, pipe_targets="items")
@@ -173,7 +173,7 @@ class TestPipedListInput:
         result = parser.run(args=[])
         assert result == ["alpha", "beta", "gamma"]
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_piped_list_custom_delimiter(self, parser: InterfacyParser, mocker):
         """Verify custom delimiter splits into list elements."""
         parser.add_command(fn_list_pipe, pipe_targets={"bindings": "items", "delimiter": ","})
@@ -183,7 +183,7 @@ class TestPipedListInput:
         result = parser.run(args=[])
         assert result == ["x", "y", "z"]
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_piped_list_int_conversion(self, parser: InterfacyParser, mocker):
         """Verify piped list elements are converted to target type."""
         parser.add_command(fn_list_int_pipe, pipe_targets="values")

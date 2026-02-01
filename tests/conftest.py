@@ -377,3 +377,31 @@ def argparse_kw_only():
         help_layout=None,
         print_result=True,
     )
+
+
+@pytest.fixture
+def click_req_pos():
+    pytest.importorskip("click")
+    from interfacy import ClickParser
+
+    return ClickParser(
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        sys_exit_enabled=False,
+        full_error_traceback=True,
+        help_layout=None,
+        print_result=True,
+    )
+
+
+@pytest.fixture
+def click_kw_only():
+    pytest.importorskip("click")
+    from interfacy import ClickParser
+
+    return ClickParser(
+        flag_strategy=DefaultFlagStrategy(style="keyword_only"),
+        sys_exit_enabled=False,
+        full_error_traceback=True,
+        help_layout=None,
+        print_result=True,
+    )

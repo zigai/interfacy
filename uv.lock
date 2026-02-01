@@ -199,7 +199,7 @@ wheels = [
 
 [[package]]
 name = "interfacy"
-version = "0.3.10"
+version = "0.3.12"
 source = { editable = "." }
 dependencies = [
     { name = "objinspect" },
@@ -214,6 +214,8 @@ click = [
     { name = "click" },
 ]
 dev = [
+    { name = "argcomplete" },
+    { name = "click" },
     { name = "coverage" },
     { name = "mypy" },
     { name = "pre-commit" },
@@ -226,6 +228,7 @@ full = [
     { name = "click" },
 ]
 test = [
+    { name = "click" },
     { name = "coverage" },
     { name = "pytest" },
     { name = "pytest-mock" },
@@ -233,9 +236,12 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "argcomplete", marker = "extra == 'dev'" },
     { name = "argcomplete", marker = "extra == 'full'" },
     { name = "click", marker = "extra == 'click'" },
+    { name = "click", marker = "extra == 'dev'" },
     { name = "click", marker = "extra == 'full'" },
+    { name = "click", marker = "extra == 'test'" },
     { name = "coverage", marker = "extra == 'dev'" },
     { name = "coverage", marker = "extra == 'test'" },
     { name = "mypy", marker = "extra == 'dev'" },

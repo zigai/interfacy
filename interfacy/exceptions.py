@@ -1,8 +1,6 @@
 class InterfacyError(Exception):
     """Base exception for Interfacy errors."""
 
-    pass
-
 
 class UnsupportedParameterTypeError(InterfacyError):
     """Raise when a parameter type is unsupported by the parser."""
@@ -54,8 +52,6 @@ class PipeInputError(InterfacyError):
 
 class InterfacyInterrupted(InterfacyError):
     """Raised when the CLI is interrupted by user (Ctrl+C from terminal)."""
-
-    pass
 
 
 class CliError(InterfacyError):

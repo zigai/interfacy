@@ -7,8 +7,8 @@ def test_no_args_prints_full_help(argparse_req_pos, capsys):
     argparse_req_pos.add_command(lambda: None, name="start", description="Start the thing")
     argparse_req_pos.add_command(lambda: None, name="down", description="Stop the thing")
 
-    with pytest.raises(SystemExit):
-        argparse_req_pos.run(args=[])
+    result = argparse_req_pos.run(args=[])
+    assert isinstance(result, SystemExit)
 
     captured = capsys.readouterr()
     combined = captured.out + captured.err
@@ -26,8 +26,8 @@ def test_missing_nested_subcommand_prints_full_help(argparse_req_pos, capsys):
     module.add_command(lambda: None, name="attach", description="Attach to a container")
 
     argparse_req_pos.add_command(workspace)
-    with pytest.raises(SystemExit):
-        argparse_req_pos.run(args=["workspace", "module"])
+    result = argparse_req_pos.run(args=["workspace", "module"])
+    assert isinstance(result, SystemExit)
 
     captured = capsys.readouterr()
     combined = captured.out + captured.err

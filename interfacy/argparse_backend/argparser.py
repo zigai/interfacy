@@ -315,11 +315,10 @@ class Argparser(InterfacyParser):
             if not param.is_required:
                 extra["metavar"] = "\b"
 
-        if self.flag_strategy.style == "required_positional":
-            is_positional = all([not i.startswith("-") for i in flags])
-            logger.debug(f"Flags: {flags}, positional={is_positional}")
-            if not is_positional:
-                extra["required"] = param.is_required
+        is_positional = all([not i.startswith("-") for i in flags])
+        logger.debug(f"Flags: {flags}, positional={is_positional}")
+        if not is_positional:
+            extra["required"] = param.is_required
 
         if is_bool_param:
             extra["action"] = argparse.BooleanOptionalAction
@@ -354,7 +353,7 @@ class Argparser(InterfacyParser):
             if not arg.required:
                 kwargs["default"] = arg.default
 
-        if self.flag_strategy.style == "required_positional" and arg.kind == ArgumentKind.OPTION:
+        if arg.kind == ArgumentKind.OPTION:
             kwargs["required"] = arg.required
 
         return kwargs
@@ -622,6 +621,10 @@ class Argparser(InterfacyParser):
             InvalidCommandError,
             ConfigurationError,
         ) as e:
+            self.log_exception(e)
+            self.exit(ExitCode.ERR_PARSING)
+            return e
+        except SystemExit as e:
             self.log_exception(e)
             self.exit(ExitCode.ERR_PARSING)
             return e
