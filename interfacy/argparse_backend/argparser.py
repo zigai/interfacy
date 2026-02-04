@@ -625,8 +625,19 @@ class Argparser(InterfacyParser):
             self.exit(ExitCode.ERR_PARSING)
             return e
         except SystemExit as e:
+            raw_code = getattr(e, "code", ExitCode.ERR_PARSING)
+            is_success_exit = raw_code in (0, ExitCode.SUCCESS, None)
+
+            if is_success_exit:
+                if self.sys_exit_enabled:
+                    self.exit(ExitCode.SUCCESS)
+                return e
+
             self.log_exception(e)
-            self.exit(ExitCode.ERR_PARSING)
+            if self.sys_exit_enabled:
+                if isinstance(raw_code, int):
+                    sys.exit(raw_code)
+                self.exit(ExitCode.ERR_PARSING)
             return e
         except KeyboardInterrupt as e:
             return self._handle_interrupt(e)
