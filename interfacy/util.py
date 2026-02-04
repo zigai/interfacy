@@ -9,7 +9,6 @@ from typing import Any, Literal
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices as objinspect_get_choices
 from objinspect.typing import get_literal_choices, is_union_type, type_args, type_origin
-from objinspect.util import colored_type
 from stdl.st import with_style
 
 from interfacy import console
@@ -342,48 +341,194 @@ def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
     return prefix + name
 
 
-def format_type_for_help(annotation: Any, style: Any) -> str:
+def format_type_for_help(annotation: Any, style: Any, theme: Any | None = None) -> str:
     """
     Return a styled, readable type string for CLI help, handling:
     - string annotations (from postponed annotations)
     - Optional unions (X | None or Optional[X]) as "X?"
+    - token-level styling when a theme provides dedicated type token styles
     - falling back gracefully if coloring fails
     """
+    return _format_type_for_help(annotation, style, theme)
+
+
+_TYPE_BRACKETS = frozenset("[](){}")
+_TYPE_PUNCTUATION = frozenset({",", ":"})
+_TYPE_OPERATORS = frozenset({"|", "?"})
+_TYPE_KEYWORDS = frozenset(
+    {
+        "Annotated",
+        "Any",
+        "ClassVar",
+        "Final",
+        "Literal",
+        "Never",
+        "NoReturn",
+        "None",
+        "NoneType",
+        "NotRequired",
+        "Optional",
+        "Required",
+        "Self",
+        "TypeAlias",
+        "TypeGuard",
+        "TypeVar",
+        "Union",
+    }
+)
+
+
+def _safe_style(text: str, style: Any) -> str:
+    try:
+        return with_style(text, style)
+    except Exception:
+        return text
+
+
+def _stringify_type_for_help(annotation: Any) -> str:
     if isinstance(annotation, str):
-        name = simplified_type_name(annotation)
-        if name.endswith("?"):
-            return with_style(name[:-1], style) + "?"
-        return with_style(name, style)
+        return simplified_type_name(annotation)
+
+    annotation = resolve_type_alias(annotation)
 
     try:
-        if is_union_type(annotation):  # Optional union types (T | None)
+        if is_union_type(annotation):
             args = list(type_args(annotation))
-            if len(args) == 2 and any(a is NoneType for a in args):
-                base = next((a for a in args if a is not NoneType), None)
+            if len(args) == 2 and any(arg is NoneType for arg in args):
+                base = next((arg for arg in args if arg is not NoneType), None)
                 if base is None:
-                    return with_style("Any", style) + "?"
-                try:
-                    base_str = colored_type(base, style)
-                except Exception:
-                    base_str = with_style(
-                        simplified_type_name(getattr(base, "__name__", str(base))),
-                        style,
-                    )
-                return f"{base_str}?"  # Color only the base type and leave '?' unstyled
+                    return "Any?"
+                base_name = _stringify_type_for_help(base)
+                if base_name.endswith("?"):
+                    return base_name
+                return f"{base_name}?"
     except Exception:
         pass
 
     try:
-        return colored_type(annotation, style)
+        origin = type_origin(annotation)
+        args = type_args(annotation)
+        if origin is not None and args:
+            return simplified_type_name(str(annotation))
+    except Exception:
+        pass
+
+    try:
+        if isinstance(annotation, type):
+            raw_name = annotation.__name__
+        else:
+            raw_name = str(annotation)
     except Exception:
         try:
-            name = getattr(annotation, "__name__", str(annotation))
+            raw_name = getattr(annotation, "__name__", str(annotation))
         except Exception:
-            name = str(annotation)
-        simple = simplified_type_name(name)
-        if simple.endswith("?"):
-            return with_style(simple[:-1], style) + "?"
-        return with_style(simple, style)
+            raw_name = str(annotation)
+
+    return simplified_type_name(raw_name)
+
+
+def _tokenize_type_text(type_text: str) -> list[tuple[str, str]]:
+    tokens: list[tuple[str, str]] = []
+    i = 0
+    length = len(type_text)
+
+    while i < length:
+        ch = type_text[i]
+
+        if ch.isspace():
+            j = i + 1
+            while j < length and type_text[j].isspace():
+                j += 1
+            tokens.append(("space", type_text[i:j]))
+            i = j
+            continue
+
+        if ch in _TYPE_BRACKETS:
+            tokens.append(("bracket", ch))
+            i += 1
+            continue
+
+        if ch in _TYPE_PUNCTUATION:
+            tokens.append(("punctuation", ch))
+            i += 1
+            continue
+
+        if ch in _TYPE_OPERATORS:
+            tokens.append(("operator", ch))
+            i += 1
+            continue
+
+        if ch in {"'", '"'}:
+            quote = ch
+            j = i + 1
+            escaped = False
+            while j < length:
+                curr = type_text[j]
+                if escaped:
+                    escaped = False
+                elif curr == "\\":
+                    escaped = True
+                elif curr == quote:
+                    j += 1
+                    break
+                j += 1
+            tokens.append(("literal", type_text[i:j]))
+            i = j
+            continue
+
+        if ch.isdigit():
+            j = i + 1
+            while j < length and (type_text[j].isdigit() or type_text[j] == "."):
+                j += 1
+            tokens.append(("literal", type_text[i:j]))
+            i = j
+            continue
+
+        if ch.isalpha() or ch == "_":
+            j = i + 1
+            while j < length and (type_text[j].isalnum() or type_text[j] in {"_", "."}):
+                j += 1
+            value = type_text[i:j]
+            token_kind = "keyword" if value in _TYPE_KEYWORDS else "name"
+            tokens.append((token_kind, value))
+            i = j
+            continue
+
+        tokens.append(("other", ch))
+        i += 1
+
+    return tokens
+
+
+def _resolve_type_token_styles(style: Any, theme: Any | None) -> dict[str, Any]:
+    def pick(name: str, fallback: Any) -> Any:
+        if theme is not None and hasattr(theme, name):
+            return getattr(theme, name)
+        return fallback
+
+    return {
+        "name": style,
+        "keyword": pick("type_keyword", style),
+        "bracket": pick("type_bracket", style),
+        "punctuation": pick("type_punctuation", style),
+        "operator": pick("type_operator", style),
+        "literal": pick("type_literal", style),
+        "other": style,
+    }
+
+
+def _format_type_for_help(annotation: Any, style: Any, theme: Any | None = None) -> str:
+    type_text = _stringify_type_for_help(annotation)
+    styles = _resolve_type_token_styles(style, theme)
+    tokens = _tokenize_type_text(type_text)
+
+    rendered: list[str] = []
+    for kind, value in tokens:
+        if kind == "space":
+            rendered.append(value)
+        else:
+            rendered.append(_safe_style(value, styles.get(kind, style)))
+    return "".join(rendered)
 
 
 __all__ = [

@@ -23,6 +23,11 @@ class InterfacyColors:
     """Base color theme for interfacy"""
 
     type: TextStyle = TextStyle(color="green")
+    type_keyword: TextStyle = TextStyle(color="light_blue")
+    type_bracket: TextStyle = TextStyle(color="white")
+    type_punctuation: TextStyle = TextStyle(color="white")
+    type_operator: TextStyle = TextStyle(color="white")
+    type_literal: TextStyle = TextStyle(color="yellow")
     default: TextStyle = TextStyle(color="light_blue")
     description: TextStyle = TextStyle(color="white")
     string: TextStyle = TextStyle(color="yellow")
@@ -556,7 +561,7 @@ class HelpLayout:
                     param_info += ", " + default_text
                     default_added = True
             else:
-                type_str = format_type_for_help(param.type, self.style.type)
+                type_str = format_type_for_help(param.type, self.style.type, theme=self.style)
                 param_info = self.prefix_type + type_str
 
             parts.append(param_info)
@@ -734,7 +739,7 @@ class HelpLayout:
         choices_block = " [" + choices_label + " " + choices_str + "]" if choices_str else ""
 
         if param.is_typed and not self._param_is_bool(param) and not choices:
-            type_str = format_type_for_help(param.type, self.style.type)
+            type_str = format_type_for_help(param.type, self.style.type, theme=self.style)
         else:  # Hide type when choices are shown
             type_str = ""
 

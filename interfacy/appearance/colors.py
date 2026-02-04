@@ -5,6 +5,11 @@ from interfacy.appearance.layout import InterfacyColors
 
 class NoColor(InterfacyColors):
     type = TextStyle(color="white")
+    type_keyword = TextStyle(color="white")
+    type_bracket = TextStyle(color="white")
+    type_punctuation = TextStyle(color="white")
+    type_operator = TextStyle(color="white")
+    type_literal = TextStyle(color="white")
     default = TextStyle(color="white")
     description = TextStyle(color="white")
     string = TextStyle(color="white")
@@ -19,6 +24,11 @@ class Aurora(InterfacyColors):
     """Color theme inspired by aurora palettes."""
 
     type = TextStyle(color="light_cyan")
+    type_keyword = TextStyle(color="light_blue")
+    type_bracket = TextStyle(color="white")
+    type_punctuation = TextStyle(color="white")
+    type_operator = TextStyle(color="white")
+    type_literal = TextStyle(color="yellow")
     default = TextStyle(color="light_magenta")
     description = TextStyle(color="white")
     string = TextStyle(color="yellow")
@@ -32,6 +42,11 @@ class ClapColors(InterfacyColors):
     """Colors that mimic clap's default styled output."""
 
     type = TextStyle(color="light_green")
+    type_keyword = TextStyle(color="light_green")
+    type_bracket = TextStyle(color="white")
+    type_punctuation = TextStyle(color="white")
+    type_operator = TextStyle(color="white")
+    type_literal = TextStyle(color="cyan")
     default = TextStyle(color="cyan")
     description = TextStyle(color="white")
     string = TextStyle(color="cyan")

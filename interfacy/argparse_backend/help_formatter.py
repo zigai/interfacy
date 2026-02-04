@@ -357,7 +357,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             elif action.type in (str, int, float):
                 type_str = ""
             else:
-                type_str = format_type_for_help(action.type, style.type)
+                type_str = format_type_for_help(action.type, style.type, theme=style)
         except Exception:
             type_str = ""
 
