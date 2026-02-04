@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
-import sys
 
 import pytest
 
-from interfacy.cli.main import ExitCode, main, resolve_target
+from interfacy.cli.main import ExitCode, _split_target, main, resolve_target
 
 
 def _write_module(path: Path, source: str) -> None:
@@ -47,6 +47,12 @@ def test_resolve_target_file_path(tmp_path: Path) -> None:
     target = resolve_target(f"{module_path}:hello")
     assert callable(target)
     assert target() == "ok"
+
+
+def test_split_target_windows_drive_path() -> None:
+    module_ref, symbol_ref = _split_target(r"C:\tmp\entry.py:hello")
+    assert module_ref == r"C:\tmp\entry.py"
+    assert symbol_ref == "hello"
 
 
 def test_main_invalid_target_missing_colon(capsys: pytest.CaptureFixture[str]) -> None:
@@ -149,7 +155,8 @@ def test_main_applies_config_to_parser_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module_path = tmp_path / "mod.py"
+    module_name = "config_parser_target"
+    module_path = tmp_path / f"{module_name}.py"
     _write_module(
         module_path,
         "\n".join(
@@ -182,11 +189,10 @@ def test_main_applies_config_to_parser_target(
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.delenv("INTERFACY_CONFIG", raising=False)
 
-    result = main([f"{module_path}:parser", "echo", "hi"])
+    result = main([f"{module_name}:parser", "echo", "hi"])
     assert result == ExitCode.SUCCESS
 
-    module_name = f"interfacy_entry_{module_path.stem}_{abs(hash(str(module_path)))}"
-    module = sys.modules[module_name]
+    module = import_module(module_name)
     parser_obj = module.parser
     assert parser_obj.display_result is True
     assert parser_obj.allow_args_from_file is False

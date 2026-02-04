@@ -41,7 +41,8 @@ def _split_target(target: str) -> tuple[str, str]:
             "Target must be in the form 'module:object' or 'path.py:object'. "
             f"Got: '{target}'. Example: 'main.py:main'."
         )
-    module_ref, symbol_ref = target.split(":", 1)
+    # Use rsplit to preserve Windows drive letters (e.g. C:\path\mod.py:symbol).
+    module_ref, symbol_ref = target.rsplit(":", 1)
     if not module_ref or not symbol_ref:
         raise ValueError(
             "Target must include both module/path and symbol. "
