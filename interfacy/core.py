@@ -102,7 +102,7 @@ class InterfacyParser:
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
-        print_result_func: Callable = print,
+        print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
@@ -151,7 +151,7 @@ class InterfacyParser:
 
     def add_command(
         self,
-        command: Callable | Any,
+        command: Callable[..., Any] | Any,
         name: str | None = None,
         description: str | None = None,
         aliases: Sequence[str] | None = None,
@@ -379,7 +379,7 @@ class InterfacyParser:
             names.append(command.canonical_name)
         if command.cli_name and command.cli_name not in names:
             names.append(command.cli_name)
-        if command.obj.name not in names:
+        if command.obj is not None and command.obj.name not in names:
             names.append(command.obj.name)
 
         for alias in command.aliases:
@@ -542,7 +542,7 @@ class InterfacyParser:
         """
         raise NotImplementedError
 
-    def run(self, *commands: Callable, args: list[str] | None = None) -> Any:
+    def run(self, *commands: Callable[..., Any], args: list[str] | None = None) -> Any:
         """
         Register commands, parse args, and execute the selected command.
 

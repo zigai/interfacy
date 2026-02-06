@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+import re
 
 from stdl.st import ansi_len, with_style
 
-if TYPE_CHECKING:
-    from interfacy.appearance.layout import HelpLayout
-    from interfacy.schema.schema import Argument, Command, ParserSchema
+from interfacy.appearance.layout import HelpLayout
+from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 
 
 def _get_terminal_width() -> int:
@@ -17,9 +16,7 @@ def _get_terminal_width() -> int:
         return 80
 
 
-def _make_help_argument() -> Argument:
-    from interfacy.schema.schema import Argument, ArgumentKind, ValueShape
-
+def _make_help_argument(help_text: str) -> Argument:
     return Argument(
         name="help",
         display_name="help",
@@ -28,7 +25,7 @@ def _make_help_argument() -> Argument:
         flags=("--help",),
         required=False,
         default=None,
-        help="show this help message and exit",
+        help=help_text,
         type=None,
         parser=None,
     )
@@ -46,12 +43,13 @@ class SchemaHelpRenderer:
     def render_parser_help(self, schema: ParserSchema, prog: str) -> str:
         if len(schema.commands) == 1:
             cmd = next(iter(schema.commands.values()))
-            return self.render_command_help(
-                cmd,
-                prog,
-                parser_description=schema.description,
-                parser_epilog=schema.epilog,
-            )
+            if cmd.is_leaf:
+                return self.render_command_help(
+                    cmd,
+                    prog,
+                    parser_description=schema.description,
+                    parser_epilog=schema.epilog,
+                )
 
         return self._render_multi_command_help(schema, prog)
 
@@ -63,8 +61,6 @@ class SchemaHelpRenderer:
         parser_description: str | None = None,
         parser_epilog: str | None = None,
     ) -> str:
-        from interfacy.schema.schema import ArgumentKind
-
         layout = self.layout
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
@@ -73,17 +69,13 @@ class SchemaHelpRenderer:
         layout.prepare_default_field_width_for_arguments(all_args)
 
         sections: list[str] = []
-
-        # Usage
         usage = self._build_usage(command, prog)
         sections.append(usage)
-
-        # Description
         description = parser_description or command.description
+
         if description:
             sections.append(description)
 
-        # Positional arguments
         if positionals:
             heading = self._style_section_heading("positional arguments")
             lines = [heading]
@@ -92,9 +84,9 @@ class SchemaHelpRenderer:
                 lines.append(self._indent(rendered))
             sections.append("\n".join(lines))
 
-        # Options
-        help_arg = _make_help_argument()
+        help_arg = _make_help_argument(layout.help_option_description)
         options_with_help = [help_arg, *options]
+
         if options_with_help:
             heading = self._style_section_heading("options")
             lines = [heading]
@@ -103,15 +95,18 @@ class SchemaHelpRenderer:
                 lines.append(self._indent(rendered))
             sections.append("\n".join(lines))
 
-        # Subcommands
         if command.subcommands:
             subcommand_help = layout.get_help_for_multiple_commands(command.subcommands)
             sections.append(subcommand_help)
 
-        # Epilog
         epilog_parts: list[str] = []
         if command.epilog:
-            epilog_parts.append(command.epilog)
+            is_legacy_command_epilog = (
+                command.subcommands is not None
+                and command.epilog.lstrip().lower().startswith("commands:")
+            )
+            if not is_legacy_command_epilog:
+                epilog_parts.append(command.epilog)
         if parser_epilog:
             epilog_parts.append(parser_epilog)
         if epilog_parts:
@@ -122,60 +117,73 @@ class SchemaHelpRenderer:
     def _render_multi_command_help(self, schema: ParserSchema, prog: str) -> str:
         layout = self.layout
         sections: list[str] = []
-
-        # Usage
-        usage_prog = self._style_usage_text(prog)
+        usage_prog = self._style_usage_text(self._normalize_prog(prog))
         usage_prefix = self._get_usage_prefix()
-        usage = f"{usage_prefix}{usage_prog} [OPTIONS] command [ARGS]"
-        sections.append(usage)
+        usage = f"{usage_prefix}{usage_prog} {layout.get_parser_command_usage_suffix()}"
 
-        # Description
+        sections.append(usage)
         if schema.description:
             sections.append(schema.description)
 
-        # Options (--help)
-        help_arg = _make_help_argument()
+        help_arg = _make_help_argument(layout.help_option_description)
         layout.prepare_default_field_width_for_arguments([help_arg])
         heading = self._style_section_heading("options")
         help_line = layout.format_argument(help_arg)
         sections.append(f"{heading}\n{self._indent(help_line)}")
 
-        # Command listing
         if schema.commands_help:
             sections.append(schema.commands_help)
         elif schema.commands:
             commands_help = layout.get_help_for_multiple_commands(schema.commands)
             sections.append(commands_help)
-
-        # Epilog
         if schema.epilog:
             sections.append(schema.epilog)
 
         return "\n\n".join(sections) + "\n"
 
     def _build_usage(self, command: Command, prog: str) -> str:
-        from interfacy.schema.schema import ArgumentKind
-
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
         options = [a for a in all_args if a.kind == ArgumentKind.OPTION]
+        compact_options_usage = self.layout.compact_options_usage
 
         usage_prefix = self._get_usage_prefix()
 
-        parts: list[str] = [self._style_usage_text(prog)]
-
-        if options:
+        parts: list[str] = [self._style_usage_text(self._normalize_prog(prog))]
+        if compact_options_usage:
             parts.append("[OPTIONS]")
+            for arg in options:
+                if arg.required:
+                    parts.append(self._usage_token_for_option(arg, compact_style=True))
+        else:
+            parts.append("[--help]")
+            for arg in options:
+                parts.append(self._usage_token_for_option(arg))
 
         for arg in positionals:
-            name = (arg.metavar or arg.name or "arg").upper()
-            if arg.required:
-                parts.append(name)
-            else:
-                parts.append(f"[{name}]")
+            raw_name = arg.metavar
+            if raw_name is None or "\b" in raw_name:
+                raw_name = arg.display_name or arg.name or "arg"
+            name = raw_name.upper()
+            metavar_name = self.layout.format_usage_metavar(name, is_varargs=False)
+            if arg.value_shape == ValueShape.LIST:
+                token = (
+                    self.layout.format_usage_metavar(name, is_varargs=True)
+                    if compact_options_usage
+                    else f"{name} ..."
+                )
+                parts.append(token if arg.nargs == "+" else f"[{token}]")
+                continue
+            if arg.value_shape == ValueShape.TUPLE and isinstance(arg.nargs, int) and arg.nargs > 1:
+                token_atom = metavar_name if compact_options_usage else name
+                token = " ".join([token_atom] * arg.nargs)
+                parts.append(token if arg.required else f"[{token}]")
+                continue
+            token = metavar_name if compact_options_usage else name
+            parts.append(token if arg.required else f"[{token}]")
 
         if command.subcommands:
-            parts.append("{command}")
+            parts.append(self.layout.get_subcommand_usage_token())
 
         usage_text = " ".join(parts)
 
@@ -187,6 +195,43 @@ class SchemaHelpRenderer:
             return f"{usage_prefix}{wrapped}"
 
         return f"{usage_prefix}{usage_text}"
+
+    def _usage_token_for_option(self, arg: Argument, *, compact_style: bool = False) -> str:
+        longs = [flag for flag in arg.flags if flag.startswith("--")]
+        shorts = [flag for flag in arg.flags if flag.startswith("-") and not flag.startswith("--")]
+        primary_flag = longs[0] if longs else (shorts[0] if shorts else f"--{arg.display_name}")
+
+        is_bool = self.layout._arg_is_bool(arg)
+        if is_bool:
+            primary_bool = self.layout._get_primary_boolean_flag_from_argument(arg) or primary_flag
+            return primary_bool if arg.required else f"[{primary_bool}]"
+
+        raw_metavar = arg.metavar
+        if raw_metavar is None or "\b" in raw_metavar:
+            raw_metavar = arg.display_name or arg.name or "value"
+
+        metavar = raw_metavar.upper()
+        if arg.value_shape == ValueShape.LIST:
+            if compact_style:
+                value_token = self.layout.format_usage_metavar(metavar, is_varargs=True)
+            else:
+                value_token = f"[{metavar} ...]"
+        elif arg.value_shape == ValueShape.TUPLE and isinstance(arg.nargs, int) and arg.nargs > 1:
+            atom = (
+                self.layout.format_usage_metavar(metavar, is_varargs=False)
+                if compact_style
+                else metavar
+            )
+            value_token = " ".join([atom] * arg.nargs)
+        else:
+            value_token = (
+                self.layout.format_usage_metavar(metavar, is_varargs=False)
+                if compact_style
+                else metavar
+            )
+
+        token = f"{primary_flag} {value_token}"
+        return token if arg.required else f"[{token}]"
 
     def _wrap_usage_parts(
         self,
@@ -222,6 +267,14 @@ class SchemaHelpRenderer:
         if layout.usage_style is not None:
             prefix = with_style(prefix, layout.usage_style)
         return prefix
+
+    def _normalize_prog(self, prog: str) -> str:
+        return re.sub(
+            r"^(?:\x1b\[[0-9;]*m)*\s*usage:\s*",
+            "",
+            prog,
+            flags=re.IGNORECASE,
+        ).strip()
 
     def _style_usage_text(self, text: str) -> str:
         if self.layout.usage_text_style is not None:

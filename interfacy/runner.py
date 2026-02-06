@@ -70,7 +70,7 @@ class SchemaRunner:
             return args
 
         payload = self.builder.read_piped_input()
-        if payload in (None, ""):
+        if payload is None or payload == "":
             return args
 
         parameters = self.builder.get_parameters_for(command, subcommand=subcommand)
@@ -103,7 +103,7 @@ class SchemaRunner:
             return self.run_method(obj, args)
         if isinstance(obj, Class):
             return self.run_class(command, args)
-        raise InvalidCommandError(command.obj)
+        raise InvalidCommandError(command.canonical_name)
 
     def run_function(self, func: Function | Method, args: dict) -> Any:
         """
@@ -270,6 +270,7 @@ class SchemaRunner:
                 cls.instance = None
                 init_args = self._extract_init_args(args, command.initializer)
                 if init_args:
+                    assert cls.init_method
                     init_a, init_kw = split_args_kwargs(init_args, cls.init_method)
                     cls.init(*init_a, **init_kw)
                 else:
@@ -355,7 +356,7 @@ class SchemaRunner:
             args = self._reconstruct_expanded_models(args, self._arguments_for(command))
             return self.run_function(obj, args)
 
-        raise InvalidCommandError(obj)
+        raise InvalidCommandError(command.canonical_name)
 
     def _reconstruct_expanded_models(
         self,
@@ -457,7 +458,7 @@ class SchemaRunner:
                     values[key] = value
             return values
         if self._is_plain_class_model(model_type):
-            values: dict[str, Any] = {}
+            values = {}
             for key in self._plain_class_param_annotations(model_type).keys():
                 try:
                     values[key] = getattr(instance, key)
@@ -506,7 +507,7 @@ class SchemaRunner:
 
         if self._is_plain_class_model(model_type):
             annotations = self._plain_class_param_annotations(model_type)
-            kwargs: dict[str, Any] = {}
+            kwargs = {}
             for key, value in values.items():
                 ann = annotations.get(key)
                 kwargs[key] = self._coerce_model_value(ann, value)

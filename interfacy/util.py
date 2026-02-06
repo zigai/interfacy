@@ -145,7 +145,7 @@ def resolve_objinspect_annotations(obj: Function | Method | Class) -> None:
     """Resolve string/forward-ref annotations for objinspect objects in-place."""
 
     def resolve_callable_hints(
-        fn: Callable, *, owner_cls: type | object | None = None
+        fn: Callable[..., Any], *, owner_cls: type | object | None = None
     ) -> dict[str, Any] | None:
         globalns = getattr(fn, "__globals__", None)
         localns: dict[str, Any] | None = None
@@ -317,7 +317,7 @@ def format_default_for_help(value: Any) -> str:
     return str(value)
 
 
-def show_result(result: Any, handler: Callable = print) -> None:
+def show_result(result: Any, handler: Callable[[Any], Any] = print) -> None:
     """
     Display a result value using the shared console helpers.
 

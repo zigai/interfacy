@@ -759,7 +759,7 @@ class ParserSchemaBuilder:
         model_default: Any = MODEL_DEFAULT_UNSET,
     ) -> Argument:
         if help_text is None:
-            help_text = self.parser.help_layout.get_help_for_parameter(spec, tuple(flags))
+            help_text = spec.description
 
         parser_func: Callable[[str], Any] | None = None
         value_shape = ValueShape.SINGLE
@@ -967,7 +967,7 @@ class ParserSchemaBuilder:
             parent_path=parent_path,
         )
 
-    def _build_args_from_source(self, source: type | Callable) -> list[Argument]:
+    def _build_args_from_source(self, source: type | Callable[..., Any]) -> list[Argument]:
         """Build argument list from a class __init__ or callable signature."""
         obj = inspect(source, init=True)
         resolve_objinspect_annotations(obj)
@@ -1009,7 +1009,7 @@ class ParserSchemaBuilder:
                     description=entry.description,
                     aliases=entry.aliases,
                 )
-            raise InvalidCommandError(entry.obj)
+            raise InvalidCommandError(entry.name)
 
     def _build_from_instance(
         self,
