@@ -1,5 +1,7 @@
+import argparse
 import os
 import re
+from enum import Enum
 from inspect import Parameter as StdParameter
 from re import Match
 from typing import TYPE_CHECKING, ClassVar, Literal
@@ -16,7 +18,7 @@ from interfacy.util import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
-    from interfacy.schema.schema import Command
+    from interfacy.schema.schema import Argument, Command
 
 
 class InterfacyColors:
@@ -72,7 +74,11 @@ class HelpLayout:
         long_flag_width (int): Width for long flag column.
         pos_flag_width (int): Width for positional column.
         min_total_flag_width (int): Minimum total width for flags.
-        PRE_FMT_PREFIX (str): Prefix used for preformatted help blocks.
+        usage_prefix (str | None): Optional usage label override.
+        usage_style (TextStyle | None): Optional style for usage label.
+        usage_text_style (TextStyle | None): Optional style for usage text.
+        section_title_map (dict[str, str] | None): Optional section title mapping.
+        section_heading_style (TextStyle | None): Optional section title style.
         layout_mode (Literal["auto", "adaptive", "template"]): Layout selection mode.
         doc_inline_code_mode (Literal["bold", "strip"]): Inline code rendering mode.
     """
@@ -106,12 +112,21 @@ class HelpLayout:
     default_field_width_small_sample_size: int = 6
     default_overflow_mode: Literal["inline", "newline"] = "newline"
     default_label_for_help: str = "default"
+    suppress_empty_default_brackets_for_help: bool = False
     include_metavar_in_flag_display: bool = True
     short_flag_width: int = 6
     long_flag_width: int = 18
     pos_flag_width: int = 24
     min_total_flag_width: int = 24
-    PRE_FMT_PREFIX = "\x00FMT:"
+    usage_prefix: str | None = None
+    usage_style: TextStyle | None = None
+    usage_text_style: TextStyle | None = None
+    section_title_map: dict[str, str] | None = None
+    section_heading_style: TextStyle | None = None
+    help_option_description: str = "show this help message and exit"
+    compact_options_usage: bool = False
+    parser_command_usage_suffix: str = "[OPTIONS] command [ARGS]"
+    subcommand_usage_token: str = "{command}"
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
 
@@ -237,6 +252,31 @@ class HelpLayout:
             description (str): Raw description text.
         """
         return self._format_doc_text(description)
+
+    def get_parser_command_usage_suffix(self) -> str:
+        return self.parser_command_usage_suffix
+
+    def get_subcommand_usage_token(self) -> str:
+        return self.subcommand_usage_token
+
+    def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:
+        return f"{name} ..." if is_varargs else name
+
+    def _collapse_empty_default_slot(
+        self,
+        rendered: str,
+        template: str,
+        default_value: str,
+    ) -> str:
+        if not self.suppress_empty_default_brackets_for_help:
+            return rendered
+        if "{default_padded}" not in template or default_value:
+            return rendered
+
+        def replace_blank_default(match: Match[str]) -> str:
+            return " " * len(match.group(0))
+
+        return re.sub(r"\[\s*\]", replace_blank_default, rendered, count=1)
 
     def get_help_for_parameter(
         self,
@@ -424,7 +464,13 @@ class HelpLayout:
         if "[type:" in rendered and "type" in values and not values["type"]:
             rendered = re.sub(r"\s*\[type:\s*\]", "", rendered)
 
-        return f"{self.PRE_FMT_PREFIX}{rendered}"
+        rendered = self._collapse_empty_default_slot(
+            rendered,
+            template,
+            values.get("default", ""),
+        )
+
+        return rendered.rstrip()
 
     def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:
         """
@@ -662,6 +708,51 @@ class HelpLayout:
     def _build_extra(self, param: Parameter) -> str:
         return HelpLayout._get_param_extra_help(self, param)
 
+    def _format_choice_for_help(self, value: object) -> str:
+        if isinstance(value, Enum):
+            raw = value.value
+            if isinstance(raw, str):
+                return raw
+            return value.name
+        return str(value)
+
+    def _format_argument_choice_for_help(self, arg: "Argument", value: object) -> str:
+        enum_type = arg.type
+        if isinstance(value, str) and isinstance(enum_type, type):
+            try:
+                if issubclass(enum_type, Enum) and value in enum_type.__members__:
+                    return self._format_choice_for_help(enum_type[value])
+            except Exception:
+                pass
+        return self._format_choice_for_help(value)
+
+    @staticmethod
+    def _enum_matches(value: object, member_name: str) -> bool:
+        member = getattr(type(value), member_name, None)
+        return value == member
+
+    def _type_for_argument_help(self, arg: "Argument") -> object | None:
+        if arg.type is None:
+            return None
+
+        if self._enum_matches(arg.value_shape, "LIST"):
+            try:
+                return list[arg.type]
+            except Exception:
+                return arg.type
+
+        if (
+            self._enum_matches(arg.value_shape, "TUPLE")
+            and isinstance(arg.nargs, int)
+            and arg.nargs > 1
+        ):
+            try:
+                return tuple.__class_getitem__(tuple([arg.type] * arg.nargs))
+            except Exception:
+                return arg.type
+
+        return arg.type
+
     def _build_styled_columns(
         self, flag_short: str, flag_long: str, flag: str, is_option: bool
     ) -> dict[str, str]:
@@ -765,6 +856,326 @@ class HelpLayout:
         values.update(self._build_styled_columns(flag_short, flag_long, flag, is_option))
 
         return values
+
+    def _arg_is_bool(self, arg: "Argument") -> bool:
+        return self._enum_matches(arg.value_shape, "FLAG")
+
+    def _arg_has_default(self, arg: "Argument") -> bool:
+        return arg.default is not None and arg.default is not argparse.SUPPRESS
+
+    def _get_primary_boolean_flag_from_argument(self, arg: "Argument") -> str:
+        longs = [f for f in arg.flags if f.startswith("--")]
+        if not longs:
+            return arg.flags[0] if arg.flags else ""
+
+        base_flag = None
+        no_flag = None
+        for flag in longs:
+            if flag.startswith("--no-"):
+                no_flag = flag
+            else:
+                base_flag = flag
+
+        if base_flag and not no_flag:
+            no_flag = f"--no-{base_flag[2:]}"
+
+        if arg.boolean_behavior is not None:
+            default_value = arg.boolean_behavior.default
+        else:
+            default_value = arg.default if self._arg_has_default(arg) else False
+
+        if default_value is True and no_flag:
+            return no_flag
+        return base_flag or longs[0]
+
+    def _build_flag_parts_from_argument(self, arg: "Argument") -> tuple[str, str, str, bool]:
+        shorts = [f for f in arg.flags if f.startswith("-") and not f.startswith("--")]
+        longs = [f for f in arg.flags if f.startswith("--")]
+        is_option = self._enum_matches(arg.kind, "OPTION")
+
+        metavar = ""
+        is_bool = self._arg_is_bool(arg)
+        needs_value = arg.type is not None and not is_bool
+        if is_option:
+            if needs_value and self.include_metavar_in_flag_display:
+                metavar = (arg.metavar or arg.display_name or arg.name or "value").upper()
+        else:
+            metavar = (arg.metavar or arg.display_name or arg.name or "value").upper()
+
+        def with_metavar(flag: str) -> str:
+            return f"{flag} {metavar}" if metavar else flag
+
+        if is_bool:
+            primary_flag = self._get_primary_boolean_flag_from_argument(arg)
+            flag_short = shorts[0] if shorts else ""
+            flag_long = primary_flag
+            if flag_short:
+                joined = f"{flag_short}, {flag_long}"
+            else:
+                joined = flag_long
+            return joined, flag_short, flag_long, is_option
+
+        flag_short = with_metavar(shorts[0]) if shorts else ""
+        flag_long = with_metavar(longs[0]) if longs else ""
+
+        if is_option:
+            joined = ", ".join([p for p in (flag_short, flag_long) if p])
+        else:
+            joined = metavar or (arg.name or "")
+
+        return joined, flag_short, flag_long, is_option
+
+    def _build_extra_from_argument(self, arg: "Argument") -> str:
+        parts: list[str] = []
+        default_added = False
+        is_typed = arg.type is not None
+        is_bool = self._arg_is_bool(arg)
+
+        if is_typed and not is_bool:
+            if arg.choices:
+                param_info = self.prefix_choices + ", ".join(
+                    [
+                        with_style(self._format_argument_choice_for_help(arg, i), self.style.string)
+                        for i in arg.choices
+                    ]
+                )
+                if not arg.required and self._arg_has_default(arg):
+                    default_text = self.prefix_default + with_style(
+                        format_default_for_help(arg.default), self.style.default
+                    )
+                    param_info += ", " + default_text
+                    default_added = True
+            else:
+                type_str = format_type_for_help(
+                    self._type_for_argument_help(arg), self.style.type, theme=self.style
+                )
+                param_info = self.prefix_type + type_str
+            parts.append(param_info)
+
+        if not arg.required and self._arg_has_default(arg) and not is_bool and not default_added:
+            parts.append(", ")
+            parts.append(
+                self.prefix_default
+                + with_style(format_default_for_help(arg.default), self.style.default)
+            )
+
+        if not parts:
+            return ""
+        return f"[{''.join(parts)}]"
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        flag, flag_short, flag_long, is_option = self._build_flag_parts_from_argument(arg)
+
+        is_bool = self._arg_is_bool(arg)
+        description = self._format_doc_text(arg.help or "")
+        if description and not description.endswith((".", "?", "!")) and is_bool:
+            description += "."
+        description = with_style(description, self.style.description)
+
+        default_raw = ""
+        if is_bool:
+            is_synthetic_help = arg.name == "help" and "--help" in arg.flags
+            if not is_synthetic_help:
+                if arg.boolean_behavior is not None:
+                    val = arg.boolean_behavior.default
+                elif self._arg_has_default(arg):
+                    val = arg.default
+                else:
+                    val = False
+                default_raw = "true" if bool(val) else "false"
+        elif not arg.required and self._arg_has_default(arg):
+            default_raw = format_default_for_help(arg.default)
+
+        styled_default = with_style(default_raw, self.style.default) if default_raw else ""
+        pad = max(0, self.default_field_width - ansi_len(styled_default))
+        default_padded = f"{' ' * pad}{styled_default}"
+        default = styled_default
+
+        choices_str = ""
+        if arg.choices:
+            choices_str = ", ".join(
+                [
+                    with_style(self._format_argument_choice_for_help(arg, i), self.style.string)
+                    for i in arg.choices
+                ]
+            )
+        choices_label = "choices:" if choices_str else ""
+        choices_block = f" [{choices_label} {choices_str}]" if choices_str else ""
+
+        arg_type_for_help = self._type_for_argument_help(arg)
+        is_typed = arg_type_for_help is not None
+        if is_typed and not is_bool and not arg.choices:
+            type_str = format_type_for_help(arg_type_for_help, self.style.type, theme=self.style)
+        else:
+            type_str = ""
+
+        is_varargs = self._enum_matches(arg.value_shape, "LIST") and not is_option
+        is_required = arg.required and not is_varargs
+
+        values: dict[str, str] = {
+            "flag": flag,
+            "flag_short": flag_short,
+            "flag_long": flag_long,
+            "description": description,
+            "type": type_str,
+            "default": default,
+            "default_padded": default_padded,
+            "choices": choices_str,
+            "choices_label": choices_label,
+            "choices_block": choices_block,
+            "extra": self._build_extra_from_argument(arg),
+            "required": self.required_indicator if is_required else "",
+            "metavar": (arg.metavar or arg.display_name or arg.name or "value").upper(),
+        }
+
+        values.update(self._build_styled_columns(flag_short, flag_long, flag, is_option))
+        return values
+
+    def format_argument(self, arg: "Argument", indent: int = 2) -> str:
+        is_option = self._enum_matches(arg.kind, "OPTION")
+        template = self.format_option if is_option else self.format_positional
+        if not template:
+            return self._format_argument_legacy(arg, indent)
+
+        values = self._build_values_from_argument(arg)
+        default_overflow = ""
+        skip_wrap = False
+        if "{default_padded}" in template:
+            styled_default = values.get("default", "")
+            if styled_default and ansi_len(styled_default) > self.default_field_width:
+                if self.default_overflow_mode == "inline":
+                    values["default"] = styled_default
+                    values["default_padded"] = styled_default
+                    skip_wrap = True
+                else:
+                    default_overflow = styled_default
+                    values["default"] = ""
+                    values["default_padded"] = " " * self.default_field_width
+
+        DESC_TOKEN = "<<__DESC__>>"
+        probe_vals = dict(values)
+        probe_vals["description"] = DESC_TOKEN
+        try:
+            probe_render = template.format(**probe_vals)
+            token_idx = probe_render.find(DESC_TOKEN)
+        except Exception:
+            probe_render = ""
+            token_idx = -1
+
+        if token_idx != -1:
+            prefix_str = probe_render[:token_idx]
+            prefix_width = ansi_len(prefix_str)
+            cont_indent = " " * (prefix_width + indent)
+
+            try:
+                term_width = os.get_terminal_size().columns
+            except (OSError, AttributeError):
+                term_width = 80
+
+            wrap_width = max(10, term_width - indent - prefix_width)
+            raw_desc = self._format_doc_text(arg.help or "")
+
+            wrapped: list[str] = []
+            for word in raw_desc.split():
+                if not wrapped:
+                    wrapped.append(word)
+                else:
+                    if len(wrapped[-1]) + 1 + len(word) <= wrap_width:
+                        wrapped[-1] = f"{wrapped[-1]} {word}"
+                    else:
+                        wrapped.append(word)
+
+            if wrapped and not skip_wrap:
+                styled_lines = [with_style(wrapped[0], self.style.description)]
+                if len(wrapped) > 1:
+                    styled_lines.extend(
+                        [
+                            cont_indent + with_style(line, self.style.description)
+                            for line in wrapped[1:]
+                        ]
+                    )
+                values["description"] = "\n".join(styled_lines)
+
+            if default_overflow:
+                arrow = with_style("→", self.style.extra_data)
+                label = with_style("default:", self.style.extra_data)
+                overflow_line = f"{arrow} {label} {default_overflow}"
+                if values["description"]:
+                    values["description"] = f"{values['description']}\n{cont_indent}{overflow_line}"
+                else:
+                    values["description"] = f"\n{cont_indent}{overflow_line}"
+
+        try:
+            rendered = template.format(**values)
+        except Exception:
+            rendered = f"{values['flag']:<40} {values['description']} {values.get('extra', '')}"
+
+        is_varargs = self._enum_matches(arg.value_shape, "LIST") and is_option is False
+        is_required = arg.required and not is_varargs
+        if is_required and values.get("required") and values["required"] not in rendered:
+            rendered = f"{rendered} {values['required']}"
+
+        if "[type:" in rendered and "type" in values and not values["type"]:
+            rendered = re.sub(r"\s*\[type:\s*\]", "", rendered)
+
+        rendered = self._collapse_empty_default_slot(
+            rendered,
+            template,
+            values.get("default", ""),
+        )
+
+        return rendered.rstrip()
+
+    def _format_argument_legacy(self, arg: "Argument", indent: int = 2) -> str:
+        is_bool = self._arg_is_bool(arg)
+        is_required = arg.required
+        is_typed = arg.type is not None
+
+        if is_required and not is_typed:
+            return ""
+
+        parts: list[str] = []
+        if is_bool:
+            if arg.help:
+                description = self._format_doc_text(arg.help)
+                if not description.endswith((".", "?", "!")):
+                    description += "."
+                parts.append(with_style(description, self.style.description))
+        else:
+            if arg.help:
+                parts.append(
+                    f"{with_style(self._format_doc_text(arg.help), self.style.description)} "
+                )
+            parts.append(self._build_extra_from_argument(arg))
+
+        text = "".join(parts)
+        if is_required:
+            if self.required_indicator_pos == "left":
+                text = f"{self.required_indicator} {text}"
+            else:
+                text = f"{text} {self.required_indicator}"
+        return text
+
+    def prepare_default_field_width_for_arguments(self, arguments: list["Argument"]) -> None:
+        template = self.format_option or self.format_positional or ""
+        if "{default_padded}" not in template:
+            return
+
+        defaults: list[str] = []
+        for arg in arguments:
+            if self._arg_is_bool(arg):
+                if arg.boolean_behavior is not None:
+                    val = arg.boolean_behavior.default
+                elif self._arg_has_default(arg):
+                    val = arg.default
+                else:
+                    val = False
+                defaults.append("true" if bool(val) else "false")
+            elif not arg.required and self._arg_has_default(arg):
+                defaults.append(format_default_for_help(arg.default))
+
+        lengths = [len(d) for d in defaults if d]
+        self.default_field_width = self._compute_default_field_width_from_lengths(lengths)
 
 
 __all__ = [
