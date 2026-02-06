@@ -2,12 +2,17 @@ import argparse
 import sys
 from argparse import Namespace
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from objinspect.typing import type_name
 
+from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.logger import get_logger
+
+if TYPE_CHECKING:
+    from interfacy.appearance.layout import HelpLayout
+    from interfacy.schema.schema import Command, ParserSchema
 
 logger = get_logger(__name__)
 
@@ -63,7 +68,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         help: str | None = None,
         metavar: str | None = None,
         formatter_class: type[argparse.HelpFormatter] | None = None,
-        help_layout: Any | None = None,
+        help_layout: "HelpLayout | None" = None,
     ) -> None:
         super().__init__(
             option_strings,
@@ -196,7 +201,7 @@ class ArgumentParser(argparse.ArgumentParser):
         nest_path: list[str] | None = None,
         exit_on_error: bool = True,
         *,
-        help_layout: Any | None = None,
+        help_layout: "HelpLayout | None" = None,
         color: bool | None = None,
     ) -> None:
         if parents is None:
@@ -250,6 +255,8 @@ class ArgumentParser(argparse.ArgumentParser):
             )
         self.register("action", "parsers", NestedSubParsersAction)
         self._interfacy_help_layout = help_layout
+        self._schema_command: Command | None = None
+        self._schema: ParserSchema | None = None
 
     def _get_formatter(self):  # type: ignore
         formatter = self.formatter_class(self.prog)  # type: ignore[arg-type]
@@ -258,12 +265,24 @@ class ArgumentParser(argparse.ArgumentParser):
                 formatter.set_help_layout(self._interfacy_help_layout)
             except Exception:
                 pass
-        if hasattr(formatter, "prepare_layout"):
-            try:
-                formatter.prepare_layout(self._actions)
-            except Exception:
-                pass
         return formatter
+
+    def format_help(self) -> str:
+        layout = self._interfacy_help_layout
+        if layout is None:
+            return super().format_help()
+        if not layout._use_template_layout():
+            return super().format_help()
+
+        renderer = SchemaHelpRenderer(layout)
+
+        if self._schema is not None:
+            return renderer.render_parser_help(self._schema, self.prog)
+
+        if self._schema_command is not None:
+            return renderer.render_command_help(self._schema_command, self.prog)
+
+        return super().format_help()
 
     def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
         """
@@ -283,7 +302,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 "base_nest_path": self.nest_path_components,
                 "nest_separator": self.nest_separator,
                 "formatter_class": self.formatter_class,
-                "help_layout": getattr(self, "_interfacy_help_layout", None),
+                "help_layout": self._interfacy_help_layout,
             }
         )
         return super().add_subparsers(**kwargs)  # type: ignore

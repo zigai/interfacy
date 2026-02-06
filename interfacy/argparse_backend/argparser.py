@@ -96,7 +96,7 @@ class Argparser(InterfacyParser):
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
-        print_result_func: Callable = print,
+        print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
@@ -333,7 +333,11 @@ class Argparser(InterfacyParser):
         return extra
 
     def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {"help": arg.help or ""}
+        help_text = arg.help or ""
+        if not self.help_layout._use_template_layout():
+            help_text = self.help_layout.format_argument(arg)
+
+        kwargs: dict[str, Any] = {"help": help_text}
         is_boolean_flag = arg.value_shape == ValueShape.FLAG
 
         if arg.metavar and not is_boolean_flag:
@@ -387,6 +391,8 @@ class Argparser(InterfacyParser):
         *,
         depth: int = 0,
     ) -> None:
+        parser._schema_command = command
+
         if command.description:
             parser.description = command.description
 
@@ -443,6 +449,7 @@ class Argparser(InterfacyParser):
 
     def _build_from_schema(self, schema: ParserSchema) -> ArgumentParser:
         parser = self._new_parser()
+        parser._schema = schema
 
         single_cmd = next(iter(schema.commands.values())) if len(schema.commands) == 1 else None
         single_group = single_cmd if single_cmd and not single_cmd.is_leaf else None
@@ -541,7 +548,7 @@ class Argparser(InterfacyParser):
 
     def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""
-        schema = getattr(self, "_last_schema", None) or self.build_parser_schema()
+        schema = self._last_schema or self.build_parser_schema()
 
         def convert_tuple(arg: Argument, val: list[Any]) -> tuple[Any, ...]:
             if arg.tuple_element_parsers:
@@ -587,12 +594,14 @@ class Argparser(InterfacyParser):
             raise exc
         return exc
 
-    def run(self, *commands: Callable | type | object, args: list[str] | None = None) -> Any:
+    def run(
+        self, *commands: Callable[..., Any] | type | object, args: list[str] | None = None
+    ) -> Any:
         """
         Register commands, parse args, and execute the selected command.
 
         Args:
-            *commands (Callable | type | object): Commands to register.
+            *commands (Callable[..., Any] | type | object): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
         original_handler = signal.getsignal(signal.SIGINT)
@@ -643,6 +652,9 @@ class Argparser(InterfacyParser):
             return self._handle_interrupt(e)
         finally:
             signal.signal(signal.SIGINT, original_handler)
+
+        if self._parser is None:
+            raise RuntimeError("Parser not initialized")
 
         signal.signal(signal.SIGINT, sigint_handler)
         try:
