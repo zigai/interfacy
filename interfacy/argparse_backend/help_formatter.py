@@ -10,9 +10,23 @@ from stdl.st import ansi_len, with_style
 if TYPE_CHECKING:
     from interfacy.appearance.layout import HelpLayout
 
+# Python 3.14 removed '_format_actions_usage', replaced with '_get_actions_usage_parts'
+_HAS_FORMAT_ACTIONS_USAGE = hasattr(argparse.HelpFormatter, "_format_actions_usage")
+
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
     """Help formatter that integrates Interfacy layout settings."""
+
+    def _compat_format_actions_usage(
+        self,
+        actions: list[argparse.Action],
+        groups: Iterable[argparse._MutuallyExclusiveGroup],
+    ) -> str:
+        """Compatibility wrapper for _format_actions_usage (removed in Python 3.14)."""
+        if _HAS_FORMAT_ACTIONS_USAGE:
+            return self._format_actions_usage(actions, groups)  # type: ignore[attr-defined]
+        parts, _ = self._get_actions_usage_parts(actions, groups)  # type: ignore[attr-defined]
+        return " ".join(parts)
 
     def set_help_layout(self, help_layout: "HelpLayout") -> None:
         """
@@ -197,16 +211,16 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 else:
                     positionals.append(action)
 
-            format = self._format_actions_usage
-            action_usage = format(optionals + positionals, groups)
+            format_actions = self._compat_format_actions_usage
+            action_usage = format_actions(optionals + positionals, groups)
             usage = " ".join([s for s in [prog, action_usage] if s])
 
             text_width = self._width - self._current_indent
             prefix_len = ansi_len(prefix)
             if prefix_len + len(usage) > text_width:
                 part_regexp = r"\(.*?\)+(?=\s|$)|" r"\[.*?\]+(?=\s|$)|" r"\S+"
-                opt_usage = format(optionals, groups)
-                pos_usage = format(positionals, groups)
+                opt_usage = format_actions(optionals, groups)
+                pos_usage = format_actions(positionals, groups)
                 opt_parts = re.findall(part_regexp, opt_usage)
                 pos_parts = re.findall(part_regexp, pos_usage)
 
