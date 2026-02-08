@@ -270,6 +270,16 @@ class Argparser(InterfacyParser):
 
         return parser
 
+    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> ArgumentParser:
+        """
+        Create an ArgumentParser from multiple commands.
+
+        Positional arguments are treated as commands to register before building the parser.
+        """
+        for command in args:
+            self.add_command(command)
+        return self.build_parser()
+
     def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, Any]:
         """
         This method creates a dictionary with additional argument parameters needed to
