@@ -1003,9 +1003,10 @@ class ParserSchemaBuilder:
             obj = inspect(entry.obj)
             resolve_objinspect_annotations(obj)
             if isinstance(obj, (Function, Method)):
+                cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
                 return self._function_spec(
                     obj,
-                    canonical_name=entry.name,
+                    canonical_name=cli_name,
                     description=entry.description,
                     aliases=entry.aliases,
                 )
@@ -1026,6 +1027,7 @@ class ParserSchemaBuilder:
             static_methods=True,
             classmethod=self.parser.include_classmethods,
         )
+        assert isinstance(cls, Class)
         resolve_objinspect_annotations(cls)
 
         subcommands: dict[str, Command] = {}
@@ -1082,7 +1084,7 @@ class ParserSchemaBuilder:
             static_methods=True,
             classmethod=self.parser.include_classmethods,
         )
-
+        assert isinstance(cls, Class)
         cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
         current_path = (*parent_path, cli_name)
 
