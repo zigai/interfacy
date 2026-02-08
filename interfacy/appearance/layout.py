@@ -141,6 +141,13 @@ class HelpLayout:
             self._default_field_width_base = base
         return base
 
+    def _get_pos_flag_width_base(self) -> int:
+        base = getattr(self, "_pos_flag_width_base", None)
+        if base is None:
+            base = self.pos_flag_width
+            self._pos_flag_width_base = base
+        return base
+
     def _compute_default_field_width_for_len(self, max_len: int) -> int:
         base_width = self._get_default_field_width_base()
         if max_len <= 0:
@@ -273,10 +280,7 @@ class HelpLayout:
         if "{default_padded}" not in template or default_value:
             return rendered
 
-        def replace_blank_default(match: Match[str]) -> str:
-            return " " * len(match.group(0))
-
-        return re.sub(r"\[\s*\]", replace_blank_default, rendered, count=1)
+        return re.sub(r"\[\s*\]\s*", "", rendered, count=1)
 
     def get_help_for_parameter(
         self,
@@ -381,6 +385,7 @@ class HelpLayout:
             return HelpLayout.get_help_for_parameter(self, param, None)
 
         values = self._build_values(param, flags)
+        raw_desc = self._format_doc_text(param.description or "")
         default_overflow = ""
         skip_wrap = False
         if "{default_padded}" in template:
@@ -419,8 +424,6 @@ class HelpLayout:
             indent_len = 2  # argparse adds a fixed two-space indent for each help line
             wrap_width = max(10, term_width - indent_len - prefix_width)
 
-            raw_desc = self._format_doc_text(param.description or "")
-
             wrapped: list[str] = []
             for word in raw_desc.split():
                 if not wrapped:
@@ -450,6 +453,16 @@ class HelpLayout:
                     values["description"] = f"{values['description']}\n{cont_indent}{overflow_line}"
                 else:
                     values["description"] = f"\n{cont_indent}{overflow_line}"
+
+        if not raw_desc.strip():
+            wrapped_extra = self._wrap_template_field_value(
+                template=template,
+                values=values,
+                field_name="extra",
+                indent=2,
+            )
+            if wrapped_extra is not None:
+                values["extra"] = wrapped_extra
 
         try:
             rendered = template.format(**values)
@@ -486,9 +499,10 @@ class HelpLayout:
         max_display = max([len(name) for name in display_names], default=0)
         ljust = self.get_commands_ljust(max_display)
         lines = [self.commands_title]
-        for name, command in commands.items():
+        for command in commands.values():
+            cli_name = command.cli_name
             if command.obj is None:
-                command_name = self._format_command_display_name(name, command.aliases)
+                command_name = self._format_command_display_name(cli_name, command.aliases)
                 name_column = f"   {command_name}".ljust(ljust)
                 description = command.raw_description or ""
                 lines.append(f"{name_column} {with_style(description, self.style.description)}")
@@ -497,7 +511,7 @@ class HelpLayout:
                     self.get_command_description(
                         command.obj,
                         ljust,
-                        name,
+                        cli_name,
                         command.aliases,
                     )
                 )
@@ -571,6 +585,58 @@ class HelpLayout:
             return None
 
         return self._get_template_token_index("description")
+
+    def _wrap_template_field_value(
+        self,
+        *,
+        template: str,
+        values: dict[str, str],
+        field_name: str,
+        indent: int,
+    ) -> str | None:
+        raw_value = values.get(field_name, "")
+        if not raw_value or "\n" in raw_value:
+            return None
+
+        token = f"<<__{field_name.upper()}__>>"
+        probe_vals = dict(values)
+        probe_vals[field_name] = token
+        try:
+            probe_render = template.format(**probe_vals)
+            token_idx = probe_render.find(token)
+        except Exception:
+            token_idx = -1
+
+        if token_idx == -1:
+            return None
+
+        prefix_str = probe_render[:token_idx]
+        prefix_width = ansi_len(prefix_str)
+        try:
+            term_width = os.get_terminal_size().columns
+        except (OSError, AttributeError):
+            term_width = 80
+
+        wrap_width = max(10, term_width - indent - prefix_width)
+        normalized = " ".join(raw_value.split())
+        if ansi_len(normalized) <= wrap_width:
+            return None
+
+        wrapped: list[str] = []
+        for word in normalized.split():
+            if not wrapped:
+                wrapped.append(word)
+            else:
+                if ansi_len(wrapped[-1]) + 1 + ansi_len(word) <= wrap_width:
+                    wrapped[-1] = f"{wrapped[-1]} {word}"
+                else:
+                    wrapped.append(word)
+
+        if len(wrapped) <= 1:
+            return None
+
+        cont_indent = " " * (prefix_width + indent)
+        return wrapped[0] + "".join(f"\n{cont_indent}{line}" for line in wrapped[1:])
 
     def get_commands_ljust(self, max_display_len: int) -> int:
         """
@@ -793,12 +859,17 @@ class HelpLayout:
         else:
             styled_values["flag_long_col"] = " " * self.long_flag_width
 
+        active_pos_width = max(
+            self._get_pos_flag_width_base(),
+            getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+        )
+
         if flag:
             fp = styled_values["flag_styled"]
-            pad = max(0, self.pos_flag_width - ansi_len(fp))
+            pad = max(0, active_pos_width - ansi_len(fp))
             styled_values["flag_col"] = f"{fp}{' ' * pad}"
         else:
-            styled_values["flag_col"] = " " * self.pos_flag_width
+            styled_values["flag_col"] = " " * active_pos_width
 
         return styled_values
 
@@ -1038,6 +1109,7 @@ class HelpLayout:
             return self._format_argument_legacy(arg, indent)
 
         values = self._build_values_from_argument(arg)
+        raw_desc = self._format_doc_text(arg.help or "")
         default_overflow = ""
         skip_wrap = False
         if "{default_padded}" in template:
@@ -1065,7 +1137,10 @@ class HelpLayout:
         if token_idx != -1:
             prefix_str = probe_render[:token_idx]
             prefix_width = ansi_len(prefix_str)
-            cont_indent = " " * (prefix_width + indent)
+            # `format_argument` output is later indented by the renderer.
+            # Keep continuation indent relative to the unindented template prefix
+            # so wrapped lines align with the first description character.
+            cont_indent = " " * prefix_width
 
             try:
                 term_width = os.get_terminal_size().columns
@@ -1073,8 +1148,6 @@ class HelpLayout:
                 term_width = 80
 
             wrap_width = max(10, term_width - indent - prefix_width)
-            raw_desc = self._format_doc_text(arg.help or "")
-
             wrapped: list[str] = []
             for word in raw_desc.split():
                 if not wrapped:
@@ -1104,6 +1177,16 @@ class HelpLayout:
                     values["description"] = f"{values['description']}\n{cont_indent}{overflow_line}"
                 else:
                     values["description"] = f"\n{cont_indent}{overflow_line}"
+
+        if not raw_desc.strip():
+            wrapped_extra = self._wrap_template_field_value(
+                template=template,
+                values=values,
+                field_name="extra",
+                indent=indent,
+            )
+            if wrapped_extra is not None:
+                values["extra"] = wrapped_extra
 
         try:
             rendered = template.format(**values)
@@ -1158,6 +1241,15 @@ class HelpLayout:
 
     def prepare_default_field_width_for_arguments(self, arguments: list["Argument"]) -> None:
         template = self.format_option or self.format_positional or ""
+        self._active_pos_flag_width = self._get_pos_flag_width_base()
+
+        if "{flag_col}" in template:
+            max_flag_len = 0
+            for argument in arguments:
+                flag, _, _, _ = self._build_flag_parts_from_argument(argument)
+                max_flag_len = max(max_flag_len, ansi_len(flag))
+            self._active_pos_flag_width = max(self._active_pos_flag_width, max_flag_len)
+
         if "{default_padded}" not in template:
             return
 
