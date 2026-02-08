@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import signal
 import sys
 import time
@@ -265,6 +266,8 @@ class Argparser(InterfacyParser):
             sp = subparser.add_parser(method_name, description=method.description)
             self.parser_from_function(function=method, parser=sp, taken_flags=taken_flags)
 
+        self._set_subparsers_metavar(subparser)
+
         return parser
 
     def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, Any]:
@@ -384,6 +387,34 @@ class Argparser(InterfacyParser):
                 return choices
         return converted
 
+    @staticmethod
+    def _set_subparsers_metavar(subparsers: argparse._SubParsersAction[ArgumentParser]) -> None:
+        names: list[str] = []
+        seen_parsers: set[int] = set()
+        for name, parser in subparsers.choices.items():
+            parser_id = id(parser)
+            if parser_id in seen_parsers:
+                continue
+            seen_parsers.add(parser_id)
+            names.append(name)
+        if names:
+            subparsers.metavar = "{" + ",".join(names) + "}"
+
+    @staticmethod
+    def _is_legacy_commands_epilog(text: str | None) -> bool:
+        if not text:
+            return False
+        normalized = re.sub(r"\x1b\[[0-9;]*m", "", text)
+        return normalized.lstrip().lower().startswith("commands:")
+
+    def _use_native_subparser_help(self) -> bool:
+        return not self.help_layout._use_template_layout()
+
+    def _subparsers_title(self) -> str | None:
+        if not self._use_native_subparser_help():
+            return None
+        return "commands"
+
     def _apply_command_schema(
         self,
         parser: ArgumentParser,
@@ -400,44 +431,64 @@ class Argparser(InterfacyParser):
             for argument in command.initializer:
                 self._add_argument_from_schema(parser, argument)
 
-            if command.epilog:
+            if command.epilog and not (
+                self._use_native_subparser_help()
+                and self._is_legacy_commands_epilog(command.epilog)
+            ):
                 parser.epilog = command.epilog
 
             dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
             subparsers = parser.add_subparsers(
                 dest=dest,
                 required=True,
-                help=argparse.SUPPRESS if command.epilog else None,
+                title=self._subparsers_title(),
+                help=(
+                    argparse.SUPPRESS
+                    if command.epilog and not self._use_native_subparser_help()
+                    else None
+                ),
             )
             for sub_cmd in command.subcommands.values():
                 subparser = subparsers.add_parser(
                     sub_cmd.cli_name,
                     description=sub_cmd.description,
+                    help=sub_cmd.description,
                     aliases=list(sub_cmd.aliases) if sub_cmd.aliases else [],
                 )
                 self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
+            self._set_subparsers_metavar(subparsers)
             return
 
         if isinstance(command.obj, Class):
             for argument in command.initializer:
                 self._add_argument_from_schema(parser, argument)
 
-            if command.epilog:
+            if command.epilog and not (
+                self._use_native_subparser_help()
+                and self._is_legacy_commands_epilog(command.epilog)
+            ):
                 parser.epilog = command.epilog
 
             dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
             subparsers = parser.add_subparsers(
                 dest=dest,
                 required=True,
-                help=argparse.SUPPRESS if command.epilog else None,
+                title=self._subparsers_title(),
+                help=(
+                    argparse.SUPPRESS
+                    if command.epilog and not self._use_native_subparser_help()
+                    else None
+                ),
             )
             if command.subcommands:
                 for sub_cmd in command.subcommands.values():
                     subparser = subparsers.add_parser(
                         sub_cmd.cli_name,
                         description=sub_cmd.description,
+                        help=sub_cmd.description,
                     )
                     self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
+            self._set_subparsers_metavar(subparsers)
             return
 
         if isinstance(command.obj, Method) and command.initializer:
@@ -458,17 +509,27 @@ class Argparser(InterfacyParser):
             subparsers = parser.add_subparsers(
                 dest=self.COMMAND_KEY,
                 required=True,
-                help=argparse.SUPPRESS if schema.commands_help else None,
+                title=self._subparsers_title(),
+                help=(
+                    argparse.SUPPRESS
+                    if schema.commands_help and not self._use_native_subparser_help()
+                    else None
+                ),
             )
             for _, cmd in schema.commands.items():
                 subparser = subparsers.add_parser(
                     cmd.cli_name,
                     description=cmd.description,
+                    help=cmd.description,
                     aliases=list(cmd.aliases),
                 )
                 self._apply_command_schema(subparser, cmd)
+            self._set_subparsers_metavar(subparsers)
 
-            if schema.commands_help:
+            if schema.commands_help and not (
+                self._use_native_subparser_help()
+                and self._is_legacy_commands_epilog(schema.commands_help)
+            ):
                 parser.epilog = schema.commands_help
         else:
             cmd = next(iter(schema.commands.values()))
