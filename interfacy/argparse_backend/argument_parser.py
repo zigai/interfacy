@@ -1,4 +1,5 @@
 import argparse
+import re
 import sys
 from argparse import Namespace
 from collections.abc import Callable, Sequence
@@ -461,8 +462,24 @@ class ArgumentParser(argparse.ArgumentParser):
         return nested
 
     def _edit_arguments(self, original_dest: str, **kwargs: Any) -> dict[str, Any]:
-        if kwargs.get("action", "store") == "store" and "metavar" not in kwargs:
-            kwargs["metavar"] = original_dest.upper()
+        action = kwargs.get("action", "store")
+        action_name = action if isinstance(action, str) else getattr(action, "__name__", "")
+        no_metavar_actions = {
+            "store_true",
+            "store_false",
+            "store_const",
+            "append_const",
+            "count",
+            "help",
+            "version",
+            "BooleanOptionalAction",
+        }
+
+        if action_name not in no_metavar_actions and "metavar" not in kwargs:
+            dest_for_metavar = original_dest
+            if self.nest_separator in dest_for_metavar:
+                dest_for_metavar = dest_for_metavar.split(self.nest_separator)[-1]
+            kwargs["metavar"] = dest_for_metavar.replace("_", "-").upper()
         return kwargs
 
     def _get_value(self, action: argparse.Action, arg_string: str) -> Any:
@@ -499,11 +516,13 @@ class ArgumentParser(argparse.ArgumentParser):
         """
         marker = "the following arguments are required:"
         if marker in message:
-            subparser_dests: set[str] = {
-                action.dest
-                for action in self._actions
-                if isinstance(action, argparse._SubParsersAction)
-            }
+            subparser_actions = [
+                action for action in self._actions if isinstance(action, argparse._SubParsersAction)
+            ]
+            subparser_dests: set[str] = {action.dest for action in subparser_actions}
+            subparser_choices: set[str] = set()
+            for action in subparser_actions:
+                subparser_choices.update(action.choices.keys())
 
             if subparser_dests:
                 missing_part = message.split(marker, 1)[1].strip()
@@ -514,8 +533,15 @@ class ArgumentParser(argparse.ArgumentParser):
                 denested_subparser_dests = {
                     self._original_destinations.get(dest, dest) for dest in subparser_dests
                 }
+                brace_choices: set[str] = set()
+                for grouped in re.findall(r"\{([^}]*)\}", missing_part):
+                    brace_choices.update(choice.strip() for choice in grouped.split(",") if choice)
 
-                if any(name in denested_subparser_dests for name in denested_missing):
+                is_missing_subcommand = any(
+                    name in denested_subparser_dests for name in denested_missing
+                ) or bool(brace_choices & subparser_choices)
+
+                if is_missing_subcommand:
                     denested_message = message
                     for nested, original in self._original_destinations.items():
                         denested_message = denested_message.replace(nested, original)
