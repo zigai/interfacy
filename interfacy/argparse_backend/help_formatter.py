@@ -1,5 +1,4 @@
 import argparse
-import os
 import re
 import textwrap
 from collections.abc import Iterable
@@ -69,7 +68,46 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         return super().start_section(heading)
 
     def _split_lines(self, text: str, width: int) -> list[str]:
-        return [text]
+        return super()._split_lines(text, width)
+
+    @staticmethod
+    def _primary_boolean_option_strings(action: argparse.Action) -> list[str]:
+        option_strings = list(action.option_strings)
+        shorts = [s for s in option_strings if s.startswith("-") and not s.startswith("--")]
+        longs = [s for s in option_strings if s.startswith("--")]
+        if not longs:
+            return option_strings
+
+        base_flag = None
+        no_flag = None
+        for flag in longs:
+            if flag.startswith("--no-"):
+                no_flag = flag
+            else:
+                base_flag = flag
+
+        if base_flag and not no_flag:
+            no_flag = f"--no-{base_flag[2:]}"
+
+        default_val = getattr(action, "default", False)
+        primary_long = no_flag if bool(default_val) and no_flag else (base_flag or longs[0])
+
+        normalized: list[str] = []
+        if shorts:
+            normalized.append(shorts[0])
+        if primary_long and primary_long not in normalized:
+            normalized.append(primary_long)
+        return normalized or option_strings
+
+    @staticmethod
+    def _primary_boolean_usage_option_strings(action: argparse.Action) -> list[str]:
+        normalized = InterfacyHelpFormatter._primary_boolean_option_strings(action)
+        longs = [flag for flag in normalized if flag.startswith("--")]
+        if longs:
+            return [longs[0]]
+        if normalized:
+            return [normalized[0]]
+        return list(action.option_strings)
 
     def _format_args(self, action: argparse.Action, default_metavar: str) -> str:
         result = super()._format_args(action, default_metavar)
@@ -94,30 +132,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             is_bool = False
 
         if is_bool:
-            shorts = [
-                s for s in action.option_strings if s.startswith("-") and not s.startswith("--")
-            ]
-            longs = [s for s in action.option_strings if s.startswith("--")]
-
-            base_flag = None
-            no_flag = None
-            for flag in longs:
-                if flag.startswith("--no-"):
-                    no_flag = flag
-                else:
-                    base_flag = flag
-
-            if base_flag and not no_flag:
-                no_flag = f"--no-{base_flag[2:]}"
-
-            default_val = getattr(action, "default", False)
-            primary_long = (
-                no_flag if bool(default_val) else (base_flag or (longs[0] if longs else ""))
-            )
-
-            if shorts:
-                return shorts[0] + (f", {primary_long}" if primary_long else "")
-            return primary_long
+            return ", ".join(self._primary_boolean_option_strings(action))
 
         if len(action.option_strings) == 1:
             return action.option_strings[0] + (f" {args_string}" if args_string else "")
@@ -125,54 +140,98 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         return ", ".join(action.option_strings) + (f" {args_string}" if args_string else "")
 
     def _format_action(self, action: argparse.Action) -> str:
-        action_header = self._format_action_invocation(action)
-        help_layout = self._get_help_layout()
-        help_position = self._action_max_length + 4
-        if help_layout is not None and isinstance(help_layout.help_position, int):
-            help_position = max(help_layout.help_position, self._action_max_length + 2)
-        indent_len = 2
+        if isinstance(action, argparse._SubParsersAction):
+            subactions = list(self._iter_indented_subactions(action))
+            if not subactions:
+                return ""
 
-        if not action.help:
-            return f"{' ' * indent_len}{action_header}\n"
+            help_layout = self._get_help_layout()
+            target_help_col = (
+                help_layout.help_position
+                if help_layout is not None and isinstance(help_layout.help_position, int)
+                else None
+            )
 
-        try:
-            term_width = os.get_terminal_size().columns
-        except (OSError, AttributeError):
-            term_width = 80
-
-        help_width = term_width - help_position - indent_len
-        help_text = self._expand_help(action)
-
-        padding_len = help_position - len(action_header) - indent_len
-
-        wrapped_lines: list[str] = []
-        for word in help_text.split():
-            if not wrapped_lines:
-                wrapped_lines.append(word)
-            else:
-                if ansi_len(wrapped_lines[-1]) + ansi_len(word) + 1 <= help_width:
-                    wrapped_lines[-1] = f"{wrapped_lines[-1]} {word}"
+            invocations = [self._format_action_invocation(sub) for sub in subactions]
+            max_name_len = max((len(name) for name in invocations), default=0)
+            lines: list[str] = []
+            for subaction, invocation in zip(subactions, invocations, strict=False):
+                raw_help = getattr(subaction, "help", None)
+                help_text = ""
+                if raw_help not in (None, argparse.SUPPRESS):
+                    help_text = " ".join(str(self._expand_help(subaction)).split())
+                if help_text:
+                    if target_help_col is None:
+                        pad = max_name_len - len(invocation) + 2
+                    else:
+                        pad = max(2, target_help_col - (2 + len(invocation)))
+                    lines.append(f"  {invocation}{' ' * pad}{help_text}\n")
                 else:
-                    wrapped_lines.append(word)
+                    lines.append(f"  {invocation}\n")
+            return "".join(lines)
 
-        result = [f"{' ' * indent_len}{action_header}{' ' * padding_len}{wrapped_lines[0]}"]
-        if len(wrapped_lines) > 1:
-            for line in wrapped_lines[1:]:
-                result.append(f"{' ' * help_position}{line}")
+        help_layout = self._get_help_layout()
+        if (
+            help_layout is None
+            or not isinstance(help_layout.help_position, int)
+            or not action.option_strings
+        ):
+            return super()._format_action(action)
 
-        return "\n".join(result) + "\n"
+        previous_max_help_position = self._max_help_position
+        previous_action_max_length = self._action_max_length
+        self._max_help_position = help_layout.help_position
+        self._action_max_length = max(self._action_max_length, help_layout.help_position - 2)
+        try:
+            return super()._format_action(action)
+        finally:
+            self._max_help_position = previous_max_help_position
+            self._action_max_length = previous_action_max_length
 
     def _fill_text(self, text: str, width: int, indent: str) -> str:
         """
         Doesn't strip whitespace from the beginning of the line when formatting help text.
         Code from: https://stackoverflow.com/a/74368128/18588657
         """
-        text = textwrap.dedent(text)
-        text = textwrap.indent(text, indent)
-        text = text.splitlines()  # type: ignore[assignment]
-        text = [textwrap.fill(line, width) for line in text]  # type: ignore[union-attr]
-        text = "\n".join(text)  # type: ignore[arg-type]
-        return text
+        lines = textwrap.dedent(text).splitlines()
+        wrapped_lines: list[str] = []
+
+        for line in lines:
+            indented = f"{indent}{line}" if line else indent.rstrip()
+            stripped = indented.lstrip()
+            if not stripped:
+                wrapped_lines.append(indented)
+                continue
+
+            leading = indented[: len(indented) - len(stripped)]
+            column_match = re.match(r"^(\s*\S(?:.*\S)?\s{2,})(\S.*)$", indented)
+            if column_match is not None:
+                head = column_match.group(1)
+                body = column_match.group(2)
+                wrapped_lines.append(
+                    textwrap.fill(
+                        body,
+                        width=width,
+                        initial_indent=head,
+                        subsequent_indent=" " * ansi_len(head),
+                        break_long_words=False,
+                        break_on_hyphens=False,
+                    )
+                )
+                continue
+
+            wrapped_lines.append(
+                textwrap.fill(
+                    stripped,
+                    width=width,
+                    initial_indent=leading,
+                    subsequent_indent=leading,
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
+            )
+
+        return "\n".join(wrapped_lines)
 
     def _format_usage(
         self,
@@ -202,6 +261,12 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         elif usage is None and not actions:
             usage = "{prog}".format(**dict(prog=self._prog))
         elif usage is None:
+            bool_actions = [a for a in actions if isinstance(a, argparse.BooleanOptionalAction)]
+            original_option_strings: dict[argparse.Action, list[str]] = {}
+            for action in bool_actions:
+                original_option_strings[action] = list(action.option_strings)
+                action.option_strings = self._primary_boolean_usage_option_strings(action)
+
             prog = "{prog}".format(**dict(prog=self._prog))
             optionals = []
             positionals = []
@@ -266,6 +331,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     lines = [prog, *lines]
 
                 usage = "\n".join(lines)
+
+            for action, option_strings in original_option_strings.items():
+                action.option_strings = option_strings
 
         usage_text_style = None
         if layout is not None:
