@@ -30,7 +30,7 @@ def log_error(tag: str, message: str) -> None:
     error(formatted)
 
 
-def log_exception(tag: str, exc: Exception, *, full_traceback: bool) -> None:
+def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None:
     if full_traceback:
         error(traceback.format_exc())
 

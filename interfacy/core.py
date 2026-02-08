@@ -614,12 +614,12 @@ class InterfacyParser:
         """
         console.log_error(self.logger_message_tag, message)
 
-    def log_exception(self, e: Exception) -> None:
+    def log_exception(self, e: BaseException) -> None:
         """
         Log an exception using the console helpers.
 
         Args:
-            e (Exception): Exception to log.
+            e (BaseException): Exception to log.
         """
         console.log_exception(self.logger_message_tag, e, full_traceback=self.full_error_traceback)
 
