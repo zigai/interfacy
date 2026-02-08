@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
 from objinspect.typing import type_name
+from typing_extensions import Never
 
 from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
@@ -507,7 +508,7 @@ class ArgumentParser(argparse.ArgumentParser):
             raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'")
         return result
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> Never:
         """
         Override argparse's default error output for missing required subcommands.
 
