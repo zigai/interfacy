@@ -90,8 +90,11 @@ class SchemaHelpRenderer:
         if options_with_help:
             heading = self._style_section_heading("options")
             lines = [heading]
+            help_only_section = not options
             for arg in options_with_help:
                 rendered = layout.format_argument(arg)
+                if help_only_section and arg.name == "help":
+                    rendered = self._normalize_help_only_option_line(rendered)
                 lines.append(self._indent(rendered))
             sections.append("\n".join(lines))
 
@@ -101,9 +104,10 @@ class SchemaHelpRenderer:
 
         epilog_parts: list[str] = []
         if command.epilog:
+            normalized_epilog = re.sub(r"\x1b\[[0-9;]*m", "", command.epilog)
             is_legacy_command_epilog = (
                 command.subcommands is not None
-                and command.epilog.lstrip().lower().startswith("commands:")
+                and normalized_epilog.lstrip().lower().startswith("commands:")
             )
             if not is_legacy_command_epilog:
                 epilog_parts.append(command.epilog)
@@ -128,7 +132,7 @@ class SchemaHelpRenderer:
         help_arg = _make_help_argument(layout.help_option_description)
         layout.prepare_default_field_width_for_arguments([help_arg])
         heading = self._style_section_heading("options")
-        help_line = layout.format_argument(help_arg)
+        help_line = self._normalize_help_only_option_line(layout.format_argument(help_arg))
         sections.append(f"{heading}\n{self._indent(help_line)}")
 
         if schema.commands_help:
@@ -183,7 +187,7 @@ class SchemaHelpRenderer:
             parts.append(token if arg.required else f"[{token}]")
 
         if command.subcommands:
-            parts.append(self.layout.get_subcommand_usage_token())
+            parts.append(self._usage_token_for_subcommands(command))
 
         usage_text = " ".join(parts)
 
@@ -195,6 +199,16 @@ class SchemaHelpRenderer:
             return f"{usage_prefix}{wrapped}"
 
         return f"{usage_prefix}{usage_text}"
+
+    def _usage_token_for_subcommands(self, command: Command) -> str:
+        token = self.layout.get_subcommand_usage_token()
+        if "{command}" not in token or not command.subcommands:
+            return token
+
+        choices = [subcommand.cli_name for subcommand in command.subcommands.values()]
+        if not choices:
+            return token
+        return token.replace("{command}", "{" + ",".join(choices) + "}")
 
     def _usage_token_for_option(self, arg: Argument, *, compact_style: bool = False) -> str:
         longs = [flag for flag in arg.flags if flag.startswith("--")]
@@ -297,6 +311,11 @@ class SchemaHelpRenderer:
         prefix = " " * width
         lines = text.splitlines()
         return "\n".join(prefix + line for line in lines)
+
+    @staticmethod
+    def _normalize_help_only_option_line(line: str) -> str:
+        """Normalize synthetic help-only rows for aligned layouts."""
+        return re.sub(r"^\s+(--help\b)", r"\1", line)
 
 
 __all__ = ["SchemaHelpRenderer"]
