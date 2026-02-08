@@ -216,7 +216,7 @@ class HelpLayout:
         for param in params:
             if self._param_is_bool(param):
                 val = param.default if param.has_default else False
-                defaults.append("true" if bool(val) else "false")
+                defaults.append(self._format_bool_default_for_help(val))
             elif not param.is_required and param.default is not None:
                 defaults.append(format_default_for_help(param.default))
 
@@ -231,6 +231,12 @@ class HelpLayout:
             base = name[:-1] if name.endswith("?") else name
             return base == "bool"
         return False
+
+    def _format_bool_default_for_help(self, value: object) -> str:
+        """Render boolean defaults, treating argparse.SUPPRESS as missing."""
+        if value is argparse.SUPPRESS:
+            return ""
+        return "true" if bool(value) else "false"
 
     def _format_doc_text(self, text: str) -> str:
         """Format inline code spans wrapped in backticks in docstrings."""
@@ -280,7 +286,17 @@ class HelpLayout:
         if "{default_padded}" not in template or default_value:
             return rendered
 
-        return re.sub(r"\[\s*\]\s*", "", rendered, count=1)
+        match = re.search(r"\[\s*\]\s*", rendered)
+        if match is None:
+            return rendered
+
+        prefix = rendered[: match.start()]
+        suffix = rendered[match.end() :]
+        needs_separator = (
+            bool(prefix) and bool(suffix) and not prefix[-1].isspace() and not suffix[0].isspace()
+        )
+        separator = " " if needs_separator else ""
+        return f"{prefix}{separator}{suffix}"
 
     def get_help_for_parameter(
         self,
@@ -884,7 +900,7 @@ class HelpLayout:
         default_raw = ""
         if self._param_is_bool(param):
             val = param.default if param.has_default else False
-            default_raw = "true" if bool(val) else "false"
+            default_raw = self._format_bool_default_for_help(val)
         elif not param.is_required and param.default is not None:
             default_raw = format_default_for_help(param.default)
 
@@ -902,7 +918,7 @@ class HelpLayout:
 
         if param.is_typed and not self._param_is_bool(param) and not choices:
             type_str = format_type_for_help(param.type, self.style.type, theme=self.style)
-        else:  # Hide type when choices are shown
+        else:
             type_str = ""
 
         is_varargs = param.kind == StdParameter.VAR_POSITIONAL
@@ -1053,7 +1069,7 @@ class HelpLayout:
                     val = arg.default
                 else:
                     val = False
-                default_raw = "true" if bool(val) else "false"
+                default_raw = self._format_bool_default_for_help(val)
         elif not arg.required and self._arg_has_default(arg):
             default_raw = format_default_for_help(arg.default)
 
@@ -1262,7 +1278,7 @@ class HelpLayout:
                     val = arg.default
                 else:
                     val = False
-                defaults.append("true" if bool(val) else "false")
+                defaults.append(self._format_bool_default_for_help(val))
             elif not arg.required and self._arg_has_default(arg):
                 defaults.append(format_default_for_help(arg.default))
 
