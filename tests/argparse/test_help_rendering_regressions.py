@@ -2,12 +2,35 @@ from __future__ import annotations
 
 import argparse
 import re
+from dataclasses import dataclass
 from typing import Literal
 
+import pytest
+
 from interfacy import CommandGroup
-from interfacy.appearance.layouts import Aligned, ArgparseLayout, ClapLayout, InterfacyLayout
+from interfacy.appearance.layouts import (
+    Aligned,
+    AlignedTyped,
+    ArgparseLayout,
+    ClapLayout,
+    InterfacyLayout,
+)
 from interfacy.argparse_backend import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
+
+
+@dataclass
+class ExpandableSettings:
+    enabled: bool = False
+
+
+DEFAULT_EXPANDABLE_SETTINGS = ExpandableSettings()
+
+
+def run_with_expandable_settings(
+    settings: ExpandableSettings = DEFAULT_EXPANDABLE_SETTINGS,
+) -> None:
+    return None
 
 
 def test_argparse_layout_root_usage_includes_subcommand_choices() -> None:
@@ -213,6 +236,18 @@ def test_aligned_layout_help_only_option_row_is_not_over_indented() -> None:
     )
     assert help_line.startswith("  --help")
     assert not help_line.startswith("        --help")
+
+
+@pytest.mark.parametrize("layout_cls", (Aligned, AlignedTyped))
+def test_aligned_family_omits_suppressed_boolean_default_for_model_expansion(
+    layout_cls: type[Aligned] | type[AlignedTyped],
+) -> None:
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(run_with_expandable_settings)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    assert re.search(r"--settings[._-]?enabled", help_text)
+    assert re.search(r"--settings[._-]?enabled\s+enabled", help_text)
+    assert "true" not in help_text.lower()
 
 
 def test_usage_metavars_use_kebab_case_for_nested_class_commands() -> None:
