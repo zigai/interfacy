@@ -29,7 +29,12 @@ class InterfacyLayout(HelpLayout):
     def _apply_interfacy_columns(self, values: dict[str, str]) -> dict[str, str]:
         values["column_gap"] = self.column_gap
         extra = values.get("extra", "")
-        values["extra"] = f" {extra}" if extra else ""
+        description = values.get("description", "")
+        has_visible_description = ansi_len(description) > 0
+        if extra:
+            values["extra"] = f" {extra}" if has_visible_description else extra
+        else:
+            values["extra"] = ""
         return values
 
     def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
@@ -54,6 +59,16 @@ class Aligned(InterfacyLayout):
     include_metavar_in_flag_display = False
     layout_mode = "template"
 
+    def get_commands_ljust(self, max_display_len: int) -> int:  # type: ignore[override]
+        base = max(self.min_ljust, max_display_len + 3)
+        default_idx = self._get_template_token_index("default_padded")
+        if default_idx is not None:
+            return max(base, default_idx + 1)
+        prefix_len = self._get_commands_prefix_len()
+        if prefix_len is not None:
+            return max(base, prefix_len + 1)
+        return super().get_commands_ljust(max_display_len)
+
 
 class AlignedTyped(InterfacyLayout):
     """Aligned layout that includes explicit type display."""
@@ -69,6 +84,16 @@ class AlignedTyped(InterfacyLayout):
     format_positional = "{flag_col}{description} [type: {type}]{choices_block}"
     include_metavar_in_flag_display = False
     layout_mode = "template"
+
+    def get_commands_ljust(self, max_display_len: int) -> int:  # type: ignore[override]
+        base = max(self.min_ljust, max_display_len + 3)
+        default_idx = self._get_template_token_index("default_padded")
+        if default_idx is not None:
+            return max(base, default_idx + 1)
+        prefix_len = self._get_commands_prefix_len()
+        if prefix_len is not None:
+            return max(base, prefix_len + 1)
+        return super().get_commands_ljust(max_display_len)
 
 
 class Modern(InterfacyLayout):
@@ -283,21 +308,30 @@ class ClapLayout(HelpLayout):
 
         if flag:
             fp = styled_values["flag_styled"]
-            pad = max(0, self.pos_flag_width - ansi_len(fp))
+            active_pos_width = max(
+                self._get_pos_flag_width_base(),
+                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+            )
+            pad = max(0, active_pos_width - ansi_len(fp))
             styled_values["flag_col"] = f"{fp}{' ' * pad}"
         else:
-            styled_values["flag_col"] = " " * self.pos_flag_width
+            active_pos_width = max(
+                self._get_pos_flag_width_base(),
+                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+            )
+            styled_values["flag_col"] = " " * active_pos_width
 
         return styled_values
 
     def _apply_clap_spacing(self, values: dict[str, str]) -> dict[str, str]:
         desc = values.get("description", "")
         extra = values.get("extra", "")
-        if not desc.strip() and extra.startswith(" "):
-            extra = extra[1:]
+        has_visible_description = ansi_len(desc) > 0
 
-        if self.collapse_gap_when_no_description and not desc.strip():
-            values["column_gap"] = self.no_description_gap if extra else ""
+        if not has_visible_description:
+            # Metadata-only rows should align to the standard help-text column.
+            extra = extra.lstrip()
+            values["column_gap"] = self.column_gap if extra else ""
         else:
             values["column_gap"] = self.column_gap
         values["extra"] = extra
@@ -454,9 +488,10 @@ class ClapLayout(HelpLayout):
         max_display = max([len(name) for name in display_names], default=0)
         ljust = self.get_commands_ljust(max_display)
         lines = [self._format_commands_title()]
-        for name, command in commands.items():
+        for command in commands.values():
+            cli_name = command.cli_name
             if command.obj is None:
-                command_name = self._format_command_display_name(name, command.aliases)
+                command_name = self._format_command_display_name(cli_name, command.aliases)
                 name_column = f"   {command_name}".ljust(ljust)
                 description = command.raw_description or ""
                 lines.append(f"{name_column} {with_style(description, self.style.description)}")
@@ -465,7 +500,7 @@ class ClapLayout(HelpLayout):
                     self.get_command_description(
                         command.obj,
                         ljust,
-                        name,
+                        cli_name,
                         command.aliases,
                     )
                 )
@@ -483,7 +518,7 @@ class ArgparseLayout(HelpLayout):
     default_label_for_help: str = ""
     clear_metavar: bool = False
 
-    help_position: int = 28  # type:ignore
+    help_position: int = 32  # type:ignore
     layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
 
     @staticmethod
