@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 import click.parser as click_parser
 
+from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.click_backend.parser import InterfacyOptionParser
+
+if TYPE_CHECKING:
+    from interfacy.schema.schema import Argument, Command, ParserSchema
 
 
 class InterfacyClickOption(click.Option):
@@ -56,6 +60,15 @@ class InterfacyClickArgument(click.Argument):
 
 
 class _HelpMixin:
+    _interfacy_schema: Command | None = None
+    _interfacy_parser_schema: ParserSchema | None = None
+    _interfacy_aliases: tuple[str, ...] = ()
+    _interfacy_epilog: str | None = None
+    _interfacy_is_root: bool = False
+    _interfacy_param_bindings: dict[str, str]
+    _interfacy_arg_specs: dict[str, Argument]
+    _interfacy_suppress_defaults: set[str]
+
     def _augment_help(self, ctx: click.Context, original_help: str) -> str:
         if "Options:" in original_help:
             description, opts = original_help.split("Options:", 1)
@@ -76,9 +89,8 @@ class _HelpMixin:
             extra_help = "Positionals:\n" + "\n".join(positional_lines) + "\n"
 
         merged = description + extra_help + options
-        epilog = getattr(self, "_interfacy_epilog", None)
-        if epilog:
-            merged = f"{merged.rstrip()}\n\n{epilog}".rstrip()
+        if self._interfacy_epilog:
+            merged = f"{merged.rstrip()}\n\n{self._interfacy_epilog}".rstrip()
         return merged
 
 
@@ -90,6 +102,19 @@ class InterfacyClickCommand(_HelpMixin, click.Command):
         return parser
 
     def get_help(self, ctx: click.Context) -> str:
+        schema = self._interfacy_parser_schema
+        if schema is not None and schema.theme._use_template_layout():
+            renderer = SchemaHelpRenderer(schema.theme)
+            return renderer.render_parser_help(schema, ctx.command_path)
+
+        schema_command = self._interfacy_schema
+        if (
+            schema_command is not None
+            and schema_command.help_layout is not None
+            and schema_command.help_layout._use_template_layout()
+        ):
+            renderer = SchemaHelpRenderer(schema_command.help_layout)
+            return renderer.render_command_help(schema_command, ctx.command_path)
         original_help = super().get_help(ctx)
         return self._augment_help(ctx, original_help)
 
@@ -106,7 +131,11 @@ class InterfacyClickGroup(_HelpMixin, click.Group):
         if command is not None:
             return command
         for sub_cmd in self.commands.values():
-            aliases = getattr(sub_cmd, "_interfacy_aliases", ())
+            aliases = (
+                sub_cmd._interfacy_aliases
+                if isinstance(sub_cmd, (InterfacyClickCommand, InterfacyClickGroup))
+                else ()
+            )
             if name in aliases:
                 return sub_cmd
         return None
@@ -115,6 +144,19 @@ class InterfacyClickGroup(_HelpMixin, click.Group):
         return list(self.commands.keys())
 
     def get_help(self, ctx: click.Context) -> str:
+        schema = self._interfacy_parser_schema
+        if schema is not None and schema.theme._use_template_layout():
+            renderer = SchemaHelpRenderer(schema.theme)
+            return renderer.render_parser_help(schema, ctx.command_path)
+
+        schema_command = self._interfacy_schema
+        if (
+            schema_command is not None
+            and schema_command.help_layout is not None
+            and schema_command.help_layout._use_template_layout()
+        ):
+            renderer = SchemaHelpRenderer(schema_command.help_layout)
+            return renderer.render_command_help(schema_command, ctx.command_path)
         original_help = super().get_help(ctx)
         return self._augment_help(ctx, original_help)
 

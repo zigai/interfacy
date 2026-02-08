@@ -1,3 +1,5 @@
+import argparse
+from collections.abc import Sequence
 from inspect import Parameter as StdParameter
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -9,7 +11,7 @@ from interfacy.appearance.layout import HelpLayout
 from interfacy.util import format_default_for_help, get_param_choices
 
 if TYPE_CHECKING:
-    from interfacy.schema.schema import Command
+    from interfacy.schema.schema import Argument, Command
 
 
 class InterfacyLayout(HelpLayout):
@@ -24,12 +26,22 @@ class InterfacyLayout(HelpLayout):
     layout_mode = "template"
     required_indicator: str = "(" + colored("*", color="red") + ")"
 
-    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
-        values = super()._build_values(param, flags)
+    def _apply_interfacy_columns(self, values: dict[str, str]) -> dict[str, str]:
         values["column_gap"] = self.column_gap
         extra = values.get("extra", "")
-        values["extra"] = f" {extra}" if extra else ""
+        description = values.get("description", "")
+        has_visible_description = ansi_len(description) > 0
+        if extra:
+            values["extra"] = f" {extra}" if has_visible_description else extra
+        else:
+            values["extra"] = ""
         return values
+
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        return self._apply_interfacy_columns(super()._build_values(param, flags))
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        return self._apply_interfacy_columns(super()._build_values_from_argument(arg))
 
 
 class Aligned(InterfacyLayout):
@@ -47,6 +59,16 @@ class Aligned(InterfacyLayout):
     include_metavar_in_flag_display = False
     layout_mode = "template"
 
+    def get_commands_ljust(self, max_display_len: int) -> int:  # type: ignore[override]
+        base = max(self.min_ljust, max_display_len + 3)
+        default_idx = self._get_template_token_index("default_padded")
+        if default_idx is not None:
+            return max(base, default_idx + 1)
+        prefix_len = self._get_commands_prefix_len()
+        if prefix_len is not None:
+            return max(base, prefix_len + 1)
+        return super().get_commands_ljust(max_display_len)
+
 
 class AlignedTyped(InterfacyLayout):
     """Aligned layout that includes explicit type display."""
@@ -62,6 +84,16 @@ class AlignedTyped(InterfacyLayout):
     format_positional = "{flag_col}{description} [type: {type}]{choices_block}"
     include_metavar_in_flag_display = False
     layout_mode = "template"
+
+    def get_commands_ljust(self, max_display_len: int) -> int:  # type: ignore[override]
+        base = max(self.min_ljust, max_display_len + 3)
+        default_idx = self._get_template_token_index("default_padded")
+        if default_idx is not None:
+            return max(base, default_idx + 1)
+        prefix_len = self._get_commands_prefix_len()
+        if prefix_len is not None:
+            return max(base, prefix_len + 1)
+        return super().get_commands_ljust(max_display_len)
 
 
 class Modern(InterfacyLayout):
@@ -79,9 +111,7 @@ class Modern(InterfacyLayout):
     format_positional = "{flag_col} {description}{details}"
     layout_mode = "template"
 
-    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:  # type: ignore[override]
-        values = super()._build_values(param, flags)
-
+    def _with_details(self, values: dict[str, str], raw_description: str) -> dict[str, str]:
         detail_parts: list[str] = []
         if values.get("default"):
             detail_parts.append("default: " + values["default"])
@@ -101,8 +131,7 @@ class Modern(InterfacyLayout):
 
             arrow = with_style("↳", self.style.extra_data)
             details_text = with_style(" | ", self.style.extra_data).join(detail_parts)
-            raw_desc = self._format_doc_text(param.description or "")
-            if not raw_desc.strip():
+            if not raw_description.strip():
                 inline_arrow = with_style("→", self.style.extra_data)
                 values["details"] = f"{inline_arrow} {details_text}"
             else:
@@ -111,6 +140,14 @@ class Modern(InterfacyLayout):
             values["details"] = ""
 
         return values
+
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:  # type: ignore[override]
+        values = super()._build_values(param, flags)
+        return self._with_details(values, self._format_doc_text(param.description or ""))
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        values = super()._build_values_from_argument(arg)
+        return self._with_details(values, self._format_doc_text(arg.help or ""))
 
 
 class ClapLayout(HelpLayout):
@@ -132,6 +169,10 @@ class ClapLayout(HelpLayout):
     usage_text_style = TextStyle(color="cyan", style="bold")
     placeholder_style = TextStyle(color="cyan", style="bold")
     command_name_style = TextStyle(color="cyan", style="bold")
+    help_option_description: str = "Print help"
+    compact_options_usage: bool = True
+    parser_command_usage_suffix: str = "[OPTIONS] [COMMAND]"
+    subcommand_usage_token: str = "[COMMAND]"
     use_action_extra: ClassVar[bool] = True
     choices_label_text: ClassVar[str] = "possible values:"
     default_label_text: ClassVar[str] = "default:"
@@ -160,69 +201,66 @@ class ClapLayout(HelpLayout):
             text = f"{text}..."
         return f"<{text}>"
 
+    def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:
+        return self._format_metavar(name, is_varargs=is_varargs)
+
     def _build_flag_parts(
         self, param: Parameter, flags: tuple[str, ...]
     ) -> tuple[str, str, str, bool]:
-        shorts = [f for f in flags if f.startswith("-") and not f.startswith("--")]
-        longs = [f for f in flags if f.startswith("--")]
-        is_option = any(f.startswith("-") for f in flags)
-
-        metavar = ""
-        needs_value = param.is_typed and not self._param_is_bool(param)
+        is_option = any(flag.startswith("-") for flag in flags)
+        is_bool = param.is_typed and self._param_is_bool(param)
+        needs_value = param.is_typed and not is_bool
         is_varargs = param.kind == StdParameter.VAR_POSITIONAL
-        if is_option:
-            if needs_value and self.include_metavar_in_flag_display:
-                metavar = self._format_metavar(param.name or "value", is_varargs=is_varargs)
-        else:
-            metavar = self._format_metavar(param.name or "value", is_varargs=is_varargs)
+        return self._build_clap_flag_parts(
+            flags=flags,
+            is_option=is_option,
+            is_bool=is_bool,
+            needs_value=needs_value,
+            metavar_name=param.name or "value",
+            is_varargs=is_varargs,
+            primary_bool_flag=self._get_primary_boolean_flag(param, flags),
+        )
 
-        is_bool_param = param.is_typed and self._param_is_bool(param)
-        if is_bool_param:
-            primary_flag = self._get_primary_boolean_flag(param, flags)
-            flag_short = shorts[0] if shorts else ""
-            flag_long = primary_flag
-            if flag_short:
-                joined = f"{flag_short}, {flag_long}"
-            else:
-                joined = flag_long
-            return joined, flag_short, flag_long, is_option
-
-        flag_short = shorts[0] if shorts else ""
-        flag_long = longs[0] if longs else ""
-
-        if metavar:
-            if flag_long:
-                flag_long = f"{flag_long} {metavar}"
-            elif flag_short:
-                flag_short = f"{flag_short} {metavar}"
-
-        if is_option:
-            joined = ", ".join([p for p in (flag_short, flag_long) if p])
-        else:
-            joined = metavar or (param.name or "")
-
-        return joined, flag_short, flag_long, is_option
-
-    def _build_extra(self, param: Parameter) -> str:
+    def _build_clap_extra(
+        self,
+        *,
+        is_bool: bool,
+        is_required: bool,
+        has_default: bool,
+        default_value: object,
+        choices: Sequence[object] | None,
+    ) -> str:
         parts: list[str] = []
 
-        if not self._param_is_bool(param):
-            if not param.is_required and param.default is not None:
+        if not is_bool:
+            if not is_required and has_default:
                 label = with_style("default:", self.style.extra_data)
-                value = with_style(format_default_for_help(param.default), self.style.default)
+                value = with_style(format_default_for_help(default_value), self.style.default)
                 parts.append(f"[{label} {value}]")
 
-            if param.is_typed:
-                choices = get_param_choices(param, for_display=True)
-                if choices:
-                    label = "possible values:"
-                    values = ", ".join([with_style(str(i), self.style.string) for i in choices])
-                    parts.append(f"[{label} {values}]")
+            if choices:
+                label = "possible values:"
+                values = ", ".join(
+                    [
+                        with_style(self._format_choice_for_help(i), self.style.string)
+                        for i in choices
+                    ]
+                )
+                parts.append(f"[{label} {values}]")
 
         if not parts:
             return ""
-
         return " " + " ".join(parts)
+
+    def _build_extra(self, param: Parameter) -> str:
+        choices = get_param_choices(param, for_display=True) if param.is_typed else None
+        return self._build_clap_extra(
+            is_bool=self._param_is_bool(param),
+            is_required=param.is_required,
+            has_default=param.default is not None,
+            default_value=param.default,
+            choices=choices,
+        )
 
     def _style_flag_token(self, flag: str, style: TextStyle) -> str:
         if not flag:
@@ -270,26 +308,118 @@ class ClapLayout(HelpLayout):
 
         if flag:
             fp = styled_values["flag_styled"]
-            pad = max(0, self.pos_flag_width - ansi_len(fp))
+            active_pos_width = max(
+                self._get_pos_flag_width_base(),
+                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+            )
+            pad = max(0, active_pos_width - ansi_len(fp))
             styled_values["flag_col"] = f"{fp}{' ' * pad}"
         else:
-            styled_values["flag_col"] = " " * self.pos_flag_width
+            active_pos_width = max(
+                self._get_pos_flag_width_base(),
+                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+            )
+            styled_values["flag_col"] = " " * active_pos_width
 
         return styled_values
 
-    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
-        values = super()._build_values(param, flags)
+    def _apply_clap_spacing(self, values: dict[str, str]) -> dict[str, str]:
         desc = values.get("description", "")
         extra = values.get("extra", "")
-        if not desc.strip() and extra.startswith(" "):
-            extra = extra[1:]
+        has_visible_description = ansi_len(desc) > 0
 
-        if self.collapse_gap_when_no_description and not desc.strip():
-            values["column_gap"] = self.no_description_gap if extra else ""
+        if not has_visible_description:
+            # Metadata-only rows should align to the standard help-text column.
+            extra = extra.lstrip()
+            values["column_gap"] = self.column_gap if extra else ""
         else:
             values["column_gap"] = self.column_gap
         values["extra"] = extra
         return values
+
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        values = super()._build_values(param, flags)
+        return self._apply_clap_spacing(values)
+
+    def _build_clap_flag_parts(
+        self,
+        *,
+        flags: tuple[str, ...],
+        is_option: bool,
+        is_bool: bool,
+        needs_value: bool,
+        metavar_name: str,
+        is_varargs: bool,
+        primary_bool_flag: str,
+    ) -> tuple[str, str, str, bool]:
+        shorts = [f for f in flags if f.startswith("-") and not f.startswith("--")]
+        longs = [f for f in flags if f.startswith("--")]
+
+        metavar = ""
+        if is_option:
+            if needs_value and self.include_metavar_in_flag_display:
+                metavar = self._format_metavar(metavar_name, is_varargs=is_varargs)
+        else:
+            metavar = self._format_metavar(metavar_name, is_varargs=is_varargs)
+
+        if is_bool:
+            flag_short = shorts[0] if shorts else ""
+            flag_long = primary_bool_flag
+            joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
+            return joined, flag_short, flag_long, is_option
+
+        flag_short = shorts[0] if shorts else ""
+        flag_long = longs[0] if longs else ""
+
+        if metavar:
+            if flag_long:
+                flag_long = f"{flag_long} {metavar}"
+            elif flag_short:
+                flag_short = f"{flag_short} {metavar}"
+
+        if is_option:
+            joined = ", ".join([p for p in (flag_short, flag_long) if p])
+        else:
+            joined = metavar or metavar_name
+
+        return joined, flag_short, flag_long, is_option
+
+    def _build_flag_parts_from_argument(self, arg: "Argument") -> tuple[str, str, str, bool]:
+        is_option = self._enum_matches(arg.kind, "OPTION")
+        is_bool = self._arg_is_bool(arg)
+        needs_value = arg.type is not None and not is_bool
+        is_varargs = self._enum_matches(arg.value_shape, "LIST") and not is_option
+        return self._build_clap_flag_parts(
+            flags=arg.flags,
+            is_option=is_option,
+            is_bool=is_bool,
+            needs_value=needs_value,
+            metavar_name=arg.metavar or arg.display_name or arg.name or "value",
+            is_varargs=is_varargs,
+            primary_bool_flag=self._get_primary_boolean_flag_from_argument(arg),
+        )
+
+    def _build_extra_from_argument(self, arg: "Argument") -> str:
+        choices = (
+            tuple(self._format_argument_choice_for_help(arg, i) for i in arg.choices)
+            if arg.choices
+            else None
+        )
+        return self._build_clap_extra(
+            is_bool=self._arg_is_bool(arg),
+            is_required=arg.required,
+            has_default=self._arg_has_default(arg),
+            default_value=arg.default,
+            choices=choices,
+        )
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        return self._apply_clap_spacing(super()._build_values_from_argument(arg))
+
+    def _format_command_display_name(self, name: str, aliases: tuple[str, ...] = ()) -> str:
+        if not aliases:
+            return name
+        return ", ".join((name, *aliases))
 
     def get_command_description(
         self,
@@ -316,9 +446,8 @@ class ClapLayout(HelpLayout):
         return f"{name_column} {with_style(description, self.style.description)}"
 
     def _format_commands_title(self) -> str:
-        heading_style = getattr(self, "section_heading_style", None)
-        if heading_style is not None:
-            return with_style(self.commands_title, heading_style)
+        if self.section_heading_style is not None:
+            return with_style(self.commands_title, self.section_heading_style)
         return self.commands_title
 
     def get_help_for_class(self, command: Class) -> str:  # type: ignore[override]
@@ -359,9 +488,10 @@ class ClapLayout(HelpLayout):
         max_display = max([len(name) for name in display_names], default=0)
         ljust = self.get_commands_ljust(max_display)
         lines = [self._format_commands_title()]
-        for name, command in commands.items():
+        for command in commands.values():
+            cli_name = command.cli_name
             if command.obj is None:
-                command_name = self._format_command_display_name(name, command.aliases)
+                command_name = self._format_command_display_name(cli_name, command.aliases)
                 name_column = f"   {command_name}".ljust(ljust)
                 description = command.raw_description or ""
                 lines.append(f"{name_column} {with_style(description, self.style.description)}")
@@ -370,7 +500,7 @@ class ClapLayout(HelpLayout):
                     self.get_command_description(
                         command.obj,
                         ljust,
-                        name,
+                        cli_name,
                         command.aliases,
                     )
                 )
@@ -388,8 +518,16 @@ class ArgparseLayout(HelpLayout):
     default_label_for_help: str = ""
     clear_metavar: bool = False
 
-    help_position: int = 28  # type:ignore
+    help_position: int = 32  # type:ignore
     layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
+
+    @staticmethod
+    def _with_default_sentence(description: str, has_default: bool, default: object) -> str:
+        if has_default:
+            if description:
+                description += ". "
+            description += f"Defaults to {format_default_for_help(default)}."
+        return description
 
     def get_help_for_parameter(
         self,
@@ -404,11 +542,15 @@ class ArgparseLayout(HelpLayout):
             flags (tuple[str, ...] | None): CLI flags for display.
         """
         description = self.format_description(param.description or "")
-        if param.has_default:
-            if len(description):
-                description += ". "
-            description += f"Defaults to {param.default}."
-        return description
+        has_default = param.has_default and param.default is not None and not param.is_required
+        return self._with_default_sentence(description, has_default, param.default)
+
+    def format_argument(self, arg: "Argument", indent: int = 2) -> str:
+        description = self.format_description(arg.help or "")
+        has_default = (
+            not arg.required and arg.default is not argparse.SUPPRESS and arg.default is not None
+        )
+        return self._with_default_sentence(description, has_default, arg.default)
 
 
 __all__ = [

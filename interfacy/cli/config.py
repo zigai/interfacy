@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from importlib import import_module
 from pathlib import Path
@@ -168,7 +169,7 @@ def _resolve_from_lookup(
     *,
     value_name: str,
     instance_type: type,
-    lookup: dict[str, type],
+    lookup: Mapping[str, type],
 ) -> Any | None:
     if value is None:
         return None

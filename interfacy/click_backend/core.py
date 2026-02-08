@@ -65,7 +65,7 @@ class ClickParser(InterfacyParser):
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_targets: PipeTargets | dict[str, str] | str | None = None,
-        print_result_func: Callable = print,
+        print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
         expand_model_params: bool = True,
@@ -151,6 +151,7 @@ class ClickParser(InterfacyParser):
     ) -> tuple[click.Parameter, bool]:
         param_type = None if argument.value_shape == ValueShape.FLAG else self._param_type(argument)
         default, suppress = self._argument_default(argument)
+        param: click.Parameter
 
         if argument.kind == ArgumentKind.POSITIONAL:
             nargs = None
@@ -254,18 +255,18 @@ class ClickParser(InterfacyParser):
 
     def _attach_param_metadata(
         self,
-        command: click.Command,
+        command: InterfacyClickCommand | InterfacyClickGroup,
         param_bindings: dict[str, str],
         arg_specs: dict[str, Argument],
         suppress_defaults: set[str],
         schema: Command,
     ) -> None:
-        command._interfacy_param_bindings = param_bindings  # type: ignore[attr-defined]
-        command._interfacy_arg_specs = arg_specs  # type: ignore[attr-defined]
-        command._interfacy_suppress_defaults = suppress_defaults  # type: ignore[attr-defined]
-        command._interfacy_schema = schema  # type: ignore[attr-defined]
-        command._interfacy_aliases = schema.aliases  # type: ignore[attr-defined]
-        command._interfacy_epilog = schema.epilog  # type: ignore[attr-defined]
+        command._interfacy_param_bindings = param_bindings
+        command._interfacy_arg_specs = arg_specs
+        command._interfacy_suppress_defaults = suppress_defaults
+        command._interfacy_schema = schema
+        command._interfacy_aliases = schema.aliases
+        command._interfacy_epilog = schema.epilog
 
     def build_click_command(self, command: Command, depth: int = 0) -> click.Command:
         is_group_like = (
@@ -327,8 +328,9 @@ class ClickParser(InterfacyParser):
         if schema.is_multi_command or single_group:
             root = InterfacyClickGroup(name="main", help=schema.description)
             root.context_settings.setdefault("allow_interspersed_args", False)
-            root._interfacy_is_root = True  # type: ignore[attr-defined]
-            root._interfacy_epilog = self._combine_epilog(schema.commands_help, schema.epilog)  # type: ignore[attr-defined]
+            root._interfacy_is_root = True
+            root._interfacy_parser_schema = schema
+            root._interfacy_epilog = self._combine_epilog(schema.commands_help, schema.epilog)
 
             for cmd in schema.commands.values():
                 root.add_command(self.build_click_command(cmd), name=cmd.cli_name)
@@ -336,7 +338,7 @@ class ClickParser(InterfacyParser):
 
         cmd = next(iter(schema.commands.values()))
         click_command = self.build_click_command(cmd)
-        click_command._interfacy_epilog = self._combine_epilog(cmd.epilog, schema.epilog)  # type: ignore[attr-defined]
+        click_command._interfacy_epilog = self._combine_epilog(cmd.epilog, schema.epilog)
         return click_command
 
     def build_parser(self) -> click.Command:
@@ -352,9 +354,13 @@ class ClickParser(InterfacyParser):
             self.install_tab_completion(root)
         return root
 
-    def _params_to_schema(self, ctx: click.Context, command: click.Command) -> dict[str, Any]:
-        bindings = getattr(command, "_interfacy_param_bindings", {})
-        suppress_defaults = getattr(command, "_interfacy_suppress_defaults", set())
+    def _params_to_schema(
+        self,
+        ctx: click.Context,
+        command: InterfacyClickCommand | InterfacyClickGroup,
+    ) -> dict[str, Any]:
+        bindings = command._interfacy_param_bindings
+        suppress_defaults = command._interfacy_suppress_defaults
         params: dict[str, Any] = {}
 
         for click_name, value in ctx.params.items():
@@ -369,7 +375,7 @@ class ClickParser(InterfacyParser):
     def _build_namespace_for_ctx(
         self,
         ctx: click.Context,
-        command: click.Command,
+        command: InterfacyClickCommand | InterfacyClickGroup,
         depth: int,
     ) -> dict[str, Any]:
         namespace = self._params_to_schema(ctx, command)
@@ -377,10 +383,12 @@ class ClickParser(InterfacyParser):
         if isinstance(command, click.Group) and command.commands:
             combined_args = self._remaining_args(ctx)
             cmd_name, sub_cmd, remaining = command.resolve_command(ctx, combined_args)
+            if not isinstance(sub_cmd, (InterfacyClickCommand, InterfacyClickGroup)):
+                raise ConfigurationError(f"Unexpected command type from click: {type(sub_cmd)!r}")
             sub_ctx = sub_cmd.make_context(cmd_name, remaining, parent=ctx, resilient_parsing=False)
             dest_key = self._command_key_for_depth(depth)
             namespace[dest_key] = cmd_name
-            sub_cli_name = getattr(sub_cmd, "_interfacy_schema", None)
+            sub_cli_name = sub_cmd._interfacy_schema
             sub_key = (
                 sub_cli_name.cli_name if sub_cli_name is not None else sub_cmd.name or cmd_name
             )
@@ -389,7 +397,7 @@ class ClickParser(InterfacyParser):
         return namespace
 
     def _normalize_parsed_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
-        schema = getattr(self, "_last_schema", None) or self.build_parser_schema()
+        schema = self._last_schema or self.build_parser_schema()
 
         def convert_tuple(arg: Argument, val: Sequence[Any]) -> tuple[Any, ...]:
             if arg.tuple_element_parsers:
@@ -439,12 +447,14 @@ class ClickParser(InterfacyParser):
         args = args if args is not None else self.get_args()
         root = self.build_parser()
 
-        if getattr(root, "_interfacy_is_root", False):
+        if isinstance(root, InterfacyClickGroup) and root._interfacy_is_root:
             ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
             combined_args = self._remaining_args(ctx)
             cmd_name, cmd, remaining = root.resolve_command(ctx, combined_args)
+            if not isinstance(cmd, (InterfacyClickCommand, InterfacyClickGroup)):
+                raise ConfigurationError(f"Unexpected command type from click: {type(cmd)!r}")
             sub_ctx = cmd.make_context(cmd_name, remaining, parent=ctx, resilient_parsing=False)
-            schema_cmd = getattr(cmd, "_interfacy_schema", None)
+            schema_cmd = cmd._interfacy_schema
             top_cli_name = schema_cmd.cli_name if schema_cmd is not None else cmd_name
             namespace = {
                 self.COMMAND_KEY: top_cli_name,
@@ -453,6 +463,8 @@ class ClickParser(InterfacyParser):
             return self._normalize_parsed_args(namespace)
 
         ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
+        if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
+            raise ConfigurationError(f"Unexpected root command type: {type(root)!r}")
         namespace = self._build_namespace_for_ctx(ctx, root, depth=0)
         return self._normalize_parsed_args(namespace)
 
@@ -465,19 +477,19 @@ class ClickParser(InterfacyParser):
             raise exc
         return exc
 
-    def run(self, *commands: Callable, args: list[str] | None = None) -> Any:
+    def run(self, *commands: Callable[..., Any], args: list[str] | None = None) -> Any:
         """
         Register commands, parse args, and execute the selected command.
 
         Args:
-            *commands (Callable): Commands to register.
+            *commands (Callable[..., Any]): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
         original_handler = signal.getsignal(signal.SIGINT)
 
         def sigint_handler(signum: int, frame: Any) -> None:
             now = time.time()
-            if now - getattr(self, "_last_interrupt_time", 0.0) < 1.0:
+            if now - self._last_interrupt_time < 1.0:
                 sys.exit(ExitCode.INTERRUPTED)
             self._last_interrupt_time = now
             raise KeyboardInterrupt()

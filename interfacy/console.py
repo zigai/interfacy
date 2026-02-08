@@ -30,7 +30,7 @@ def log_error(tag: str, message: str) -> None:
     error(formatted)
 
 
-def log_exception(tag: str, exc: Exception, *, full_traceback: bool) -> None:
+def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None:
     if full_traceback:
         error(traceback.format_exc())
 
@@ -47,7 +47,7 @@ def log_interrupt(*, silent: bool) -> None:
     error(message)
 
 
-def display_result(value: Any, handler: Callable = print) -> None:
+def display_result(value: Any, handler: Callable[[Any], Any] = print) -> None:
     if isinstance(value, list):
         for entry in value:
             handler(entry)

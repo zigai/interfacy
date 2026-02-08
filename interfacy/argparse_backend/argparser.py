@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import signal
 import sys
 import time
@@ -96,7 +97,7 @@ class Argparser(InterfacyParser):
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
-        print_result_func: Callable = print,
+        print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
@@ -265,7 +266,19 @@ class Argparser(InterfacyParser):
             sp = subparser.add_parser(method_name, description=method.description)
             self.parser_from_function(function=method, parser=sp, taken_flags=taken_flags)
 
+        self._set_subparsers_metavar(subparser)
+
         return parser
+
+    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> ArgumentParser:
+        """
+        Create an ArgumentParser from multiple commands.
+
+        Positional arguments are treated as commands to register before building the parser.
+        """
+        for command in args:
+            self.add_command(command)
+        return self.build_parser()
 
     def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, Any]:
         """
@@ -333,7 +346,11 @@ class Argparser(InterfacyParser):
         return extra
 
     def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {"help": arg.help or ""}
+        help_text = arg.help or ""
+        if not self.help_layout._use_template_layout():
+            help_text = self.help_layout.format_argument(arg)
+
+        kwargs: dict[str, Any] = {"help": help_text}
         is_boolean_flag = arg.value_shape == ValueShape.FLAG
 
         if arg.metavar and not is_boolean_flag:
@@ -380,6 +397,34 @@ class Argparser(InterfacyParser):
                 return choices
         return converted
 
+    @staticmethod
+    def _set_subparsers_metavar(subparsers: argparse._SubParsersAction[ArgumentParser]) -> None:
+        names: list[str] = []
+        seen_parsers: set[int] = set()
+        for name, parser in subparsers.choices.items():
+            parser_id = id(parser)
+            if parser_id in seen_parsers:
+                continue
+            seen_parsers.add(parser_id)
+            names.append(name)
+        if names:
+            subparsers.metavar = "{" + ",".join(names) + "}"
+
+    @staticmethod
+    def _is_legacy_commands_epilog(text: str | None) -> bool:
+        if not text:
+            return False
+        normalized = re.sub(r"\x1b\[[0-9;]*m", "", text)
+        return normalized.lstrip().lower().startswith("commands:")
+
+    def _use_native_subparser_help(self) -> bool:
+        return not self.help_layout._use_template_layout()
+
+    def _subparsers_title(self) -> str | None:
+        if not self._use_native_subparser_help():
+            return None
+        return "commands"
+
     def _apply_command_schema(
         self,
         parser: ArgumentParser,
@@ -387,6 +432,8 @@ class Argparser(InterfacyParser):
         *,
         depth: int = 0,
     ) -> None:
+        parser._schema_command = command
+
         if command.description:
             parser.description = command.description
 
@@ -394,44 +441,64 @@ class Argparser(InterfacyParser):
             for argument in command.initializer:
                 self._add_argument_from_schema(parser, argument)
 
-            if command.epilog:
+            if command.epilog and not (
+                self._use_native_subparser_help()
+                and self._is_legacy_commands_epilog(command.epilog)
+            ):
                 parser.epilog = command.epilog
 
             dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
             subparsers = parser.add_subparsers(
                 dest=dest,
                 required=True,
-                help=argparse.SUPPRESS if command.epilog else None,
+                title=self._subparsers_title(),
+                help=(
+                    argparse.SUPPRESS
+                    if command.epilog and not self._use_native_subparser_help()
+                    else None
+                ),
             )
             for sub_cmd in command.subcommands.values():
                 subparser = subparsers.add_parser(
                     sub_cmd.cli_name,
                     description=sub_cmd.description,
+                    help=sub_cmd.description,
                     aliases=list(sub_cmd.aliases) if sub_cmd.aliases else [],
                 )
                 self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
+            self._set_subparsers_metavar(subparsers)
             return
 
         if isinstance(command.obj, Class):
             for argument in command.initializer:
                 self._add_argument_from_schema(parser, argument)
 
-            if command.epilog:
+            if command.epilog and not (
+                self._use_native_subparser_help()
+                and self._is_legacy_commands_epilog(command.epilog)
+            ):
                 parser.epilog = command.epilog
 
             dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
             subparsers = parser.add_subparsers(
                 dest=dest,
                 required=True,
-                help=argparse.SUPPRESS if command.epilog else None,
+                title=self._subparsers_title(),
+                help=(
+                    argparse.SUPPRESS
+                    if command.epilog and not self._use_native_subparser_help()
+                    else None
+                ),
             )
             if command.subcommands:
                 for sub_cmd in command.subcommands.values():
                     subparser = subparsers.add_parser(
                         sub_cmd.cli_name,
                         description=sub_cmd.description,
+                        help=sub_cmd.description,
                     )
                     self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
+            self._set_subparsers_metavar(subparsers)
             return
 
         if isinstance(command.obj, Method) and command.initializer:
@@ -443,6 +510,7 @@ class Argparser(InterfacyParser):
 
     def _build_from_schema(self, schema: ParserSchema) -> ArgumentParser:
         parser = self._new_parser()
+        parser._schema = schema
 
         single_cmd = next(iter(schema.commands.values())) if len(schema.commands) == 1 else None
         single_group = single_cmd if single_cmd and not single_cmd.is_leaf else None
@@ -451,17 +519,27 @@ class Argparser(InterfacyParser):
             subparsers = parser.add_subparsers(
                 dest=self.COMMAND_KEY,
                 required=True,
-                help=argparse.SUPPRESS if schema.commands_help else None,
+                title=self._subparsers_title(),
+                help=(
+                    argparse.SUPPRESS
+                    if schema.commands_help and not self._use_native_subparser_help()
+                    else None
+                ),
             )
             for _, cmd in schema.commands.items():
                 subparser = subparsers.add_parser(
                     cmd.cli_name,
                     description=cmd.description,
+                    help=cmd.description,
                     aliases=list(cmd.aliases),
                 )
                 self._apply_command_schema(subparser, cmd)
+            self._set_subparsers_metavar(subparsers)
 
-            if schema.commands_help:
+            if schema.commands_help and not (
+                self._use_native_subparser_help()
+                and self._is_legacy_commands_epilog(schema.commands_help)
+            ):
                 parser.epilog = schema.commands_help
         else:
             cmd = next(iter(schema.commands.values()))
@@ -541,7 +619,7 @@ class Argparser(InterfacyParser):
 
     def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""
-        schema = getattr(self, "_last_schema", None) or self.build_parser_schema()
+        schema = self._last_schema or self.build_parser_schema()
 
         def convert_tuple(arg: Argument, val: list[Any]) -> tuple[Any, ...]:
             if arg.tuple_element_parsers:
@@ -587,12 +665,14 @@ class Argparser(InterfacyParser):
             raise exc
         return exc
 
-    def run(self, *commands: Callable | type | object, args: list[str] | None = None) -> Any:
+    def run(
+        self, *commands: Callable[..., Any] | type | object, args: list[str] | None = None
+    ) -> Any:
         """
         Register commands, parse args, and execute the selected command.
 
         Args:
-            *commands (Callable | type | object): Commands to register.
+            *commands (Callable[..., Any] | type | object): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
         original_handler = signal.getsignal(signal.SIGINT)
@@ -643,6 +723,9 @@ class Argparser(InterfacyParser):
             return self._handle_interrupt(e)
         finally:
             signal.signal(signal.SIGINT, original_handler)
+
+        if self._parser is None:
+            raise RuntimeError("Parser not initialized")
 
         signal.signal(signal.SIGINT, sigint_handler)
         try:

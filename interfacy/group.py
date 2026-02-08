@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class CommandEntry:
     """Internal representation of a command added to a group."""
 
-    obj: Callable | type | object
+    obj: Callable[..., Any] | type | object
     name: str
     description: str | None
     aliases: tuple[str, ...]
@@ -37,11 +38,11 @@ class CommandGroup:
         self.aliases = tuple(aliases) if aliases else ()
         self._commands: dict[str, CommandEntry] = {}
         self._subgroups: dict[str, CommandGroup] = {}
-        self._group_args_source: type | Callable | None = None
+        self._group_args_source: type | Callable[..., Any] | None = None
 
     def add_command(
         self,
-        command: Callable | type | object,
+        command: Callable[..., Any] | type | object,
         name: str | None = None,
         description: str | None = None,
         aliases: tuple[str, ...] | list[str] | None = None,
@@ -96,7 +97,7 @@ class CommandGroup:
         self._subgroups[group_name] = group
         return self
 
-    def with_args(self, source: type | Callable) -> CommandGroup:
+    def with_args(self, source: type | Callable[..., Any]) -> CommandGroup:
         """
         Set group-level arguments from a class __init__ or function signature.
 

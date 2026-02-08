@@ -1,13 +1,20 @@
 import argparse
+import re
 import sys
 from argparse import Namespace
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from objinspect.typing import type_name
+from typing_extensions import Never
 
+from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.logger import get_logger
+
+if TYPE_CHECKING:
+    from interfacy.appearance.layout import HelpLayout
+    from interfacy.schema.schema import Command, ParserSchema
 
 logger = get_logger(__name__)
 
@@ -63,7 +70,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         help: str | None = None,
         metavar: str | None = None,
         formatter_class: type[argparse.HelpFormatter] | None = None,
-        help_layout: Any | None = None,
+        help_layout: "HelpLayout | None" = None,
     ) -> None:
         super().__init__(
             option_strings,
@@ -196,7 +203,7 @@ class ArgumentParser(argparse.ArgumentParser):
         nest_path: list[str] | None = None,
         exit_on_error: bool = True,
         *,
-        help_layout: Any | None = None,
+        help_layout: "HelpLayout | None" = None,
         color: bool | None = None,
     ) -> None:
         if parents is None:
@@ -250,6 +257,8 @@ class ArgumentParser(argparse.ArgumentParser):
             )
         self.register("action", "parsers", NestedSubParsersAction)
         self._interfacy_help_layout = help_layout
+        self._schema_command: Command | None = None
+        self._schema: ParserSchema | None = None
 
     def _get_formatter(self):  # type: ignore
         formatter = self.formatter_class(self.prog)  # type: ignore[arg-type]
@@ -258,12 +267,24 @@ class ArgumentParser(argparse.ArgumentParser):
                 formatter.set_help_layout(self._interfacy_help_layout)
             except Exception:
                 pass
-        if hasattr(formatter, "prepare_layout"):
-            try:
-                formatter.prepare_layout(self._actions)
-            except Exception:
-                pass
         return formatter
+
+    def format_help(self) -> str:
+        layout = self._interfacy_help_layout
+        if layout is None:
+            return super().format_help()
+        if not layout._use_template_layout():
+            return super().format_help()
+
+        renderer = SchemaHelpRenderer(layout)
+
+        if self._schema is not None:
+            return renderer.render_parser_help(self._schema, self.prog)
+
+        if self._schema_command is not None:
+            return renderer.render_command_help(self._schema_command, self.prog)
+
+        return super().format_help()
 
     def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
         """
@@ -283,7 +304,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 "base_nest_path": self.nest_path_components,
                 "nest_separator": self.nest_separator,
                 "formatter_class": self.formatter_class,
-                "help_layout": getattr(self, "_interfacy_help_layout", None),
+                "help_layout": self._interfacy_help_layout,
             }
         )
         return super().add_subparsers(**kwargs)  # type: ignore
@@ -442,8 +463,24 @@ class ArgumentParser(argparse.ArgumentParser):
         return nested
 
     def _edit_arguments(self, original_dest: str, **kwargs: Any) -> dict[str, Any]:
-        if kwargs.get("action", "store") == "store" and "metavar" not in kwargs:
-            kwargs["metavar"] = original_dest.upper()
+        action = kwargs.get("action", "store")
+        action_name = action if isinstance(action, str) else getattr(action, "__name__", "")
+        no_metavar_actions = {
+            "store_true",
+            "store_false",
+            "store_const",
+            "append_const",
+            "count",
+            "help",
+            "version",
+            "BooleanOptionalAction",
+        }
+
+        if action_name not in no_metavar_actions and "metavar" not in kwargs:
+            dest_for_metavar = original_dest
+            if self.nest_separator in dest_for_metavar:
+                dest_for_metavar = dest_for_metavar.split(self.nest_separator)[-1]
+            kwargs["metavar"] = dest_for_metavar.replace("_", "-").upper()
         return kwargs
 
     def _get_value(self, action: argparse.Action, arg_string: str) -> Any:
@@ -471,7 +508,7 @@ class ArgumentParser(argparse.ArgumentParser):
             raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'")
         return result
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> Never:
         """
         Override argparse's default error output for missing required subcommands.
 
@@ -480,11 +517,13 @@ class ArgumentParser(argparse.ArgumentParser):
         """
         marker = "the following arguments are required:"
         if marker in message:
-            subparser_dests: set[str] = {
-                action.dest
-                for action in self._actions
-                if isinstance(action, argparse._SubParsersAction)
-            }
+            subparser_actions = [
+                action for action in self._actions if isinstance(action, argparse._SubParsersAction)
+            ]
+            subparser_dests: set[str] = {action.dest for action in subparser_actions}
+            subparser_choices: set[str] = set()
+            for action in subparser_actions:
+                subparser_choices.update(action.choices.keys())
 
             if subparser_dests:
                 missing_part = message.split(marker, 1)[1].strip()
@@ -495,8 +534,15 @@ class ArgumentParser(argparse.ArgumentParser):
                 denested_subparser_dests = {
                     self._original_destinations.get(dest, dest) for dest in subparser_dests
                 }
+                brace_choices: set[str] = set()
+                for grouped in re.findall(r"\{([^}]*)\}", missing_part):
+                    brace_choices.update(choice.strip() for choice in grouped.split(",") if choice)
 
-                if any(name in denested_subparser_dests for name in denested_missing):
+                is_missing_subcommand = any(
+                    name in denested_subparser_dests for name in denested_missing
+                ) or bool(brace_choices & subparser_choices)
+
+                if is_missing_subcommand:
                     denested_message = message
                     for nested, original in self._original_destinations.items():
                         denested_message = denested_message.replace(nested, original)

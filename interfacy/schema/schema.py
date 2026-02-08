@@ -39,12 +39,13 @@ class BooleanBehavior:
     Attributes:
         supports_negative (bool): Whether a negative form is generated.
         negative_form (str | None): Negative flag form (e.g., "--no-flag") if any.
-        default (bool | None): Effective default value for the flag.
+        default (bool | str | None): Effective default value for the flag.
+            Can be argparse.SUPPRESS (a str sentinel) to suppress the default.
     """
 
     supports_negative: bool
     negative_form: str | None
-    default: bool | None
+    default: bool | str | None
 
 
 @dataclass
