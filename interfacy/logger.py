@@ -19,7 +19,7 @@ LEVEL_COLORS = {
 
 def _get_level() -> int:
     level_name = os.getenv("INTERFACY_LOG") or "NOTSET"
-    level_name = "INFO" if level_name == 1 else level_name
+    level_name = "INFO" if level_name == "1" else level_name
     return _nameToLevel.get(level_name, logging.NOTSET)
 
 
