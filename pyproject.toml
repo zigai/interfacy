@@ -57,12 +57,12 @@ dev = [
     "pre-commit",
     "coverage",
     "mypy",
-    "click",
+    "click>=8.3.1",
     "argcomplete",
 ]
-full = ["argcomplete", "click"]
-click = ["click"]
-test = ["pytest", "pytest-mock", "coverage", "click"]
+full = ["argcomplete", "click>=8.3.1"]
+click = ["click>=8.3.1"]
+test = ["pytest", "pytest-mock", "coverage", "click>=8.3.1"]
 
 [project.urls]
 Repository = "https://github.com/zigai/interfacy"
