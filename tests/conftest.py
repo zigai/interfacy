@@ -290,6 +290,29 @@ def fn_varargs(*args: int) -> int:
     return sum(args)
 
 
+def fn_positional_varargs(head: str, *tail: str) -> tuple[str, tuple[str, ...]]:
+    """Collect one required positional value with trailing varargs."""
+    return head, tail
+
+
+def fn_positional_varargs_kwonly(
+    head: str,
+    *tail: str,
+    mode: str = "default",
+) -> tuple[str, tuple[str, ...], str]:
+    """Collect required positional + varargs + keyword-only option."""
+    return head, tail, mode
+
+
+def fn_positional_varargs_varkw(
+    head: str,
+    *tail: str,
+    **options: dict[str, str],
+) -> tuple[str, tuple[str, ...], dict[str, str]]:
+    """Collect required positional + varargs + catch-all keyword mapping."""
+    return head, tail, options
+
+
 def fn_kwargs(**kwargs: str) -> dict[str, str]:
     return kwargs
 
@@ -349,6 +372,29 @@ class Database:
 
     def ping(self) -> str:
         return f"Pong from {self.host}:{self.port}"
+
+
+class TextCollector:
+    """Class fixture for testing positional + varargs method execution."""
+
+    def collect(self, head: str, *tail: str) -> tuple[str, tuple[str, ...]]:
+        return head, tail
+
+    def collect_with_mode(
+        self,
+        head: str,
+        *tail: str,
+        mode: str = "default",
+    ) -> tuple[str, tuple[str, ...], str]:
+        return head, tail, mode
+
+    def collect_with_options(
+        self,
+        head: str,
+        *tail: str,
+        **options: dict[str, str],
+    ) -> tuple[str, tuple[str, ...], dict[str, str]]:
+        return head, tail, options
 
 
 @pytest.fixture

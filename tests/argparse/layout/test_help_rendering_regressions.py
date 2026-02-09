@@ -284,7 +284,7 @@ def test_argparse_layout_group_usage_includes_subcommand_choices() -> None:
 
 
 def test_clap_layout_wraps_long_possible_values() -> None:
-    def quality(
+    def list_items(
         sort: Literal[
             "name",
             "loc",
@@ -297,11 +297,79 @@ def test_clap_layout_wraps_long_possible_values() -> None:
         return None
 
     parser = Argparser(help_layout=ClapLayout(), sys_exit_enabled=False, print_result=False)
-    parser.add_command(quality)
+    parser.add_command(list_items)
 
     help_text = parser.build_parser().format_help()
     assert "[possible values:" in help_text
     assert "possible values: name, loc,\n" in help_text
+
+
+def test_clap_layout_single_command_description_precedes_usage() -> None:
+    def command_one() -> None:
+        """Project command suite."""
+        return None
+
+    parser = Argparser(help_layout=ClapLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(command_one)
+
+    help_text = parser.build_parser().format_help()
+    description_idx = help_text.index("Project command suite.")
+    usage_idx = help_text.index("Usage:")
+    assert description_idx < usage_idx
+
+
+def test_clap_layout_root_description_precedes_usage() -> None:
+    def command_one() -> None:
+        """First command."""
+        return None
+
+    def command_two() -> None:
+        """Second command."""
+        return None
+
+    parser = Argparser(
+        description="Project command suite.",
+        help_layout=ClapLayout(),
+        sys_exit_enabled=False,
+        print_result=False,
+    )
+    parser.add_command(command_one)
+    parser.add_command(command_two)
+
+    help_text = parser.build_parser().format_help()
+    description_idx = help_text.index("Project command suite.")
+    usage_idx = help_text.index("Usage:")
+    assert description_idx < usage_idx
+
+
+def test_clap_layout_styles_group_and_command_rows_consistently(monkeypatch) -> None:
+    ops = CommandGroup("ops")
+    nested = CommandGroup(
+        "nested-tools",
+        description="Nested subgroup with a longer name to test alignment.",
+        aliases=("nested",),
+    )
+    ops.add_group(nested)
+    ops.add_command(
+        lambda: None,
+        name="cache_prune",
+        aliases=("prune",),
+        description="Prune cache keys; bool default True should show --no-dry-run.",
+    )
+
+    parser = Argparser(help_layout=ClapLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(ops)
+    schema = parser.build_parser_schema()
+    ops_schema = schema.get_command("ops")
+    assert ops_schema.subcommands is not None
+
+    monkeypatch.setattr(
+        "interfacy.appearance.layouts.with_style", lambda text, style: f"<S>{text}</S>"
+    )
+    help_text = parser.help_layout.get_help_for_multiple_commands(ops_schema.subcommands)
+
+    assert "   <S>nested-tools, nested</S>" in help_text
+    assert "   <S>cache-prune, prune</S>" in help_text
 
 
 def test_clap_layout_wrapped_description_continuation_aligns() -> None:

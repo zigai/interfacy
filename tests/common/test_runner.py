@@ -126,15 +126,6 @@ class TestEnums:
 class TestLiterals:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_literal_positional(self, parser: InterfacyParser):
-        # NOTE: Not implemented in original file but present in test_parsing.py?
-        # Ah wait, TestLiterals in test_runner.py was just "..." in my view?
-        # No, I saw "class TestLiterals: ..." in view_file output but maybe I missed body or it was empty?
-        # Let's check line 118 of view_file output.
-        # "118: class TestLiterals: ...". Yes, it has "..." literally? Or truncated?
-        # If it has "...", then pass.
-        # But wait, python valid syntax "class TestLiterals: ..." refers to Ellipsis?
-        # It's valid body.
-        # So I shouldn't add methods if they aren't there.
         pass
 
 
