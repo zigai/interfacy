@@ -173,6 +173,7 @@ class ClapLayout(HelpLayout):
     compact_options_usage: bool = True
     parser_command_usage_suffix: str = "[OPTIONS] [COMMAND]"
     subcommand_usage_token: str = "[COMMAND]"
+    description_before_usage: bool = True
     use_action_extra: ClassVar[bool] = True
     choices_label_text: ClassVar[str] = "possible values:"
     default_label_text: ClassVar[str] = "default:"
@@ -492,7 +493,9 @@ class ClapLayout(HelpLayout):
             cli_name = command.cli_name
             if command.obj is None:
                 command_name = self._format_command_display_name(cli_name, command.aliases)
-                name_column = f"   {command_name}".ljust(ljust)
+                name_styled = with_style(command_name, self.style.flag_long)
+                pad = max(0, ljust - len(command_name) - 3)
+                name_column = f"   {name_styled}{' ' * pad}"
                 description = command.raw_description or ""
                 lines.append(f"{name_column} {with_style(description, self.style.description)}")
             else:

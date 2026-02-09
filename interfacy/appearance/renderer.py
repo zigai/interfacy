@@ -70,11 +70,16 @@ class SchemaHelpRenderer:
 
         sections: list[str] = []
         usage = self._build_usage(command, prog)
-        sections.append(usage)
         description = parser_description or command.description
 
-        if description:
-            sections.append(description)
+        if layout.should_render_description_before_usage():
+            if description:
+                sections.append(description)
+            sections.append(usage)
+        else:
+            sections.append(usage)
+            if description:
+                sections.append(description)
 
         if positionals:
             heading = self._style_section_heading("positional arguments")
@@ -125,9 +130,14 @@ class SchemaHelpRenderer:
         usage_prefix = self._get_usage_prefix()
         usage = f"{usage_prefix}{usage_prog} {layout.get_parser_command_usage_suffix()}"
 
-        sections.append(usage)
-        if schema.description:
-            sections.append(schema.description)
+        if layout.should_render_description_before_usage():
+            if schema.description:
+                sections.append(schema.description)
+            sections.append(usage)
+        else:
+            sections.append(usage)
+            if schema.description:
+                sections.append(schema.description)
 
         help_arg = _make_help_argument(layout.help_option_description)
         layout.prepare_default_field_width_for_arguments([help_arg])

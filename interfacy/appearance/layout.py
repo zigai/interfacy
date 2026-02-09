@@ -127,6 +127,7 @@ class HelpLayout:
     compact_options_usage: bool = False
     parser_command_usage_suffix: str = "[OPTIONS] command [ARGS]"
     subcommand_usage_token: str = "{command}"
+    description_before_usage: bool = False
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
 
@@ -271,6 +272,9 @@ class HelpLayout:
 
     def get_subcommand_usage_token(self) -> str:
         return self.subcommand_usage_token
+
+    def should_render_description_before_usage(self) -> bool:
+        return self.description_before_usage
 
     def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:
         return f"{name} ..." if is_varargs else name
