@@ -113,30 +113,7 @@ class SchemaRunner:
             func (Function | Method): Callable to execute.
             args (dict): Parsed argument mapping.
         """
-        positional_args = []
-        keyword_args = {}
-
-        for param in func.params:
-            if (
-                param.name not in args
-                and param.kind != inspect.Parameter.VAR_POSITIONAL
-                and param.kind != inspect.Parameter.VAR_KEYWORD
-            ):
-                continue
-
-            val = args.get(param.name)
-            if param.kind == inspect.Parameter.POSITIONAL_ONLY:
-                positional_args.append(val)
-            elif param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
-                keyword_args[param.name] = val
-            elif param.kind == inspect.Parameter.VAR_POSITIONAL:
-                if val:
-                    positional_args.extend(val)
-            elif param.kind == inspect.Parameter.KEYWORD_ONLY:
-                keyword_args[param.name] = val
-            elif param.kind == inspect.Parameter.VAR_KEYWORD:
-                if val:
-                    keyword_args.update(val)
+        positional_args, keyword_args = self._build_call_args(func, args)
 
         logger.info(
             f"Calling function '{func.name}' with args: {positional_args}, kwargs: {keyword_args}"
@@ -157,7 +134,7 @@ class SchemaRunner:
         cli_args = reverse_translations(args, self.builder.flag_strategy.argument_translator)
         instance = method.class_instance
         if instance:
-            method_args, method_kwargs = split_args_kwargs(cli_args, method)
+            method_args, method_kwargs = self._build_call_args(method, cli_args)
             return method.call(*method_args, **method_kwargs)
 
         instance = Class(method.cls)
@@ -171,7 +148,7 @@ class SchemaRunner:
             if not method.is_static:
                 instance.init()
 
-        method_args, method_kwargs = split_args_kwargs(args_method, method)
+        method_args, method_kwargs = self._build_call_args(method, args_method)
         logger.info(
             f"Calling method '{method.name}' with args: {method_args}, kwargs: {method_kwargs}"
         )
@@ -220,7 +197,7 @@ class SchemaRunner:
             command_args = self._reconstruct_expanded_models(
                 command_args, subcommand_spec.parameters
             )
-        method_args, method_kwargs = split_args_kwargs(command_args, method)
+        method_args, method_kwargs = self._build_call_args(method, command_args)
         logger.info(
             f"Calling method '{method.name}' with args: {method_args}, kwargs: {method_kwargs}"
         )
@@ -340,7 +317,7 @@ class SchemaRunner:
                 args = self._reconstruct_expanded_models(
                     args, [*self._initializer_for(command), *self._arguments_for(command)]
                 )
-                method_args, method_kwargs = split_args_kwargs(args, obj)
+                method_args, method_kwargs = self._build_call_args(obj, args)
                 logger.info(
                     f"Calling method '{obj.name}' on instance with args: {method_args}, kwargs: {method_kwargs}"
                 )
@@ -357,6 +334,53 @@ class SchemaRunner:
             return self.run_function(obj, args)
 
         raise InvalidCommandError(command.canonical_name)
+
+    def _build_call_args(
+        self,
+        callable_obj: Function | Method,
+        args: dict[str, Any],
+    ) -> tuple[list[Any], dict[str, Any]]:
+        """Build positional and keyword arguments from parsed CLI values."""
+        positional_args: list[Any] = []
+        keyword_args: dict[str, Any] = {}
+
+        for param in callable_obj.params:
+            if (
+                param.name not in args
+                and param.kind != inspect.Parameter.VAR_POSITIONAL
+                and param.kind != inspect.Parameter.VAR_KEYWORD
+            ):
+                continue
+
+            if param.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                if param.name in args:
+                    positional_args.append(args[param.name])
+                continue
+
+            if param.kind == inspect.Parameter.VAR_POSITIONAL:
+                varargs = args.get(param.name)
+                if not varargs:
+                    continue
+                if isinstance(varargs, (list, tuple)):
+                    positional_args.extend(varargs)
+                else:
+                    positional_args.append(varargs)
+                continue
+
+            if param.kind == inspect.Parameter.KEYWORD_ONLY:
+                if param.name in args:
+                    keyword_args[param.name] = args[param.name]
+                continue
+
+            if param.kind == inspect.Parameter.VAR_KEYWORD:
+                var_kwargs = args.get(param.name)
+                if isinstance(var_kwargs, dict):
+                    keyword_args.update(var_kwargs)
+
+        return positional_args, keyword_args
 
     def _reconstruct_expanded_models(
         self,
