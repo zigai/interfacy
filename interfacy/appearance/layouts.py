@@ -59,7 +59,7 @@ class Aligned(InterfacyLayout):
     include_metavar_in_flag_display = False
     layout_mode = "template"
 
-    def get_commands_ljust(self, max_display_len: int) -> int:  # type: ignore[override]
+    def get_commands_ljust(self, max_display_len: int) -> int:
         base = max(self.min_ljust, max_display_len + 3)
         default_idx = self._get_template_token_index("default_padded")
         if default_idx is not None:
@@ -85,7 +85,7 @@ class AlignedTyped(InterfacyLayout):
     include_metavar_in_flag_display = False
     layout_mode = "template"
 
-    def get_commands_ljust(self, max_display_len: int) -> int:  # type: ignore[override]
+    def get_commands_ljust(self, max_display_len: int) -> int:
         base = max(self.min_ljust, max_display_len + 3)
         default_idx = self._get_template_token_index("default_padded")
         if default_idx is not None:
@@ -141,7 +141,7 @@ class Modern(InterfacyLayout):
 
         return values
 
-    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:  # type: ignore[override]
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
         values = super()._build_values(param, flags)
         return self._with_details(values, self._format_doc_text(param.description or ""))
 
@@ -428,7 +428,7 @@ class ClapLayout(HelpLayout):
         ljust: int,
         name: str | None = None,
         aliases: tuple[str, ...] = (),
-    ) -> str:  # type: ignore[override]
+    ) -> str:
         """
         Return a styled command description line.
 
@@ -451,7 +451,7 @@ class ClapLayout(HelpLayout):
             return with_style(self.commands_title, self.section_heading_style)
         return self.commands_title
 
-    def get_help_for_class(self, command: Class) -> str:  # type: ignore[override]
+    def get_help_for_class(self, command: Class) -> str:
         """
         Build help text for class subcommands with styled headings.
 
@@ -475,7 +475,7 @@ class ClapLayout(HelpLayout):
             lines.append(self.get_command_description(method, ljust, method_name))
         return "\n".join(lines)
 
-    def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:  # type: ignore[override]
+    def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:
         """
         Build a styled command listing for multiple commands.
 

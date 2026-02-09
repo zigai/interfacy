@@ -451,7 +451,7 @@ def test_clap_layout_defaults_align_when_option_label_exceeds_base_width() -> No
 
 def test_ansi_styled_legacy_epilog_is_not_duplicated_for_subcommands() -> None:
     class StyledTitleClapLayout(ClapLayout):
-        def _format_commands_title(self) -> str:  # type: ignore[override]
+        def _format_commands_title(self) -> str:
             return "\x1b[32mCommands:\x1b[0m"
 
     ops = CommandGroup("ops")

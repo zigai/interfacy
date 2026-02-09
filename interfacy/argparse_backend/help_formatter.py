@@ -39,7 +39,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
 
-    def start_section(self, heading: str | None) -> None:  # type: ignore[override]
+    def start_section(self, heading: str | None) -> None:
         """
         Start a help section with optional layout styling.
 
