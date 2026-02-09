@@ -543,13 +543,8 @@ class ArgumentParser(argparse.ArgumentParser):
                 ) or bool(brace_choices & subparser_choices)
 
                 if is_missing_subcommand:
-                    denested_message = message
-                    for nested, original in self._original_destinations.items():
-                        denested_message = denested_message.replace(nested, original)
-
-                    self._print_message(f"{self.prog}: error: {denested_message}\n", sys.stderr)
                     self.print_help(sys.stderr)
-                    raise SystemExit(2)
+                    raise SystemExit(0)
 
         super().error(message)
 

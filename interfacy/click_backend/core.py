@@ -520,6 +520,15 @@ class ClickParser(InterfacyParser):
             self.log_exception(e)
             self.exit(ExitCode.ERR_PARSING)
             return e
+        except click.exceptions.Exit as e:
+            system_exit = SystemExit(e.exit_code)
+            if self.sys_exit_enabled:
+                raise system_exit
+            return system_exit
+        except SystemExit as e:
+            if self.sys_exit_enabled:
+                raise
+            return e
         except KeyboardInterrupt as e:
             return self._handle_interrupt(e)
         finally:
@@ -536,6 +545,15 @@ class ClickParser(InterfacyParser):
         except InterfacyError as e:
             self.log_exception(e)
             self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
+            return e
+        except click.exceptions.Exit as e:
+            system_exit = SystemExit(e.exit_code)
+            if self.sys_exit_enabled:
+                raise system_exit
+            return system_exit
+        except SystemExit as e:
+            if self.sys_exit_enabled:
+                raise
             return e
         except click.UsageError as e:
             self.log_exception(e)
