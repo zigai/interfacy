@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from inspect import Parameter as InspectParameter
+from inspect import _ParameterKind
 from types import NoneType
 from typing import TYPE_CHECKING, Any
 
@@ -48,7 +49,7 @@ class _ParamSpec:
     default: Any
     is_required: bool
     is_optional: bool
-    kind: InspectParameter
+    kind: _ParameterKind
     description: str | None = None
 
 
@@ -501,8 +502,8 @@ class ParserSchemaBuilder:
                 default = None
                 if f.default is not MISSING:
                     default = f.default
-                elif f.default_factory is not MISSING:  # type: ignore[comparison-overlap]
-                    default = f.default_factory  # type: ignore[assignment]
+                elif f.default_factory is not MISSING:
+                    default = f.default_factory
                 description = None
                 if isinstance(f.metadata, dict):
                     description = f.metadata.get("description") or f.metadata.get("help")
@@ -529,9 +530,9 @@ class ParserSchemaBuilder:
                 required = False
                 if hasattr(info, "is_required"):
                     try:
-                        required = bool(info.is_required())  # type: ignore[operator]
+                        required = bool(info.is_required())
                     except TypeError:
-                        required = bool(info.is_required)  # type: ignore[truthy-bool]
+                        required = bool(info.is_required)
                 default = getattr(info, "default", None)
                 if required:
                     default = None

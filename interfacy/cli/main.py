@@ -11,6 +11,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from interfacy.appearance.layout import HelpLayout
 from interfacy.appearance.layouts import InterfacyLayout
 from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
@@ -198,7 +199,7 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
     return kwargs
 
 
-def _apply_layout_to_command(command: Any, layout: InterfacyLayout) -> None:
+def _apply_layout_to_command(command: Any, layout: HelpLayout) -> None:
     command.help_layout = layout
     subcommands = getattr(command, "subcommands", None)
     if isinstance(subcommands, dict):

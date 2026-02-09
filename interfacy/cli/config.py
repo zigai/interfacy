@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from stdl.fs import toml_load
 
@@ -227,11 +227,12 @@ def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy |
     if isinstance(value, DefaultFlagStrategy):
         return value
     if callable(getattr(value, "get_arg_flags", None)):
-        return value
+        return cast(FlagStrategy, value)
     if isinstance(value, str):
         if ":" in value:
             symbol = _import_symbol(value)
-            return symbol() if isinstance(symbol, type) else symbol
+            resolved = symbol() if isinstance(symbol, type) else symbol
+            return cast(FlagStrategy, resolved)
         key = _normalize_name(value)
         if key in {"default", "standard"}:
             style = config.get("flag_style")

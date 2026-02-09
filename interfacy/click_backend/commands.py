@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import click
-import click.parser as click_parser
 
 from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.click_backend.parser import InterfacyOptionParser
@@ -19,8 +18,8 @@ class InterfacyClickOption(click.Option):
         if help_record is not None:
             name, help_text = help_record
             if " " in name:
-                name = name.split(" ")[:-1]
-                name = " ".join(name)
+                parts = name.split(" ")
+                name = " ".join(parts[:-1])
             return name, help_text
         return None
 
@@ -53,8 +52,8 @@ class InterfacyClickArgument(click.Argument):
         help_record = super().get_help_record(ctx)
         if help_record is not None:
             name, help_text = help_record
-            name = name.split(" ")[:-1]
-            name = " ".join(name)
+            parts = name.split(" ")
+            name = " ".join(parts[:-1])
             return name, help_text
         return None
 
@@ -65,6 +64,7 @@ class _HelpMixin:
     _interfacy_aliases: tuple[str, ...] = ()
     _interfacy_epilog: str | None = None
     _interfacy_is_root: bool = False
+    params: list[click.Parameter]
     _interfacy_param_bindings: dict[str, str]
     _interfacy_arg_specs: dict[str, Argument]
     _interfacy_suppress_defaults: set[str]
@@ -95,7 +95,7 @@ class _HelpMixin:
 
 
 class InterfacyClickCommand(_HelpMixin, click.Command):
-    def make_parser(self, ctx: click.Context) -> click_parser.OptionParser:
+    def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:
         parser = InterfacyOptionParser(ctx)
         for param in self.get_params(ctx):
             param.add_to_parser(parser, ctx)
@@ -120,7 +120,7 @@ class InterfacyClickCommand(_HelpMixin, click.Command):
 
 
 class InterfacyClickGroup(_HelpMixin, click.Group):
-    def make_parser(self, ctx: click.Context) -> click_parser.OptionParser:
+    def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:
         parser = InterfacyOptionParser(ctx)
         for param in self.get_params(ctx):
             param.add_to_parser(parser, ctx)

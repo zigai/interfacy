@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import click.parser as click_parser
 
-try:
-    _BaseOptionParser = click_parser._OptionParser  # type: ignore[attr-defined]
-except AttributeError:  # pragma: no cover - fallback for older/newer Click
-    try:  # pragma: no cover
-        from click import optparse as click_optparse  # type: ignore[import-not-found]
-
-        _BaseOptionParser = click_optparse.OptionParser  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover
-        _BaseOptionParser = click_parser.OptionParser  # type: ignore[assignment]
+_BaseOptionParser: type[Any] = cast(type[Any], click_parser._OptionParser)
 
 
 class InterfacyOptionParser(_BaseOptionParser):

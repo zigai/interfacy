@@ -121,7 +121,7 @@ class HelpLayout:
     usage_prefix: str | None = None
     usage_style: TextStyle | None = None
     usage_text_style: TextStyle | None = None
-    section_title_map: dict[str, str] | None = None
+    section_title_map: ClassVar[dict[str, str] | None] = None
     section_heading_style: TextStyle | None = None
     help_option_description: str = "show this help message and exit"
     compact_options_usage: bool = False
@@ -582,6 +582,7 @@ class HelpLayout:
         values = self._command_layout_probe_values()
         values[token_name] = token
 
+        probe_render = ""
         try:
             probe_render = template.format(**values)
             token_idx = probe_render.find(token)
@@ -621,6 +622,7 @@ class HelpLayout:
         token = f"<<__{field_name.upper()}__>>"
         probe_vals = dict(values)
         probe_vals[field_name] = token
+        probe_render = ""
         try:
             probe_render = template.format(**probe_vals)
             token_idx = probe_render.find(token)

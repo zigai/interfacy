@@ -14,7 +14,11 @@ from strto import StrToTypeParser
 
 from interfacy import console
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
-from interfacy.argparse_backend.argument_parser import ArgumentParser, namespace_to_dict
+from interfacy.argparse_backend.argument_parser import (
+    ArgumentParser,
+    NestedSubParsersAction,
+    namespace_to_dict,
+)
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
 from interfacy.core import ExitCode, InterfacyParser
@@ -78,7 +82,6 @@ class Argparser(InterfacyParser):
     """
 
     RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
-    COMMAND_KEY = "command"
 
     def __init__(
         self,
@@ -238,14 +241,14 @@ class Argparser(InterfacyParser):
         self,
         cls: Class,
         parser: ArgumentParser | None = None,
-        subparser: argparse._SubParsersAction[ArgumentParser] | None = None,
+        subparser: NestedSubParsersAction | None = None,
     ) -> ArgumentParser:
         """Create an ArgumentParser from a Class"""
         parser = parser or self._new_parser()
 
         if cls.has_docstring:
             parser.description = self.help_layout.format_description(cls.description)
-        parser.epilog = self.help_layout.get_help_for_class(cls)  # type: ignore
+        parser.epilog = self.help_layout.get_help_for_class(cls)
 
         if cls.has_init and not cls.is_initialized:
             for param in cls.get_method("__init__").params:
@@ -295,7 +298,7 @@ class Argparser(InterfacyParser):
 
         """
         extra: dict[str, Any] = {}
-        if self.help_layout._use_template_layout():  # type: ignore[attr-defined]
+        if self.help_layout._use_template_layout():
             extra["help"] = self.help_layout.get_help_for_parameter(param, None)
         else:
             extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
@@ -309,7 +312,7 @@ class Argparser(InterfacyParser):
 
             if optional_union_list:
                 list_annotation, element_type = optional_union_list
-            elif is_list_or_list_alias(annotation):
+            elif annotation is not None and is_list_or_list_alias(annotation):
                 list_annotation = annotation
                 list_args = type_args(annotation)
                 element_type = list_args[0] if list_args else None
@@ -398,7 +401,7 @@ class Argparser(InterfacyParser):
         return converted
 
     @staticmethod
-    def _set_subparsers_metavar(subparsers: argparse._SubParsersAction[ArgumentParser]) -> None:
+    def _set_subparsers_metavar(subparsers: NestedSubParsersAction) -> None:
         names: list[str] = []
         seen_parsers: set[int] = set()
         for name, parser in subparsers.choices.items():

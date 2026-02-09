@@ -23,7 +23,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
     ) -> str:
         """Compatibility wrapper for _format_actions_usage (removed in Python 3.14)."""
         if _HAS_FORMAT_ACTIONS_USAGE:
-            return self._format_actions_usage(actions, groups)  # type: ignore[attr-defined]
+            return self._format_actions_usage(actions, groups)
         parts, _ = self._get_actions_usage_parts(actions, groups)  # type: ignore[attr-defined]
         return " ".join(parts)
 
@@ -263,18 +263,18 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         elif usage is None:
             bool_actions = [a for a in actions if isinstance(a, argparse.BooleanOptionalAction)]
             original_option_strings: dict[argparse.Action, list[str]] = {}
-            for action in bool_actions:
-                original_option_strings[action] = list(action.option_strings)
-                action.option_strings = self._primary_boolean_usage_option_strings(action)
+            for bool_action in bool_actions:
+                original_option_strings[bool_action] = list(bool_action.option_strings)
+                bool_action.option_strings = self._primary_boolean_usage_option_strings(bool_action)
 
             prog = "{prog}".format(**dict(prog=self._prog))
-            optionals = []
-            positionals = []
-            for action in actions:
-                if action.option_strings:
-                    optionals.append(action)
+            optionals: list[argparse.Action] = []
+            positionals: list[argparse.Action] = []
+            for usage_action in actions:
+                if usage_action.option_strings:
+                    optionals.append(usage_action)
                 else:
-                    positionals.append(action)
+                    positionals.append(usage_action)
 
             format_actions = self._compat_format_actions_usage
             action_usage = format_actions(optionals + positionals, groups)
@@ -292,7 +292,8 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 def get_lines(
                     parts: list[str], indent: str, prefix: str | None = None
                 ) -> list[str]:
-                    lines, line = [], []
+                    lines: list[str] = []
+                    line: list[str] = []
                     if prefix is not None:
                         line_len = ansi_len(prefix) - 1
                     else:
@@ -332,8 +333,8 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
                 usage = "\n".join(lines)
 
-            for action, option_strings in original_option_strings.items():
-                action.option_strings = option_strings
+            for restored_action, option_strings in original_option_strings.items():
+                restored_action.option_strings = option_strings
 
         usage_text_style = None
         if layout is not None:

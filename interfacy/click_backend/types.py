@@ -24,7 +24,8 @@ click.Context.formatter_class = ClickHelpFormatter
 class ClickFuncParamType(click.types.FuncParamType):
     def __init__(self, func: Callable[[Any], Any], name: str | None = None) -> None:
         self.func = func
-        self.name = name or getattr(func, "__name__", "NO_NAME")
+        raw_name = name if name is not None else getattr(func, "__name__", None)
+        self.name = str(raw_name) if raw_name is not None else "NO_NAME"
 
 
 class ChoiceParamType(click.ParamType):

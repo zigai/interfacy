@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 
 COMMAND_KEY: Final[str] = "command"
-PIPE_UNSET = ...
+PIPE_UNSET: Final[object] = object()
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -456,7 +456,12 @@ class InterfacyParser:
             piped = read_piped()
             self._pipe_buffer = piped if piped else None
 
-        return self._pipe_buffer if self._pipe_buffer is not PIPE_UNSET else None
+        buffer = self._pipe_buffer
+        if buffer is PIPE_UNSET:
+            return None
+        if buffer is None or isinstance(buffer, str):
+            return buffer
+        return None
 
     def reset_piped_input(self) -> None:
         """Clear any cached stdin content."""

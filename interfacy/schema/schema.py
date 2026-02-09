@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -97,7 +98,7 @@ class Argument:
     tuple_element_parsers: tuple[Callable[[str], Any], ...] | None = None
     is_expanded_from: str | None = None
     expansion_path: tuple[str, ...] = ()
-    original_model_type: type | None = None
+    original_model_type: builtins.type[Any] | None = None
     parent_is_optional: bool = False
     model_default: Any = MODEL_DEFAULT_UNSET
 

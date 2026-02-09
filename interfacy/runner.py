@@ -1,7 +1,7 @@
 import inspect
 from dataclasses import asdict, fields, is_dataclass
 from types import NoneType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
@@ -12,7 +12,7 @@ from interfacy.exceptions import ConfigurationError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import reverse_translations
 from interfacy.pipe import apply_pipe_values
-from interfacy.schema.schema import MODEL_DEFAULT_UNSET, Argument, Command
+from interfacy.schema.schema import MODEL_DEFAULT_UNSET, Argument, Command, ParserSchema
 from interfacy.util import resolve_type_alias
 
 if TYPE_CHECKING:
@@ -105,7 +105,7 @@ class SchemaRunner:
             return self.run_class(command, args)
         raise InvalidCommandError(command.canonical_name)
 
-    def run_function(self, func: Function | Method, args: dict) -> Any:
+    def run_function(self, func: Function | Method, args: dict[str, Any]) -> Any:
         """
         Invoke a function or method with parsed arguments.
 
@@ -123,7 +123,7 @@ class SchemaRunner:
         logger.info(f"Result: {result}")
         return result
 
-    def run_method(self, method: Method, args: dict) -> Any:
+    def run_method(self, method: Method, args: dict[str, Any]) -> Any:
         """
         Invoke a method, instantiating its class if needed.
 
@@ -154,7 +154,7 @@ class SchemaRunner:
         )
         return instance.call_method(method.name, *method_args, **method_kwargs)
 
-    def run_class(self, command: Command, args: dict) -> Any:
+    def run_class(self, command: Command, args: dict[str, Any]) -> Any:
         """
         Execute a class subcommand, instantiating as necessary.
 
@@ -429,7 +429,7 @@ class SchemaRunner:
         return args
 
     def _schema_command_for(self, command: Command) -> Command | None:
-        schema = getattr(self.builder, "_last_schema", None)
+        schema = cast(ParserSchema | None, getattr(self.builder, "_last_schema", None))
         if schema is None:
             return None
         return schema.commands.get(command.canonical_name)
@@ -470,9 +470,11 @@ class SchemaRunner:
         if is_dataclass(model_type):
             return asdict(instance)
         if hasattr(instance, "model_dump"):
-            return instance.model_dump()
+            dumped = instance.model_dump()
+            return dumped if isinstance(dumped, dict) else {}
         if hasattr(instance, "dict"):
-            return instance.dict()
+            dumped = instance.dict()
+            return dumped if isinstance(dumped, dict) else {}
         if hasattr(instance, "__dict__"):
             values: dict[str, Any] = {}
             for key, value in vars(instance).items():

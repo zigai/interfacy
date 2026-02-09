@@ -268,7 +268,9 @@ class ClickParser(InterfacyParser):
         command._interfacy_aliases = schema.aliases
         command._interfacy_epilog = schema.epilog
 
-    def build_click_command(self, command: Command, depth: int = 0) -> click.Command:
+    def build_click_command(
+        self, command: Command, depth: int = 0
+    ) -> InterfacyClickCommand | InterfacyClickGroup:
         is_group_like = (
             command.command_type in ("group", "instance")
             or command.subcommands is not None
@@ -385,13 +387,15 @@ class ClickParser(InterfacyParser):
             cmd_name, sub_cmd, remaining = command.resolve_command(ctx, combined_args)
             if not isinstance(sub_cmd, (InterfacyClickCommand, InterfacyClickGroup)):
                 raise ConfigurationError(f"Unexpected command type from click: {type(sub_cmd)!r}")
-            sub_ctx = sub_cmd.make_context(cmd_name, remaining, parent=ctx, resilient_parsing=False)
-            dest_key = self._command_key_for_depth(depth)
-            namespace[dest_key] = cmd_name
-            sub_cli_name = sub_cmd._interfacy_schema
-            sub_key = (
-                sub_cli_name.cli_name if sub_cli_name is not None else sub_cmd.name or cmd_name
+            resolved_cmd_name = cmd_name if cmd_name is not None else (sub_cmd.name or "")
+            sub_ctx = sub_cmd.make_context(
+                resolved_cmd_name, remaining, parent=ctx, resilient_parsing=False
             )
+            dest_key = self._command_key_for_depth(depth)
+            namespace[dest_key] = resolved_cmd_name
+            sub_cli_name = sub_cmd._interfacy_schema
+            fallback_sub_name = sub_cmd.name if sub_cmd.name is not None else resolved_cmd_name
+            sub_key = sub_cli_name.cli_name if sub_cli_name is not None else fallback_sub_name
             namespace[sub_key] = self._build_namespace_for_ctx(sub_ctx, sub_cmd, depth + 1)
 
         return namespace
@@ -453,9 +457,12 @@ class ClickParser(InterfacyParser):
             cmd_name, cmd, remaining = root.resolve_command(ctx, combined_args)
             if not isinstance(cmd, (InterfacyClickCommand, InterfacyClickGroup)):
                 raise ConfigurationError(f"Unexpected command type from click: {type(cmd)!r}")
-            sub_ctx = cmd.make_context(cmd_name, remaining, parent=ctx, resilient_parsing=False)
+            resolved_cmd_name = cmd_name if cmd_name is not None else (cmd.name or "")
+            sub_ctx = cmd.make_context(
+                resolved_cmd_name, remaining, parent=ctx, resilient_parsing=False
+            )
             schema_cmd = cmd._interfacy_schema
-            top_cli_name = schema_cmd.cli_name if schema_cmd is not None else cmd_name
+            top_cli_name = schema_cmd.cli_name if schema_cmd is not None else resolved_cmd_name
             namespace = {
                 self.COMMAND_KEY: top_cli_name,
                 top_cli_name: self._build_namespace_for_ctx(sub_ctx, cmd, depth=0),

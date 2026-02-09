@@ -52,7 +52,7 @@ class Aligned(InterfacyLayout):
     pos_flag_width: int = 24
     default_field_width_max: int = 12
     default_overflow_mode: Literal["inline", "newline"] = "inline"
-    suppress_empty_default_brackets_for_help: ClassVar[bool] = True
+    suppress_empty_default_brackets_for_help: bool = True
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
     format_positional = "{flag_col}{description}{choices_block}"
@@ -78,7 +78,7 @@ class AlignedTyped(InterfacyLayout):
     pos_flag_width: int = 24
     default_field_width_max: int = 12
     default_overflow_mode: Literal["inline", "newline"] = "inline"
-    suppress_empty_default_brackets_for_help: ClassVar[bool] = True
+    suppress_empty_default_brackets_for_help: bool = True
 
     format_option = "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]{choices_block}"
     format_positional = "{flag_col}{description} [type: {type}]{choices_block}"
@@ -521,7 +521,7 @@ class ArgparseLayout(HelpLayout):
     default_label_for_help: str = ""
     clear_metavar: bool = False
 
-    help_position: int = 32  # type:ignore
+    help_position: int = 32
     layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
 
     @staticmethod

@@ -62,7 +62,11 @@ class CommandGroup:
         if isinstance(command, type):
             cmd_name = name or command.__name__
         elif callable(command):
-            cmd_name = name or command.__name__
+            callable_name = getattr(command, "__name__", None)
+            fallback_name = (
+                callable_name if isinstance(callable_name, str) else type(command).__name__
+            )
+            cmd_name = name or fallback_name
         else:
             is_instance = True
             cmd_name = name or type(command).__name__

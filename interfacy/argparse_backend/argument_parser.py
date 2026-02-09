@@ -3,7 +3,7 @@ import re
 import sys
 from argparse import Namespace
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from objinspect.typing import type_name
 from typing_extensions import Never
@@ -40,7 +40,7 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
     return result
 
 
-class NestedSubParsersAction(argparse._SubParsersAction):
+class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[type-arg]
     """
     Subparser action that supports nested destination paths.
 
@@ -136,26 +136,29 @@ class NestedSubParsersAction(argparse._SubParsersAction):
         """
         kwargs.setdefault("help_layout", self._child_help_layout)
 
-        return super().add_parser(
-            name,
-            help=help,
-            aliases=aliases,
-            prog=prog,
-            usage=usage,
-            description=description,
-            epilog=epilog,
-            parents=parents,
-            formatter_class=formatter_class or self._child_formatter_class,
-            prefix_chars=prefix_chars,
-            fromfile_prefix_chars=fromfile_prefix_chars,
-            argument_default=argument_default,
-            conflict_handler=conflict_handler,
-            add_help=add_help,
-            allow_abbrev=allow_abbrev,
-            nest_path=[*self.base_nest_path_components, nest_dir or name],
-            nest_separator=self.nest_separator,
-            exit_on_error=exit_on_error,
-            **kwargs,
+        return cast(
+            ArgumentParser,
+            super().add_parser(
+                name,
+                help=help,
+                aliases=aliases,
+                prog=prog,
+                usage=usage,
+                description=description,
+                epilog=epilog,
+                parents=parents,
+                formatter_class=formatter_class or self._child_formatter_class,
+                prefix_chars=prefix_chars,
+                fromfile_prefix_chars=fromfile_prefix_chars,
+                argument_default=argument_default,
+                conflict_handler=conflict_handler,
+                add_help=add_help,
+                allow_abbrev=allow_abbrev,
+                nest_path=[*self.base_nest_path_components, nest_dir or name],
+                nest_separator=self.nest_separator,
+                exit_on_error=exit_on_error,
+                **kwargs,
+            ),
         )
 
 
@@ -261,7 +264,7 @@ class ArgumentParser(argparse.ArgumentParser):
         self._schema: ParserSchema | None = None
 
     def _get_formatter(self):  # type: ignore
-        formatter = self.formatter_class(self.prog)  # type: ignore[arg-type]
+        formatter = self.formatter_class(str(self.prog))
         if hasattr(formatter, "set_help_layout"):
             try:
                 formatter.set_help_layout(self._interfacy_help_layout)
@@ -307,7 +310,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 "help_layout": self._interfacy_help_layout,
             }
         )
-        return super().add_subparsers(**kwargs)  # type: ignore
+        return cast(NestedSubParsersAction, super().add_subparsers(**kwargs))
 
     def parse_known_args(  # type: ignore
         self,
@@ -441,7 +444,7 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def _extract_destination(self, *args: str, **kwargs: Any) -> str:
         if DEST_KEY in kwargs and kwargs[DEST_KEY] is not None:
-            return kwargs[DEST_KEY]
+            return str(kwargs[DEST_KEY])
         # Find first long option string, falling back to first short option
         option_strings = ((s, len(s) > 2) for s in args if s[0] in self.prefix_chars)
         for option_string, is_long in option_strings:
