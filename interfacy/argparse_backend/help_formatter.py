@@ -2,7 +2,7 @@ import argparse
 import re
 import textwrap
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from stdl.st import ansi_len, with_style
 
@@ -11,6 +11,12 @@ if TYPE_CHECKING:
 
 # Python 3.14 removed '_format_actions_usage', replaced with '_get_actions_usage_parts'
 _HAS_FORMAT_ACTIONS_USAGE = hasattr(argparse.HelpFormatter, "_format_actions_usage")
+_STORE_TRUE_ACTION_ATTR = "_StoreTrueAction"
+_SUBPARSERS_ACTION_ATTR = "_SubParsersAction"
+_ARGPARSE_STORE_TRUE_ACTION = getattr(argparse, _STORE_TRUE_ACTION_ATTR, None)
+_ARGPARSE_SUBPARSERS_ACTION = cast(
+    type[argparse.Action], getattr(argparse, _SUBPARSERS_ACTION_ATTR)
+)
 
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
@@ -39,6 +45,13 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
 
+    @staticmethod
+    def _style_heading(heading: str, heading_style: object) -> str:
+        try:
+            return with_style(heading, heading_style)
+        except (AttributeError, TypeError, ValueError):
+            return heading
+
     def start_section(self, heading: str | None) -> None:
         """
         Start a help section with optional layout styling.
@@ -61,10 +74,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     heading = mapped
             heading_style = getattr(layout, "section_heading_style", None)
             if heading_style is not None:
-                try:
-                    heading = with_style(str(heading), heading_style)
-                except Exception:
-                    pass
+                heading = self._style_heading(str(heading), heading_style)
         return super().start_section(heading)
 
     def _split_lines(self, text: str, width: int) -> list[str]:
@@ -122,14 +132,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         default = self._get_default_metavar_for_optional(action)
         args_string = self._format_args(action, default)
 
-        try:
-            import argparse as _argparse
-
-            is_bool = isinstance(action, _argparse._StoreTrueAction) or isinstance(
-                action, _argparse.BooleanOptionalAction
-            )
-        except Exception:
-            is_bool = False
+        is_bool = isinstance(action, argparse.BooleanOptionalAction)
+        if not is_bool and _ARGPARSE_STORE_TRUE_ACTION is not None:
+            is_bool = isinstance(action, _ARGPARSE_STORE_TRUE_ACTION)
 
         if is_bool:
             return ", ".join(self._primary_boolean_option_strings(action))
@@ -140,7 +145,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         return ", ".join(action.option_strings) + (f" {args_string}" if args_string else "")
 
     def _format_action(self, action: argparse.Action) -> str:
-        if isinstance(action, argparse._SubParsersAction):
+        if isinstance(action, _ARGPARSE_SUBPARSERS_ACTION):
             subactions = list(self._iter_indented_subactions(action))
             if not subactions:
                 return ""
@@ -190,8 +195,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
     def _fill_text(self, text: str, width: int, indent: str) -> str:
         """
-        Doesn't strip whitespace from the beginning of the line when formatting help text.
-        Code from: https://stackoverflow.com/a/74368128/18588657
+        Preserve leading whitespace when formatting help text.
+
+        Code from https://stackoverflow.com/a/74368128/18588657.
         """
         lines = textwrap.dedent(text).splitlines()
         wrapped_lines: list[str] = []
@@ -241,8 +247,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         prefix: str | None,
     ) -> str:
         """
-        Making sure that doesn't crash your program if your terminal window isn't wide enough.
-        Explained here: https://stackoverflow.com/a/50394665/18588657
+        Avoid crashing when terminal width is very small.
+
+        Explained at https://stackoverflow.com/a/50394665/18588657.
         """
         if prefix is None:
             prefix = "usage: "
@@ -257,9 +264,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     prefix = with_style(prefix, usage_style)
 
         if usage is not None:
-            usage = usage % dict(prog=self._prog)
+            usage = usage % {"prog": self._prog}
         elif usage is None and not actions:
-            usage = "{prog}".format(**dict(prog=self._prog))
+            usage = "{prog}".format(**{"prog": self._prog})
         elif usage is None:
             bool_actions = [a for a in actions if isinstance(a, argparse.BooleanOptionalAction)]
             original_option_strings: dict[argparse.Action, list[str]] = {}
@@ -267,7 +274,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 original_option_strings[bool_action] = list(bool_action.option_strings)
                 bool_action.option_strings = self._primary_boolean_usage_option_strings(bool_action)
 
-            prog = "{prog}".format(**dict(prog=self._prog))
+            prog = "{prog}".format(**{"prog": self._prog})
             optionals: list[argparse.Action] = []
             positionals: list[argparse.Action] = []
             for usage_action in actions:
@@ -283,7 +290,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             text_width = self._width - self._current_indent
             prefix_len = ansi_len(prefix)
             if prefix_len + len(usage) > text_width:
-                part_regexp = r"\(.*?\)+(?=\s|$)|" r"\[.*?\]+(?=\s|$)|" r"\S+"
+                part_regexp = r"\(.*?\)+(?=\s|$)|\[.*?\]+(?=\s|$)|\S+"
                 opt_usage = format_actions(optionals, groups)
                 pos_usage = format_actions(positionals, groups)
                 opt_parts = re.findall(part_regexp, opt_usage)
@@ -294,10 +301,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 ) -> list[str]:
                     lines: list[str] = []
                     line: list[str] = []
-                    if prefix is not None:
-                        line_len = ansi_len(prefix) - 1
-                    else:
-                        line_len = len(indent) - 1
+                    line_len = ansi_len(prefix) - 1 if prefix is not None else len(indent) - 1
                     for part in parts:
                         if line_len + 1 + len(part) > text_width and line:
                             lines.append(indent + " ".join(line))

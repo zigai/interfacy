@@ -22,7 +22,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 class InterfacyColors:
-    """Base color theme for interfacy"""
+    """Base color theme for interfacy."""
 
     type: TextStyle = TextStyle(color="green")
     type_keyword: TextStyle = TextStyle(color="light_blue")
@@ -98,7 +98,7 @@ class HelpLayout:
     required_indicator_pos: Literal["left", "right"] = "right"
     min_ljust: int = 19
     command_skips: ClassVar[list[str]] = ["__init__"]
-    flag_generator: FlagStrategy = None  # type:ignore
+    flag_generator: FlagStrategy = None  # type: ignore[assignment]
     name_registry: CommandNameRegistry | None = None
 
     format_option: str | None = None
@@ -126,7 +126,7 @@ class HelpLayout:
     help_option_description: str = "show this help message and exit"
     compact_options_usage: bool = False
     parser_command_usage_suffix: str = "[OPTIONS] command [ARGS]"
-    subcommand_usage_token: str = "{command}"
+    subcommand_usage_placeholder: str = "{command}"
     description_before_usage: bool = False
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
@@ -229,7 +229,7 @@ class HelpLayout:
             return True
         if isinstance(param.type, str):
             name = simplified_type_name(param.type)
-            base = name[:-1] if name.endswith("?") else name
+            base = name.removesuffix("?")
             return base == "bool"
         return False
 
@@ -271,7 +271,10 @@ class HelpLayout:
         return self.parser_command_usage_suffix
 
     def get_subcommand_usage_token(self) -> str:
-        return self.subcommand_usage_token
+        legacy_placeholder = getattr(self, "subcommand_usage_token", None)
+        if isinstance(legacy_placeholder, str):
+            return legacy_placeholder
+        return self.subcommand_usage_placeholder
 
     def should_render_description_before_usage(self) -> bool:
         return self.description_before_usage
@@ -391,21 +394,53 @@ class HelpLayout:
             lines.append(self.get_command_description(method, ljust, method_name))
         return "\n".join(lines)
 
-    def format_parameter(self, param: Parameter, flags: tuple[str, ...]) -> str:
-        """
-        Format a parameter using the active layout template.
+    @staticmethod
+    def _safe_template_format(template: str, values: dict[str, str]) -> str | None:
+        try:
+            return template.format(**values)
+        except (KeyError, IndexError, TypeError, ValueError):
+            return None
 
-        Args:
-            param (Parameter): Parameter metadata.
-            flags (tuple[str, ...]): CLI flags for the parameter.
-        """
-        _, _, _, is_option = self._build_flag_parts(param, flags)
-        template = self.format_option if is_option else self.format_positional
-        if not template:
-            return HelpLayout.get_help_for_parameter(self, param, None)
+    @staticmethod
+    def _terminal_width(default: int = 80) -> int:
+        try:
+            return os.get_terminal_size().columns
+        except (OSError, AttributeError):
+            return default
 
-        values = self._build_values(param, flags)
-        raw_desc = self._format_doc_text(param.description or "")
+    @staticmethod
+    def _wrap_plain_words(text: str, wrap_width: int) -> list[str]:
+        wrapped: list[str] = []
+        for word in text.split():
+            if not wrapped:
+                wrapped.append(word)
+            elif len(wrapped[-1]) + 1 + len(word) <= wrap_width:
+                wrapped[-1] = f"{wrapped[-1]} {word}"
+            else:
+                wrapped.append(word)
+        return wrapped
+
+    def _probe_template_field_index(
+        self,
+        *,
+        template: str,
+        values: dict[str, str],
+        field_name: str,
+        marker: str,
+    ) -> tuple[str, int]:
+        probe_values = dict(values)
+        probe_values[field_name] = marker
+        probe_render = self._safe_template_format(template, probe_values)
+        if probe_render is None:
+            return "", -1
+        return probe_render, probe_render.find(marker)
+
+    def _prepare_template_default_overflow(
+        self,
+        *,
+        template: str,
+        values: dict[str, str],
+    ) -> tuple[str, bool]:
         default_overflow = ""
         skip_wrap = False
         if "{default_padded}" in template:
@@ -420,77 +455,62 @@ class HelpLayout:
                     default_overflow = styled_default
                     values["default"] = ""
                     values["default_padded"] = " " * self.default_field_width
+        return default_overflow, skip_wrap
 
-        DESC_TOKEN = "<<__DESC__>>"
-        probe_vals = dict(values)
-        probe_vals["description"] = DESC_TOKEN
-        try:
-            probe_render = template.format(**probe_vals)
-            token_idx = probe_render.find(DESC_TOKEN)
-        except Exception:
-            probe_render = ""
-            token_idx = -1
+    def _apply_template_description_wrapping(
+        self,
+        *,
+        template: str,
+        values: dict[str, str],
+        raw_description: str,
+        indent: int,
+        skip_wrap: bool,
+        default_overflow: str,
+    ) -> None:
+        desc_marker = "<<__DESC__>>"
+        probe_render, marker_idx = self._probe_template_field_index(
+            template=template,
+            values=values,
+            field_name="description",
+            marker=desc_marker,
+        )
+        if marker_idx == -1:
+            return
 
-        if token_idx != -1:
-            prefix_str = probe_render[:token_idx]
-            prefix_width = ansi_len(prefix_str)
-            cont_indent = " " * prefix_width
+        prefix_width = ansi_len(probe_render[:marker_idx])
+        cont_indent = " " * prefix_width
+        wrap_width = max(10, self._terminal_width() - indent - prefix_width)
+        wrapped = self._wrap_plain_words(raw_description, wrap_width)
 
-            try:
-                term_width = os.get_terminal_size().columns
-            except (OSError, AttributeError):
-                term_width = 80
+        if wrapped and not skip_wrap:
+            styled_lines = [with_style(wrapped[0], self.style.description)]
+            if len(wrapped) > 1:
+                styled_lines.extend(
+                    [cont_indent + with_style(line, self.style.description) for line in wrapped[1:]]
+                )
+            values["description"] = "\n".join(styled_lines)
 
-            indent_len = 2  # argparse adds a fixed two-space indent for each help line
-            wrap_width = max(10, term_width - indent_len - prefix_width)
+        if default_overflow:
+            arrow = with_style("→", self.style.extra_data)
+            label = with_style("default:", self.style.extra_data)
+            overflow_line = f"{arrow} {label} {default_overflow}"
+            if values["description"]:
+                values["description"] = f"{values['description']}\n{cont_indent}{overflow_line}"
+            else:
+                values["description"] = f"\n{cont_indent}{overflow_line}"
 
-            wrapped: list[str] = []
-            for word in raw_desc.split():
-                if not wrapped:
-                    wrapped.append(word)
-                else:
-                    if len(wrapped[-1]) + 1 + len(word) <= wrap_width:
-                        wrapped[-1] = f"{wrapped[-1]} {word}"
-                    else:
-                        wrapped.append(word)
+    @staticmethod
+    def _template_fallback_line(values: dict[str, str]) -> str:
+        return f"{values['flag']:<40} {values['description']} {values.get('extra', '')}"
 
-            if wrapped and not skip_wrap:
-                styled_lines = [with_style(wrapped[0], self.style.description)]
-                if len(wrapped) > 1:
-                    styled_lines.extend(
-                        [
-                            cont_indent + with_style(line, self.style.description)
-                            for line in wrapped[1:]
-                        ]
-                    )
-                values["description"] = "\n".join(styled_lines)
-
-            if default_overflow:
-                arrow = with_style("→", self.style.extra_data)
-                label = with_style("default:", self.style.extra_data)
-                overflow_line = f"{arrow} {label} {default_overflow}"
-                if values["description"]:
-                    values["description"] = f"{values['description']}\n{cont_indent}{overflow_line}"
-                else:
-                    values["description"] = f"\n{cont_indent}{overflow_line}"
-
-        if not raw_desc.strip():
-            wrapped_extra = self._wrap_template_field_value(
-                template=template,
-                values=values,
-                field_name="extra",
-                indent=2,
-            )
-            if wrapped_extra is not None:
-                values["extra"] = wrapped_extra
-
-        try:
-            rendered = template.format(**values)
-        except Exception:
-            rendered = f"{values['flag']:<40} {values['description']} {values.get('extra', '')}"
-
-        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
-        is_required = param.is_required and not is_varargs
+    def _finalize_templated_line(
+        self,
+        *,
+        rendered: str,
+        template: str,
+        values: dict[str, str],
+        is_required: bool,
+    ) -> str:
         if is_required and values.get("required") and values["required"] not in rendered:
             rendered = f"{rendered} {values['required']}"
 
@@ -502,8 +522,75 @@ class HelpLayout:
             template,
             values.get("default", ""),
         )
-
         return rendered.rstrip()
+
+    def _format_templated_help_line(
+        self,
+        *,
+        template: str,
+        values: dict[str, str],
+        raw_description: str,
+        indent: int,
+        is_required: bool,
+    ) -> str:
+        default_overflow, skip_wrap = self._prepare_template_default_overflow(
+            template=template,
+            values=values,
+        )
+        self._apply_template_description_wrapping(
+            template=template,
+            values=values,
+            raw_description=raw_description,
+            indent=indent,
+            skip_wrap=skip_wrap,
+            default_overflow=default_overflow,
+        )
+
+        if not raw_description.strip():
+            wrapped_extra = self._wrap_template_field_value(
+                template=template,
+                values=values,
+                field_name="extra",
+                indent=indent,
+            )
+            if wrapped_extra is not None:
+                values["extra"] = wrapped_extra
+
+        rendered = self._safe_template_format(template, values)
+        if rendered is None:
+            rendered = self._template_fallback_line(values)
+
+        return self._finalize_templated_line(
+            rendered=rendered,
+            template=template,
+            values=values,
+            is_required=is_required,
+        )
+
+    def format_parameter(self, param: Parameter, flags: tuple[str, ...]) -> str:
+        """
+        Format a parameter using the active layout template.
+
+        Args:
+            param (Parameter): Parameter metadata.
+            flags (tuple[str, ...]): CLI flags for the parameter.
+        """
+        _, _, _, is_option = self._build_flag_parts(param, flags)
+        template = self.format_option if is_option else self.format_positional
+        if not template:
+            return HelpLayout.get_help_for_parameter(self, param, None)
+
+        values = self._build_values(param, flags)
+        raw_description = self._format_doc_text(param.description or "")
+        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
+        is_required = param.is_required and not is_varargs
+        return self._format_templated_help_line(
+            template=template,
+            values=values,
+            raw_description=raw_description,
+            indent=2,  # argparse adds a fixed two-space indent for each help line
+            is_required=is_required,
+        )
 
     def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:
         """
@@ -570,7 +657,7 @@ class HelpLayout:
             values["column_gap"] = self.column_gap
         return values
 
-    def _get_template_token_index(self, token_name: str) -> int | None:
+    def _get_template_token_index(self, field_name: str) -> int | None:
         if not self._use_template_layout():
             return None
 
@@ -578,24 +665,23 @@ class HelpLayout:
         if not template:
             return None
 
-        token = f"<<__{token_name}__>>"
+        marker = f"<<__{field_name}__>>"
         values = self._command_layout_probe_values()
-        values[token_name] = token
+        values[field_name] = marker
+        probe_render = self._safe_template_format(template, values)
+        marker_idx = probe_render.find(marker) if probe_render is not None else -1
 
-        probe_render = ""
-        try:
-            probe_render = template.format(**values)
-            token_idx = probe_render.find(token)
-        except Exception:
-            token_idx = -1
-
-        if token_idx == -1:
+        if marker_idx == -1:
             return None
 
-        if token_name == "default_padded" and token_idx > 0 and probe_render[token_idx - 1] == "[":
-            return token_idx - 1
+        if (
+            field_name == "default_padded"
+            and marker_idx > 0
+            and probe_render[marker_idx - 1] == "["
+        ):
+            return marker_idx - 1
 
-        return token_idx
+        return marker_idx
 
     def _get_commands_prefix_len(self) -> int | None:
         if not self._use_template_layout():
@@ -619,25 +705,20 @@ class HelpLayout:
         if not raw_value or "\n" in raw_value:
             return None
 
-        token = f"<<__{field_name.upper()}__>>"
-        probe_vals = dict(values)
-        probe_vals[field_name] = token
-        probe_render = ""
-        try:
-            probe_render = template.format(**probe_vals)
-            token_idx = probe_render.find(token)
-        except Exception:
-            token_idx = -1
+        marker = f"<<__{field_name.upper()}__>>"
+        probe_render, marker_idx = self._probe_template_field_index(
+            template=template,
+            values=values,
+            field_name=field_name,
+            marker=marker,
+        )
 
-        if token_idx == -1:
+        if marker_idx == -1:
             return None
 
-        prefix_str = probe_render[:token_idx]
+        prefix_str = probe_render[:marker_idx]
         prefix_width = ansi_len(prefix_str)
-        try:
-            term_width = os.get_terminal_size().columns
-        except (OSError, AttributeError):
-            term_width = 80
+        term_width = self._terminal_width()
 
         wrap_width = max(10, term_width - indent - prefix_width)
         normalized = " ".join(raw_value.split())
@@ -648,11 +729,10 @@ class HelpLayout:
         for word in normalized.split():
             if not wrapped:
                 wrapped.append(word)
+            elif ansi_len(wrapped[-1]) + 1 + ansi_len(word) <= wrap_width:
+                wrapped[-1] = f"{wrapped[-1]} {word}"
             else:
-                if ansi_len(wrapped[-1]) + 1 + ansi_len(word) <= wrap_width:
-                    wrapped[-1] = f"{wrapped[-1]} {word}"
-                else:
-                    wrapped.append(word)
+                wrapped.append(word)
 
         if len(wrapped) <= 1:
             return None
@@ -777,10 +857,7 @@ class HelpLayout:
             primary_flag = self._get_primary_boolean_flag(param, flags)
             flag_short = shorts[0] if shorts else ""
             flag_long = primary_flag
-            if flag_short:
-                joined = f"{flag_short}, {flag_long}"
-            else:
-                joined = flag_long
+            joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
             return joined, flag_short, flag_long, is_option
 
         flag_short = with_metavar(shorts[0]) if shorts else ""
@@ -806,12 +883,10 @@ class HelpLayout:
 
     def _format_argument_choice_for_help(self, arg: "Argument", value: object) -> str:
         enum_type = arg.type
-        if isinstance(value, str) and isinstance(enum_type, type):
-            try:
-                if issubclass(enum_type, Enum) and value in enum_type.__members__:
-                    return self._format_choice_for_help(enum_type[value])
-            except Exception:
-                pass
+        if isinstance(value, str) and isinstance(enum_type, type) and issubclass(enum_type, Enum):
+            enum_member = enum_type.__members__.get(value)
+            if enum_member is not None:
+                return self._format_choice_for_help(enum_member)
         return self._format_choice_for_help(value)
 
     @staticmethod
@@ -826,7 +901,7 @@ class HelpLayout:
         if self._enum_matches(arg.value_shape, "LIST"):
             try:
                 return list[arg.type]
-            except Exception:
+            except TypeError:
                 return arg.type
 
         if (
@@ -836,7 +911,7 @@ class HelpLayout:
         ):
             try:
                 return tuple.__class_getitem__(tuple([arg.type] * arg.nargs))
-            except Exception:
+            except TypeError:
                 return arg.type
 
         return arg.type
@@ -953,6 +1028,9 @@ class HelpLayout:
     def _arg_is_bool(self, arg: "Argument") -> bool:
         return self._enum_matches(arg.value_shape, "FLAG")
 
+    def is_argument_boolean(self, arg: "Argument") -> bool:
+        return self._arg_is_bool(arg)
+
     def _arg_has_default(self, arg: "Argument") -> bool:
         return arg.default is not None and arg.default is not argparse.SUPPRESS
 
@@ -981,6 +1059,9 @@ class HelpLayout:
             return no_flag
         return base_flag or longs[0]
 
+    def get_primary_boolean_flag_for_argument(self, arg: "Argument") -> str:
+        return self._get_primary_boolean_flag_from_argument(arg)
+
     def _build_flag_parts_from_argument(self, arg: "Argument") -> tuple[str, str, str, bool]:
         shorts = [f for f in arg.flags if f.startswith("-") and not f.startswith("--")]
         longs = [f for f in arg.flags if f.startswith("--")]
@@ -1002,10 +1083,7 @@ class HelpLayout:
             primary_flag = self._get_primary_boolean_flag_from_argument(arg)
             flag_short = shorts[0] if shorts else ""
             flag_long = primary_flag
-            if flag_short:
-                joined = f"{flag_short}, {flag_long}"
-            else:
-                joined = flag_long
+            joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
             return joined, flag_short, flag_long, is_option
 
         flag_short = with_metavar(shorts[0]) if shorts else ""
@@ -1131,107 +1209,18 @@ class HelpLayout:
             return self._format_argument_legacy(arg, indent)
 
         values = self._build_values_from_argument(arg)
-        raw_desc = self._format_doc_text(arg.help or "")
-        default_overflow = ""
-        skip_wrap = False
-        if "{default_padded}" in template:
-            styled_default = values.get("default", "")
-            if styled_default and ansi_len(styled_default) > self.default_field_width:
-                if self.default_overflow_mode == "inline":
-                    values["default"] = styled_default
-                    values["default_padded"] = styled_default
-                    skip_wrap = True
-                else:
-                    default_overflow = styled_default
-                    values["default"] = ""
-                    values["default_padded"] = " " * self.default_field_width
-
-        DESC_TOKEN = "<<__DESC__>>"
-        probe_vals = dict(values)
-        probe_vals["description"] = DESC_TOKEN
-        try:
-            probe_render = template.format(**probe_vals)
-            token_idx = probe_render.find(DESC_TOKEN)
-        except Exception:
-            probe_render = ""
-            token_idx = -1
-
-        if token_idx != -1:
-            prefix_str = probe_render[:token_idx]
-            prefix_width = ansi_len(prefix_str)
-            # `format_argument` output is later indented by the renderer.
-            # Keep continuation indent relative to the unindented template prefix
-            # so wrapped lines align with the first description character.
-            cont_indent = " " * prefix_width
-
-            try:
-                term_width = os.get_terminal_size().columns
-            except (OSError, AttributeError):
-                term_width = 80
-
-            wrap_width = max(10, term_width - indent - prefix_width)
-            wrapped: list[str] = []
-            for word in raw_desc.split():
-                if not wrapped:
-                    wrapped.append(word)
-                else:
-                    if len(wrapped[-1]) + 1 + len(word) <= wrap_width:
-                        wrapped[-1] = f"{wrapped[-1]} {word}"
-                    else:
-                        wrapped.append(word)
-
-            if wrapped and not skip_wrap:
-                styled_lines = [with_style(wrapped[0], self.style.description)]
-                if len(wrapped) > 1:
-                    styled_lines.extend(
-                        [
-                            cont_indent + with_style(line, self.style.description)
-                            for line in wrapped[1:]
-                        ]
-                    )
-                values["description"] = "\n".join(styled_lines)
-
-            if default_overflow:
-                arrow = with_style("→", self.style.extra_data)
-                label = with_style("default:", self.style.extra_data)
-                overflow_line = f"{arrow} {label} {default_overflow}"
-                if values["description"]:
-                    values["description"] = f"{values['description']}\n{cont_indent}{overflow_line}"
-                else:
-                    values["description"] = f"\n{cont_indent}{overflow_line}"
-
-        if not raw_desc.strip():
-            wrapped_extra = self._wrap_template_field_value(
-                template=template,
-                values=values,
-                field_name="extra",
-                indent=indent,
-            )
-            if wrapped_extra is not None:
-                values["extra"] = wrapped_extra
-
-        try:
-            rendered = template.format(**values)
-        except Exception:
-            rendered = f"{values['flag']:<40} {values['description']} {values.get('extra', '')}"
-
+        raw_description = self._format_doc_text(arg.help or "")
         is_varargs = self._enum_matches(arg.value_shape, "LIST") and is_option is False
         is_required = arg.required and not is_varargs
-        if is_required and values.get("required") and values["required"] not in rendered:
-            rendered = f"{rendered} {values['required']}"
-
-        if "[type:" in rendered and "type" in values and not values["type"]:
-            rendered = re.sub(r"\s*\[type:\s*\]", "", rendered)
-
-        rendered = self._collapse_empty_default_slot(
-            rendered,
-            template,
-            values.get("default", ""),
+        return self._format_templated_help_line(
+            template=template,
+            values=values,
+            raw_description=raw_description,
+            indent=indent,
+            is_required=is_required,
         )
 
-        return rendered.rstrip()
-
-    def _format_argument_legacy(self, arg: "Argument", indent: int = 2) -> str:
+    def _format_argument_legacy(self, arg: "Argument", _indent: int = 2) -> str:
         is_bool = self._arg_is_bool(arg)
         is_required = arg.required
         is_typed = arg.type is not None
@@ -1293,6 +1282,6 @@ class HelpLayout:
 
 
 __all__ = [
-    "InterfacyColors",
     "HelpLayout",
+    "InterfacyColors",
 ]

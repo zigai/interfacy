@@ -22,6 +22,21 @@ logger = get_logger(__name__)
 DEST_KEY = "dest"
 ActionType = Callable[[str], Any] | type[Any] | str | None
 NargsPattern = Literal["?", "*", "+"]
+_SUBPARSERS_ACTION_ATTR = "_SubParsersAction"
+_CONTAINER_DEFAULTS_ATTR = "_defaults"
+_CONTAINER_ACTIONS_ATTR = "_actions"
+_ARGPARSE_SUBPARSERS_ACTION = cast(
+    type[argparse.Action], getattr(argparse, _SUBPARSERS_ACTION_ATTR)
+)
+
+
+def _uses_template_layout(layout: "HelpLayout | None") -> bool:
+    if layout is None:
+        return False
+    use_template_layout = getattr(layout, "_use_template_layout", None)
+    if not callable(use_template_layout):
+        return False
+    return bool(use_template_layout())
 
 
 def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
@@ -40,7 +55,7 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
     return result
 
 
-class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[type-arg]
+class NestedSubParsersAction(_ARGPARSE_SUBPARSERS_ACTION):  # type: ignore[type-arg,misc]
     """
     Subparser action that supports nested destination paths.
 
@@ -67,7 +82,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[type-a
         parser_class: type["ArgumentParser"] | None = None,
         dest: str = argparse.SUPPRESS,
         required: bool = False,
-        help: str | None = None,
+        help: str | None = None,  # noqa: A002 - argparse API compatibility
         metavar: str | None = None,
         formatter_class: type[argparse.HelpFormatter] | None = None,
         help_layout: "HelpLayout | None" = None,
@@ -86,11 +101,11 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[type-a
         self._child_formatter_class = formatter_class or InterfacyHelpFormatter
         self._child_help_layout = help_layout
 
-    def add_parser(  # type: ignore
+    def add_parser(  # type: ignore[override]
         self,
         name: str,
         *,
-        help: str | None = None,
+        help: str | None = None,  # noqa: A002 - argparse API compatibility
         aliases: Sequence[str] = (),
         prog: str | None = None,
         usage: str | None = None,
@@ -100,13 +115,13 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[type-a
         formatter_class: type[argparse.HelpFormatter] | None = None,
         prefix_chars: str = "-",
         fromfile_prefix_chars: str | None = None,
-        argument_default: Any = None,
+        argument_default: object = None,
         conflict_handler: str = "error",
         add_help: bool = True,
         allow_abbrev: bool = True,
         exit_on_error: bool = True,
         nest_dir: str | None = None,
-        **kwargs: Any,
+        **kwargs: object,
     ) -> "ArgumentParser":
         """
         Creates and returns a new parser for a subcommand with nesting support.
@@ -197,7 +212,7 @@ class ArgumentParser(argparse.ArgumentParser):
         formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
         prefix_chars: str = "-",
         fromfile_prefix_chars: str | None = None,
-        argument_default: Any = None,
+        argument_default: object = None,
         conflict_handler: str = "error",
         add_help: bool = True,
         allow_abbrev: bool = True,
@@ -244,6 +259,9 @@ class ArgumentParser(argparse.ArgumentParser):
                 raise
             base_init_kwargs.pop("color")
             super().__init__(**base_init_kwargs)
+        self._interfacy_help_layout = help_layout
+        self._schema_command: Command | None = None
+        self._schema: ParserSchema | None = None
         self.add_help = add_help
         if add_help:
             if "-" in self.prefix_chars:
@@ -259,24 +277,22 @@ class ArgumentParser(argparse.ArgumentParser):
                 help=argparse._("show this help message and exit"),
             )
         self.register("action", "parsers", NestedSubParsersAction)
-        self._interfacy_help_layout = help_layout
-        self._schema_command: Command | None = None
-        self._schema: ParserSchema | None = None
 
-    def _get_formatter(self):  # type: ignore
+    def _get_formatter(self) -> argparse.HelpFormatter:  # type: ignore[override]
         formatter = self.formatter_class(str(self.prog))
-        if hasattr(formatter, "set_help_layout"):
+        set_help_layout = getattr(formatter, "set_help_layout", None)
+        if callable(set_help_layout):
             try:
-                formatter.set_help_layout(self._interfacy_help_layout)
-            except Exception:
-                pass
+                set_help_layout(self._interfacy_help_layout)
+            except TypeError:
+                logger.debug("Formatter rejected help layout", exc_info=True)
         return formatter
 
     def format_help(self) -> str:
         layout = self._interfacy_help_layout
         if layout is None:
             return super().format_help()
-        if not layout._use_template_layout():
+        if not _uses_template_layout(layout):
             return super().format_help()
 
         renderer = SchemaHelpRenderer(layout)
@@ -289,14 +305,20 @@ class ArgumentParser(argparse.ArgumentParser):
 
         return super().format_help()
 
-    def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
+    def set_schema_command(self, command: "Command | None") -> None:
+        self._schema_command = command
+
+    def set_schema(self, schema: "ParserSchema | None") -> None:
+        self._schema = schema
+
+    def add_subparsers(self, **kwargs: object) -> NestedSubParsersAction:
         """
         Create a nested subparser group with remapped destinations.
 
         Args:
             **kwargs (Any): Arguments forwarded to argparse add_subparsers.
         """
-        logger.info(f"Adding subparsers with kwargs={kwargs}")
+        logger.info("Adding subparsers with kwargs=%s", kwargs)
         if DEST_KEY in kwargs:
             dest = kwargs[DEST_KEY]
             nested_dest = self._get_nested_destination(dest.replace("-", "_"), store=True)
@@ -312,7 +334,7 @@ class ArgumentParser(argparse.ArgumentParser):
         )
         return cast(NestedSubParsersAction, super().add_subparsers(**kwargs))
 
-    def parse_known_args(  # type: ignore
+    def parse_known_args(  # type: ignore[override]
         self,
         args: Sequence[str] | None = None,
         namespace: Namespace | None = None,
@@ -325,15 +347,15 @@ class ArgumentParser(argparse.ArgumentParser):
             namespace (Namespace | None): Optional namespace to populate.
         """
         parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
-        logger.info(f"Initial parse result: {vars(parsed_args)}, unknown={unknown_args}")
+        logger.info("Initial parse result: %s, unknown=%s", vars(parsed_args), unknown_args)
         if parsed_args is None:
             raise ValueError("No parsed arguments found.")
 
         deflattened_args = self._deflatten_namespace(parsed_args)
-        logger.info(f"Deflattened result:   {vars(deflattened_args)}")
+        logger.info("Deflattened result:   %s", vars(deflattened_args))
         return deflattened_args, unknown_args
 
-    def set_defaults(self, **kwargs: Any) -> None:
+    def set_defaults(self, **kwargs: object) -> None:
         """
         Set defaults while respecting nested destinations.
 
@@ -343,10 +365,10 @@ class ArgumentParser(argparse.ArgumentParser):
         nested_kwargs = {
             self._get_nested_destination(dest, store=True): value for dest, value in kwargs.items()
         }
-        logger.info(f"Nested defaults: {nested_kwargs}")
+        logger.info("Nested defaults: %s", nested_kwargs)
         super().set_defaults(**nested_kwargs)
 
-    def get_default(self, dest: str) -> Any:
+    def get_default(self, dest: str) -> object:
         """
         Return the default value for a destination name.
 
@@ -361,14 +383,14 @@ class ArgumentParser(argparse.ArgumentParser):
         self._remap_container_destinations(container)
         return super()._add_container_actions(container)
 
-    def _get_positional_kwargs(self, dest: str, **kwargs: Any) -> dict[str, Any]:
-        logger.debug(f"Getting positional kwargs for dest='{dest}'")
+    def _get_positional_kwargs(self, dest: str, **kwargs: object) -> dict[str, Any]:
+        logger.debug("Getting positional kwargs for dest='%s'", dest)
         nested_dest = self._get_nested_destination(dest.replace("-", "_"), store=True)
         kwargs = self._edit_arguments(dest, **kwargs)
         return super()._get_positional_kwargs(nested_dest, **kwargs)
 
-    def _get_optional_kwargs(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        logger.debug(f"Getting optional kwargs for args={args}")
+    def _get_optional_kwargs(self, *args: str, **kwargs: object) -> dict[str, Any]:
+        logger.debug("Getting optional kwargs for args=%s", args)
         dest = self._extract_destination(*args, **kwargs)
         nested_dest = self._get_nested_destination(dest.replace("-", "_"), store=True)
         kwargs[DEST_KEY] = nested_dest
@@ -385,14 +407,14 @@ class ArgumentParser(argparse.ArgumentParser):
             # Navigate through component hierarchy
             for component in components[:-1]:
                 if not hasattr(current, component):
-                    logger.debug(f"Creating new namespace for '{component}'")
+                    logger.debug("Creating new namespace for '%s'", component)
                     setattr(current, component, Namespace())
                 current = getattr(current, component)
 
             # Set or merge final value
             final_component = components[-1]
             if hasattr(current, final_component):
-                logger.debug(f"Merging nested namespaces at {final_component}")
+                logger.debug("Merging nested namespaces at %s", final_component)
                 existing_value = getattr(current, final_component)
                 if isinstance(existing_value, Namespace) and isinstance(value, Namespace):
                     self._recursively_merge_namespaces(existing_value, value)
@@ -408,64 +430,86 @@ class ArgumentParser(argparse.ArgumentParser):
             if hasattr(destination, name):
                 dest_value = getattr(destination, name)
                 if isinstance(dest_value, Namespace) and isinstance(value, Namespace):
-                    logger.info(f"Recursively merging at attribute: {name}")
+                    logger.info("Recursively merging at attribute: %s", name)
                     self._recursively_merge_namespaces(dest_value, value)
                 else:
                     raise ValueError(
                         f'Cannot merge namespaces due to conflict at attribute "{name}".'
                     )
             else:
-                logger.info(f"Setting new attribute: {name}={value}")
+                logger.info("Setting new attribute: %s=%s", name, value)
                 setattr(destination, name, value)
         return destination
 
-    def _remap_container_destinations(self, container: argparse._ActionsContainer) -> None:
-        logger.info(f"Remapping container destinations: {container._defaults}")
-        container._defaults = {
-            self._get_nested_destination(dest): value for dest, value in container._defaults.items()
-        }
-        logger.info(f"Remapped container destinations: {container._defaults}")
+    @staticmethod
+    def _container_defaults(container: argparse._ActionsContainer) -> dict[str, object]:
+        defaults = getattr(container, _CONTAINER_DEFAULTS_ATTR, None)
+        if isinstance(defaults, dict):
+            return defaults
+        return {}
 
-        for action in container._actions:
+    @staticmethod
+    def _set_container_defaults(
+        container: argparse._ActionsContainer, defaults: dict[str, object]
+    ) -> None:
+        setattr(container, _CONTAINER_DEFAULTS_ATTR, defaults)
+
+    @staticmethod
+    def _iter_container_actions(container: argparse._ActionsContainer) -> list[argparse.Action]:
+        actions = getattr(container, _CONTAINER_ACTIONS_ATTR, ())
+        if not isinstance(actions, list):
+            actions = list(actions)
+        return [action for action in actions if isinstance(action, argparse.Action)]
+
+    def _remap_container_destinations(self, container: argparse._ActionsContainer) -> None:
+        defaults = self._container_defaults(container)
+        logger.info("Remapping container destinations: %s", defaults)
+        remapped_defaults = {
+            self._get_nested_destination(dest): value for dest, value in defaults.items()
+        }
+        self._set_container_defaults(container, remapped_defaults)
+        logger.info("Remapped container destinations: %s", remapped_defaults)
+
+        for action in self._iter_container_actions(container):
             self._remap_action_destinations(action)
 
     def _remap_action_destinations(self, action: argparse.Action) -> None:
-        logger.info(f"Remapping action: {action}")
+        logger.info("Remapping action: %s", action)
 
         if action.dest is not None:
             old_dest = action.dest
             action.dest = self._get_nested_destination(action.dest, store=True)
-            logger.info(f"Remapped action dest from {old_dest} to {action.dest}")
+            logger.info("Remapped action dest from %s to %s", old_dest, action.dest)
 
         if isinstance(action, NestedSubParsersAction) and action.choices is not None:
             for subparser in action.choices.values():
                 if isinstance(subparser, ArgumentParser):
                     self._remap_container_destinations(subparser)
 
-    def _extract_destination(self, *args: str, **kwargs: Any) -> str:
+    def _extract_destination(self, *args: str, **kwargs: object) -> str:
         if DEST_KEY in kwargs and kwargs[DEST_KEY] is not None:
             return str(kwargs[DEST_KEY])
         # Find first long option string, falling back to first short option
         option_strings = ((s, len(s) > 2) for s in args if s[0] in self.prefix_chars)
         for option_string, is_long in option_strings:
             if is_long and option_string[1] in self.prefix_chars:
-                logger.debug(f"Using long option string for dest: {option_string}")
+                logger.debug("Using long option string for dest: %s", option_string)
                 return option_string.lstrip(self.prefix_chars)
         # If no long option found, use first short option
         dest = next(s.lstrip(self.prefix_chars) for s in args if s[0] in self.prefix_chars)
-        logger.debug(f"Using short option string for dest: {dest}")
+        logger.debug("Using short option string for dest: %s", dest)
         return dest
 
     def _get_nested_destination(self, dest: str, *, store: bool = False) -> str:
         if not self.nest_path_components:
             return dest
         nested = f"{self.nest_separator.join(self.nest_path_components)}{self.nest_separator}{dest}"
-        logger.info(f"Generated nested dest: {nested} -> {dest}")
+        logger.info("Generated nested dest: %s -> %s", nested, dest)
         if store:
             self._original_destinations[nested] = dest
         return nested
 
-    def _edit_arguments(self, original_dest: str, **kwargs: Any) -> dict[str, Any]:
+    def _edit_arguments(self, original_dest: str, **kwargs: object) -> dict[str, Any]:
         action = kwargs.get("action", "store")
         action_name = action if isinstance(action, str) else getattr(action, "__name__", "")
         no_metavar_actions = {
@@ -486,29 +530,27 @@ class ArgumentParser(argparse.ArgumentParser):
             kwargs["metavar"] = dest_for_metavar.replace("_", "-").upper()
         return kwargs
 
-    def _get_value(self, action: argparse.Action, arg_string: str) -> Any:
+    def _get_value(self, action: argparse.Action, arg_string: str) -> object:
         parse_func = self._registry_get("type", action.type, action.type)
         if not callable(parse_func):
             raise argparse.ArgumentError(action, f"{parse_func!r} is not callable")
         try:
             result = parse_func(arg_string)
 
-        except argparse.ArgumentTypeError:
+        except argparse.ArgumentTypeError as exc:
             getattr(action.type, "__name__", repr(action.type))
             msg = str(sys.exc_info()[1])
-            raise argparse.ArgumentError(action, msg)
+            raise argparse.ArgumentError(action, msg) from exc
 
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
             t = None
-            if hasattr(parse_func, "keywords"):
-                try:
-                    t = parse_func.keywords.get("t")
-                except Exception:
-                    t = None
+            keywords = getattr(parse_func, "keywords", None)
+            if isinstance(keywords, dict):
+                t = keywords.get("t")
             if t is None:
                 t = action.type if action.type is not None else "value"
             t_name = type_name(str(t))
-            raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'")
+            raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'") from exc
         return result
 
     def error(self, message: str) -> Never:
@@ -521,7 +563,9 @@ class ArgumentParser(argparse.ArgumentParser):
         marker = "the following arguments are required:"
         if marker in message:
             subparser_actions = [
-                action for action in self._actions if isinstance(action, argparse._SubParsersAction)
+                action
+                for action in self._actions
+                if isinstance(action, _ARGPARSE_SUBPARSERS_ACTION)
             ]
             subparser_dests: set[str] = {action.dest for action in subparser_actions}
             subparser_choices: set[str] = set()
@@ -553,9 +597,9 @@ class ArgumentParser(argparse.ArgumentParser):
 
 
 __all__ = [
+    "DEST_KEY",
     "ActionType",
     "ArgumentParser",
-    "DEST_KEY",
     "NargsPattern",
     "NestedSubParsersAction",
     "namespace_to_dict",

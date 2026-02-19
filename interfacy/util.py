@@ -13,6 +13,14 @@ from stdl.st import with_style
 
 from interfacy import console
 
+_MISSING = object()
+_TYPE_ALIAS_RESOLUTION_ERRORS = (AttributeError, NameError, RecursionError, TypeError)
+_TYPE_HINT_RESOLUTION_ERRORS = (AttributeError, NameError, TypeError, ValueError)
+_LITERAL_PARSE_ERRORS = (SyntaxError, TypeError, ValueError)
+_INTROSPECTION_ERRORS = (AttributeError, KeyError, NameError, TypeError, ValueError)
+_STRINGIFY_ERRORS = (RecursionError, TypeError, ValueError)
+_STYLE_RENDER_ERRORS = (AttributeError, TypeError, ValueError)
+
 
 def simplified_type_name(name: str) -> str:
     """
@@ -82,10 +90,7 @@ def is_fixed_tuple(t: type) -> bool:
     if not args:
         return False
 
-    if len(args) == 2 and args[1] is Ellipsis:  # Variable-length tuple: tuple[T, ...]
-        return False
-
-    return True
+    return not (len(args) == 2 and args[1] is Ellipsis)  # Variable-length tuple: tuple[T, ...]
 
 
 def get_fixed_tuple_info(t: type) -> tuple[int, tuple[type, ...]] | None:
@@ -107,7 +112,7 @@ def get_fixed_tuple_info(t: type) -> tuple[int, tuple[type, ...]] | None:
     return len(args), tuple(args)
 
 
-def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
+def extract_optional_union_list(t: object) -> tuple[object, object | None] | None:
     """
     If the annotation represents `list[T] | None` or `Optional[list[T]]`, return the list annotation together with its element type.
     Otherwise `None`.
@@ -127,75 +132,91 @@ def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
     return None
 
 
-def resolve_type_alias(annotation: Any) -> Any:
+def resolve_type_alias(annotation: object) -> object:
     """Resolve PEP 695 type aliases to their underlying value when possible."""
     type_alias_type = getattr(typing, "TypeAliasType", None)
     if type_alias_type is None:
         return annotation
 
     while isinstance(annotation, type_alias_type):
-        try:
-            annotation = annotation.__value__
-        except Exception:
+        value = _resolve_type_alias_value(annotation)
+        if value is _MISSING:
             break
+        annotation = value
     return annotation
+
+
+def _resolve_type_alias_value(annotation: object) -> object:
+    try:
+        return annotation.__value__
+    except _TYPE_ALIAS_RESOLUTION_ERRORS:
+        return _MISSING
+
+
+def _resolve_owner_localns(owner_cls: type | object | None) -> dict[str, Any] | None:
+    if owner_cls is None:
+        return None
+
+    owner_type = owner_cls if isinstance(owner_cls, type) else type(owner_cls)
+    localns = dict(vars(owner_type))
+    localns.setdefault(owner_type.__name__, owner_type)
+    return localns
+
+
+def _resolve_callable_hints(
+    fn: Callable[..., Any], *, owner_cls: type | object | None = None
+) -> dict[str, Any] | None:
+    globalns = getattr(fn, "__globals__", None)
+    localns = _resolve_owner_localns(owner_cls)
+    try:
+        return typing.get_type_hints(
+            fn,
+            globalns=globalns,
+            localns=localns,
+            include_extras=True,
+        )
+    except TypeError:
+        try:
+            return typing.get_type_hints(fn, globalns=globalns, localns=localns)
+        except _TYPE_HINT_RESOLUTION_ERRORS:
+            return None
+    except _TYPE_HINT_RESOLUTION_ERRORS:
+        return None
+
+
+def _apply_hints(params: list[Parameter], hints: dict[str, Any]) -> None:
+    for param in params:
+        hint = hints.get(param.name, _MISSING)
+        if hint is not _MISSING:
+            param.type = hint
+
+
+def _resolve_and_apply_hints(
+    fn: Callable[..., Any], params: list[Parameter], *, owner_cls: type | object | None = None
+) -> None:
+    hints = _resolve_callable_hints(fn, owner_cls=owner_cls)
+    if hints:
+        _apply_hints(params, hints)
 
 
 def resolve_objinspect_annotations(obj: Function | Method | Class) -> None:
     """Resolve string/forward-ref annotations for objinspect objects in-place."""
-
-    def resolve_callable_hints(
-        fn: Callable[..., Any], *, owner_cls: type | object | None = None
-    ) -> dict[str, Any] | None:
-        globalns = getattr(fn, "__globals__", None)
-        localns: dict[str, Any] | None = None
-        if owner_cls is not None:
-            if not isinstance(owner_cls, type):
-                owner_cls = type(owner_cls)
-            localns = dict(vars(owner_cls))
-            localns.setdefault(owner_cls.__name__, owner_cls)
-        try:
-            return typing.get_type_hints(
-                fn,
-                globalns=globalns,
-                localns=localns,
-                include_extras=True,
-            )
-        except TypeError:
-            try:
-                return typing.get_type_hints(fn, globalns=globalns, localns=localns)
-            except Exception:
-                return None
-        except Exception:
-            return None
-
-    def apply_hints(params: list[Parameter], hints: dict[str, Any]) -> None:
-        for param in params:
-            if param.name in hints:
-                param.type = hints[param.name]
-
     if isinstance(obj, Function):
-        hints = resolve_callable_hints(obj.func)
-        if hints:
-            apply_hints(obj.params, hints)
+        _resolve_and_apply_hints(obj.func, obj.params)
         return
 
     if isinstance(obj, Method):
-        hints = resolve_callable_hints(obj.func, owner_cls=obj.cls)
-        if hints:
-            apply_hints(obj.params, hints)
+        _resolve_and_apply_hints(obj.func, obj.params, owner_cls=obj.cls)
         return
 
     if isinstance(obj, Class):
         if obj.init_method is not None:
-            hints = resolve_callable_hints(obj.init_method.func, owner_cls=obj.cls)
-            if hints:
-                apply_hints(obj.init_method.params, hints)
+            _resolve_and_apply_hints(
+                obj.init_method.func, obj.init_method.params, owner_cls=obj.cls
+            )
 
         for method in obj.methods:
-            hints = resolve_callable_hints(method.func, owner_cls=obj.cls)
-            if hints:
-                apply_hints(method.params, hints)
+            _resolve_and_apply_hints(method.func, method.params, owner_cls=obj.cls)
 
 
 def _normalize_enum_choices(choices: list[Any], *, for_display: bool) -> list[Any] | None:
@@ -229,7 +250,7 @@ def _parse_literal_choices_from_string(annotation: str) -> list[Any] | None:
 
     try:
         parsed = ast.literal_eval(f"({inner})")
-    except Exception:
+    except _LITERAL_PARSE_ERRORS:
         return None
 
     if not isinstance(parsed, tuple):
@@ -238,7 +259,34 @@ def _parse_literal_choices_from_string(annotation: str) -> list[Any] | None:
     return [value for value in parsed if value is not None] or None
 
 
-def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> list[Any] | None:
+def _literal_choices_from_annotation(annotation: object) -> list[object] | None:
+    if type_origin(annotation) is not Literal:
+        return None
+
+    try:
+        raw = get_literal_choices(annotation)
+    except _INTROSPECTION_ERRORS:
+        return None
+
+    if not raw:
+        return None
+    return [value for value in raw if value is not None] or None
+
+
+def _objinspect_choices_from_annotation(
+    annotation: object, *, for_display: bool
+) -> list[object] | None:
+    try:
+        raw = objinspect_get_choices(annotation)
+    except _INTROSPECTION_ERRORS:
+        return None
+
+    if not raw:
+        return None
+    return _normalize_enum_choices(list(raw), for_display=for_display)
+
+
+def get_annotation_choices(annotation: object, *, for_display: bool = False) -> list[object] | None:
     """
     Return a normalized list of choices for a type annotation.
 
@@ -247,38 +295,22 @@ def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> lis
     if annotation is None:
         return None
 
-    annotation = resolve_type_alias(annotation)
+    resolved = resolve_type_alias(annotation)
 
-    if isinstance(annotation, type) and issubclass(annotation, Enum):
-        return _normalize_enum_choices(list(annotation), for_display=for_display)
+    if isinstance(resolved, type) and issubclass(resolved, Enum):
+        return _normalize_enum_choices(list(resolved), for_display=for_display)
 
-    if isinstance(annotation, str):
-        literal_choices = _parse_literal_choices_from_string(annotation)
-        if literal_choices:
-            return literal_choices
-        return None
+    if isinstance(resolved, str):
+        return _parse_literal_choices_from_string(resolved)
 
-    if type_origin(annotation) is Literal:
-        try:
-            raw = get_literal_choices(annotation)
-            if raw:
-                return [value for value in raw if value is not None] or None
-        except Exception:
-            return None
+    literal_choices = _literal_choices_from_annotation(resolved)
+    if literal_choices:
+        return literal_choices
 
-    try:
-        raw = objinspect_get_choices(annotation)
-        if raw:
-            normalized = _normalize_enum_choices(list(raw), for_display=for_display)
-            if normalized:
-                return normalized
-    except Exception:
-        return None
-
-    return None
+    return _objinspect_choices_from_annotation(resolved, for_display=for_display)
 
 
-def get_param_choices(param: Any, *, for_display: bool = False) -> list[Any] | None:
+def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[object] | None:
     """Return choices for an objinspect Parameter, falling back to inferred Enum types."""
     choices = get_annotation_choices(getattr(param, "type", None), for_display=for_display)
     if choices:
@@ -288,7 +320,7 @@ def get_param_choices(param: Any, *, for_display: bool = False) -> list[Any] | N
     if hasattr(param, "get_infered_type"):
         try:
             inferred = param.get_infered_type()
-        except Exception:
+        except _INTROSPECTION_ERRORS:
             inferred = None
 
     if inferred is None and getattr(param, "has_default", False):
@@ -302,7 +334,7 @@ def get_param_choices(param: Any, *, for_display: bool = False) -> list[Any] | N
     return get_annotation_choices(inferred, for_display=for_display)
 
 
-def format_default_for_help(value: Any) -> str:
+def format_default_for_help(value: object) -> str:
     """
     Format a default value for display in help text.
 
@@ -317,7 +349,7 @@ def format_default_for_help(value: Any) -> str:
     return str(value)
 
 
-def show_result(result: Any, handler: Callable[[Any], Any] = print) -> None:
+def show_result(result: object, handler: Callable[[object], object | None] = print) -> None:
     """
     Display a result value using the shared console helpers.
 
@@ -341,9 +373,11 @@ def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
     return prefix + name
 
 
-def format_type_for_help(annotation: Any, style: Any, theme: Any | None = None) -> str:
+def format_type_for_help(annotation: object, style: object, theme: object | None = None) -> str:
     """
-    Return a styled, readable type string for CLI help, handling:
+    Return a styled, readable type string for CLI help.
+
+    Handles:
     - string annotations (from postponed annotations)
     - Optional unions (X | None or Optional[X]) as "X?"
     - token-level styling when a theme provides dedicated type token styles
@@ -378,130 +412,162 @@ _TYPE_KEYWORDS = frozenset(
 )
 
 
-def _safe_style(text: str, style: Any) -> str:
+def _safe_style(text: str, style: object) -> str:
     try:
         return with_style(text, style)
-    except Exception:
+    except _STYLE_RENDER_ERRORS:
         return text
 
 
-def _stringify_type_for_help(annotation: Any) -> str:
+def _stringify_type_for_help(annotation: object) -> str:
     if isinstance(annotation, str):
         return simplified_type_name(annotation)
 
-    annotation = resolve_type_alias(annotation)
+    resolved = resolve_type_alias(annotation)
+    optional_union_name = _stringify_optional_union_type(resolved)
+    if optional_union_name is not None:
+        return optional_union_name
 
+    generic_type_name = _stringify_generic_type(resolved)
+    if generic_type_name is not None:
+        return generic_type_name
+
+    return simplified_type_name(_stringify_fallback_type_name(resolved))
+
+
+def _stringify_optional_union_type(annotation: object) -> str | None:
     try:
-        if is_union_type(annotation):
-            args = list(type_args(annotation))
-            if len(args) == 2 and any(arg is NoneType for arg in args):
-                base = next((arg for arg in args if arg is not NoneType), None)
-                if base is None:
-                    return "Any?"
-                base_name = _stringify_type_for_help(base)
-                if base_name.endswith("?"):
-                    return base_name
-                return f"{base_name}?"
-    except Exception:
-        pass
+        if not is_union_type(annotation):
+            return None
+        args = list(type_args(annotation))
+    except _INTROSPECTION_ERRORS:
+        return None
 
+    if len(args) != 2 or not any(arg is NoneType for arg in args):
+        return None
+
+    base = next((arg for arg in args if arg is not NoneType), None)
+    if base is None:
+        return "Any?"
+
+    base_name = _stringify_type_for_help(base)
+    if base_name.endswith("?"):
+        return base_name
+    return f"{base_name}?"
+
+
+def _safe_stringify(value: object) -> str:
+    try:
+        return str(value)
+    except _STRINGIFY_ERRORS:
+        return object.__repr__(value)
+
+
+def _stringify_generic_type(annotation: object) -> str | None:
     try:
         origin = type_origin(annotation)
         args = type_args(annotation)
-        if origin is not None and args:
-            return simplified_type_name(str(annotation))
-    except Exception:
-        pass
+    except _INTROSPECTION_ERRORS:
+        return None
 
-    try:
-        if isinstance(annotation, type):
-            raw_name = annotation.__name__
-        else:
-            raw_name = str(annotation)
-    except Exception:
-        try:
-            raw_name = getattr(annotation, "__name__", str(annotation))
-        except Exception:
-            raw_name = str(annotation)
+    if origin is None or not args:
+        return None
 
-    return simplified_type_name(raw_name)
+    return simplified_type_name(_safe_stringify(annotation))
+
+
+def _stringify_fallback_type_name(annotation: object) -> str:
+    if isinstance(annotation, type):
+        return annotation.__name__
+
+    name = getattr(annotation, "__name__", None)
+    if isinstance(name, str):
+        return name
+
+    return _safe_stringify(annotation)
+
+
+def _consume_space(text: str, start: int) -> int:
+    index = start + 1
+    while index < len(text) and text[index].isspace():
+        index += 1
+    return index
+
+
+def _consume_quoted_literal(text: str, start: int) -> int:
+    quote = text[start]
+    index = start + 1
+    escaped = False
+    while index < len(text):
+        current = text[index]
+        if escaped:
+            escaped = False
+        elif current == "\\":
+            escaped = True
+        elif current == quote:
+            index += 1
+            break
+        index += 1
+    return index
+
+
+def _consume_numeric_literal(text: str, start: int) -> int:
+    index = start + 1
+    while index < len(text) and (text[index].isdigit() or text[index] == "."):
+        index += 1
+    return index
+
+
+def _consume_identifier(text: str, start: int) -> int:
+    index = start + 1
+    while index < len(text) and (text[index].isalnum() or text[index] in {"_", "."}):
+        index += 1
+    return index
+
+
+def _next_type_token(type_text: str, start: int) -> tuple[str, str, int]:
+    ch = type_text[start]
+    kind = "other"
+    value = ch
+    next_index = start + 1
+
+    if ch.isspace():
+        next_index = _consume_space(type_text, start)
+        kind = "space"
+        value = type_text[start:next_index]
+    elif ch in _TYPE_BRACKETS:
+        kind = "bracket"
+    elif ch in _TYPE_PUNCTUATION:
+        kind = "punctuation"
+    elif ch in _TYPE_OPERATORS:
+        kind = "operator"
+    elif ch in {"'", '"'}:
+        next_index = _consume_quoted_literal(type_text, start)
+        kind = "literal"
+        value = type_text[start:next_index]
+    elif ch.isdigit():
+        next_index = _consume_numeric_literal(type_text, start)
+        kind = "literal"
+        value = type_text[start:next_index]
+    elif ch.isalpha() or ch == "_":
+        next_index = _consume_identifier(type_text, start)
+        value = type_text[start:next_index]
+        kind = "keyword" if value in _TYPE_KEYWORDS else "name"
+
+    return kind, value, next_index
 
 
 def _tokenize_type_text(type_text: str) -> list[tuple[str, str]]:
     tokens: list[tuple[str, str]] = []
-    i = 0
-    length = len(type_text)
-
-    while i < length:
-        ch = type_text[i]
-
-        if ch.isspace():
-            j = i + 1
-            while j < length and type_text[j].isspace():
-                j += 1
-            tokens.append(("space", type_text[i:j]))
-            i = j
-            continue
-
-        if ch in _TYPE_BRACKETS:
-            tokens.append(("bracket", ch))
-            i += 1
-            continue
-
-        if ch in _TYPE_PUNCTUATION:
-            tokens.append(("punctuation", ch))
-            i += 1
-            continue
-
-        if ch in _TYPE_OPERATORS:
-            tokens.append(("operator", ch))
-            i += 1
-            continue
-
-        if ch in {"'", '"'}:
-            quote = ch
-            j = i + 1
-            escaped = False
-            while j < length:
-                curr = type_text[j]
-                if escaped:
-                    escaped = False
-                elif curr == "\\":
-                    escaped = True
-                elif curr == quote:
-                    j += 1
-                    break
-                j += 1
-            tokens.append(("literal", type_text[i:j]))
-            i = j
-            continue
-
-        if ch.isdigit():
-            j = i + 1
-            while j < length and (type_text[j].isdigit() or type_text[j] == "."):
-                j += 1
-            tokens.append(("literal", type_text[i:j]))
-            i = j
-            continue
-
-        if ch.isalpha() or ch == "_":
-            j = i + 1
-            while j < length and (type_text[j].isalnum() or type_text[j] in {"_", "."}):
-                j += 1
-            value = type_text[i:j]
-            token_kind = "keyword" if value in _TYPE_KEYWORDS else "name"
-            tokens.append((token_kind, value))
-            i = j
-            continue
-
-        tokens.append(("other", ch))
-        i += 1
-
+    index = 0
+    while index < len(type_text):
+        kind, value, index = _next_type_token(type_text, index)
+        tokens.append((kind, value))
     return tokens
 
 
-def _resolve_type_token_styles(style: Any, theme: Any | None) -> dict[str, Any]:
-    def pick(name: str, fallback: Any) -> Any:
+def _resolve_type_token_styles(style: object, theme: object | None) -> dict[str, object]:
+    def pick(name: str, fallback: object) -> object:
         if theme is not None and hasattr(theme, name):
             return getattr(theme, name)
         return fallback
@@ -517,7 +583,7 @@ def _resolve_type_token_styles(style: Any, theme: Any | None) -> dict[str, Any]:
     }
 
 
-def _format_type_for_help(annotation: Any, style: Any, theme: Any | None = None) -> str:
+def _format_type_for_help(annotation: object, style: object, theme: object | None = None) -> str:
     type_text = _stringify_type_for_help(annotation)
     styles = _resolve_type_token_styles(style, theme)
     tokens = _tokenize_type_text(type_text)
@@ -532,17 +598,17 @@ def _format_type_for_help(annotation: Any, style: Any, theme: Any | None = None)
 
 
 __all__ = [
-    "simplified_type_name",
-    "is_list_or_list_alias",
-    "is_fixed_tuple",
-    "get_fixed_tuple_info",
     "extract_optional_union_list",
-    "resolve_type_alias",
-    "resolve_objinspect_annotations",
-    "get_annotation_choices",
-    "get_param_choices",
     "format_default_for_help",
-    "show_result",
-    "inverted_bool_flag_name",
     "format_type_for_help",
+    "get_annotation_choices",
+    "get_fixed_tuple_info",
+    "get_param_choices",
+    "inverted_bool_flag_name",
+    "is_fixed_tuple",
+    "is_list_or_list_alias",
+    "resolve_objinspect_annotations",
+    "resolve_type_alias",
+    "show_result",
+    "simplified_type_name",
 ]

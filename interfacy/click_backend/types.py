@@ -9,7 +9,10 @@ import click
 
 class ClickHelpFormatter(click.HelpFormatter):
     def __init__(
-        self, indent_increment: int = 2, width: int | None = None, max_width: int | None = None
+        self,
+        indent_increment: int = 2,
+        width: int | None = None,
+        max_width: int | None = None,  # noqa: ARG002 - click formatter signature
     ) -> None:
         try:
             terminal_width = get_terminal_size()[0]
@@ -38,15 +41,17 @@ class ChoiceParamType(click.ParamType):
         if self.parser is not None:
             try:
                 self._parsed_choices = tuple(self.parser(choice) for choice in self.choices)
-            except Exception:
+            except (TypeError, ValueError, click.BadParameter):
                 self._parsed_choices = None
 
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> Any:
+    def convert(
+        self, value: str, param: click.Parameter | None, ctx: click.Context | None
+    ) -> object:
         converted: Any = value
         if self.parser is not None:
             try:
                 converted = self.parser(value)
-            except Exception as exc:
+            except (TypeError, ValueError, click.BadParameter) as exc:
                 raise click.BadParameter(str(exc), ctx=ctx, param=param) from exc
 
         allowed = self._parsed_choices if self._parsed_choices is not None else self.choices

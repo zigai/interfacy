@@ -199,7 +199,7 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
     return kwargs
 
 
-def _apply_layout_to_command(command: Any, layout: HelpLayout) -> None:
+def _apply_layout_to_command(command: object, layout: HelpLayout) -> None:
     command.help_layout = layout
     subcommands = getattr(command, "subcommands", None)
     if isinstance(subcommands, dict):
@@ -207,38 +207,37 @@ def _apply_layout_to_command(command: Any, layout: HelpLayout) -> None:
             _apply_layout_to_command(subcommand, layout)
 
 
-def _apply_settings_to_parser(parser: InterfacyParser, settings: dict[str, Any]) -> None:
-    if "print_result" in settings and settings["print_result"] is not None:
-        parser.display_result = settings["print_result"]
-    if "full_error_traceback" in settings and settings["full_error_traceback"] is not None:
-        parser.full_error_traceback = settings["full_error_traceback"]
-    if "tab_completion" in settings and settings["tab_completion"] is not None:
-        parser.enable_tab_completion = settings["tab_completion"]
-    if "allow_args_from_file" in settings and settings["allow_args_from_file"] is not None:
-        parser.allow_args_from_file = settings["allow_args_from_file"]
-    if (
-        "include_inherited_methods" in settings
-        and settings["include_inherited_methods"] is not None
-    ):
-        parser.include_inherited_methods = settings["include_inherited_methods"]
-    if "include_classmethods" in settings and settings["include_classmethods"] is not None:
-        parser.include_classmethods = settings["include_classmethods"]
-    if "silent_interrupt" in settings and settings["silent_interrupt"] is not None:
-        parser.silent_interrupt = settings["silent_interrupt"]
-
+def _apply_layout_settings(parser: InterfacyParser, settings: dict[str, Any]) -> None:
     help_layout = settings.get("help_layout")
     help_colors = settings.get("help_colors")
-    if help_layout is not None or help_colors is not None:
-        layout = help_layout or parser.help_layout or InterfacyLayout()
-        if help_colors is not None:
-            layout.style = help_colors
-        parser.help_layout = layout
-        parser.help_colors = layout.style
-        try:
-            for command in parser.get_commands():
-                _apply_layout_to_command(command, layout)
-        except Exception:
-            pass
+    if help_layout is None and help_colors is None:
+        return
+
+    layout = help_layout or parser.help_layout or InterfacyLayout()
+    if help_colors is not None:
+        layout.style = help_colors
+    parser.help_layout = layout
+    parser.help_colors = layout.style
+    for command in parser.get_commands():
+        _apply_layout_to_command(command, layout)
+
+
+def _apply_settings_to_parser(parser: InterfacyParser, settings: dict[str, Any]) -> None:
+    parser_settings = {
+        "print_result": "display_result",
+        "full_error_traceback": "full_error_traceback",
+        "tab_completion": "enable_tab_completion",
+        "allow_args_from_file": "allow_args_from_file",
+        "include_inherited_methods": "include_inherited_methods",
+        "include_classmethods": "include_classmethods",
+        "silent_interrupt": "silent_interrupt",
+    }
+    for key, attr in parser_settings.items():
+        value = settings.get(key)
+        if value is not None:
+            setattr(parser, attr, value)
+
+    _apply_layout_settings(parser, settings)
 
 
 def main(argv: Sequence[str] | None = None) -> ExitCode:
@@ -263,7 +262,7 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
 
     try:
         target = resolve_target(args.target)
-    except Exception as exc:
+    except (AttributeError, FileNotFoundError, ImportError, OSError, ValueError) as exc:
         parser.error(str(exc))
         return ExitCode.ERR_INVALID_ARGS
 

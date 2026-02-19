@@ -13,7 +13,7 @@ class UnsupportedParameterTypeError(InterfacyError):
 class ReservedFlagError(InterfacyError):
     """Raise when a flag name collides with a reserved flag."""
 
-    def __init__(self, flag: str):
+    def __init__(self, flag: str) -> None:
         self.flag = flag
         super().__init__(f"Flag name '{flag}' is already reserved for a different flag")
 
@@ -50,8 +50,12 @@ class PipeInputError(InterfacyError):
         super().__init__(f"Pipe input error for {prefix}: {message}")
 
 
-class InterfacyInterrupted(InterfacyError):
+class InterfacyInterruptedError(InterfacyError):
     """Raised when the CLI is interrupted by user (Ctrl+C from terminal)."""
+
+
+# Backward-compatible alias for older imports.
+InterfacyInterrupted = InterfacyInterruptedError
 
 
 class CliError(InterfacyError):
@@ -85,16 +89,17 @@ class TargetImportError(CliError):
 
 
 __all__ = [
-    "InterfacyError",
-    "UnsupportedParameterTypeError",
-    "ReservedFlagError",
-    "InvalidCommandError",
-    "DuplicateCommandError",
-    "ConfigurationError",
-    "PipeInputError",
-    "InterfacyInterrupted",
     "CliError",
+    "ConfigurationError",
+    "DuplicateCommandError",
+    "InterfacyError",
+    "InterfacyInterrupted",
+    "InterfacyInterruptedError",
+    "InvalidCommandError",
     "InvalidTargetSyntaxError",
-    "TargetNotFoundError",
+    "PipeInputError",
+    "ReservedFlagError",
     "TargetImportError",
+    "TargetNotFoundError",
+    "UnsupportedParameterTypeError",
 ]

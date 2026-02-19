@@ -71,42 +71,69 @@ class SchemaHelpRenderer:
         sections: list[str] = []
         usage = self._build_usage(command, prog)
         description = parser_description or command.description
+        self._append_usage_and_description(sections=sections, usage=usage, description=description)
 
-        if layout.should_render_description_before_usage():
-            if description:
-                sections.append(description)
-            sections.append(usage)
-        else:
-            sections.append(usage)
-            if description:
-                sections.append(description)
-
-        if positionals:
-            heading = self._style_section_heading("positional arguments")
-            lines = [heading]
-            for arg in positionals:
-                rendered = layout.format_argument(arg)
-                lines.append(self._indent(rendered))
-            sections.append("\n".join(lines))
+        positionals_section = self._render_argument_section("positional arguments", positionals)
+        if positionals_section is not None:
+            sections.append(positionals_section)
 
         help_arg = _make_help_argument(layout.help_option_description)
         options_with_help = [help_arg, *options]
-
-        if options_with_help:
-            heading = self._style_section_heading("options")
-            lines = [heading]
-            help_only_section = not options
-            for arg in options_with_help:
-                rendered = layout.format_argument(arg)
-                if help_only_section and arg.name == "help":
-                    rendered = self._normalize_help_only_option_line(rendered)
-                lines.append(self._indent(rendered))
-            sections.append("\n".join(lines))
+        options_section = self._render_argument_section(
+            "options",
+            options_with_help,
+            normalize_help_only=not options,
+        )
+        if options_section is not None:
+            sections.append(options_section)
 
         if command.subcommands:
             subcommand_help = layout.get_help_for_multiple_commands(command.subcommands)
             sections.append(subcommand_help)
 
+        epilog_block = self._build_epilog_block(command, parser_epilog)
+        if epilog_block is not None:
+            sections.append(epilog_block)
+
+        return "\n\n".join(sections) + "\n"
+
+    def _append_usage_and_description(
+        self,
+        *,
+        sections: list[str],
+        usage: str,
+        description: str | None,
+    ) -> None:
+        if self.layout.should_render_description_before_usage():
+            if description:
+                sections.append(description)
+            sections.append(usage)
+            return
+
+        sections.append(usage)
+        if description:
+            sections.append(description)
+
+    def _render_argument_section(
+        self,
+        heading: str,
+        arguments: list[Argument],
+        *,
+        normalize_help_only: bool = False,
+    ) -> str | None:
+        if not arguments:
+            return None
+
+        lines = [self._style_section_heading(heading)]
+        for arg in arguments:
+            rendered = self.layout.format_argument(arg)
+            if normalize_help_only and arg.name == "help":
+                rendered = self._normalize_help_only_option_line(rendered)
+            lines.append(self._indent(rendered))
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_epilog_block(command: Command, parser_epilog: str | None) -> str | None:
         epilog_parts: list[str] = []
         if command.epilog:
             normalized_epilog = re.sub(r"\x1b\[[0-9;]*m", "", command.epilog)
@@ -118,10 +145,9 @@ class SchemaHelpRenderer:
                 epilog_parts.append(command.epilog)
         if parser_epilog:
             epilog_parts.append(parser_epilog)
-        if epilog_parts:
-            sections.append("\n\n".join(epilog_parts))
-
-        return "\n\n".join(sections) + "\n"
+        if not epilog_parts:
+            return None
+        return "\n\n".join(epilog_parts)
 
     def _render_multi_command_help(self, schema: ParserSchema, prog: str) -> str:
         layout = self.layout
@@ -166,13 +192,14 @@ class SchemaHelpRenderer:
         parts: list[str] = [self._style_usage_text(self._normalize_prog(prog))]
         if compact_options_usage:
             parts.append("[OPTIONS]")
-            for arg in options:
-                if arg.required:
-                    parts.append(self._usage_token_for_option(arg, compact_style=True))
+            parts.extend(
+                self._usage_token_for_option(arg, compact_style=True)
+                for arg in options
+                if arg.required
+            )
         else:
             parts.append("[--help]")
-            for arg in options:
-                parts.append(self._usage_token_for_option(arg))
+            parts.extend(self._usage_token_for_option(arg) for arg in options)
 
         for arg in positionals:
             raw_name = arg.metavar
@@ -225,9 +252,9 @@ class SchemaHelpRenderer:
         shorts = [flag for flag in arg.flags if flag.startswith("-") and not flag.startswith("--")]
         primary_flag = longs[0] if longs else (shorts[0] if shorts else f"--{arg.display_name}")
 
-        is_bool = self.layout._arg_is_bool(arg)
+        is_bool = self.layout.is_argument_boolean(arg)
         if is_bool:
-            primary_bool = self.layout._get_primary_boolean_flag_from_argument(arg) or primary_flag
+            primary_bool = self.layout.get_primary_boolean_flag_for_argument(arg) or primary_flag
             return primary_bool if arg.required else f"[{primary_bool}]"
 
         raw_metavar = arg.metavar

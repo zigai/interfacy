@@ -5,6 +5,7 @@ import signal
 import sys
 import time
 from collections.abc import Callable, Sequence
+from types import FrameType
 from typing import Any, ClassVar
 
 try:
@@ -17,6 +18,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - handled by optional dep
     ) from exc
 
 from objinspect import Class
+from strto import StrToTypeParser
 
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.click_backend.commands import (
@@ -52,11 +54,11 @@ class ClickParser(InterfacyParser):
         self,
         description: str | None = None,
         epilog: str | None = None,
-        type_parser: Any | None = None,
+        type_parser: StrToTypeParser | None = None,
         help_layout: HelpLayout | None = None,
         *,
         help_colors: InterfacyColors | None = None,
-        run: bool = False,
+        run: bool = False,  # noqa: ARG002 - kept for API parity
         print_result: bool = False,
         tab_completion: bool = False,
         full_error_traceback: bool = False,
@@ -144,6 +146,99 @@ class ClickParser(InterfacyParser):
             default = None
         return default, suppress
 
+    def _common_param_attrs(self, argument: Argument) -> dict[str, Any]:
+        attrs: dict[str, Any] = {
+            "required": argument.required,
+            "help": argument.help,
+        }
+        if argument.metavar and argument.value_shape != ValueShape.FLAG:
+            attrs["metavar"] = argument.metavar
+        return attrs
+
+    def _positional_nargs(self, argument: Argument) -> int | None:
+        if argument.value_shape == ValueShape.LIST:
+            return -1
+        if argument.value_shape == ValueShape.TUPLE and isinstance(argument.nargs, int):
+            return argument.nargs
+        return None
+
+    def _build_positional_click_param(
+        self,
+        argument: Argument,
+        param_type: click.ParamType | None,
+        default: object,
+        *,
+        suppress: bool,
+    ) -> tuple[click.Parameter, bool]:
+        nargs = self._positional_nargs(argument)
+        attrs = self._common_param_attrs(argument)
+        if nargs is not None:
+            attrs["nargs"] = nargs
+        if param_type is not None:
+            attrs["type"] = param_type
+        if nargs != -1 and not suppress:
+            attrs["default"] = default
+        return InterfacyClickArgument((argument.display_name,), **attrs), suppress
+
+    def _flag_param_declarations(self, argument: Argument, param_name: str) -> list[str]:
+        param_decls: list[str] = [param_name]
+        long_flags = [flag for flag in argument.flags if flag.startswith("--")]
+        short_flags = [
+            flag for flag in argument.flags if flag.startswith("-") and not flag.startswith("--")
+        ]
+        boolean_behavior = argument.boolean_behavior
+        if boolean_behavior is not None and boolean_behavior.supports_negative and long_flags:
+            positive = long_flags[0]
+            negative = boolean_behavior.negative_form or ""
+            combined = f"{positive}/{negative}" if negative else positive
+            param_decls.extend(short_flags)
+            param_decls.append(combined)
+            return param_decls
+        param_decls.extend(argument.flags)
+        return param_decls
+
+    def _build_flag_click_param(
+        self,
+        argument: Argument,
+        param_name: str,
+        default: object,
+        *,
+        suppress: bool,
+    ) -> tuple[click.Parameter, bool]:
+        boolean_behavior = argument.boolean_behavior
+        if boolean_behavior is None:
+            raise ConfigurationError("Boolean flag behavior is required for flag parameters")
+        attrs = self._common_param_attrs(argument)
+        attrs["is_flag"] = True
+        if not boolean_behavior.supports_negative:
+            attrs["flag_value"] = True
+        if not suppress:
+            attrs["default"] = default
+        param_decls = self._flag_param_declarations(argument, param_name)
+        return InterfacyClickOption(param_decls, **attrs), suppress
+
+    def _build_option_click_param(
+        self,
+        argument: Argument,
+        param_name: str,
+        param_type: click.ParamType | None,
+        default: object,
+        *,
+        suppress: bool,
+    ) -> tuple[click.Parameter, bool]:
+        attrs = self._common_param_attrs(argument)
+        if param_type is not None:
+            attrs["type"] = param_type
+        if argument.value_shape == ValueShape.LIST:
+            if not suppress:
+                attrs["default"] = default
+            return InterfacyListOption([param_name, *argument.flags], **attrs), suppress
+        if argument.value_shape == ValueShape.TUPLE and isinstance(argument.nargs, int):
+            attrs["nargs"] = argument.nargs
+        if not suppress:
+            attrs["default"] = default
+        return InterfacyClickOption([param_name, *argument.flags], **attrs), suppress
+
     def _make_click_param(
         self,
         argument: Argument,
@@ -151,87 +246,30 @@ class ClickParser(InterfacyParser):
     ) -> tuple[click.Parameter, bool]:
         param_type = None if argument.value_shape == ValueShape.FLAG else self._param_type(argument)
         default, suppress = self._argument_default(argument)
-        param: click.Parameter
 
         if argument.kind == ArgumentKind.POSITIONAL:
-            nargs = None
-            if argument.value_shape == ValueShape.LIST:
-                nargs = -1
-            elif argument.value_shape == ValueShape.TUPLE and isinstance(argument.nargs, int):
-                nargs = argument.nargs
-
-            attrs: dict[str, Any] = {
-                "required": argument.required,
-                "help": argument.help,
-            }
-            if argument.metavar and argument.value_shape != ValueShape.FLAG:
-                attrs["metavar"] = argument.metavar
-            if nargs is not None:
-                attrs["nargs"] = nargs
-            if param_type is not None:
-                attrs["type"] = param_type
-            if nargs != -1 and not suppress:
-                attrs["default"] = default
-
-            param = InterfacyClickArgument((argument.display_name,), **attrs)
-            return param, suppress
+            return self._build_positional_click_param(
+                argument,
+                param_type,
+                default,
+                suppress=suppress,
+            )
 
         param_name = self._sanitize_param_name(argument.name, used_names)
-
         if argument.value_shape == ValueShape.FLAG and argument.boolean_behavior is not None:
-            param_decls: list[str] = [param_name]
-            long_flags = [flag for flag in argument.flags if flag.startswith("--")]
-            short_flags = [
-                flag
-                for flag in argument.flags
-                if flag.startswith("-") and not flag.startswith("--")
-            ]
-            if argument.boolean_behavior.supports_negative and long_flags:
-                positive = long_flags[0]
-                negative = argument.boolean_behavior.negative_form or ""
-                combined = f"{positive}/{negative}" if negative else positive
-                if short_flags:
-                    param_decls.extend(short_flags)
-                param_decls.append(combined)
-            else:
-                param_decls.extend(argument.flags)
-
-            attrs = {
-                "is_flag": True,
-                "help": argument.help,
-                "required": argument.required,
-            }
-            if not argument.boolean_behavior.supports_negative:
-                attrs["flag_value"] = True
-            if not suppress:
-                attrs["default"] = default
-            param = InterfacyClickOption(param_decls, **attrs)
-            return param, suppress
-
-        attrs = {
-            "help": argument.help,
-            "required": argument.required,
-        }
-        if argument.metavar and argument.value_shape != ValueShape.FLAG:
-            attrs["metavar"] = argument.metavar
-
-        if param_type is not None:
-            attrs["type"] = param_type
-
-        if argument.value_shape == ValueShape.LIST:
-            if not suppress:
-                attrs["default"] = default
-            param = InterfacyListOption([param_name, *argument.flags], **attrs)
-            return param, suppress
-
-        if argument.value_shape == ValueShape.TUPLE and isinstance(argument.nargs, int):
-            attrs["nargs"] = argument.nargs
-
-        if not suppress:
-            attrs["default"] = default
-
-        param = InterfacyClickOption([param_name, *argument.flags], **attrs)
-        return param, suppress
+            return self._build_flag_click_param(
+                argument,
+                param_name,
+                default,
+                suppress=suppress,
+            )
+        return self._build_option_click_param(
+            argument,
+            param_name,
+            param_type,
+            default,
+            suppress=suppress,
+        )
 
     def _build_click_params(
         self, arguments: list[Argument]
@@ -261,12 +299,12 @@ class ClickParser(InterfacyParser):
         suppress_defaults: set[str],
         schema: Command,
     ) -> None:
-        command._interfacy_param_bindings = param_bindings
-        command._interfacy_arg_specs = arg_specs
-        command._interfacy_suppress_defaults = suppress_defaults
-        command._interfacy_schema = schema
-        command._interfacy_aliases = schema.aliases
-        command._interfacy_epilog = schema.epilog
+        command.interfacy_param_bindings = param_bindings
+        command.interfacy_arg_specs = arg_specs
+        command.interfacy_suppress_defaults = suppress_defaults
+        command.interfacy_schema = schema
+        command.interfacy_aliases = schema.aliases
+        command.interfacy_epilog = schema.epilog
 
     def build_click_command(
         self, command: Command, depth: int = 0
@@ -330,9 +368,9 @@ class ClickParser(InterfacyParser):
         if schema.is_multi_command or single_group:
             root = InterfacyClickGroup(name="main", help=schema.description)
             root.context_settings.setdefault("allow_interspersed_args", False)
-            root._interfacy_is_root = True
-            root._interfacy_parser_schema = schema
-            root._interfacy_epilog = self._combine_epilog(schema.commands_help, schema.epilog)
+            root.interfacy_is_root = True
+            root.interfacy_parser_schema = schema
+            root.interfacy_epilog = self._combine_epilog(schema.commands_help, schema.epilog)
 
             for cmd in schema.commands.values():
                 root.add_command(self.build_click_command(cmd), name=cmd.cli_name)
@@ -340,7 +378,7 @@ class ClickParser(InterfacyParser):
 
         cmd = next(iter(schema.commands.values()))
         click_command = self.build_click_command(cmd)
-        click_command._interfacy_epilog = self._combine_epilog(cmd.epilog, schema.epilog)
+        click_command.interfacy_epilog = self._combine_epilog(cmd.epilog, schema.epilog)
         return click_command
 
     def build_parser(self) -> click.Command:
@@ -361,8 +399,8 @@ class ClickParser(InterfacyParser):
         ctx: click.Context,
         command: InterfacyClickCommand | InterfacyClickGroup,
     ) -> dict[str, Any]:
-        bindings = command._interfacy_param_bindings
-        suppress_defaults = command._interfacy_suppress_defaults
+        bindings = command.interfacy_param_bindings
+        suppress_defaults = command.interfacy_suppress_defaults
         params: dict[str, Any] = {}
 
         for click_name, value in ctx.params.items():
@@ -393,52 +431,58 @@ class ClickParser(InterfacyParser):
             )
             dest_key = self._command_key_for_depth(depth)
             namespace[dest_key] = resolved_cmd_name
-            sub_cli_name = sub_cmd._interfacy_schema
+            sub_cli_name = sub_cmd.interfacy_schema
             fallback_sub_name = sub_cmd.name if sub_cmd.name is not None else resolved_cmd_name
             sub_key = sub_cli_name.cli_name if sub_cli_name is not None else fallback_sub_name
             namespace[sub_key] = self._build_namespace_for_ctx(sub_ctx, sub_cmd, depth + 1)
 
         return namespace
 
+    def _convert_tuple_value(self, argument: Argument, value: Sequence[Any]) -> tuple[Any, ...]:
+        if argument.tuple_element_parsers:
+            return tuple(
+                parser(v) for parser, v in zip(argument.tuple_element_parsers, value, strict=False)
+            )
+        return tuple(value)
+
+    def _normalize_argument_value(self, argument: Argument, bucket: dict[str, Any]) -> None:
+        if argument.name not in bucket:
+            return
+        value = bucket[argument.name]
+        if argument.value_shape == ValueShape.TUPLE and isinstance(value, (list, tuple)):
+            bucket[argument.name] = self._convert_tuple_value(argument, value)
+            return
+        if argument.value_shape == ValueShape.LIST and isinstance(value, tuple):
+            bucket[argument.name] = list(value)
+
+    def _normalize_command_bucket(self, command: Command, bucket: dict[str, Any]) -> None:
+        for argument in (*command.initializer, *command.parameters):
+            self._normalize_argument_value(argument, bucket)
+        if command.subcommands:
+            for sub_cmd in command.subcommands.values():
+                sub_bucket = bucket.get(sub_cmd.cli_name)
+                if isinstance(sub_bucket, dict):
+                    self._normalize_command_bucket(sub_cmd, sub_bucket)
+
+    def _is_single_leaf_schema(self, schema: ParserSchema) -> Command | None:
+        if len(schema.commands) != 1 or schema.is_multi_command:
+            return None
+        single_cmd = next(iter(schema.commands.values()))
+        if single_cmd.is_leaf:
+            return single_cmd
+        return None
+
     def _normalize_parsed_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         schema = self._last_schema or self.build_parser_schema()
-
-        def convert_tuple(arg: Argument, val: Sequence[Any]) -> tuple[Any, ...]:
-            if arg.tuple_element_parsers:
-                return tuple(
-                    parser(v) for parser, v in zip(arg.tuple_element_parsers, val, strict=False)
-                )
-            return tuple(val)
-
-        def normalize_arg(arg: Argument, bucket: dict[str, Any]) -> None:
-            if arg.name not in bucket:
-                return
-            val = bucket[arg.name]
-            if arg.value_shape == ValueShape.TUPLE and isinstance(val, (list, tuple)):
-                bucket[arg.name] = convert_tuple(arg, val)
-            elif arg.value_shape == ValueShape.LIST and isinstance(val, tuple):
-                bucket[arg.name] = list(val)
-
-        def normalize_command(command: Command, bucket: dict[str, Any]) -> None:
-            for arg in command.initializer:
-                normalize_arg(arg, bucket)
-            for arg in command.parameters:
-                normalize_arg(arg, bucket)
-            if command.subcommands:
-                for sub_cmd in command.subcommands.values():
-                    sub_bucket = bucket.get(sub_cmd.cli_name)
-                    if isinstance(sub_bucket, dict):
-                        normalize_command(sub_cmd, sub_bucket)
-
-        single_cmd = next(iter(schema.commands.values())) if len(schema.commands) == 1 else None
-        if single_cmd and not schema.is_multi_command and single_cmd.is_leaf:
-            normalize_command(single_cmd, namespace)
+        single_cmd = self._is_single_leaf_schema(schema)
+        if single_cmd is not None:
+            self._normalize_command_bucket(single_cmd, namespace)
             return namespace
 
         for cmd in schema.commands.values():
             bucket = namespace.get(cmd.cli_name)
             if isinstance(bucket, dict):
-                normalize_command(cmd, bucket)
+                self._normalize_command_bucket(cmd, bucket)
         return namespace
 
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
@@ -451,7 +495,7 @@ class ClickParser(InterfacyParser):
         args = args if args is not None else self.get_args()
         root = self.build_parser()
 
-        if isinstance(root, InterfacyClickGroup) and root._interfacy_is_root:
+        if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
             ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
             combined_args = self._remaining_args(ctx)
             cmd_name, cmd, remaining = root.resolve_command(ctx, combined_args)
@@ -461,7 +505,7 @@ class ClickParser(InterfacyParser):
             sub_ctx = cmd.make_context(
                 resolved_cmd_name, remaining, parent=ctx, resilient_parsing=False
             )
-            schema_cmd = cmd._interfacy_schema
+            schema_cmd = cmd.interfacy_schema
             top_cli_name = schema_cmd.cli_name if schema_cmd is not None else resolved_cmd_name
             namespace = {
                 self.COMMAND_KEY: top_cli_name,
@@ -484,7 +528,101 @@ class ClickParser(InterfacyParser):
             raise exc
         return exc
 
-    def run(self, *commands: Callable[..., Any], args: list[str] | None = None) -> Any:
+    def _sigint_handler(self, _signum: int, _frame: FrameType | None) -> None:
+        now = time.time()
+        if now - self._last_interrupt_time < 1.0:
+            sys.exit(ExitCode.INTERRUPTED)
+        self._last_interrupt_time = now
+        raise KeyboardInterrupt()
+
+    def _handle_system_exit(self, exc: click.exceptions.Exit | SystemExit) -> SystemExit:
+        if isinstance(exc, click.exceptions.Exit):
+            system_exit = SystemExit(exc.exit_code)
+            if self.sys_exit_enabled:
+                raise system_exit from exc
+            return system_exit
+        if self.sys_exit_enabled:
+            raise exc
+        return exc
+
+    def _handle_parse_failure(
+        self,
+        exc: (
+            DuplicateCommandError
+            | UnsupportedParameterTypeError
+            | ReservedFlagError
+            | InvalidCommandError
+            | ConfigurationError
+            | click.UsageError
+        ),
+    ) -> Exception:
+        if isinstance(exc, click.exceptions.NoArgsIsHelpError):
+            parse_error = ConfigurationError(str(exc))
+            self.log_exception(parse_error)
+            self.exit(ExitCode.ERR_PARSING)
+            return parse_error
+        self.log_exception(exc)
+        self.exit(ExitCode.ERR_PARSING)
+        return exc
+
+    def _register_commands_and_parse(
+        self,
+        commands: tuple[Callable[..., object], ...],
+        args: list[str] | None,
+    ) -> tuple[bool, tuple[list[str], dict[str, Any]] | object]:
+        try:
+            self.reset_piped_input()
+            for cmd in commands:
+                self.add_command(cmd, name=None, description=None)
+            parsed_args = args if args is not None else self.get_args()
+            logger.info("Got args: %s", parsed_args)
+            namespace = self.parse_args(parsed_args)
+        except (
+            DuplicateCommandError,
+            UnsupportedParameterTypeError,
+            ReservedFlagError,
+            InvalidCommandError,
+            ConfigurationError,
+            click.UsageError,
+        ) as exc:
+            return False, self._handle_parse_failure(exc)
+        except (click.exceptions.Exit, SystemExit) as exc:
+            return False, self._handle_system_exit(exc)
+        except KeyboardInterrupt as exc:
+            return False, self._handle_interrupt(exc)
+        else:
+            return True, (parsed_args, namespace)
+
+    def _execute_schema_runner(
+        self,
+        namespace: dict[str, Any],
+        args: list[str],
+    ) -> tuple[bool, object]:
+        try:
+            runner = SchemaRunner(
+                namespace=namespace,
+                args=args,
+                builder=self,
+            )
+            return True, runner.run()
+        except InterfacyError as exc:
+            self.log_exception(exc)
+            self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
+            return False, exc
+        except (click.exceptions.Exit, SystemExit) as exc:
+            return False, self._handle_system_exit(exc)
+        except click.UsageError as exc:
+            self.log_exception(exc)
+            self.exit(ExitCode.ERR_PARSING)
+            return False, exc
+        except KeyboardInterrupt as exc:
+            return False, self._handle_interrupt(exc)
+        except Exception as exc:  # noqa: BLE001 - runtime boundary fallback
+            self.log_exception(exc)
+            self.exit(ExitCode.ERR_RUNTIME)
+            return False, exc
+
+    def run(self, *commands: Callable[..., object], args: list[str] | None = None) -> object:
         """
         Register commands, parse args, and execute the selected command.
 
@@ -493,104 +631,40 @@ class ClickParser(InterfacyParser):
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
         original_handler = signal.getsignal(signal.SIGINT)
-
-        def sigint_handler(signum: int, frame: Any) -> None:
-            now = time.time()
-            if now - self._last_interrupt_time < 1.0:
-                sys.exit(ExitCode.INTERRUPTED)
-            self._last_interrupt_time = now
-            raise KeyboardInterrupt()
-
-        signal.signal(signal.SIGINT, sigint_handler)
-
+        signal.signal(signal.SIGINT, self._sigint_handler)
         try:
-            self.reset_piped_input()
-            for cmd in commands:
-                self.add_command(cmd, name=None, description=None)
-
-            args = args if args is not None else self.get_args()
-            logger.info(f"Got args: {args}")
-            namespace = self.parse_args(args)
-        except (
-            DuplicateCommandError,
-            UnsupportedParameterTypeError,
-            ReservedFlagError,
-            InvalidCommandError,
-            ConfigurationError,
-            click.UsageError,
-        ) as e:
-            if isinstance(e, click.exceptions.NoArgsIsHelpError):
-                err = ConfigurationError(str(e))
-                self.log_exception(err)
-                self.exit(ExitCode.ERR_PARSING)
-                return err
-            self.log_exception(e)
-            self.exit(ExitCode.ERR_PARSING)
-            return e
-        except click.exceptions.Exit as e:
-            system_exit = SystemExit(e.exit_code)
-            if self.sys_exit_enabled:
-                raise system_exit
-            return system_exit
-        except SystemExit as e:
-            if self.sys_exit_enabled:
-                raise
-            return e
-        except KeyboardInterrupt as e:
-            return self._handle_interrupt(e)
+            parse_ok, parse_payload = self._register_commands_and_parse(commands, args)
         finally:
             signal.signal(signal.SIGINT, original_handler)
+        if not parse_ok:
+            return parse_payload
 
-        signal.signal(signal.SIGINT, sigint_handler)
+        parsed_args, namespace = parse_payload
+        signal.signal(signal.SIGINT, self._sigint_handler)
         try:
-            runner = SchemaRunner(
-                namespace=namespace,
-                args=args,
-                builder=self,
-            )
-            result = runner.run()
-        except InterfacyError as e:
-            self.log_exception(e)
-            self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
-            return e
-        except click.exceptions.Exit as e:
-            system_exit = SystemExit(e.exit_code)
-            if self.sys_exit_enabled:
-                raise system_exit
-            return system_exit
-        except SystemExit as e:
-            if self.sys_exit_enabled:
-                raise
-            return e
-        except click.UsageError as e:
-            self.log_exception(e)
-            self.exit(ExitCode.ERR_PARSING)
-            return e
-        except KeyboardInterrupt as e:
-            return self._handle_interrupt(e)
-        except Exception as e:
-            self.log_exception(e)
-            self.exit(ExitCode.ERR_RUNTIME)
-            return e
+            run_ok, run_payload = self._execute_schema_runner(namespace, parsed_args)
         finally:
             signal.signal(signal.SIGINT, original_handler)
+        if not run_ok:
+            return run_payload
 
+        result = run_payload
         if self.display_result:
             self.result_display_fn(result)
 
         self.exit(ExitCode.SUCCESS)
         return result
 
-    def parser_from_function(self, *args: Any, **kwargs: Any) -> Any:
+    def parser_from_function(self, *args: object, **kwargs: object) -> object:
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
-    def parser_from_class(self, *args: Any, **kwargs: Any) -> Any:
+    def parser_from_class(self, *args: object, **kwargs: object) -> object:
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
-    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> Any:
+    def parser_from_multiple_commands(self, *args: object, **kwargs: object) -> object:
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
-    def install_tab_completion(self, *args: Any, **kwargs: Any) -> None:
+    def install_tab_completion(self, *_args: object, **_kwargs: object) -> None:
         return None
 
 

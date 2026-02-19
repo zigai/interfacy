@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class InterfacyLayout(HelpLayout):
-    """Default Interfacy layout"""
+    """Default Interfacy layout."""
 
     pos_flag_width: int = 24
 
@@ -172,7 +172,7 @@ class ClapLayout(HelpLayout):
     help_option_description: str = "Print help"
     compact_options_usage: bool = True
     parser_command_usage_suffix: str = "[OPTIONS] [COMMAND]"
-    subcommand_usage_token: str = "[COMMAND]"
+    subcommand_usage_placeholder: str = "[COMMAND]"
     description_before_usage: bool = True
     use_action_extra: ClassVar[bool] = True
     choices_label_text: ClassVar[str] = "possible values:"
@@ -535,7 +535,7 @@ class ArgparseLayout(HelpLayout):
     def get_help_for_parameter(
         self,
         param: Parameter,
-        flags: tuple[str, ...] | None = None,
+        flags: tuple[str, ...] | None = None,  # noqa: ARG002 - API compatibility
     ) -> str:
         """
         Return help text following argparse's default style.
@@ -548,7 +548,11 @@ class ArgparseLayout(HelpLayout):
         has_default = param.has_default and param.default is not None and not param.is_required
         return self._with_default_sentence(description, has_default, param.default)
 
-    def format_argument(self, arg: "Argument", indent: int = 2) -> str:
+    def format_argument(
+        self,
+        arg: "Argument",
+        indent: int = 2,  # noqa: ARG002 - API compatibility
+    ) -> str:
         description = self.format_description(arg.help or "")
         has_default = (
             not arg.required and arg.default is not argparse.SUPPRESS and arg.default is not None
@@ -557,10 +561,10 @@ class ArgparseLayout(HelpLayout):
 
 
 __all__ = [
-    "ClapLayout",
-    "ArgparseLayout",
     "Aligned",
     "AlignedTyped",
-    "Modern",
+    "ArgparseLayout",
+    "ClapLayout",
     "InterfacyLayout",
+    "Modern",
 ]

@@ -6,6 +6,7 @@ import signal
 import sys
 import time
 from collections.abc import Callable, Sequence
+from types import FrameType
 from typing import Any, ClassVar
 
 from objinspect import Class, Function, Method, Parameter
@@ -194,7 +195,7 @@ class Argparser(InterfacyParser):
         name = self.flag_strategy.argument_translator.translate(param.name)
         flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbreviation_gen)
         extra_args = self._extra_add_arg_params(param, flags)
-        logger.info(f"Flags: {flags}, Extra args: {extra_args}")
+        logger.info("Flags: %s, Extra args: %s", flags, extra_args)
         return parser.add_argument(*flags, **extra_args)
 
     def parser_from_function(
@@ -203,7 +204,7 @@ class Argparser(InterfacyParser):
         parser: ArgumentParser | None = None,
         taken_flags: list[str] | None = None,
     ) -> ArgumentParser:
-        """Create an ArgumentParser from a Function"""
+        """Create an ArgumentParser from a Function."""
         taken_flags = [] if taken_flags is None else taken_flags
         parser = parser or self._new_parser()
 
@@ -221,7 +222,7 @@ class Argparser(InterfacyParser):
         taken_flags: list[str],
         parser: ArgumentParser | None = None,
     ) -> ArgumentParser:
-        """Create an ArgumentParser from a Method"""
+        """Create an ArgumentParser from a Method."""
         parser = parser or self._new_parser()
 
         is_initialized = hasattr(method.func, "__self__")
@@ -243,7 +244,7 @@ class Argparser(InterfacyParser):
         parser: ArgumentParser | None = None,
         subparser: NestedSubParsersAction | None = None,
     ) -> ArgumentParser:
-        """Create an ArgumentParser from a Class"""
+        """Create an ArgumentParser from a Class."""
         parser = parser or self._new_parser()
 
         if cls.has_docstring:
@@ -273,7 +274,7 @@ class Argparser(InterfacyParser):
 
         return parser
 
-    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> ArgumentParser:
+    def parser_from_multiple_commands(self, *args: object, **_kwargs: object) -> ArgumentParser:
         """
         Create an ArgumentParser from multiple commands.
 
@@ -282,6 +283,46 @@ class Argparser(InterfacyParser):
         for command in args:
             self.add_command(command)
         return self.build_parser()
+
+    def _uses_template_layout(self) -> bool:
+        use_template_layout = getattr(self.help_layout, "_use_template_layout", None)
+        if not callable(use_template_layout):
+            return False
+        return bool(use_template_layout())
+
+    def _parameter_help(self, param: Parameter, flags: tuple[str, ...]) -> str:
+        if self._uses_template_layout():
+            return self.help_layout.get_help_for_parameter(param, None)
+        return self.help_layout.get_help_for_parameter(param, flags)
+
+    @staticmethod
+    def _resolve_list_annotation(annotation: object | None) -> tuple[object | None, object | None]:
+        optional_union_list = extract_optional_union_list(annotation)
+        if optional_union_list:
+            return optional_union_list
+        if annotation is not None and is_list_or_list_alias(annotation):
+            list_args = type_args(annotation)
+            return annotation, (list_args[0] if list_args else None)
+        return None, None
+
+    def _apply_typed_argument_params(
+        self, extra: dict[str, Any], param: Parameter, annotation: object
+    ) -> None:
+        list_annotation, element_type = self._resolve_list_annotation(annotation)
+        if list_annotation is not None:
+            extra["nargs"] = "*"
+            if element_type is not None:
+                extra["type"] = self.type_parser.get_parse_func(element_type)
+        else:
+            extra["type"] = self.type_parser.get_parse_func(annotation)
+
+        choices = get_param_choices(param, for_display=False)
+        if choices:
+            extra["choices"] = self._coerce_choices_for_parser(choices, extra.get("type"))
+
+    @staticmethod
+    def _is_positional_flags(flags: tuple[str, ...]) -> bool:
+        return all(not flag.startswith("-") for flag in flags)
 
     def _extra_add_arg_params(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, Any]:
         """
@@ -297,51 +338,24 @@ class Argparser(InterfacyParser):
             "required", "metavar", and "default".
 
         """
-        extra: dict[str, Any] = {}
-        if self.help_layout._use_template_layout():
-            extra["help"] = self.help_layout.get_help_for_parameter(param, None)
-        else:
-            extra["help"] = self.help_layout.get_help_for_parameter(param, flags)
+        extra: dict[str, Any] = {"help": self._parameter_help(param, flags)}
 
         annotation = resolve_type_alias(param.type) if param.is_typed else None
         is_bool_param = param.is_typed and annotation is bool
         if param.is_typed and not is_bool_param:
-            optional_union_list = extract_optional_union_list(annotation)
-            list_annotation: Any | None = None
-            element_type: Any | None = None
+            self._apply_typed_argument_params(extra, param, annotation)
 
-            if optional_union_list:
-                list_annotation, element_type = optional_union_list
-            elif annotation is not None and is_list_or_list_alias(annotation):
-                list_annotation = annotation
-                list_args = type_args(annotation)
-                element_type = list_args[0] if list_args else None
+        if self.help_layout.clear_metavar and not is_bool_param and not param.is_required:
+            extra["metavar"] = "\b"
 
-            if list_annotation is not None:
-                extra["nargs"] = "*"
-                if element_type is not None:
-                    extra["type"] = self.type_parser.get_parse_func(element_type)
-            else:
-                extra["type"] = self.type_parser.get_parse_func(annotation)
-
-            if choices := get_param_choices(param, for_display=False):
-                extra["choices"] = self._coerce_choices_for_parser(choices, extra.get("type"))
-
-        if self.help_layout.clear_metavar and not is_bool_param:
-            if not param.is_required:
-                extra["metavar"] = "\b"
-
-        is_positional = all([not i.startswith("-") for i in flags])
-        logger.debug(f"Flags: {flags}, positional={is_positional}")
+        is_positional = self._is_positional_flags(flags)
+        logger.debug("Flags: %s, positional=%s", flags, is_positional)
         if not is_positional:
             extra["required"] = param.is_required
 
         if is_bool_param:
             extra["action"] = argparse.BooleanOptionalAction
-            if not param.is_required:
-                extra["default"] = param.default
-            else:
-                extra["default"] = False
+            extra["default"] = param.default if not param.is_required else False
             return extra
 
         if not param.is_required:
@@ -350,7 +364,7 @@ class Argparser(InterfacyParser):
 
     def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
         help_text = arg.help or ""
-        if not self.help_layout._use_template_layout():
+        if not self._uses_template_layout():
             help_text = self.help_layout.format_argument(arg)
 
         kwargs: dict[str, Any] = {"help": help_text}
@@ -380,7 +394,7 @@ class Argparser(InterfacyParser):
 
     def _add_argument_from_schema(self, parser: ArgumentParser, argument: Argument) -> None:
         kwargs = self._argument_kwargs(argument)
-        logger.info(f"Adding argument flags={argument.flags}, kwargs={kwargs}")
+        logger.info("Adding argument flags=%s, kwargs=%s", argument.flags, kwargs)
         parser.add_argument(*argument.flags, **kwargs)
 
     @staticmethod
@@ -392,13 +406,10 @@ class Argparser(InterfacyParser):
         if not all(isinstance(choice, str) for choice in choices):
             return choices
 
-        converted: list[Any] = []
-        for choice in choices:
-            try:
-                converted.append(parser(choice))
-            except Exception:
-                return choices
-        return converted
+        try:
+            return [parser(choice) for choice in choices]
+        except (argparse.ArgumentTypeError, TypeError, ValueError):
+            return choices
 
     @staticmethod
     def _set_subparsers_metavar(subparsers: NestedSubParsersAction) -> None:
@@ -421,12 +432,90 @@ class Argparser(InterfacyParser):
         return normalized.lstrip().lower().startswith("commands:")
 
     def _use_native_subparser_help(self) -> bool:
-        return not self.help_layout._use_template_layout()
+        return not self._uses_template_layout()
 
     def _subparsers_title(self) -> str | None:
         if not self._use_native_subparser_help():
             return None
         return "commands"
+
+    def _should_set_epilog(self, epilog: str | None) -> bool:
+        if not epilog:
+            return False
+        return not (self._use_native_subparser_help() and self._is_legacy_commands_epilog(epilog))
+
+    def _command_dest(self, depth: int) -> str:
+        return f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
+
+    def _add_initializer_arguments(self, parser: ArgumentParser, command: Command) -> None:
+        for argument in command.initializer:
+            self._add_argument_from_schema(parser, argument)
+
+    def _add_parameter_arguments(self, parser: ArgumentParser, command: Command) -> None:
+        for argument in command.parameters:
+            self._add_argument_from_schema(parser, argument)
+
+    def _create_command_subparsers(
+        self,
+        parser: ArgumentParser,
+        *,
+        depth: int,
+        has_custom_epilog: bool,
+    ) -> NestedSubParsersAction:
+        return parser.add_subparsers(
+            dest=self._command_dest(depth),
+            required=True,
+            title=self._subparsers_title(),
+            help=(
+                argparse.SUPPRESS
+                if has_custom_epilog and not self._use_native_subparser_help()
+                else None
+            ),
+        )
+
+    def _add_subcommands(
+        self,
+        subparsers: NestedSubParsersAction,
+        command: Command,
+        *,
+        depth: int,
+        include_aliases: bool,
+    ) -> None:
+        if not command.subcommands:
+            return
+        for sub_cmd in command.subcommands.values():
+            parser_kwargs: dict[str, Any] = {
+                "description": sub_cmd.description,
+                "help": sub_cmd.description,
+            }
+            if include_aliases:
+                parser_kwargs["aliases"] = list(sub_cmd.aliases) if sub_cmd.aliases else []
+            subparser = subparsers.add_parser(sub_cmd.cli_name, **parser_kwargs)
+            self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
+
+    def _apply_schema_for_subcommands(
+        self,
+        parser: ArgumentParser,
+        command: Command,
+        *,
+        depth: int,
+        include_aliases: bool,
+    ) -> None:
+        self._add_initializer_arguments(parser, command)
+        if self._should_set_epilog(command.epilog):
+            parser.epilog = command.epilog
+        subparsers = self._create_command_subparsers(
+            parser,
+            depth=depth,
+            has_custom_epilog=bool(command.epilog),
+        )
+        self._add_subcommands(
+            subparsers,
+            command,
+            depth=depth,
+            include_aliases=include_aliases,
+        )
+        self._set_subparsers_metavar(subparsers)
 
     def _apply_command_schema(
         self,
@@ -435,85 +524,37 @@ class Argparser(InterfacyParser):
         *,
         depth: int = 0,
     ) -> None:
-        parser._schema_command = command
+        parser.set_schema_command(command)
 
         if command.description:
             parser.description = command.description
 
         if not command.is_leaf and command.subcommands:
-            for argument in command.initializer:
-                self._add_argument_from_schema(parser, argument)
-
-            if command.epilog and not (
-                self._use_native_subparser_help()
-                and self._is_legacy_commands_epilog(command.epilog)
-            ):
-                parser.epilog = command.epilog
-
-            dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
-            subparsers = parser.add_subparsers(
-                dest=dest,
-                required=True,
-                title=self._subparsers_title(),
-                help=(
-                    argparse.SUPPRESS
-                    if command.epilog and not self._use_native_subparser_help()
-                    else None
-                ),
+            self._apply_schema_for_subcommands(
+                parser,
+                command,
+                depth=depth,
+                include_aliases=True,
             )
-            for sub_cmd in command.subcommands.values():
-                subparser = subparsers.add_parser(
-                    sub_cmd.cli_name,
-                    description=sub_cmd.description,
-                    help=sub_cmd.description,
-                    aliases=list(sub_cmd.aliases) if sub_cmd.aliases else [],
-                )
-                self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
-            self._set_subparsers_metavar(subparsers)
             return
 
         if isinstance(command.obj, Class):
-            for argument in command.initializer:
-                self._add_argument_from_schema(parser, argument)
-
-            if command.epilog and not (
-                self._use_native_subparser_help()
-                and self._is_legacy_commands_epilog(command.epilog)
-            ):
-                parser.epilog = command.epilog
-
-            dest = f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
-            subparsers = parser.add_subparsers(
-                dest=dest,
-                required=True,
-                title=self._subparsers_title(),
-                help=(
-                    argparse.SUPPRESS
-                    if command.epilog and not self._use_native_subparser_help()
-                    else None
-                ),
+            self._apply_schema_for_subcommands(
+                parser,
+                command,
+                depth=depth,
+                include_aliases=False,
             )
-            if command.subcommands:
-                for sub_cmd in command.subcommands.values():
-                    subparser = subparsers.add_parser(
-                        sub_cmd.cli_name,
-                        description=sub_cmd.description,
-                        help=sub_cmd.description,
-                    )
-                    self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
-            self._set_subparsers_metavar(subparsers)
             return
 
-        if isinstance(command.obj, Method) and command.initializer:
-            for argument in command.initializer:
-                self._add_argument_from_schema(parser, argument)
+        if isinstance(command.obj, Method):
+            self._add_initializer_arguments(parser, command)
 
-        for argument in command.parameters:
-            self._add_argument_from_schema(parser, argument)
+        self._add_parameter_arguments(parser, command)
 
     def _build_from_schema(self, schema: ParserSchema) -> ArgumentParser:
         parser = self._new_parser()
-        parser._schema = schema
+        parser.set_schema(schema)
 
         single_cmd = next(iter(schema.commands.values())) if len(schema.commands) == 1 else None
         single_group = single_cmd if single_cmd and not single_cmd.is_leaf else None
@@ -529,7 +570,7 @@ class Argparser(InterfacyParser):
                     else None
                 ),
             )
-            for _, cmd in schema.commands.items():
+            for cmd in schema.commands.values():
                 subparser = subparsers.add_parser(
                     cmd.cli_name,
                     description=cmd.description,
@@ -623,40 +664,40 @@ class Argparser(InterfacyParser):
     def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""
         schema = self._last_schema or self.build_parser_schema()
-
-        def convert_tuple(arg: Argument, val: list[Any]) -> tuple[Any, ...]:
-            if arg.tuple_element_parsers:
-                return tuple(
-                    parser(v) for parser, v in zip(arg.tuple_element_parsers, val, strict=False)
-                )
-            return tuple(val)
-
         for command in schema.commands.values():
-            for arg in command.initializer:
-                if arg.value_shape == ValueShape.TUPLE and arg.name in namespace:
-                    val = namespace[arg.name]
-                    if isinstance(val, list):
-                        namespace[arg.name] = convert_tuple(arg, val)
-
-            for arg in command.parameters:
-                if arg.value_shape == ValueShape.TUPLE and arg.name in namespace:
-                    val = namespace[arg.name]
-                    if isinstance(val, list):
-                        namespace[arg.name] = convert_tuple(arg, val)
-
-            if command.subcommands:
-                for subcmd in command.subcommands.values():
-                    cmd_key = self.COMMAND_KEY
-                    if cmd_key in namespace and subcmd.cli_name in namespace:
-                        sub_ns = namespace[subcmd.cli_name]
-                        if isinstance(sub_ns, dict):
-                            for arg in subcmd.parameters:
-                                if arg.value_shape == ValueShape.TUPLE and arg.name in sub_ns:
-                                    val = sub_ns[arg.name]
-                                    if isinstance(val, list):
-                                        sub_ns[arg.name] = convert_tuple(arg, val)
+            self._convert_command_tuple_arguments(command, namespace)
 
         return namespace
+
+    @staticmethod
+    def _tuple_value(argument: Argument, value: list[Any]) -> tuple[Any, ...]:
+        if argument.tuple_element_parsers:
+            return tuple(
+                parser(item)
+                for parser, item in zip(argument.tuple_element_parsers, value, strict=False)
+            )
+        return tuple(value)
+
+    def _convert_tuple_values_for_arguments(
+        self, arguments: Sequence[Argument], namespace: dict[str, Any]
+    ) -> None:
+        for argument in arguments:
+            if argument.value_shape != ValueShape.TUPLE:
+                continue
+            value = namespace.get(argument.name)
+            if isinstance(value, list):
+                namespace[argument.name] = self._tuple_value(argument, value)
+
+    def _convert_command_tuple_arguments(self, command: Command, namespace: dict[str, Any]) -> None:
+        self._convert_tuple_values_for_arguments(command.initializer, namespace)
+        self._convert_tuple_values_for_arguments(command.parameters, namespace)
+        if not command.subcommands:
+            return
+
+        for subcommand in command.subcommands.values():
+            sub_namespace = namespace.get(subcommand.cli_name)
+            if isinstance(sub_namespace, dict):
+                self._convert_command_tuple_arguments(subcommand, sub_namespace)
 
     def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
         """Handle KeyboardInterrupt with callback, logging, and optional re-raise."""
@@ -668,19 +709,12 @@ class Argparser(InterfacyParser):
             raise exc
         return exc
 
-    def run(
-        self, *commands: Callable[..., Any] | type | object, args: list[str] | None = None
-    ) -> Any:
-        """
-        Register commands, parse args, and execute the selected command.
-
-        Args:
-            *commands (Callable[..., Any] | type | object): Commands to register.
-            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
-        """
+    def _install_sigint_handler(
+        self,
+    ) -> tuple[Any, Callable[[int, FrameType | None], None]]:
         original_handler = signal.getsignal(signal.SIGINT)
 
-        def sigint_handler(signum: int, frame: Any) -> None:
+        def sigint_handler(_signum: int, _frame: FrameType | None) -> None:
             now = time.time()
             if now - self._last_interrupt_time < 1.0:  # Double Ctrl+C: force immediate exit
                 sys.exit(ExitCode.INTERRUPTED)
@@ -688,38 +722,43 @@ class Argparser(InterfacyParser):
             raise KeyboardInterrupt()
 
         signal.signal(signal.SIGINT, sigint_handler)
+        return original_handler, sigint_handler
 
+    def _parse_run_input(
+        self,
+        commands: Sequence[Callable[..., Any] | type | object],
+        args: list[str] | None,
+    ) -> tuple[list[str], dict[str, Any]] | BaseException:
         try:
             self.reset_piped_input()
-            for cmd in commands:
-                self.add_command(cmd, name=None, description=None)
+            for command in commands:
+                self.add_command(command, name=None, description=None)
 
-            args = args if args is not None else self.get_args()
-            logger.info(f"Got args: {args}")
-            namespace = self.parse_args(args)
+            resolved_args = args if args is not None else self.get_args()
+            logger.info("Got args: %s", resolved_args)
+            namespace = self.parse_args(resolved_args)
         except (
             DuplicateCommandError,
             UnsupportedParameterTypeError,
             ReservedFlagError,
             InvalidCommandError,
             ConfigurationError,
-        ) as e:
-            self.log_exception(e)
+        ) as exc:
+            self.log_exception(exc)
             self.exit(ExitCode.ERR_PARSING)
-            return e
-        except SystemExit as e:
+            return exc
+        except SystemExit as exc:
             if self.sys_exit_enabled:
                 raise
-            return e
-        except KeyboardInterrupt as e:
-            return self._handle_interrupt(e)
-        finally:
-            signal.signal(signal.SIGINT, original_handler)
+            return exc
+        except KeyboardInterrupt as exc:
+            return self._handle_interrupt(exc)
+        else:
+            return resolved_args, namespace
 
+    def _run_runner(self, namespace: dict[str, Any], args: list[str]) -> object | BaseException:
         if self._parser is None:
             raise RuntimeError("Parser not initialized")
-
-        signal.signal(signal.SIGINT, sigint_handler)
         try:
             runner = ArgparseRunner(
                 namespace=namespace,
@@ -727,23 +766,54 @@ class Argparser(InterfacyParser):
                 parser=self._parser,
                 builder=self,
             )
-            result = runner.run()
-        except InterfacyError as e:
-            self.log_exception(e)
+            return runner.run()
+        except InterfacyError as exc:
+            self.log_exception(exc)
             self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
-            return e
-        except SystemExit as e:
+            return exc
+        except SystemExit as exc:
             if self.sys_exit_enabled:
                 raise
-            return e
-        except KeyboardInterrupt as e:
-            return self._handle_interrupt(e)
-        except Exception as e:
-            self.log_exception(e)
+            return exc
+        except KeyboardInterrupt as exc:
+            return self._handle_interrupt(exc)
+        except Exception as exc:  # noqa: BLE001 - CLI boundary catches user command errors
+            self.log_exception(exc)
             self.exit(ExitCode.ERR_RUNTIME)
-            return e
+            return exc
+
+    @staticmethod
+    def _is_exception_result(value: object) -> bool:
+        return isinstance(value, BaseException)
+
+    def run(
+        self, *commands: Callable[..., Any] | type | object, args: list[str] | None = None
+    ) -> object:
+        """
+        Register commands, parse args, and execute the selected command.
+
+        Args:
+            *commands (Callable[..., Any] | type | object): Commands to register.
+            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
+        """
+        original_handler, sigint_handler = self._install_sigint_handler()
+        try:
+            parse_result = self._parse_run_input(commands, args)
         finally:
             signal.signal(signal.SIGINT, original_handler)
+
+        if self._is_exception_result(parse_result):
+            return parse_result
+        resolved_args, namespace = parse_result
+
+        signal.signal(signal.SIGINT, sigint_handler)
+        try:
+            result = self._run_runner(namespace, resolved_args)
+        finally:
+            signal.signal(signal.SIGINT, original_handler)
+
+        if self._is_exception_result(result):
+            return result
 
         if self.display_result:
             self.result_display_fn(result)

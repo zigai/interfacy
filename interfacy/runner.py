@@ -3,7 +3,7 @@ from dataclasses import asdict, fields, is_dataclass
 from types import NoneType
 from typing import TYPE_CHECKING, Any, cast
 
-from objinspect import Class, Function, Method
+from objinspect import Class, Function, Method, Parameter
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 from objinspect.typing import is_union_type, type_args
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 COMMAND_KEY_BASE = "command"
+OBJINSPECT_CLASS_ERRORS = (AttributeError, TypeError, ValueError)
 
 
 class SchemaRunner:
@@ -45,7 +46,7 @@ class SchemaRunner:
         self.COMMAND_KEY = self.builder.COMMAND_KEY
         self._instance_chain: list[Any] = []
 
-    def run(self) -> Any:
+    def run(self) -> object:
         """Execute commands based on the parsed namespace."""
         commands = self.builder.commands
         if len(commands) == 0:
@@ -82,7 +83,7 @@ class SchemaRunner:
             type_parser=self.builder.type_parser,
         )
 
-    def run_command(self, command: Command, args: dict[str, Any]) -> Any:
+    def run_command(self, command: Command, args: dict[str, Any]) -> object:
         """
         Dispatch a command to its underlying callable.
 
@@ -105,7 +106,7 @@ class SchemaRunner:
             return self.run_class(command, args)
         raise InvalidCommandError(command.canonical_name)
 
-    def run_function(self, func: Function | Method, args: dict[str, Any]) -> Any:
+    def run_function(self, func: Function | Method, args: dict[str, Any]) -> object:
         """
         Invoke a function or method with parsed arguments.
 
@@ -116,14 +117,17 @@ class SchemaRunner:
         positional_args, keyword_args = self._build_call_args(func, args)
 
         logger.info(
-            f"Calling function '{func.name}' with args: {positional_args}, kwargs: {keyword_args}"
+            "Calling function '%s' with args: %s, kwargs: %s",
+            func.name,
+            positional_args,
+            keyword_args,
         )
         result = func.call(*positional_args, **keyword_args)
 
-        logger.info(f"Result: {result}")
+        logger.info("Result: %s", result)
         return result
 
-    def run_method(self, method: Method, args: dict[str, Any]) -> Any:
+    def run_method(self, method: Method, args: dict[str, Any]) -> object:
         """
         Invoke a method, instantiating its class if needed.
 
@@ -141,7 +145,7 @@ class SchemaRunner:
         if instance.init_method:
             args_init, args_method = split_init_args(cli_args, instance, method)
             init_args, init_kwargs = split_args_kwargs(args_init, instance.init_method)
-            logger.info(f"__init__ method args: {init_args}, kwargs: {init_kwargs}")
+            logger.info("__init__ method args: %s, kwargs: %s", init_args, init_kwargs)
             instance.init(*init_args, **init_kwargs)
         else:
             args_method = cli_args
@@ -150,11 +154,14 @@ class SchemaRunner:
 
         method_args, method_kwargs = self._build_call_args(method, args_method)
         logger.info(
-            f"Calling method '{method.name}' with args: {method_args}, kwargs: {method_kwargs}"
+            "Calling method '%s' with args: %s, kwargs: %s",
+            method.name,
+            method_args,
+            method_kwargs,
         )
         return instance.call_method(method.name, *method_args, **method_kwargs)
 
-    def run_class(self, command: Command, args: dict[str, Any]) -> Any:
+    def run_class(self, command: Command, args: dict[str, Any]) -> object:
         """
         Execute a class subcommand, instantiating as necessary.
 
@@ -173,7 +180,7 @@ class SchemaRunner:
         command_args = args[command_name]
         del args[self.COMMAND_KEY]
         del args[command_name]
-        logger.info(f"Namespace: {command_args}")
+        logger.info("Namespace: %s", command_args)
 
         resolved_name = self.builder.flag_strategy.command_translator.reverse(command_name)
         try:
@@ -186,7 +193,7 @@ class SchemaRunner:
                 args = self._apply_pipe(command, args, subcommand="__init__")
                 args = self._reconstruct_expanded_models(args, self._initializer_for(command))
                 init_args, init_kwargs = split_args_kwargs(args, runtime_cls.init_method)
-                logger.info(f"__init__ method args: {init_args}, kwargs: {init_kwargs}")
+                logger.info("__init__ method args: %s, kwargs: %s", init_args, init_kwargs)
                 runtime_cls.init(*init_args, **init_kwargs)
             else:
                 runtime_cls.init()
@@ -199,11 +206,17 @@ class SchemaRunner:
             )
         method_args, method_kwargs = self._build_call_args(method, command_args)
         logger.info(
-            f"Calling method '{method.name}' with args: {method_args}, kwargs: {method_kwargs}"
+            "Calling method '%s' with args: %s, kwargs: %s",
+            method.name,
+            method_args,
+            method_kwargs,
         )
         return runtime_cls.call_method(method.name, *method_args, **method_kwargs)
 
-    def run_multiple(self, commands: dict[str, Command]) -> Any:
+    def run_multiple(
+        self,
+        commands: dict[str, Command],  # noqa: ARG002 - uniform runner API
+    ) -> object:
         """
         Execute one of multiple registered commands.
 
@@ -223,46 +236,97 @@ class SchemaRunner:
         command: Command,
         args: dict[str, Any],
         depth: int,
-        parent_instance: Any = None,
-    ) -> Any:
+        parent_instance: object | None = None,
+    ) -> object:
         """
         Execute a command with chain instantiation support.
 
         For groups/classes: instantiate at this level, then recurse to subcommand.
         For leaf commands: execute with the accumulated instance chain.
         """
+        current_instance, normalized_args = self._prepare_chain_level(
+            command,
+            args,
+            parent_instance,
+        )
+        if command.is_leaf:
+            return self._execute_leaf(command, normalized_args, current_instance)
+
+        subcommand, subcommand_args = self._resolve_chain_subcommand(
+            command,
+            normalized_args,
+            depth,
+        )
+        return self._run_with_chain(subcommand, subcommand_args, depth + 1, current_instance)
+
+    def _prepare_chain_level(
+        self,
+        command: Command,
+        args: dict[str, Any],
+        parent_instance: object | None,
+    ) -> tuple[object | None, dict[str, Any]]:
         current_instance = parent_instance
+        normalized_args = args
 
         initializer = self._initializer_for(command)
         if initializer:
-            args = self._reconstruct_expanded_models(args, initializer)
+            normalized_args = self._reconstruct_expanded_models(normalized_args, initializer)
 
         if command.is_instance and command.stored_instance is not None:
-            current_instance = command.stored_instance
+            return command.stored_instance, normalized_args
 
-        elif command.command_type == "class" and command.obj is not None:
-            cls = command.obj
-            if isinstance(cls, Class):
-                cls.is_initialized = False
-                cls.instance = None
-                init_args = self._extract_init_args(args, command.initializer)
-                if init_args:
-                    assert cls.init_method
-                    init_a, init_kw = split_args_kwargs(init_args, cls.init_method)
-                    cls.init(*init_a, **init_kw)
-                else:
-                    cls.init()
-                current_instance = cls.instance
+        instantiated = self._instantiate_chain_class(command, normalized_args)
+        if instantiated is None:
+            return current_instance, normalized_args
 
-                if parent_instance is not None:
-                    try:
-                        current_instance._parent = parent_instance
-                    except AttributeError:
-                        pass
+        self._attach_parent_instance(instantiated, parent_instance)
+        return instantiated, normalized_args
 
-        if command.is_leaf:
-            return self._execute_leaf(command, args, current_instance)
+    def _instantiate_chain_class(
+        self,
+        command: Command,
+        args: dict[str, Any],
+    ) -> object | None:
+        if command.command_type != "class" or command.obj is None:
+            return None
 
+        cls = command.obj
+        if not isinstance(cls, Class):
+            return None
+
+        cls.is_initialized = False
+        cls.instance = None
+        init_args = self._extract_init_args(args, command.initializer)
+        if init_args:
+            assert cls.init_method
+            init_a, init_kw = split_args_kwargs(init_args, cls.init_method)
+            cls.init(*init_a, **init_kw)
+        else:
+            cls.init()
+        return cls.instance
+
+    def _attach_parent_instance(
+        self,
+        current_instance: object | None,
+        parent_instance: object | None,
+    ) -> None:
+        if current_instance is None or parent_instance is None:
+            return
+        instance_dict = getattr(current_instance, "__dict__", None)
+        if isinstance(instance_dict, dict):
+            instance_dict["_parent"] = parent_instance
+            return
+        try:
+            object.__setattr__(current_instance, "_parent", parent_instance)
+        except (AttributeError, TypeError):
+            return
+
+    def _resolve_chain_subcommand(
+        self,
+        command: Command,
+        args: dict[str, Any],
+        depth: int,
+    ) -> tuple[Command, dict[str, Any]]:
         dest_key = f"{COMMAND_KEY_BASE}_{depth}" if depth > 0 else COMMAND_KEY_BASE
         if dest_key not in args:
             raise ConfigurationError(
@@ -271,27 +335,27 @@ class SchemaRunner:
             )
 
         subcommand_name = args[dest_key]
-
         if command.subcommands is None:
             raise ConfigurationError(f"Command '{command.cli_name}' has no subcommands")
 
-        subcommand = None
-        for sub_cmd in command.subcommands.values():
-            if sub_cmd.cli_name == subcommand_name:
-                subcommand = sub_cmd
-                break
-            if subcommand_name in sub_cmd.aliases:
-                subcommand = sub_cmd
-                break
-
+        subcommand = self._match_subcommand(command.subcommands, subcommand_name)
         if subcommand is None:
             raise ConfigurationError(f"Unknown subcommand '{subcommand_name}'")
 
         subcommand_args = args.get(subcommand.cli_name, args.get(subcommand_name, {}))
         if not isinstance(subcommand_args, dict):
             subcommand_args = {}
+        return subcommand, subcommand_args
 
-        return self._run_with_chain(subcommand, subcommand_args, depth + 1, current_instance)
+    def _match_subcommand(
+        self,
+        subcommands: dict[str, Command],
+        subcommand_name: str,
+    ) -> Command | None:
+        for sub_cmd in subcommands.values():
+            if sub_cmd.cli_name == subcommand_name or subcommand_name in sub_cmd.aliases:
+                return sub_cmd
+        return None
 
     def _extract_init_args(
         self,
@@ -306,8 +370,8 @@ class SchemaRunner:
         self,
         command: Command,
         args: dict[str, Any],
-        instance: Any | None,
-    ) -> Any:
+        instance: object | None,
+    ) -> object:
         """Execute a leaf command (function or method)."""
         obj = command.obj
 
@@ -319,7 +383,10 @@ class SchemaRunner:
                 )
                 method_args, method_kwargs = self._build_call_args(obj, args)
                 logger.info(
-                    f"Calling method '{obj.name}' on instance with args: {method_args}, kwargs: {method_kwargs}"
+                    "Calling method '%s' on instance with args: %s, kwargs: %s",
+                    obj.name,
+                    method_args,
+                    method_kwargs,
                 )
                 return obj.func(instance, *method_args, **method_kwargs)
             args = self._apply_pipe(command, args)
@@ -343,90 +410,146 @@ class SchemaRunner:
         """Build positional and keyword arguments from parsed CLI values."""
         positional_args: list[Any] = []
         keyword_args: dict[str, Any] = {}
+        handlers = {
+            inspect.Parameter.POSITIONAL_ONLY: self._append_positional_param,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD: self._append_positional_param,
+            inspect.Parameter.VAR_POSITIONAL: self._append_var_positional_param,
+            inspect.Parameter.KEYWORD_ONLY: self._append_keyword_only_param,
+            inspect.Parameter.VAR_KEYWORD: self._append_var_keyword_param,
+        }
 
         for param in callable_obj.params:
-            if (
-                param.name not in args
-                and param.kind != inspect.Parameter.VAR_POSITIONAL
-                and param.kind != inspect.Parameter.VAR_KEYWORD
-            ):
+            if self._should_skip_call_param(param, args):
                 continue
-
-            if param.kind in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            ):
-                if param.name in args:
-                    positional_args.append(args[param.name])
-                continue
-
-            if param.kind == inspect.Parameter.VAR_POSITIONAL:
-                varargs = args.get(param.name)
-                if not varargs:
-                    continue
-                if isinstance(varargs, (list, tuple)):
-                    positional_args.extend(varargs)
-                else:
-                    positional_args.append(varargs)
-                continue
-
-            if param.kind == inspect.Parameter.KEYWORD_ONLY:
-                if param.name in args:
-                    keyword_args[param.name] = args[param.name]
-                continue
-
-            if param.kind == inspect.Parameter.VAR_KEYWORD:
-                var_kwargs = args.get(param.name)
-                if isinstance(var_kwargs, dict):
-                    keyword_args.update(var_kwargs)
+            handler = handlers.get(param.kind)
+            if handler is not None:
+                handler(param, args, positional_args, keyword_args)
 
         return positional_args, keyword_args
+
+    def _should_skip_call_param(self, param: Parameter, args: dict[str, Any]) -> bool:
+        return param.name not in args and param.kind not in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        )
+
+    def _append_positional_param(
+        self,
+        param: Parameter,
+        args: dict[str, Any],
+        positional_args: list[Any],
+        _keyword_args: dict[str, Any],
+    ) -> None:
+        if param.name in args:
+            positional_args.append(args[param.name])
+
+    def _append_var_positional_param(
+        self,
+        param: Parameter,
+        args: dict[str, Any],
+        positional_args: list[Any],
+        _keyword_args: dict[str, Any],
+    ) -> None:
+        varargs = args.get(param.name)
+        if not varargs:
+            return
+        if isinstance(varargs, (list, tuple)):
+            positional_args.extend(varargs)
+            return
+        positional_args.append(varargs)
+
+    def _append_keyword_only_param(
+        self,
+        param: Parameter,
+        args: dict[str, Any],
+        _positional_args: list[Any],
+        keyword_args: dict[str, Any],
+    ) -> None:
+        if param.name in args:
+            keyword_args[param.name] = args[param.name]
+
+    def _append_var_keyword_param(
+        self,
+        param: Parameter,
+        args: dict[str, Any],
+        _positional_args: list[Any],
+        keyword_args: dict[str, Any],
+    ) -> None:
+        var_kwargs = args.get(param.name)
+        if isinstance(var_kwargs, dict):
+            keyword_args.update(var_kwargs)
 
     def _reconstruct_expanded_models(
         self,
         args: dict[str, Any],
         arguments: list[Argument],
     ) -> dict[str, Any]:
-        expanded = [arg for arg in arguments if arg.is_expanded_from]
-        if not expanded:
+        grouped = self._group_expanded_arguments(arguments)
+        if not grouped:
             return args
 
+        for root_name, group in grouped.items():
+            self._reconstruct_expanded_model_group(args, root_name, group)
+
+        return args
+
+    def _group_expanded_arguments(self, arguments: list[Argument]) -> dict[str, list[Argument]]:
         grouped: dict[str, list[Argument]] = {}
-        for arg in expanded:
+        for arg in arguments:
             if arg.is_expanded_from is None:
                 continue
             grouped.setdefault(arg.is_expanded_from, []).append(arg)
+        return grouped
 
-        for root_name, group in grouped.items():
-            model_type = group[0].original_model_type
-            if model_type is None:
-                continue
+    def _reconstruct_expanded_model_group(
+        self,
+        args: dict[str, Any],
+        root_name: str,
+        group: list[Argument],
+    ) -> None:
+        model_type = group[0].original_model_type
+        if model_type is None:
+            return
+        if root_name in args and not any(arg.name in args for arg in group):
+            return
 
-            if root_name in args and not any(arg.name in args for arg in group):
-                continue
+        model_default = group[0].model_default
+        has_model_default = model_default is not MODEL_DEFAULT_UNSET
+        values, provided = self._collect_model_values(args, group)
+        args[root_name] = self._build_reconstructed_model_value(
+            model_type,
+            group,
+            values,
+            provided,
+            model_default,
+            has_model_default,
+        )
 
-            model_default = group[0].model_default
-            has_model_default = model_default is not MODEL_DEFAULT_UNSET
-            values, provided = self._collect_model_values(args, group)
-            if not provided:
-                if has_model_default:
-                    args[root_name] = model_default
-                elif any(arg.parent_is_optional for arg in group):
-                    args[root_name] = None
-                else:
-                    args[root_name] = self._build_model_instance(model_type, values)
-            else:
-                if has_model_default and model_default is not None:
-                    base_values = self._model_instance_to_values(model_type, model_default)
-                    merged = self._deep_merge(base_values, values)
-                    args[root_name] = self._build_model_instance(model_type, merged)
-                else:
-                    args[root_name] = self._build_model_instance(model_type, values)
+        for arg in group:
+            args.pop(arg.name, None)
 
-            for arg in group:
-                args.pop(arg.name, None)
+    def _build_reconstructed_model_value(
+        self,
+        model_type: type,
+        group: list[Argument],
+        values: dict[str, Any],
+        provided: bool,
+        model_default: object,
+        has_model_default: bool,
+    ) -> object:
+        if not provided:
+            if has_model_default:
+                return model_default
+            if any(arg.parent_is_optional for arg in group):
+                return None
+            return self._build_model_instance(model_type, values)
 
-        return args
+        if has_model_default and model_default is not None:
+            base_values = self._model_instance_to_values(model_type, model_default)
+            merged = self._deep_merge(base_values, values)
+            return self._build_model_instance(model_type, merged)
+
+        return self._build_model_instance(model_type, values)
 
     def _schema_command_for(self, command: Command) -> Command | None:
         schema = cast(ParserSchema | None, getattr(self.builder, "_last_schema", None))
@@ -464,34 +587,47 @@ class SchemaRunner:
                 merged[key] = value
         return merged
 
-    def _model_instance_to_values(self, model_type: type, instance: Any) -> dict[str, Any]:
+    def _model_instance_to_values(self, model_type: type, instance: object) -> dict[str, Any]:
         if instance is None:
             return {}
         if is_dataclass(model_type):
             return asdict(instance)
+        dumped_values = self._dump_model_instance(instance)
+        if dumped_values is not None:
+            return dumped_values
+        if hasattr(instance, "__dict__"):
+            return self._values_from_instance_dict(instance)
+        if self._is_plain_class_model(model_type):
+            return self._values_from_plain_class(model_type, instance)
+        return {}
+
+    def _dump_model_instance(self, instance: object) -> dict[str, Any] | None:
         if hasattr(instance, "model_dump"):
             dumped = instance.model_dump()
-            return dumped if isinstance(dumped, dict) else {}
+            if isinstance(dumped, dict):
+                return dumped
         if hasattr(instance, "dict"):
             dumped = instance.dict()
-            return dumped if isinstance(dumped, dict) else {}
-        if hasattr(instance, "__dict__"):
-            values: dict[str, Any] = {}
-            for key, value in vars(instance).items():
-                if self._is_model_type(type(value)):
-                    values[key] = self._model_instance_to_values(type(value), value)
-                else:
-                    values[key] = value
-            return values
-        if self._is_plain_class_model(model_type):
-            values = {}
-            for key in self._plain_class_param_annotations(model_type).keys():
-                try:
-                    values[key] = getattr(instance, key)
-                except AttributeError:
-                    continue
-            return values
-        return {}
+            if isinstance(dumped, dict):
+                return dumped
+        return None
+
+    def _values_from_instance_dict(self, instance: object) -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        for key, value in vars(instance).items():
+            if self._is_model_type(type(value)):
+                values[key] = self._model_instance_to_values(type(value), value)
+            else:
+                values[key] = value
+        return values
+
+    def _values_from_plain_class(self, model_type: type, instance: object) -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        for key in self._plain_class_param_annotations(model_type):
+            if not hasattr(instance, key):
+                continue
+            values[key] = getattr(instance, key)
+        return values
 
     def _collect_model_values(
         self,
@@ -515,7 +651,7 @@ class SchemaRunner:
 
         return values, provided
 
-    def _build_model_instance(self, model_type: type, values: dict[str, Any]) -> Any:
+    def _build_model_instance(self, model_type: type, values: dict[str, Any]) -> object:
         if is_dataclass(model_type):
             kwargs: dict[str, Any] = {}
             for field in fields(model_type):
@@ -555,7 +691,7 @@ class SchemaRunner:
             kwargs[name] = self._coerce_model_value(annotation, values[name])
         return kwargs
 
-    def _coerce_model_value(self, annotation: Any, value: Any) -> Any:
+    def _coerce_model_value(self, annotation: object, value: object) -> object:
         if value is None:
             return None
 
@@ -566,7 +702,7 @@ class SchemaRunner:
             return self._build_model_instance(inner, value)
         return value
 
-    def _unwrap_optional(self, annotation: Any) -> tuple[Any, bool]:
+    def _unwrap_optional(self, annotation: object) -> tuple[object, bool]:
         annotation = resolve_type_alias(annotation)
         if not is_union_type(annotation):
             return annotation, False
@@ -576,7 +712,7 @@ class SchemaRunner:
         inner = next(arg for arg in union_args if arg is not NoneType)
         return inner, True
 
-    def _is_model_type(self, annotation: Any) -> bool:
+    def _is_model_type(self, annotation: object) -> bool:
         if not isinstance(annotation, type):
             return False
         if (
@@ -587,7 +723,7 @@ class SchemaRunner:
             return True
         return self._is_plain_class_model(annotation)
 
-    def _is_plain_class_model(self, annotation: Any) -> bool:
+    def _is_plain_class_model(self, annotation: object) -> bool:
         if not isinstance(annotation, type):
             return False
         if annotation in {str, int, float, bool, bytes, list, dict, tuple, set}:
@@ -603,7 +739,7 @@ class SchemaRunner:
                 private=False,
                 classmethod=True,
             )
-        except Exception:
+        except OBJINSPECT_CLASS_ERRORS:
             return False
         init_method = cls_info.init_method
         if init_method is None:
@@ -627,7 +763,7 @@ class SchemaRunner:
                 private=False,
                 classmethod=True,
             )
-        except Exception:
+        except OBJINSPECT_CLASS_ERRORS:
             return {}
         init_method = cls_info.init_method
         if init_method is None:
@@ -641,6 +777,6 @@ class SchemaRunner:
 
 
 __all__ = [
-    "SchemaRunner",
     "COMMAND_KEY_BASE",
+    "SchemaRunner",
 ]

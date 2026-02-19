@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Any, Literal
+from dataclasses import dataclass, replace
+from typing import Any, Literal, cast
 
 from objinspect import Parameter
 from objinspect.typing import get_literal_choices, type_args
@@ -50,19 +50,19 @@ def parse_priority(value: str | None) -> PipePriority:
     """Parse a user-supplied priority value. Defaults to 'cli' if value is None."""
     choices = get_literal_choices(PipePriority)
     if value in choices:
-        return value  # type:ignore
+        return cast(PipePriority, value)
     if value is None:
         return "cli"
 
     raise ConfigurationError(f"Invalid pipe priority '{value}'. Valid values: {','.join(choices)}")
 
 
-def targets_to_list(value: Any) -> list[str]:
+def targets_to_list(value: str | Sequence[object]) -> list[str]:
     """
     Normalize pipe target input into a list of unique names.
 
     Args:
-        value (Any): String, sequence of strings, or other input to normalize.
+        value (str | Sequence[object]): String or sequence to normalize.
 
     Raises:
         ConfigurationError: If the value cannot be interpreted as target names or contains invalid/duplicate entries.
@@ -91,6 +91,64 @@ def targets_to_list(value: Any) -> list[str]:
     return result
 
 
+def _replace_pipe_targets(
+    config: PipeTargets,
+    *,
+    delimiter: str | None | object,
+    allow_partial: bool | None,
+    priority: str | PipePriority | None,
+) -> PipeTargets:
+    updated = config
+    if delimiter is not DELIMITER_UNSET:
+        updated = replace(updated, delimiter=cast(str | None, delimiter))
+    if allow_partial is not None:
+        updated = replace(updated, allow_partial=allow_partial)
+    if priority is not None:
+        updated = replace(updated, priority=parse_priority(priority))
+    return updated
+
+
+def _resolve_pipe_target_inputs(
+    targets: TargetsInput,
+    *,
+    delimiter: str | None | object,
+    allow_partial: bool | None,
+    priority: str | PipePriority | None,
+) -> tuple[object, bool, str | None, bool | None, str | PipePriority | None]:
+    names_value: object = targets
+    delimiter_explicit = delimiter is not DELIMITER_UNSET
+    final_delimiter: str | None = (
+        None if delimiter is DELIMITER_UNSET else cast(str | None, delimiter)
+    )
+    resolved_allow_partial = allow_partial
+    resolved_priority = priority
+
+    if isinstance(targets, dict):
+        names_value = targets.get("parameters") or targets.get("bindings")
+        if names_value is None:
+            raise ConfigurationError(
+                "Pipe target dict must include 'parameters' or 'bindings' entries"
+            )
+
+        if "delimiter" in targets and delimiter is DELIMITER_UNSET:
+            delimiter_explicit = True
+            final_delimiter = targets.get("delimiter")
+
+        if resolved_allow_partial is None and "allow_partial" in targets:
+            resolved_allow_partial = bool(targets["allow_partial"])
+
+        if resolved_priority is None and "priority" in targets:
+            resolved_priority = targets["priority"]
+
+    return (
+        names_value,
+        delimiter_explicit,
+        final_delimiter,
+        resolved_allow_partial,
+        resolved_priority,
+    )
+
+
 def build_pipe_targets_config(
     targets: TargetsInput,
     *,
@@ -113,42 +171,26 @@ def build_pipe_targets_config(
     If more than one target is provided and no delimiter
     is explicitly set, a newline is used by default.
     """
-    config: PipeTargets
-
     if isinstance(targets, PipeTargets):
-        config = targets
-        if delimiter is not DELIMITER_UNSET:
-            config.delimiter = delimiter  # type:ignore
-        if allow_partial is not None:
-            config.allow_partial = allow_partial  # type:ignore
-        if priority is not None:
-            config.priority = parse_priority(priority)  # type:ignore
-        return config
+        return _replace_pipe_targets(
+            targets,
+            delimiter=delimiter,
+            allow_partial=allow_partial,
+            priority=priority,
+        )
 
-    raw_dict: dict[str, Any] | None = None
-    names_value: Any = targets
-    delimiter_explicit = delimiter is not DELIMITER_UNSET
-    final_delimiter: str | None = None if delimiter is DELIMITER_UNSET else delimiter  # type: ignore
-
-    if isinstance(targets, dict):
-        raw_dict = targets
-
-        names_value = raw_dict.get("parameters") or raw_dict.get("bindings")
-        if names_value is None:
-            raise ConfigurationError(
-                "Pipe target dict must include 'parameters' or 'bindings' entries"
-            )
-
-        if "delimiter" in raw_dict and delimiter is DELIMITER_UNSET:
-            delimiter_explicit = True
-            final_delimiter = raw_dict.get("delimiter")
-
-        if allow_partial is None and "allow_partial" in raw_dict:
-            allow_partial = bool(raw_dict["allow_partial"])
-
-        if priority is None:
-            if "priority" in raw_dict:
-                priority = raw_dict["priority"]
+    (
+        names_value,
+        delimiter_explicit,
+        final_delimiter,
+        allow_partial,
+        priority,
+    ) = _resolve_pipe_target_inputs(
+        targets,
+        delimiter=delimiter,
+        allow_partial=allow_partial,
+        priority=priority,
+    )
 
     names = targets_to_list(names_value)
     if final_delimiter is None and len(names) > 1 and not delimiter_explicit:
@@ -180,25 +222,19 @@ def split_data(data: str, config: PipeTargets) -> list[str]:
         pieces = data.splitlines()
     else:
         max_splits = expected - 1 if expected > 0 else -1
-        if max_splits >= 0:
-            pieces = data.split(delimiter, max_splits)
-        else:
-            pieces = data.split(delimiter)
+        pieces = data.split(delimiter, max_splits) if max_splits >= 0 else data.split(delimiter)
 
     pieces = [piece.strip() for piece in pieces]
     return pieces
 
 
 def _split_list_values(chunk: str, delimiter: str | None) -> list[str]:
-    if delimiter is None:
-        values = chunk.splitlines()
-    else:
-        values = chunk.split(delimiter)
+    values = chunk.splitlines() if delimiter is None else chunk.split(delimiter)
     values = [value.strip() for value in values]
     return values
 
 
-def is_cli_supplied(value: Any, parameter: Parameter) -> bool:
+def is_cli_supplied(value: object, parameter: Parameter) -> bool:
     """
     Check if a value was explicitly provided via CLI.
 
@@ -210,13 +246,10 @@ def is_cli_supplied(value: Any, parameter: Parameter) -> bool:
     if parameter.is_typed and _is_empty_collection_from_argparse(value, parameter.type):
         return False
 
-    if parameter.has_default and value == parameter.default:
-        return False
-
-    return True
+    return not (parameter.has_default and value == parameter.default)
 
 
-def _is_empty_collection_from_argparse(value: Any, param_type: Any) -> bool:
+def _is_empty_collection_from_argparse(value: object, param_type: object) -> bool:
     """Check if value is an empty collection from argparse nargs='*'."""
     if value not in ([], (), set()):
         return False
@@ -227,10 +260,7 @@ def _is_empty_collection_from_argparse(value: Any, param_type: Any) -> bool:
     origin = getattr(param_type, "__origin__", None)
     if origin in (tuple, set):
         return True
-    if param_type in (tuple, set):
-        return True
-
-    return False
+    return param_type in (tuple, set)
 
 
 def parse_list(
@@ -272,7 +302,7 @@ def parse_value(
     raw: str,
     delimiter: str | None,
     type_parser: StrToTypeParser,
-) -> Any:
+) -> object:
     """
     Parse a raw string into a typed value for a parameter.
 
@@ -309,7 +339,7 @@ def get_chunks(
     Raises:
         PipeInputError: If chunk counts do not match required targets.
     """
-    chunks: list[str | None] = split_data(data, config)  # type:ignore
+    chunks: list[str | None] = cast(list[str | None], split_data(data, config))
     expected = len(config.targets)
 
     if len(chunks) < expected:
@@ -385,6 +415,6 @@ def apply_pipe_values(
 __all__ = [
     "PipePriority",
     "PipeTargets",
-    "build_pipe_targets_config",
     "apply_pipe_values",
+    "build_pipe_targets_config",
 ]
