@@ -221,12 +221,12 @@ class ParserSchema:
 
 
 __all__ = [
-    "ArgumentKind",
+    "MODEL_DEFAULT_UNSET",
     "Argument",
+    "ArgumentKind",
     "BooleanBehavior",
     "Command",
     "CommandType",
-    "MODEL_DEFAULT_UNSET",
     "ParserSchema",
     "ValueShape",
 ]

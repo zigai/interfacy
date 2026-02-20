@@ -58,8 +58,8 @@ class ClapColors(InterfacyColors):
 
 
 __all__ = [
-    "InterfacyColors",
-    "NoColor",
     "Aurora",
     "ClapColors",
+    "InterfacyColors",
+    "NoColor",
 ]

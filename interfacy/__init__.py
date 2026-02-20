@@ -8,7 +8,7 @@ from interfacy.group import CommandGroup
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.click_backend import ClickParser as ClickParser
 
-__all__ = ["Argparser", "CommandGroup", "ClickParser"]
+__all__ = ["Argparser", "ClickParser", "CommandGroup"]
 
 
 def __getattr__(name: str) -> type[ClickParser]:

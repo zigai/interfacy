@@ -1,8 +1,8 @@
 from .schema import Argument, ArgumentKind, BooleanBehavior, Command, ParserSchema, ValueShape
 
 __all__ = [
-    "ArgumentKind",
     "Argument",
+    "ArgumentKind",
     "BooleanBehavior",
     "Command",
     "ParserSchema",

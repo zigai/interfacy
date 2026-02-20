@@ -30,6 +30,6 @@ class ArgparseRunner(SchemaRunner):
 
 
 __all__ = [
-    "ArgparseRunner",
     "COMMAND_KEY_BASE",
+    "ArgparseRunner",
 ]

@@ -47,7 +47,7 @@ def log_interrupt(*, silent: bool) -> None:
     error(message)
 
 
-def display_result(value: Any, handler: Callable[[Any], Any] = print) -> None:
+def display_result(value: object, handler: Callable[[Any], Any] = print) -> None:
     if isinstance(value, list):
         for entry in value:
             handler(entry)
@@ -60,12 +60,12 @@ def display_result(value: Any, handler: Callable[[Any], Any] = print) -> None:
 
 
 __all__ = [
-    "info",
-    "warn",
+    "display_result",
     "error",
+    "info",
     "log",
     "log_error",
     "log_exception",
     "log_interrupt",
-    "display_result",
+    "warn",
 ]

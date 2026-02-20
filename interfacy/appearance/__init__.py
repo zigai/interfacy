@@ -9,12 +9,12 @@ from interfacy.appearance.layouts import (
 )
 
 __all__ = [
-    "InterfacyColors",
-    "HelpLayout",
-    "InterfacyLayout",
     "Aligned",
     "AlignedTyped",
-    "Modern",
     "ArgparseLayout",
     "ClapLayout",
+    "HelpLayout",
+    "InterfacyColors",
+    "InterfacyLayout",
+    "Modern",
 ]

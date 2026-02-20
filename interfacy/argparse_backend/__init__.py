@@ -4,8 +4,8 @@ from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
 
 __all__ = [
+    "ArgparseRunner",
     "Argparser",
     "ArgumentParser",
     "InterfacyHelpFormatter",
-    "ArgparseRunner",
 ]
