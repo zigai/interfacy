@@ -1,6 +1,7 @@
 import logging
 import os
 from logging import _nameToLevel
+from pathlib import Path
 
 from stdl.st import colored, terminal_link
 
@@ -48,7 +49,7 @@ class _ClickableFormatter(logging.Formatter):
         Args:
             record (logging.LogRecord): Log record to format.
         """
-        filename = os.path.basename(record.pathname)
+        filename = Path(record.pathname).name
         label = f"{filename}:{record.lineno}"
         record.clickable_path = terminal_link(f"{record.pathname}:{record.lineno}", label)
         colored_level = colored(record.levelname, color=LEVEL_COLORS.get(record.levelname, "white"))
@@ -68,9 +69,9 @@ class _ClickableFormatter(logging.Formatter):
         else:
             record.short_name = record.name
 
-        combined = f"{record.short_name}.{label}"  # type:ignore
+        combined = f"{record.short_name}.{label}"  # type: ignore[attr-defined]
         visible_length = len(combined)
-        combined_with_link = f"{record.short_name}.{record.clickable_path}"  # type:ignore
+        combined_with_link = f"{record.short_name}.{record.clickable_path}"  # type: ignore[attr-defined]
         padding_needed = max(0, max_total_width - visible_length)
         record.name_location = combined_with_link + (" " * padding_needed)
 

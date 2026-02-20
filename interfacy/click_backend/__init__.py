@@ -1,5 +1,3 @@
-from typing import Any
-
 try:
     from interfacy.click_backend.core import ClickParser
 except ImportError as exc:
@@ -10,7 +8,7 @@ except ImportError as exc:
     _CLICK_IMPORT_ERROR = exc
 
     class ClickParser:  # type: ignore[no-redef]
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
             raise ImportError(
                 "Click is required to use ClickParser. Install it with "
                 "\"pip install 'interfacy[click]'\" or \"uv add 'interfacy[click]'\"."

@@ -78,7 +78,11 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
 class NoAbbreviations(AbbreviationGenerator):
     """Abbreviation generator that disables short flags."""
 
-    def generate(self, value: str, taken: list[str]) -> str | None:
+    def generate(
+        self,
+        value: str,  # noqa: ARG002 - interface contract
+        taken: list[str],  # noqa: ARG002 - interface contract
+    ) -> str | None:
         """
         Return None to indicate no abbreviation is available.
 

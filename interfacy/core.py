@@ -151,7 +151,7 @@ class InterfacyParser:
 
     def add_command(
         self,
-        command: Callable[..., Any] | Any,
+        command: object,
         name: str | None = None,
         description: str | None = None,
         aliases: Sequence[str] | None = None,
@@ -220,7 +220,7 @@ class InterfacyParser:
             help_layout=self.help_layout,
         )
         self.commands[canonical_name] = command
-        logger.debug(f"Added command: {command}")
+        logger.debug("Added command: %s", command)
         return command
 
     def command(
@@ -285,7 +285,7 @@ class InterfacyParser:
         canonical_name, command_aliases = self.name_registry.register(
             default_name=group.name,
             explicit_name=name,
-            aliases=combined_aliases if combined_aliases else None,
+            aliases=combined_aliases or None,
         )
 
         if canonical_name in self.commands:
@@ -299,7 +299,7 @@ class InterfacyParser:
 
         command.aliases = tuple(command_aliases)
         self.commands[canonical_name] = command
-        logger.debug(f"Added group: {command}")
+        logger.debug("Added group: %s", command)
         return command
 
     def get_commands(self) -> list["Command"]:
@@ -332,7 +332,7 @@ class InterfacyParser:
         Args:
             code (ExitCode): Exit code to use.
         """
-        logger.info(f"Exit code: {code}")
+        logger.info("Exit code: %s", code)
         if self.sys_exit_enabled:
             sys.exit(code)
         return code
@@ -343,7 +343,7 @@ class InterfacyParser:
         *,
         command: str | None = None,
         subcommand: str | None = None,
-        **normalization_kwargs: Any,
+        **normalization_kwargs: object,
     ) -> PipeTargets:
         """
         Configure default pipe targets.
@@ -454,7 +454,7 @@ class InterfacyParser:
         """Read and cache stdin content if available."""
         if self._pipe_buffer is PIPE_UNSET:
             piped = read_piped()
-            self._pipe_buffer = piped if piped else None
+            self._pipe_buffer = piped or None
 
         buffer = self._pipe_buffer
         if buffer is PIPE_UNSET:
@@ -482,9 +482,7 @@ class InterfacyParser:
         """
         obj = command.obj
 
-        if isinstance(obj, Function):
-            params = obj.params
-        elif isinstance(obj, Method):
+        if isinstance(obj, (Function, Method)):
             params = obj.params
         elif isinstance(obj, Class):
             if subcommand in (None, "__init__"):
@@ -520,7 +518,11 @@ class InterfacyParser:
             f"Could not resolve subcommand '{subcommand}' for class '{cls.name}'"
         )
 
-    def parser_from_command(self, command: Function | Method | Class, main: bool = False) -> Any:
+    def parser_from_command(
+        self,
+        command: Function | Method | Class,
+        main: bool = False,  # noqa: ARG002 - reserved API parameter
+    ) -> object:
         """
         Build a parser object from an inspected command.
 
@@ -547,7 +549,7 @@ class InterfacyParser:
         """
         raise NotImplementedError
 
-    def run(self, *commands: Callable[..., Any], args: list[str] | None = None) -> Any:
+    def run(self, *commands: Callable[..., object], args: list[str] | None = None) -> object:
         """
         Register commands, parse args, and execute the selected command.
 
@@ -558,7 +560,7 @@ class InterfacyParser:
         raise NotImplementedError
 
     @abstractmethod
-    def parser_from_function(self, *args: Any, **kwargs: Any) -> Any:
+    def parser_from_function(self, *args: object, **kwargs: object) -> object:
         """
         Build a parser from a function or method.
 
@@ -569,7 +571,7 @@ class InterfacyParser:
         ...
 
     @abstractmethod
-    def parser_from_class(self, *args: Any, **kwargs: Any) -> Any:
+    def parser_from_class(self, *args: object, **kwargs: object) -> object:
         """
         Build a parser from a class command.
 
@@ -580,7 +582,7 @@ class InterfacyParser:
         ...
 
     @abstractmethod
-    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> Any:
+    def parser_from_multiple_commands(self, *args: object, **kwargs: object) -> object:
         """
         Build a parser from multiple commands.
 
@@ -591,7 +593,7 @@ class InterfacyParser:
         ...
 
     @abstractmethod
-    def install_tab_completion(self, *args: Any, **kwargs: Any) -> None:
+    def install_tab_completion(self, *args: object, **kwargs: object) -> None:
         """
         Install tab completion for a parser instance.
 
@@ -638,4 +640,4 @@ class InterfacyParser:
         return builder.build()
 
 
-__all__ = ["InterfacyParser", "ExitCode"]
+__all__ = ["ExitCode", "InterfacyParser"]

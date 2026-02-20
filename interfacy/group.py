@@ -71,9 +71,8 @@ class CommandGroup:
             is_instance = True
             cmd_name = name or type(command).__name__
 
-        if description is None:
-            if hasattr(command, "__doc__") and command.__doc__:
-                description = command.__doc__.split("\n")[0].strip()
+        if description is None and hasattr(command, "__doc__") and command.__doc__:
+            description = command.__doc__.split("\n")[0].strip()
 
         entry = CommandEntry(
             obj=command,
@@ -144,4 +143,4 @@ class CommandGroup:
         )
 
 
-__all__ = ["CommandGroup", "CommandEntry"]
+__all__ = ["CommandEntry", "CommandGroup"]

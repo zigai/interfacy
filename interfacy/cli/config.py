@@ -149,7 +149,7 @@ def load_config(path: Path | None = None) -> InterfacyConfig:
     return InterfacyConfig()
 
 
-def _import_symbol(value: str) -> Any:
+def _import_symbol(value: str) -> object:
     if ":" not in value:
         raise ConfigurationError(
             f"Invalid import path '{value}'. Use the format 'package.module:Symbol'."
@@ -165,12 +165,12 @@ def _import_symbol(value: str) -> Any:
 
 
 def _resolve_from_lookup(
-    value: Any,
+    value: object,
     *,
     value_name: str,
     instance_type: type,
     lookup: Mapping[str, type],
-) -> Any | None:
+) -> object | None:
     if value is None:
         return None
     if isinstance(value, instance_type):
@@ -186,7 +186,7 @@ def _resolve_from_lookup(
     raise ConfigurationError(f"Unknown {value_name} value: {value}")
 
 
-def _resolve_help_layout(value: Any) -> HelpLayout | None:
+def _resolve_help_layout(value: object) -> HelpLayout | None:
     lookup = {
         "default": InterfacyLayout,
         "interfacy": InterfacyLayout,
@@ -205,7 +205,7 @@ def _resolve_help_layout(value: Any) -> HelpLayout | None:
     )
 
 
-def _resolve_help_colors(value: Any) -> InterfacyColors | None:
+def _resolve_help_colors(value: object) -> InterfacyColors | None:
     lookup = {
         "default": InterfacyColors,
         "interfacy": InterfacyColors,
@@ -221,7 +221,7 @@ def _resolve_help_colors(value: Any) -> InterfacyColors | None:
     )
 
 
-def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy | None:
+def _resolve_flag_strategy(value: object, config: dict[str, Any]) -> FlagStrategy | None:
     if value is None:
         return None
     if isinstance(value, DefaultFlagStrategy):
@@ -244,7 +244,7 @@ def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy |
     raise ConfigurationError(f"Unknown flag_strategy value: {value}")
 
 
-def _resolve_abbreviation_gen(value: Any, config: dict[str, Any]) -> Any | None:
+def _resolve_abbreviation_gen(value: object, config: dict[str, Any]) -> object | None:
     if value is None:
         return None
     if isinstance(value, (DefaultAbbreviationGenerator, NoAbbreviations)):

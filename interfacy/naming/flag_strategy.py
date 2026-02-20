@@ -113,10 +113,7 @@ class DefaultFlagStrategy(FlagStrategy):
         ):
             return (name,)
 
-        if len(name) == 1:
-            flag_long = f"-{name}".strip()
-        else:
-            flag_long = f"--{name}".strip()
+        flag_long = f"-{name}".strip() if len(name) == 1 else f"--{name}".strip()
 
         flags: tuple[str, ...] = (flag_long,)
 
@@ -142,7 +139,7 @@ class DefaultFlagStrategy(FlagStrategy):
                 else:
                     flag_short = None
 
-            if flag_short and flag_short != name and flag_short != abbrev_name:
+            if flag_short and flag_short not in (name, abbrev_name):
                 flags = (f"-{flag_short}", flag_long)
 
         return flags
