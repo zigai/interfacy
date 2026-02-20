@@ -9,7 +9,7 @@ from interfacy.argparse_backend import Argparser
 from interfacy.naming import DefaultFlagStrategy
 
 
-def pow(base: int, exponent: int = 2) -> int:
+def pow(base: int, exponent: int = 2) -> int:  # noqa: A001 - intentional command name
     """
     Raise base to the power of exponent.
 
@@ -62,7 +62,6 @@ class Math:
         Returns:
             float: Sum of a and b.
         """
-
         return self._round(a + b)
 
     def subtract(self, a: int, b: int) -> float:

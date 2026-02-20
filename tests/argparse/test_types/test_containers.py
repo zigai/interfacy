@@ -1,5 +1,3 @@
-from typing import Dict, List, Tuple
-
 import pytest
 
 from interfacy.core import InterfacyParser

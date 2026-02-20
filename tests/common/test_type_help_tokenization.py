@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from stdl.st import TextStyle
 
-import interfacy.util as util
+from interfacy import util
 from interfacy.appearance.layout import InterfacyColors
 
 

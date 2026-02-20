@@ -1,7 +1,5 @@
 """Tests for KeyboardInterrupt (Ctrl+C) signal handling."""
 
-import signal
-import threading
 import time
 
 import pytest
@@ -12,7 +10,7 @@ from interfacy.core import ExitCode
 
 def slow_task(seconds: int = 10) -> str:
     """A slow task that can be interrupted."""
-    for i in range(seconds):
+    for _ in range(seconds):
         time.sleep(0.1)
     return "Done"
 

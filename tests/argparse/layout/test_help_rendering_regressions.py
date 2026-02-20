@@ -238,9 +238,9 @@ def test_aligned_layout_help_only_option_row_is_not_over_indented() -> None:
     assert not help_line.startswith("        --help")
 
 
-@pytest.mark.parametrize("layout_cls", (Aligned, AlignedTyped))
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
 def test_aligned_family_omits_suppressed_boolean_default_for_model_expansion(
-    layout_cls: type[Aligned] | type[AlignedTyped],
+    layout_cls: type[Aligned | AlignedTyped],
 ) -> None:
     parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
     parser.add_command(run_with_expandable_settings)

@@ -1,7 +1,7 @@
 import pytest
-from interfacy.core import InterfacyParser, PipeTargets
+
+from interfacy.core import InterfacyParser
 from interfacy.exceptions import PipeInputError
-from unittest.mock import Mock
 
 
 # We define dummy functions here to use as command targets
@@ -21,7 +21,7 @@ def fn_dict_arg(data: dict):
     return data
 
 
-def fn_partial(a: str, b: str = None):
+def fn_partial(a: str, b: str | None = None):
     return (a, b)
 
 

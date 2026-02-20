@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 from objinspect import Class, Function
 
@@ -34,7 +36,7 @@ def positional_value(value: int) -> int:
     return value
 
 
-def bool_tristate(flag: bool = None) -> bool | None:
+def bool_tristate(flag: bool = cast(bool, None)) -> bool | None:
     return flag
 
 

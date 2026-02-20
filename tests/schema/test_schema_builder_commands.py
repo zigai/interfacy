@@ -1,9 +1,7 @@
-import pytest
 from objinspect import Class, Function, Method
 
 from interfacy.naming import DefaultFlagStrategy
 from interfacy.naming.abbreviations import NoAbbreviations
-from interfacy.pipe import PipeTargets
 from interfacy.schema.builder import ParserSchemaBuilder
 from interfacy.schema.schema import ArgumentKind, ValueShape
 from tests.schema.conftest import (
@@ -14,18 +12,18 @@ from tests.schema.conftest import (
 
 
 def standalone(value: int, *, verbose: bool = False) -> int:
-    """Standalone command"""
+    """Standalone command."""
     return value
 
 
 class MathOps:
-    """doc"""
+    """Math operations command group."""
 
     def __init__(self, precision: int = 2) -> None:
         self.precision = precision
 
     def compute_total(self, first: int, second: int) -> int:
-        """calculate total"""
+        """Calculate total."""
         return first + second
 
     def export_value(self, payload: str) -> str:
@@ -77,7 +75,7 @@ def test_class_command_populates_epilog_and_pipe_targets(
     assert command.subcommands is not None
     compute = command.subcommands["compute-total"]
     assert compute.pipe_targets is command.pipe_targets
-    assert compute.raw_description == "calculate total"
+    assert compute.raw_description == "Calculate total."
 
 
 def test_pipe_target_fallback_uses_original_method_name(

@@ -1,5 +1,3 @@
-import pytest
-
 from interfacy.group import CommandGroup
 
 

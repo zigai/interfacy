@@ -10,10 +10,10 @@ from tests.schema.conftest import (
     Address,
     FakeParser,
     UserWithAddress,
-    greet_with_address,
     greet_plain,
     greet_plain_default,
     greet_plain_with_address,
+    greet_with_address,
     maybe_plain,
     uses_levels,
 )

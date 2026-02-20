@@ -8,11 +8,11 @@ from tests.schema.conftest import (
 
 
 def sample() -> None:
-    """sample docstring"""
+    """Sample docstring."""
 
 
 def another() -> None:
-    """another docstring"""
+    """Another docstring."""
 
 
 def test_parser_schema_formats_description_and_epilog_once() -> None:

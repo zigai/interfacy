@@ -257,7 +257,13 @@ def test_root_help_contains_usage_options_and_commands_sections(
 
 @pytest.mark.parametrize(
     "layout_cls",
-    (InterfacyLayout, Aligned, AlignedTyped, Modern, ArgparseLayout),
+    [
+        InterfacyLayout,
+        Aligned,
+        AlignedTyped,
+        Modern,
+        ArgparseLayout,
+    ],
 )
 def test_usage_boolean_tokens_use_primary_form_without_alternation(
     layout_cls: type[HelpLayout],
@@ -277,7 +283,13 @@ def test_usage_boolean_tokens_use_primary_form_without_alternation(
 
 @pytest.mark.parametrize(
     "layout_cls",
-    (InterfacyLayout, Aligned, AlignedTyped, Modern, ArgparseLayout),
+    [
+        InterfacyLayout,
+        Aligned,
+        AlignedTyped,
+        Modern,
+        ArgparseLayout,
+    ],
 )
 def test_usage_subcommand_choices_show_canonical_names_without_aliases(
     layout_cls: type[HelpLayout],
@@ -394,7 +406,7 @@ def test_argparse_layout_long_option_help_stays_inline_with_readable_gap(
 
 @pytest.mark.parametrize(
     ("args", "line_selector", "help_token", "row_token"),
-    (
+    [
         (
             ["path-ops", "--help"],
             "-l, --level LEVEL",
@@ -413,7 +425,7 @@ def test_argparse_layout_long_option_help_stays_inline_with_readable_gap(
             "show this help message and exit",
             "Defaults to 100.",
         ),
-    ),
+    ],
 )
 def test_argparse_layout_option_help_column_is_consistently_wide(
     args: list[str],
@@ -509,7 +521,7 @@ def test_clap_layout_no_description_default_aligns_to_help_text_column(
     assert limit_line.index("[default:") == help_line.index("Print help")
 
 
-@pytest.mark.parametrize("layout_cls", (Aligned, AlignedTyped))
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
 def test_aligned_family_command_descriptions_align_with_options_description_column(
     layout_cls: type[HelpLayout],
     monkeypatch: pytest.MonkeyPatch,
@@ -541,7 +553,7 @@ def test_aligned_family_command_descriptions_align_with_options_description_colu
     assert help_desc_idx == title_default_idx
 
 
-@pytest.mark.parametrize("layout_cls", (Aligned, AlignedTyped))
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
 def test_aligned_family_help_row_uses_default_column_when_default_slot_is_empty(
     layout_cls: type[HelpLayout],
     monkeypatch: pytest.MonkeyPatch,

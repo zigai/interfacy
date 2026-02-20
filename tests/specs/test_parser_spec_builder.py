@@ -161,7 +161,8 @@ def test_multi_command_records_aliases_and_pipe_targets():
     assert schema.is_multi_command is True
     assert schema.pipe_targets is not None
     assert list(schema.pipe_targets.targets) == ["result"]
-    assert schema.commands_help and "commands:" in schema.commands_help
+    assert schema.commands_help is not None
+    assert "commands:" in schema.commands_help
 
     command_pow = schema.commands["pow"]
     assert command_pow.aliases == ("p",)
@@ -246,7 +247,7 @@ def test_optional_list_argument_metadata(parser: Argparser):
 
 
 class TestOptionalUnionListArg:
-    """Optional list annotations, eg. list | None, should still behave like lists"""
+    """Optional list annotations, eg. list | None, should still behave like lists."""
 
     def test_optional_union_list_argument_detected_as_list(self, parser: Argparser):
         """Verify that Optional[List] union arguments are detected as lists."""

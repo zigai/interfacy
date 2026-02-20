@@ -51,7 +51,7 @@ class TestMathClassParsing:
     def test_from_instance(self, parser: InterfacyParser):
         """Verify execution of commands derived from instance methods."""
         math = Math(rounding=2)
-        parser.add_command(math)  # type: ignore
+        parser.add_command(math)  # type: ignore[arg-type]
 
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
@@ -87,26 +87,26 @@ class TestBooleanFlags:
     def test_bool_required(self, parser: InterfacyParser):
         """Verify execution with required boolean flags."""
         parser.add_command(fn_bool_required)
-        assert parser.run(args=["--value"]) == True
-        assert parser.run(args=["--no-value"]) == False
+        assert parser.run(args=["--value"]) is True
+        assert parser.run(args=["--no-value"]) is False
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_bool_default_true(self, parser: InterfacyParser):
         """Verify execution with boolean flags defaulting to True."""
         parser.add_command(fn_bool_default_true)
 
-        assert parser.run(args=[]) == True
-        assert parser.run(args=["--value"]) == True
-        assert parser.run(args=["--no-value"]) == False
+        assert parser.run(args=[]) is True
+        assert parser.run(args=["--value"]) is True
+        assert parser.run(args=["--no-value"]) is False
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_bool_false_by_default(self, parser: InterfacyParser):
         """Verify execution with boolean flags defaulting to False."""
         parser.add_command(fn_bool_default_false)
 
-        assert parser.run(args=[]) == False
-        assert parser.run(args=["--value"]) == True
-        assert parser.run(args=["--no-value"]) == False
+        assert parser.run(args=[]) is False
+        assert parser.run(args=["--value"]) is True
+        assert parser.run(args=["--no-value"]) is False
 
 
 class TestEnums:
@@ -184,7 +184,7 @@ class TestMathClassParsingKwOnly:
     def test_from_instance(self, parser: InterfacyParser):
         """Verify instance-based command execution with kw-only strategy."""
         math = Math(rounding=2)
-        parser.add_command(math)  # type: ignore
+        parser.add_command(math)  # type: ignore[arg-type]
 
         assert parser.run(args=["pow", "--base", "2", "-e", "2"]) == 4
 

@@ -70,7 +70,7 @@ class TestMathClassParsing:
     def test_from_instance(self, parser: InterfacyParser):
         """Verify parsing of commands derived from instance methods."""
         math = Math(rounding=2)
-        parser.add_command(math)  # type: ignore
+        parser.add_command(math)  # type: ignore[arg-type]
 
         args = parser.parse_args(["pow", "2", "-e", "2"])
         assert args == {
@@ -127,23 +127,23 @@ class TestBooleanFlags:
         """Verify parsing of required boolean flags."""
         parser.add_command(fn_bool_required)
         args = parser.parse_args(["--value"])
-        assert args["value"] == True
+        assert args["value"] is True
 
         args = parser.parse_args(["--no-value"])
-        assert args["value"] == False
+        assert args["value"] is False
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_bool_default_true(self, parser: InterfacyParser):
         """Verify parsing of boolean flags defaulting to True."""
         parser.add_command(fn_bool_default_true)
         args = parser.parse_args([])
-        assert args["value"] == True
+        assert args["value"] is True
 
         args = parser.parse_args(["--value"])
-        assert args["value"] == True
+        assert args["value"] is True
 
         args = parser.parse_args(["--no-value"])
-        assert args["value"] == False
+        assert args["value"] is False
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_bool_false_by_default(self, parser: InterfacyParser):
@@ -151,13 +151,13 @@ class TestBooleanFlags:
         parser.add_command(fn_bool_default_false)
 
         args = parser.parse_args([])
-        assert args["value"] == False
+        assert args["value"] is False
 
         args = parser.parse_args(["--value"])
-        assert args["value"] == True
+        assert args["value"] is True
 
         args = parser.parse_args(["--no-value"])
-        assert args["value"] == False
+        assert args["value"] is False
 
 
 class TestEnums:
@@ -250,7 +250,7 @@ class TestMathClassParsingKwOnly:
     def test_from_instance(self, parser: InterfacyParser):
         """Verify instance-based command parsing with kw-only strategy."""
         math = Math(rounding=2)
-        parser.add_command(math)  # type: ignore
+        parser.add_command(math)  # type: ignore[arg-type]
 
         assert parser.run(args=["pow", "--base", "2", "-e", "2"]) == 4
 

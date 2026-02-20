@@ -1,5 +1,6 @@
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
 
 import pytest
 from objinspect import Class, Function, Method
@@ -277,5 +278,4 @@ def greet_plain_with_address(user: PlainUserWithAddress) -> str:
 @pytest.fixture
 def builder_parser() -> FakeParser:
     """Return a fresh FakeParser for each test."""
-
     return FakeParser()
