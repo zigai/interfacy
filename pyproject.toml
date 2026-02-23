@@ -8,7 +8,7 @@ license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "stdl>=0.6.8",
+    "stdl>=0.7.0",
     "objinspect>=0.4.1",
     "strto>=0.2.6",
     "tomlkit>=0.12",
@@ -199,6 +199,15 @@ exclude = ["build"]
 ]
 "interfacy/argparse_backend/help_formatter.py" = [
     "C901", # argparse-derived internals with targeted patches
+]
+"interfacy/appearance/layout.py" = [
+    "RUF009", # stdl.TextStyle is immutable (frozen dataclass); direct defaults are intentional
+]
+"interfacy/appearance/colors.py" = [
+    "RUF009", # stdl.TextStyle is immutable (frozen dataclass); direct defaults are intentional
+]
+"interfacy/appearance/layouts.py" = [
+    "RUF009", # stdl.TextStyle is immutable (frozen dataclass); direct defaults are intentional
 ]
 "tests/conftest.py" = [
     "UP006", # intentional legacy typing.List/Dict coverage
