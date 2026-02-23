@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import re
 from dataclasses import dataclass
 from typing import Literal
 
 import pytest
+from stdl.st import TextStyle
 
 from interfacy import CommandGroup
+from interfacy.appearance.colors import NoColor
 from interfacy.appearance.layouts import (
     Aligned,
     AlignedTyped,
@@ -31,6 +34,38 @@ def run_with_expandable_settings(
     settings: ExpandableSettings = DEFAULT_EXPANDABLE_SETTINGS,
 ) -> None:
     return None
+
+
+def test_layout_constructor_accepts_inline_kwargs() -> None:
+    layout = ArgparseLayout(clear_metavar=True, help_position=44, help_option_description="Help.")
+    assert layout.clear_metavar is True
+    assert layout.help_position == 44
+    assert layout.help_option_description == "Help."
+
+
+def test_color_theme_constructor_accepts_inline_kwargs() -> None:
+    theme = NoColor(flag_short=TextStyle(color="red"), description=TextStyle(color="yellow"))
+    assert theme.flag_short.color == "red"
+    assert theme.description.color == "yellow"
+
+
+def test_layout_constructor_signature_exposes_supported_settings() -> None:
+    signature = inspect.signature(ArgparseLayout)
+    assert "clear_metavar" in signature.parameters
+    assert "help_position" in signature.parameters
+    assert signature.parameters["clear_metavar"].kind == inspect.Parameter.KEYWORD_ONLY
+
+
+def test_color_theme_constructor_signature_exposes_supported_settings() -> None:
+    signature = inspect.signature(NoColor)
+    assert "flag_short" in signature.parameters
+    assert "description" in signature.parameters
+    assert signature.parameters["flag_short"].kind == inspect.Parameter.KEYWORD_ONLY
+
+
+def test_layout_constructor_rejects_unknown_setting_kwargs() -> None:
+    with pytest.raises(TypeError, match="unexpected keyword argument 'unknown_layout_setting'"):
+        ArgparseLayout(unknown_layout_setting=True)
 
 
 def test_argparse_layout_root_usage_includes_subcommand_choices() -> None:
@@ -184,12 +219,12 @@ def test_interfacy_layout_help_and_choices_metadata_align_in_same_column() -> No
 
     help_text = parser.build_parser().format_help()
     help_line = next(
-        line for line in help_text.splitlines() if "--help" in line and "show " in line
+        line for line in help_text.splitlines() if "--help" in line and "Show " in line
     )
     mode_line = next(
         line for line in help_text.splitlines() if "--mode" in line and "[choices:" in line
     )
-    assert help_line.index("show") == mode_line.index("[choices:")
+    assert help_line.index("Show") == mode_line.index("[choices:")
 
 
 def test_interfacy_layout_help_and_type_metadata_align_in_same_column() -> None:
@@ -201,22 +236,22 @@ def test_interfacy_layout_help_and_type_metadata_align_in_same_column() -> None:
 
     help_text = parser.build_parser().format_help()
     help_line = next(
-        line for line in help_text.splitlines() if "--help" in line and "show " in line
+        line for line in help_text.splitlines() if "--help" in line and "Show " in line
     )
     level_line = next(
-        line for line in help_text.splitlines() if "--level" in line and "[type:" in line
+        line for line in help_text.splitlines() if "--level" in line and "[default=" in line
     )
-    assert help_line.index("show") == level_line.index("[type:")
+    assert help_line.index("Show") == level_line.index("[default=")
 
 
 def test_interfacy_layout_does_not_add_extra_leading_space_for_ansi_only_description() -> None:
     layout = InterfacyLayout()
     values = {
         "description": "\x1b[38;5;15m\x1b[0m",
-        "extra": "[type: int, default=3]",
+        "extra": "[default=3, type: int]",
     }
     applied = layout._apply_interfacy_columns(values)
-    assert applied["extra"] == "[type: int, default=3]"
+    assert applied["extra"] == "[default=3, type: int]"
 
 
 def test_aligned_layout_help_only_option_row_is_not_over_indented() -> None:
@@ -232,7 +267,7 @@ def test_aligned_layout_help_only_option_row_is_not_over_indented() -> None:
 
     help_text = parser.build_parser().format_help()
     help_line = next(
-        line for line in help_text.splitlines() if "--help" in line and "show " in line
+        line for line in help_text.splitlines() if "--help" in line and "Show " in line
     )
     assert help_line.startswith("  --help")
     assert not help_line.startswith("        --help")
@@ -248,6 +283,71 @@ def test_aligned_family_omits_suppressed_boolean_default_for_model_expansion(
     assert re.search(r"--settings[._-]?enabled", help_text)
     assert re.search(r"--settings[._-]?enabled\s+enabled", help_text)
     assert "true" not in help_text.lower()
+
+
+def test_aligned_typed_help_aligns_to_metadata_column_when_options_are_metadata_only() -> None:
+    def ytmp3_like(
+        *urls: str,
+        album: str | None = None,
+        output: str = "%(title)s.%(ext)s",
+        quiet: bool = False,
+    ) -> None:
+        return None
+
+    parser = Argparser(help_layout=AlignedTyped(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(ytmp3_like)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    lines = help_text.splitlines()
+    help_line = next(
+        line for line in lines if "--help" in line and "Show this help message and exit" in line
+    )
+    album_line = next(line for line in lines if "--album" in line and "[type:" in line)
+    output_line = next(
+        line for line in lines if "--output" in line and "[%(title)s.%(ext)s]" in line
+    )
+
+    help_idx = help_line.index("Show this help message and exit")
+    assert help_idx == album_line.index("[type:")
+    assert help_idx == output_line.index("[")
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_hides_false_default_for_positive_boolean_flags(
+    layout_cls: type[Aligned | AlignedTyped],
+) -> None:
+    def pull_all_like(*, quiet: bool = False) -> None:
+        return None
+
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(pull_all_like)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    quiet_line = next(
+        line
+        for line in help_text.splitlines()
+        if line.lstrip().startswith("-") and "--quiet" in line
+    )
+    assert "[" not in quiet_line
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_keeps_true_default_for_negative_boolean_flags(
+    layout_cls: type[Aligned | AlignedTyped],
+) -> None:
+    def compress_like(*, recursive: bool = True) -> None:
+        return None
+
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(compress_like)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    recursive_line = next(
+        line
+        for line in help_text.splitlines()
+        if line.lstrip().startswith("-") and "--no-recursive" in line
+    )
+    assert "true" in recursive_line.lower()
 
 
 def test_usage_metavars_use_kebab_case_for_nested_class_commands() -> None:
@@ -467,3 +567,98 @@ def test_ansi_styled_legacy_epilog_is_not_duplicated_for_subcommands() -> None:
     help_text = re.sub(r"\x1b\[[0-9;]*m", "", ops_parser.format_help())
 
     assert help_text.count("Commands:") == 1
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_long_option_rows_keep_separator_before_default_slot(
+    layout_cls: type[Aligned | AlignedTyped],
+) -> None:
+    def sniffa_like(
+        *,
+        webdriver_endpoint: str = "http://127.0.0.1:4444",
+        bidi_session_timeout_seconds: int = 30,
+        include_intermediate: bool = False,
+        writer_queue_size: int = 10000,
+    ) -> None:
+        return None
+
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(sniffa_like)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    lines = help_text.splitlines()
+    for long_flag in (
+        "--webdriver-endpoint",
+        "--bidi-session-timeout-seconds",
+        "--include-intermediate",
+        "--writer-queue-size",
+    ):
+        line = next(line for line in lines if long_flag in line)
+        assert f"{long_flag}[" not in line
+
+
+def test_argparse_layout_does_not_duplicate_existing_default_sentence() -> None:
+    def c2p(*, no_tokens: bool = True) -> None:
+        """Convert source to a prompt.
+
+        Args:
+            no_tokens: Include token information in the output. Defaults to True.
+        """
+        return None
+
+    parser = Argparser(help_layout=ArgparseLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(c2p)
+    help_text = parser.build_parser().format_help()
+
+    assert "Defaults to True.. Defaults to True." not in help_text
+    assert help_text.count("Defaults to True.") == 1
+
+
+def test_argparse_layout_collapses_terminal_double_period_before_default_sentence() -> None:
+    def sniffa(*, backend: str = "cdp") -> None:
+        """Sniffa demo.
+
+        Args:
+            backend: Browser protocol backend. Use cdp for Chromium and bidi for Firefox..
+        """
+        return None
+
+    parser = Argparser(help_layout=ArgparseLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(sniffa)
+    help_text = parser.build_parser().format_help()
+
+    assert "Firefox.. Defaults to cdp." not in help_text
+    assert "Firefox. Defaults to cdp." in help_text
+
+
+def test_argparse_layout_dot_default_uses_single_terminal_period() -> None:
+    def open_file_explorer(*, directory: str = ".") -> None:
+        """Open the platform file explorer at a given path."""
+        return None
+
+    parser = Argparser(help_layout=ArgparseLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(open_file_explorer)
+    help_text = parser.build_parser().format_help()
+
+    assert "Defaults to .." not in help_text
+    assert "Defaults to ." in help_text
+
+
+def test_argparse_layout_renders_percent_defaults_without_keyerror(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def ytmp3(*, output: str = "%(title)s.%(ext)s") -> None:
+        """Download content."""
+        return None
+
+    parser = Argparser(help_layout=ArgparseLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(ytmp3)
+
+    try:
+        parser.run(args=["--help"])
+    except SystemExit:
+        pass
+
+    out = capsys.readouterr()
+    help_text = out.out + out.err
+    assert "%(title)s.%(ext)s" in help_text

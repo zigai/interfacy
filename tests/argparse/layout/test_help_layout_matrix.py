@@ -337,11 +337,11 @@ def test_argparse_layout_command_descriptions_align_with_option_help_column(
         render_help_for_args(ArgparseLayout, ["--help"], monkeypatch, capsys, argparse_req_pos)
     )
     lines = help_text.splitlines()
-    help_line = next(line for line in lines if "--help" in line and "show this help" in line)
+    help_line = next(line for line in lines if "--help" in line and "Show this help" in line)
     dense_line = next(line for line in lines if line.strip().startswith("dense-parameters"))
     path_line = next(line for line in lines if line.strip().startswith("path-ops"))
 
-    help_idx = help_line.index("show this help message and exit")
+    help_idx = help_line.index("Show this help message and exit")
     dense_idx = dense_line.index("Exercise choices, defaults, tuples, and long descriptions.")
     path_idx = path_line.index("Mix positionals, varargs, and keyword-only options.")
 
@@ -410,19 +410,19 @@ def test_argparse_layout_long_option_help_stays_inline_with_readable_gap(
         (
             ["path-ops", "--help"],
             "-l, --level LEVEL",
-            "show this help message and exit",
+            "Show this help message and exit",
             "Defaults to 2.",
         ),
         (
             ["report-tool", "output-dir", "compare", "--help"],
             "-m, --mode MODE",
-            "show this help message and exit",
+            "Show this help message and exit",
             "Defaults to strict.",
         ),
         (
             ["ops", "workspace", "cache-prune", "--help"],
             "-l, --limit LIMIT",
-            "show this help message and exit",
+            "Show this help message and exit",
             "Defaults to 100.",
         ),
     ],
@@ -538,12 +538,12 @@ def test_aligned_family_command_descriptions_align_with_options_description_colu
         )
     )
     lines = help_text.splitlines()
-    help_line = next(line for line in lines if "--help" in line and "show this help" in line)
+    help_line = next(line for line in lines if "--help" in line and "Show this help" in line)
     compare_line = next(line for line in lines if line.strip().startswith("compare"))
     summarize_line = next(line for line in lines if line.strip().startswith("summarize"))
     title_line = next(line for line in lines if "--title" in line and "[ Report]" in line)
 
-    help_desc_idx = help_line.index("show this help message and exit")
+    help_desc_idx = help_line.index("Show this help message and exit")
     compare_desc_idx = compare_line.index("Compare two sources;")
     summarize_desc_idx = summarize_line.index("Summarize data with list and literal choices.")
     title_default_idx = title_line.index("[ Report]")
@@ -554,7 +554,7 @@ def test_aligned_family_command_descriptions_align_with_options_description_colu
 
 
 @pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
-def test_aligned_family_help_row_uses_default_column_when_default_slot_is_empty(
+def test_aligned_family_help_row_uses_metadata_column_when_option_rows_are_metadata_only(
     layout_cls: type[HelpLayout],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -570,10 +570,10 @@ def test_aligned_family_help_row_uses_default_column_when_default_slot_is_empty(
         )
     )
     lines = help_text.splitlines()
-    help_line = next(line for line in lines if "--help" in line and "show this help" in line)
+    help_line = next(line for line in lines if "--help" in line and "Show this help" in line)
     title_line = next(line for line in lines if "--title" in line and "[ Report]" in line)
 
-    assert help_line.index("show this help message and exit") == title_line.index("[ Report]")
+    assert help_line.index("Show this help message and exit") == title_line.index("[ Report]")
 
 
 def test_argparse_commands_descriptions_stay_inline_when_width_is_sufficient(
