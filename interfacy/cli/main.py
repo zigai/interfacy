@@ -17,6 +17,7 @@ from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, load_config
 from interfacy.core import ExitCode, InterfacyParser
+from interfacy.naming.abbreviations import DefaultAbbreviationGenerator
 
 
 def _get_version() -> str:
@@ -31,7 +32,6 @@ def _default_config_paths() -> list[Path]:
     paths: list[Path] = []
     if env_path:
         paths.append(Path(env_path))
-    paths.append(Path.cwd() / ".interfacy.toml")
     paths.append(Path.home() / ".config" / "interfacy" / "config.toml")
     return paths
 
@@ -107,6 +107,9 @@ def resolve_entrypoint_settings() -> dict[str, Any]:
             "help_colors": None,
             "flag_strategy": None,
             "abbreviation_gen": None,
+            "abbreviation_max_generated_len": None,
+            "abbreviation_scope": None,
+            "help_option_sort": None,
             "print_result": None,
             "full_error_traceback": None,
             "tab_completion": None,
@@ -185,6 +188,9 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "flag_strategy",
         "abbreviation_gen",
+        "abbreviation_max_generated_len",
+        "abbreviation_scope",
+        "help_option_sort",
         "print_result",
         "full_error_traceback",
         "tab_completion",
@@ -231,13 +237,28 @@ def _apply_settings_to_parser(parser: InterfacyParser, settings: dict[str, Any])
         "include_inherited_methods": "include_inherited_methods",
         "include_classmethods": "include_classmethods",
         "silent_interrupt": "silent_interrupt",
+        "abbreviation_max_generated_len": "abbreviation_max_generated_len",
+        "abbreviation_scope": "abbreviation_scope",
+        "help_option_sort": "help_option_sort",
     }
     for key, attr in parser_settings.items():
         value = settings.get(key)
         if value is not None:
             setattr(parser, attr, value)
 
+    abbreviation_gen = settings.get("abbreviation_gen")
+    if abbreviation_gen is not None:
+        parser.abbreviation_gen = abbreviation_gen
+    elif settings.get("abbreviation_max_generated_len") is not None and isinstance(
+        parser.abbreviation_gen, DefaultAbbreviationGenerator
+    ):
+        parser.abbreviation_gen = DefaultAbbreviationGenerator(
+            max_generated_len=parser.abbreviation_max_generated_len
+        )
+
     _apply_layout_settings(parser, settings)
+    if settings.get("help_option_sort") is not None and parser.help_layout is not None:
+        parser.help_layout.help_option_sort = parser.help_option_sort
 
 
 def main(argv: Sequence[str] | None = None) -> ExitCode:

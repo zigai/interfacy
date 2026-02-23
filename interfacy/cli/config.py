@@ -41,7 +41,9 @@ class InterfacyConfig:
         flag_style (FlagStyle | None): Flag style override.
         translation_mode (TranslationMode | None): Flag translation mode.
         abbreviation_gen (str | None): Abbreviation generator name or import path.
-        abbreviation_min_len (int | None): Minimum abbreviation length.
+        abbreviation_max_generated_len (int | None): Max generated abbreviation length.
+        abbreviation_scope (str | None): Where generated abbreviations are allowed.
+        help_option_sort (str | None): Option row ordering in help output.
         print_result (bool | None): Whether to print command results.
         full_error_traceback (bool | None): Whether to show full tracebacks.
         tab_completion (bool | None): Whether to enable tab completion.
@@ -57,7 +59,9 @@ class InterfacyConfig:
     flag_style: FlagStyle | None = None
     translation_mode: TranslationMode | None = None
     abbreviation_gen: str | None = None
-    abbreviation_min_len: int | None = None
+    abbreviation_max_generated_len: int | None = None
+    abbreviation_scope: str | None = None
+    help_option_sort: str | None = None
     print_result: bool | None = None
     full_error_traceback: bool | None = None
     tab_completion: bool | None = None
@@ -76,7 +80,6 @@ def _default_config_paths() -> list[Path]:
     paths = []
     if env_path:
         paths.append(Path(env_path))
-    paths.append(Path.cwd() / ".interfacy.toml")
     paths.append(Path.home() / ".config" / "interfacy" / "config.toml")
     return paths
 
@@ -105,9 +108,17 @@ def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
             "strategy": "flag_strategy",
             "style": "flag_style",
             "translation_mode": "translation_mode",
+            "help_option_sort": "help_option_sort",
         },
     )
-    apply("abbreviations", {"generator": "abbreviation_gen", "min_len": "abbreviation_min_len"})
+    apply(
+        "abbreviations",
+        {
+            "generator": "abbreviation_gen",
+            "max_generated_len": "abbreviation_max_generated_len",
+            "scope": "abbreviation_scope",
+        },
+    )
     apply(
         "behavior",
         {
@@ -245,8 +256,13 @@ def _resolve_flag_strategy(value: object, config: dict[str, Any]) -> FlagStrateg
 
 
 def _resolve_abbreviation_gen(value: object, config: dict[str, Any]) -> object | None:
+    max_generated_len = _resolve_abbreviation_max_generated_len(
+        config.get("abbreviation_max_generated_len")
+    )
     if value is None:
-        return None
+        if max_generated_len is None:
+            return None
+        return DefaultAbbreviationGenerator(max_generated_len=max_generated_len)
     if isinstance(value, (DefaultAbbreviationGenerator, NoAbbreviations)):
         return value
     if isinstance(value, str):
@@ -255,11 +271,54 @@ def _resolve_abbreviation_gen(value: object, config: dict[str, Any]) -> object |
             return symbol() if isinstance(symbol, type) else symbol
         key = _normalize_name(value)
         if key in {"default", "standard"}:
-            min_len = config.get("abbreviation_min_len")
-            return DefaultAbbreviationGenerator(min_len=min_len or 3)
+            return DefaultAbbreviationGenerator(max_generated_len=max_generated_len or 1)
         if key in {"none", "noabbrev", "noabbreviations"}:
             return NoAbbreviations()
     raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
+
+
+def _resolve_abbreviation_max_generated_len(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
+    if value < 1:
+        raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
+    return value
+
+
+def _resolve_abbreviation_scope(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigurationError("abbreviation_scope must be a string")
+    key = _normalize_name(value)
+    lookup = {
+        "topleveloptions": "top_level_options",
+        "alloptions": "all_options",
+    }
+    resolved = lookup.get(key)
+    if resolved is None:
+        raise ConfigurationError(
+            "abbreviation_scope must be one of: top_level_options, all_options"
+        )
+    return resolved
+
+
+def _resolve_help_option_sort(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigurationError("help_option_sort must be a string")
+    key = _normalize_name(value)
+    lookup = {
+        "declaration": "declaration",
+        "alphabetical": "alphabetical",
+    }
+    resolved = lookup.get(key)
+    if resolved is None:
+        raise ConfigurationError("help_option_sort must be one of: declaration, alphabetical")
+    return resolved
 
 
 def _to_config_dict(config: InterfacyConfig | dict[str, Any]) -> dict[str, Any]:
@@ -295,6 +354,17 @@ def apply_config_defaults(
 
     if overrides.get("abbreviation_gen") is None:
         resolved["abbreviation_gen"] = _resolve_abbreviation_gen(cfg.get("abbreviation_gen"), cfg)
+
+    if overrides.get("abbreviation_max_generated_len") is None:
+        resolved["abbreviation_max_generated_len"] = _resolve_abbreviation_max_generated_len(
+            cfg.get("abbreviation_max_generated_len")
+        )
+
+    if overrides.get("abbreviation_scope") is None:
+        resolved["abbreviation_scope"] = _resolve_abbreviation_scope(cfg.get("abbreviation_scope"))
+
+    if overrides.get("help_option_sort") is None:
+        resolved["help_option_sort"] = _resolve_help_option_sort(cfg.get("help_option_sort"))
 
     passthrough_keys = [
         "print_result",

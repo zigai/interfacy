@@ -65,6 +65,7 @@ class SchemaHelpRenderer:
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
         options = [a for a in all_args if a.kind == ArgumentKind.OPTION]
+        options = layout.order_option_arguments_for_help(options)
 
         layout.prepare_default_field_width_for_arguments(all_args)
 
@@ -192,6 +193,7 @@ class SchemaHelpRenderer:
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
         options = [a for a in all_args if a.kind == ArgumentKind.OPTION]
+        options = self.layout.order_option_arguments_for_help(options)
         compact_options_usage = self.layout.compact_options_usage
 
         usage_prefix = self._get_usage_prefix()

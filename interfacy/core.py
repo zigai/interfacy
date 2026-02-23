@@ -2,7 +2,7 @@ import sys
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, Any, ClassVar, Final, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypeVar
 
 from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
@@ -35,10 +35,39 @@ if TYPE_CHECKING:
 
 COMMAND_KEY: Final[str] = "command"
 PIPE_UNSET: Final[object] = object()
+AbbreviationScope = Literal["top_level_options", "all_options"]
+HelpOptionSort = Literal["declaration", "alphabetical"]
+_ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
+    "top_level_options",
+    "all_options",
+)
+_HELP_OPTION_SORT_VALUES: tuple[HelpOptionSort, ...] = ("declaration", "alphabetical")
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 logger = get_logger(__name__)
+
+
+def _validate_abbreviation_max_generated_len(value: int) -> int:
+    if value < 1:
+        raise ConfigurationError("abbreviation_max_generated_len must be >= 1")
+    return value
+
+
+def _validate_abbreviation_scope(value: AbbreviationScope) -> AbbreviationScope:
+    if value not in _ABBREVIATION_SCOPE_VALUES:
+        raise ConfigurationError(
+            "abbreviation_scope must be one of: " + ", ".join(_ABBREVIATION_SCOPE_VALUES)
+        )
+    return value
+
+
+def _validate_help_option_sort(value: HelpOptionSort) -> HelpOptionSort:
+    if value not in _HELP_OPTION_SORT_VALUES:
+        raise ConfigurationError(
+            "help_option_sort must be one of: " + ", ".join(_HELP_OPTION_SORT_VALUES)
+        )
+    return value
 
 
 class ExitCode(IntEnum):
@@ -70,6 +99,9 @@ class InterfacyParser:
         sys_exit_enabled (bool): Whether to call sys.exit on completion.
         flag_strategy (FlagStrategy | None): Flag naming and style strategy.
         abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
+        abbreviation_max_generated_len (int): Max generated short-flag length.
+        abbreviation_scope (AbbreviationScope): Which option groups receive generated short flags.
+        help_option_sort (HelpOptionSort): Ordering of option rows in help output.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
         include_inherited_methods (bool): Include inherited methods for class commands.
@@ -101,6 +133,9 @@ class InterfacyParser:
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
+        abbreviation_max_generated_len: int = 1,
+        abbreviation_scope: AbbreviationScope = "top_level_options",
+        help_option_sort: HelpOptionSort = "declaration",
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -125,6 +160,11 @@ class InterfacyParser:
         self.include_classmethods = include_classmethods
         self.expand_model_params = expand_model_params
         self.model_expansion_max_depth = model_expansion_max_depth
+        self.abbreviation_max_generated_len = _validate_abbreviation_max_generated_len(
+            abbreviation_max_generated_len
+        )
+        self.abbreviation_scope = _validate_abbreviation_scope(abbreviation_scope)
+        self.help_option_sort = _validate_help_option_sort(help_option_sort)
 
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file
@@ -136,12 +176,15 @@ class InterfacyParser:
         self.silent_interrupt = silent_interrupt
         self.reraise_interrupt = reraise_interrupt
 
-        self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator()
+        self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator(
+            max_generated_len=self.abbreviation_max_generated_len
+        )
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
         self.flag_strategy = flag_strategy or DefaultFlagStrategy()
         self.help_layout = help_layout or InterfacyLayout()
         if help_colors is not None:
             self.help_layout.style = help_colors
+        self.help_layout.help_option_sort = self.help_option_sort
         self.help_colors = self.help_layout.style
         self.help_layout.flag_generator = self.flag_strategy
         self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)

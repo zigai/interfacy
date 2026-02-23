@@ -7,7 +7,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from types import FrameType
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import type_args
@@ -69,6 +69,9 @@ class Argparser(InterfacyParser):
         sys_exit_enabled (bool): Whether to call sys.exit on completion.
         flag_strategy (FlagStrategy | None): Flag naming and style strategy.
         abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
+        abbreviation_max_generated_len (int): Max generated short-flag length.
+        abbreviation_scope (Literal["top_level_options", "all_options"]): Scope for generation.
+        help_option_sort (Literal["declaration", "alphabetical"]): Help option row ordering.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
         include_inherited_methods (bool): Include inherited methods for class commands.
@@ -78,7 +81,6 @@ class Argparser(InterfacyParser):
         reraise_interrupt (bool): Re-raise KeyboardInterrupt after handling.
         expand_model_params (bool): Expand model parameters into nested flags.
         model_expansion_max_depth (int): Max depth for model expansion.
-        use_global_config (bool): Apply config defaults from config file.
         formatter_class (type[argparse.HelpFormatter]): Help formatter class.
     """
 
@@ -100,6 +102,9 @@ class Argparser(InterfacyParser):
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
+        abbreviation_max_generated_len: int = 1,
+        abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
+        help_option_sort: Literal["declaration", "alphabetical"] = "declaration",
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -109,45 +114,8 @@ class Argparser(InterfacyParser):
         reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
-        use_global_config: bool = False,
         formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
     ) -> None:
-        if use_global_config:
-            from interfacy.cli.config import apply_config_defaults, load_config
-
-            overrides = apply_config_defaults(
-                load_config(),
-                {
-                    "flag_strategy": flag_strategy,
-                    "help_layout": help_layout,
-                    "help_colors": help_colors,
-                    "print_result": print_result,
-                    "full_error_traceback": full_error_traceback,
-                    "tab_completion": tab_completion,
-                    "allow_args_from_file": allow_args_from_file,
-                    "include_inherited_methods": include_inherited_methods,
-                    "include_classmethods": include_classmethods,
-                    "silent_interrupt": silent_interrupt,
-                    "abbreviation_gen": abbreviation_gen,
-                    "expand_model_params": expand_model_params,
-                    "model_expansion_max_depth": model_expansion_max_depth,
-                },
-            )
-
-            flag_strategy = overrides["flag_strategy"]
-            help_layout = overrides["help_layout"]
-            help_colors = overrides["help_colors"]
-            print_result = overrides["print_result"]
-            full_error_traceback = overrides["full_error_traceback"]
-            tab_completion = overrides["tab_completion"]
-            allow_args_from_file = overrides["allow_args_from_file"]
-            include_inherited_methods = overrides["include_inherited_methods"]
-            include_classmethods = overrides["include_classmethods"]
-            silent_interrupt = overrides["silent_interrupt"]
-            abbreviation_gen = overrides["abbreviation_gen"]
-            expand_model_params = overrides["expand_model_params"]
-            model_expansion_max_depth = overrides["model_expansion_max_depth"]
-
         super().__init__(
             description,
             epilog,
@@ -158,6 +126,9 @@ class Argparser(InterfacyParser):
             allow_args_from_file=allow_args_from_file,
             flag_strategy=flag_strategy,
             abbreviation_gen=abbreviation_gen,
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
             pipe_targets=pipe_targets,
             tab_completion=tab_completion,
             print_result=print_result,
@@ -487,12 +458,21 @@ class Argparser(InterfacyParser):
     def _command_dest(self, depth: int) -> str:
         return f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
 
+    def _ordered_arguments_for_help(self, arguments: Sequence[Argument]) -> list[Argument]:
+        if not arguments:
+            return []
+
+        positionals = [arg for arg in arguments if arg.kind == ArgumentKind.POSITIONAL]
+        options = [arg for arg in arguments if arg.kind == ArgumentKind.OPTION]
+        ordered_options = self.help_layout.order_option_arguments_for_help(options)
+        return [*positionals, *ordered_options]
+
     def _add_initializer_arguments(self, parser: ArgumentParser, command: Command) -> None:
-        for argument in command.initializer:
+        for argument in self._ordered_arguments_for_help(command.initializer):
             self._add_argument_from_schema(parser, argument)
 
     def _add_parameter_arguments(self, parser: ArgumentParser, command: Command) -> None:
-        for argument in command.parameters:
+        for argument in self._ordered_arguments_for_help(command.parameters):
             self._add_argument_from_schema(parser, argument)
 
     def _create_command_subparsers(

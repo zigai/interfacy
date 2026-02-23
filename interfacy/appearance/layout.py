@@ -89,6 +89,7 @@ class HelpLayout:
         section_heading_style (TextStyle | None): Optional section title style.
         layout_mode (Literal["auto", "adaptive", "template"]): Layout selection mode.
         doc_inline_code_mode (Literal["bold", "strip"]): Inline code rendering mode.
+        help_option_sort (Literal["declaration", "alphabetical"]): Option row ordering mode.
     """
 
     style: InterfacyColors = field(default_factory=InterfacyColors)
@@ -137,6 +138,7 @@ class HelpLayout:
     parser_command_usage_suffix: str = "[OPTIONS] command [ARGS]"
     subcommand_usage_placeholder: str = "{command}"
     description_before_usage: bool = False
+    help_option_sort: Literal["declaration", "alphabetical"] = "declaration"
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
 
@@ -1220,6 +1222,33 @@ class HelpLayout:
 
         values.update(self._build_styled_columns(flag_short, flag_long, flag, is_option))
         return values
+
+    def _option_sort_key(self, arg: "Argument") -> str:
+        longs = [flag for flag in arg.flags if flag.startswith("--")]
+        shorts = [flag for flag in arg.flags if flag.startswith("-") and not flag.startswith("--")]
+
+        if self._arg_is_bool(arg):
+            primary_bool = self.get_primary_boolean_flag_for_argument(arg)
+            if primary_bool.startswith("--"):
+                return primary_bool[2:]
+            if primary_bool.startswith("-"):
+                return primary_bool[1:]
+
+        if longs:
+            return longs[0][2:]
+        if shorts:
+            return shorts[0][1:]
+        return arg.display_name or arg.name
+
+    def order_option_arguments_for_help(self, options: list["Argument"]) -> list["Argument"]:
+        if self.help_option_sort != "alphabetical":
+            return options
+
+        indexed_options = list(enumerate(options))
+        indexed_options.sort(
+            key=lambda item: (self._option_sort_key(item[1]), item[0]),
+        )
+        return [option for _, option in indexed_options]
 
     def format_argument(self, arg: "Argument", indent: int = 2) -> str:
         is_option = self._enum_matches(arg.kind, "OPTION")

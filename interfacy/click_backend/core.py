@@ -6,7 +6,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from types import FrameType
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 try:
     import click
@@ -66,6 +66,9 @@ class ClickParser(InterfacyParser):
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
+        abbreviation_max_generated_len: int = 1,
+        abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
+        help_option_sort: Literal["declaration", "alphabetical"] = "declaration",
         pipe_targets: PipeTargets | dict[str, str] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -86,6 +89,9 @@ class ClickParser(InterfacyParser):
             flag_strategy=flag_strategy,
             tab_completion=tab_completion,
             abbreviation_gen=abbreviation_gen,
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,
             full_error_traceback=full_error_traceback,
@@ -280,7 +286,14 @@ class ClickParser(InterfacyParser):
         suppress_defaults: set[str] = set()
         used_names: set[str] = set()
 
-        for argument in arguments:
+        positionals = [arg for arg in arguments if arg.kind == ArgumentKind.POSITIONAL]
+        options = [arg for arg in arguments if arg.kind == ArgumentKind.OPTION]
+        ordered_arguments = [
+            *positionals,
+            *self.help_layout.order_option_arguments_for_help(options),
+        ]
+
+        for argument in ordered_arguments:
             param, suppress = self._make_click_param(argument, used_names)
             params.append(param)
             if param.name is not None:
