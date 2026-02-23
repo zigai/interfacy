@@ -124,12 +124,19 @@ class SchemaHelpRenderer:
         if not arguments:
             return None
 
+        previous_keep = self.layout.keep_empty_default_slot_for_help
+        self.layout.keep_empty_default_slot_for_help = (
+            self.layout.keep_help_default_slot_for_arguments(arguments)
+        )
         lines = [self._style_section_heading(heading)]
-        for arg in arguments:
-            rendered = self.layout.format_argument(arg)
-            if normalize_help_only and arg.name == "help":
-                rendered = self._normalize_help_only_option_line(rendered)
-            lines.append(self._indent(rendered))
+        try:
+            for arg in arguments:
+                rendered = self.layout.format_argument(arg)
+                if normalize_help_only and arg.name == "help":
+                    rendered = self._normalize_help_only_option_line(rendered)
+                lines.append(self._indent(rendered))
+        finally:
+            self.layout.keep_empty_default_slot_for_help = previous_keep
         return "\n".join(lines)
 
     @staticmethod

@@ -1,13 +1,19 @@
 import argparse
 import os
 import re
+from dataclasses import dataclass, field
 from enum import Enum
 from inspect import Parameter as StdParameter
 from re import Match
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Literal
 
 from objinspect import Class, Function, Method, Parameter
-from stdl.st import TextStyle, ansi_len, colored, with_style
+from stdl.st import (
+    TextStyle,
+    ansi_len,
+    colored,
+    with_style,
+)
 
 from interfacy.naming import CommandNameRegistry, FlagStrategy
 from interfacy.util import (
@@ -21,6 +27,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from interfacy.schema.schema import Argument, Command
 
 
+@dataclass(kw_only=True)
 class InterfacyColors:
     """Base color theme for interfacy."""
 
@@ -39,6 +46,7 @@ class InterfacyColors:
     flag_positional: TextStyle = TextStyle(color="white")
 
 
+@dataclass(kw_only=True)
 class HelpLayout:
     """
     Base class for formatting CLI help output.
@@ -83,7 +91,7 @@ class HelpLayout:
         doc_inline_code_mode (Literal["bold", "strip"]): Inline code rendering mode.
     """
 
-    style: InterfacyColors = InterfacyColors()
+    style: InterfacyColors = field(default_factory=InterfacyColors)
 
     commands_title: str = "commands:"
     prefix_choices: str = "choices: "
@@ -97,8 +105,8 @@ class HelpLayout:
 
     required_indicator_pos: Literal["left", "right"] = "right"
     min_ljust: int = 19
-    command_skips: ClassVar[list[str]] = ["__init__"]
-    flag_generator: FlagStrategy = None  # type: ignore[assignment]
+    command_skips: list[str] = field(default_factory=lambda: ["__init__"])
+    flag_generator: FlagStrategy | None = None
     name_registry: CommandNameRegistry | None = None
 
     format_option: str | None = None
@@ -113,6 +121,7 @@ class HelpLayout:
     default_overflow_mode: Literal["inline", "newline"] = "newline"
     default_label_for_help: str = "default"
     suppress_empty_default_brackets_for_help: bool = False
+    keep_empty_default_slot_for_help: bool = False
     include_metavar_in_flag_display: bool = True
     short_flag_width: int = 6
     long_flag_width: int = 18
@@ -121,9 +130,9 @@ class HelpLayout:
     usage_prefix: str | None = None
     usage_style: TextStyle | None = None
     usage_text_style: TextStyle | None = None
-    section_title_map: ClassVar[dict[str, str] | None] = None
+    section_title_map: dict[str, str] | None = None
     section_heading_style: TextStyle | None = None
-    help_option_description: str = "show this help message and exit"
+    help_option_description: str = "Show this help message and exit"
     compact_options_usage: bool = False
     parser_command_usage_suffix: str = "[OPTIONS] command [ARGS]"
     subcommand_usage_placeholder: str = "{command}"
@@ -282,11 +291,16 @@ class HelpLayout:
     def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:
         return f"{name} ..." if is_varargs else name
 
+    def keep_help_default_slot_for_arguments(self, _arguments: list["Argument"]) -> bool:
+        return self.keep_empty_default_slot_for_help
+
     def _collapse_empty_default_slot(
         self,
         rendered: str,
         template: str,
         default_value: str,
+        *,
+        is_help_option: bool = False,
     ) -> str:
         if not self.suppress_empty_default_brackets_for_help:
             return rendered
@@ -299,6 +313,10 @@ class HelpLayout:
 
         prefix = rendered[: match.start()]
         suffix = rendered[match.end() :]
+        if is_help_option and self.keep_empty_default_slot_for_help:
+            slot_width = match.end() - match.start()
+            return f"{prefix}{' ' * slot_width}{suffix}"
+
         needs_separator = (
             bool(prefix) and bool(suffix) and not prefix[-1].isspace() and not suffix[0].isspace()
         )
@@ -521,6 +539,7 @@ class HelpLayout:
             rendered,
             template,
             values.get("default", ""),
+            is_help_option=values.get("flag_long", "") == "--help",
         )
         return rendered.rstrip()
 
