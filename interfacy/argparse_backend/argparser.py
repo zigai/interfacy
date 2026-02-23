@@ -195,8 +195,11 @@ class Argparser(InterfacyParser):
         name = self.flag_strategy.argument_translator.translate(param.name)
         flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbreviation_gen)
         extra_args = self._extra_add_arg_params(param, flags)
+        add_flags = flags
+        if extra_args.get("action") is argparse.BooleanOptionalAction:
+            add_flags = self._normalize_boolean_optional_flags(flags)
         logger.info("Flags: %s, Extra args: %s", flags, extra_args)
-        return parser.add_argument(*flags, **extra_args)
+        return parser.add_argument(*add_flags, **extra_args)
 
     def parser_from_function(
         self,
@@ -290,10 +293,43 @@ class Argparser(InterfacyParser):
             return False
         return bool(use_template_layout())
 
+    @staticmethod
+    def _escape_argparse_help_text(text: str | None) -> str:
+        if not text or "%" not in text:
+            return text or ""
+        return text.replace("%", "%%")
+
+    @staticmethod
+    def _normalize_boolean_optional_flags(flags: tuple[str, ...]) -> tuple[str, ...]:
+        """
+        Normalize bool option strings for ``BooleanOptionalAction`` compatibility.
+
+        Python 3.14 rejects ``BooleanOptionalAction`` when all long flags already
+        start with ``--no-``. In that case, derive a positive base flag from the
+        first long option (e.g. ``--no-tokens`` -> ``--tokens``) and let argparse
+        generate the negative alias.
+        """
+        long_flags = [flag for flag in flags if flag.startswith("--")]
+        if not long_flags:
+            return flags
+        if any(not flag.startswith("--no-") for flag in long_flags):
+            return flags
+
+        normalized: list[str] = []
+        replaced = False
+        for flag in flags:
+            if not replaced and flag.startswith("--no-") and len(flag) > len("--no-"):
+                normalized.append(f"--{flag[len('--no-') :]}")
+                replaced = True
+            else:
+                normalized.append(flag)
+        return tuple(normalized)
+
     def _parameter_help(self, param: Parameter, flags: tuple[str, ...]) -> str:
         if self._uses_template_layout():
             return self.help_layout.get_help_for_parameter(param, None)
-        return self.help_layout.get_help_for_parameter(param, flags)
+        help_text = self.help_layout.get_help_for_parameter(param, flags)
+        return self._escape_argparse_help_text(help_text)
 
     @staticmethod
     def _resolve_list_annotation(annotation: object | None) -> tuple[object | None, object | None]:
@@ -366,6 +402,7 @@ class Argparser(InterfacyParser):
         help_text = arg.help or ""
         if not self._uses_template_layout():
             help_text = self.help_layout.format_argument(arg)
+            help_text = self._escape_argparse_help_text(help_text)
 
         kwargs: dict[str, Any] = {"help": help_text}
         is_boolean_flag = arg.value_shape == ValueShape.FLAG
@@ -394,8 +431,11 @@ class Argparser(InterfacyParser):
 
     def _add_argument_from_schema(self, parser: ArgumentParser, argument: Argument) -> None:
         kwargs = self._argument_kwargs(argument)
-        logger.info("Adding argument flags=%s, kwargs=%s", argument.flags, kwargs)
-        parser.add_argument(*argument.flags, **kwargs)
+        add_flags = argument.flags
+        if kwargs.get("action") is argparse.BooleanOptionalAction:
+            add_flags = self._normalize_boolean_optional_flags(argument.flags)
+        logger.info("Adding argument flags=%s, kwargs=%s", add_flags, kwargs)
+        parser.add_argument(*add_flags, **kwargs)
 
     @staticmethod
     def _coerce_choices_for_parser(
@@ -486,7 +526,7 @@ class Argparser(InterfacyParser):
         for sub_cmd in command.subcommands.values():
             parser_kwargs: dict[str, Any] = {
                 "description": sub_cmd.description,
-                "help": sub_cmd.description,
+                "help": self._escape_argparse_help_text(sub_cmd.description),
             }
             if include_aliases:
                 parser_kwargs["aliases"] = list(sub_cmd.aliases) if sub_cmd.aliases else []
@@ -574,7 +614,7 @@ class Argparser(InterfacyParser):
                 subparser = subparsers.add_parser(
                     cmd.cli_name,
                     description=cmd.description,
-                    help=cmd.description,
+                    help=self._escape_argparse_help_text(cmd.description),
                     aliases=list(cmd.aliases),
                 )
                 self._apply_command_schema(subparser, cmd)
