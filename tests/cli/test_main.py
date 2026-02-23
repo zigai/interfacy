@@ -120,7 +120,6 @@ def test_main_config_paths_output(
     lines = [line.strip() for line in captured.out.splitlines() if line.strip()]
     assert lines == [
         str(env_path),
-        str(tmp_path / ".interfacy.toml"),
         str(tmp_path / "home" / ".config" / "interfacy" / "config.toml"),
     ]
 
@@ -172,7 +171,7 @@ def test_main_applies_config_to_parser_target(
             ]
         ),
     )
-    config_path = tmp_path / ".interfacy.toml"
+    config_path = tmp_path / "config.toml"
     config_path.write_text(
         "\n".join(
             [
@@ -187,7 +186,7 @@ def test_main_applies_config_to_parser_target(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.syspath_prepend(str(tmp_path))
-    monkeypatch.delenv("INTERFACY_CONFIG", raising=False)
+    monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
 
     result = main([f"{module_name}:parser", "echo", "hi"])
     assert result == ExitCode.SUCCESS
@@ -214,7 +213,7 @@ def test_main_config_print_result_for_function_target(
             ]
         ),
     )
-    config_path = tmp_path / ".interfacy.toml"
+    config_path = tmp_path / "config.toml"
     config_path.write_text(
         "\n".join(
             [
@@ -228,7 +227,7 @@ def test_main_config_print_result_for_function_target(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.syspath_prepend(str(tmp_path))
-    monkeypatch.delenv("INTERFACY_CONFIG", raising=False)
+    monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
 
     with pytest.raises(SystemExit) as excinfo:
         main([f"{module_path}:echo", "hi"])

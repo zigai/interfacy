@@ -95,12 +95,17 @@ class FakeParser:
     metadata: dict[str, Any] | None = None
     expand_model_params: bool = True
     model_expansion_max_depth: int = 3
+    abbreviation_scope: str = "top_level_options"
+    help_option_sort: str = "declaration"
+    abbreviation_max_generated_len: int = 1
 
     def __post_init__(self) -> None:
         self.COMMAND_KEY = self.command_key
         self.RESERVED_FLAGS = list(self.reserved_flags)
         self.flag_strategy = self.flag_strategy or DefaultFlagStrategy(style="required_positional")
-        self.abbreviation_gen = self.abbreviation_gen or DefaultAbbreviationGenerator()
+        self.abbreviation_gen = self.abbreviation_gen or DefaultAbbreviationGenerator(
+            max_generated_len=self.abbreviation_max_generated_len
+        )
         self.help_layout = self.help_layout or RecordingHelpLayout()
         self.help_layout.flag_generator = self.flag_strategy
         self.type_parser = self.type_parser or StubTypeParser()

@@ -52,7 +52,7 @@ def test_command_name_registry_lookups():
 
 def test_abbreviation_generator_logic():
     """Verify DefaultAbbreviationGenerator fallback logic and conflict handling."""
-    gen = DefaultAbbreviationGenerator()
+    gen = DefaultAbbreviationGenerator(max_generated_len=2)
     taken: list[str] = []
 
     # First char: "verbose" -> "v"
@@ -68,8 +68,17 @@ def test_abbreviation_generator_logic():
     assert gen.generate("validate", taken) == "va"
     assert "va" in taken
 
-    # Exhaustion: all fallbacks taken
+    # Exhaustion: all fallbacks up to length 2 are taken
     taken = ["v", "vc", "ve"]
+    assert gen.generate("version_check", taken) is None
+
+
+def test_abbreviation_generator_default_max_len_is_one():
+    """Verify default max generated length allows only one-character abbreviations."""
+    gen = DefaultAbbreviationGenerator()
+    taken: list[str] = []
+
+    assert gen.generate("verbose", taken) == "v"
     assert gen.generate("version_check", taken) is None
 
 
@@ -106,9 +115,9 @@ def test_flag_strategy_boolean_inversion_short_flags():
     param = Function(fn_verbose).params[0]
     flags = strategy.get_arg_flags("verbose", param, taken, gen)
 
-    # Boolean with default=True generates --verbose with short -nv (no-verbose)
+    # Boolean with default=True generates --verbose with one-char short alias.
     assert "--verbose" in flags
-    assert "-nv" in flags
+    assert "-n" in flags
 
 
 def test_flag_strategy_positional_logic():

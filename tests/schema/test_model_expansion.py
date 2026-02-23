@@ -48,6 +48,30 @@ def test_schema_expands_dataclass_fields(builder_parser: FakeParser) -> None:
     assert "--user.age" in flags
 
 
+def test_schema_expanded_fields_use_long_flags_by_default() -> None:
+    parser = FakeParser()
+    parser.register_command(Function(greet), canonical_name="greet")
+    schema = ParserSchemaBuilder(parser).build()
+
+    cmd = schema.commands["greet"]
+    assert all(flags[0].startswith("--") for flags in (arg.flags for arg in cmd.parameters))
+
+
+def test_schema_expanded_fields_can_generate_short_flags_for_all_options_scope() -> None:
+    parser = FakeParser(abbreviation_scope="all_options")
+    parser.register_command(Function(greet), canonical_name="greet")
+    schema = ParserSchemaBuilder(parser).build()
+
+    cmd = schema.commands["greet"]
+    short_flags = [
+        flag
+        for arg in cmd.parameters
+        for flag in arg.flags
+        if flag.startswith("-") and not flag.startswith("--")
+    ]
+    assert short_flags
+
+
 def test_argparse_reconstructs_expanded_dataclass() -> None:
     parser = Argparser(sys_exit_enabled=False)
     result = parser.run(greet, args=["--user.name", "Alice", "--user.age", "30"])

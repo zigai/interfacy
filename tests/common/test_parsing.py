@@ -44,6 +44,17 @@ class TestPowFunctionParsing:
         args = parser.parse_args(["--base", "2", "--exponent", "4"])
         assert args == {"base": 2, "exponent": 4}
 
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_kw_only_abbrev_collision_skips_second_short(self, parser: InterfacyParser):
+        """Verify that short-flag collisions do not fall back to multi-character aliases."""
+
+        def fn_collision(*, value: int = 1, version: int = 2) -> tuple[int, int]:
+            return value, version
+
+        parser.add_command(fn_collision)
+        args = parser.parse_args(["-v", "3", "--version", "4"])
+        assert args == {"value": 3, "version": 4}
+
     # @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     # def test_kw_only_missing_base(self, parser: InterfacyParserCore):
     #     parser.add_command(pow)

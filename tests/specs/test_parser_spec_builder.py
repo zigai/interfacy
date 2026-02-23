@@ -110,7 +110,7 @@ def test_boolean_argument_annotated_with_boolean_behavior(parser: Argparser):
     command = schema.commands["fn-bool-default-true"]
     argument = command.parameters[0]
 
-    assert argument.flags == ("-nv", "--value")
+    assert argument.flags == ("-n", "--value")
     assert argument.value_shape is ValueShape.FLAG
     assert argument.boolean_behavior is not None
     assert argument.boolean_behavior.supports_negative is True
