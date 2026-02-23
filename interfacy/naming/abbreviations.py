@@ -22,8 +22,7 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
     Returns None if it cannot find a short name.
 
     Args:
-        taken (list[str]): List of taken abbreviations.
-        min_len (int, optional): Minimum length of the value to abbreviate. If the value is shorter than this, None will be returned.
+        max_generated_len (int, optional): Maximum generated abbreviation length.
 
     Example:
         >>> AbbreviationGenerator(taken=[]).generate("hello_word")
@@ -37,8 +36,10 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
 
     """
 
-    def __init__(self, min_len: int = 3) -> None:
-        self.min_len = min_len
+    def __init__(self, max_generated_len: int = 1) -> None:
+        if max_generated_len < 1:
+            raise ValueError("max_generated_len must be >= 1")
+        self.max_generated_len = max_generated_len
 
     def generate(self, value: str, taken: list[str]) -> str | None:
         """
@@ -55,24 +56,25 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
             raise ValueError(f"'{value}' is already an abbreviation")
 
         name_split = value.split("_")
-        abbrev = name_split[0][0]
-        if abbrev not in taken and abbrev != value:
-            taken.append(abbrev)
-            return abbrev
+        if not name_split:
+            return None
 
-        short_name = "".join([i[0] for i in name_split])
-        if short_name not in taken and short_name != value:
-            taken.append(short_name)
-            return short_name
-        try:
-            short_name = name_split[0][:2]
-        except IndexError:
-            return None
-        else:
-            if short_name not in taken and short_name != value:
-                taken.append(short_name)
-                return short_name
-            return None
+        candidates = [
+            name_split[0][0],
+            "".join([part[0] for part in name_split if part]),
+            name_split[0][:2],
+        ]
+
+        for candidate in candidates:
+            if (
+                candidate
+                and len(candidate) <= self.max_generated_len
+                and candidate not in taken
+                and candidate != value
+            ):
+                taken.append(candidate)
+                return candidate
+        return None
 
 
 class NoAbbreviations(AbbreviationGenerator):

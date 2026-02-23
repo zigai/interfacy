@@ -75,6 +75,7 @@ class _ArgumentBuildState:
 
 
 OBJINSPECT_CLASS_ERRORS = (AttributeError, TypeError, ValueError)
+_ABBREVIATION_SCOPE_ALL_OPTIONS = "all_options"
 
 
 @dataclass
@@ -724,10 +725,15 @@ class ParserSchemaBuilder:
             display_name = nested_separator.join(translated_path)
             if display_name in taken_flags:
                 raise ReservedFlagError(display_name)
-            taken_flags.append(display_name)
 
             arg_name = nested_separator.join(new_path)
-            flags = (f"--{display_name}",)
+            flags = self._expanded_option_flags(
+                display_name=display_name,
+                annotation=annotation,
+                field_default=field.default,
+                taken_flags=taken_flags,
+            )
+            taken_flags.append(display_name)
 
             is_required = field.required and not (
                 parent_optional or is_optional_model or parent_has_default
@@ -766,6 +772,31 @@ class ParserSchemaBuilder:
             )
 
         return arguments
+
+    def _expanded_option_flags(
+        self,
+        *,
+        display_name: str,
+        annotation: object,
+        field_default: object,
+        taken_flags: list[str],
+    ) -> tuple[str, ...]:
+        long_flag = f"--{display_name}"
+        flags: tuple[str, ...] = (long_flag,)
+        abbreviation_scope = getattr(self.parser, "abbreviation_scope", "top_level_options")
+        if abbreviation_scope != _ABBREVIATION_SCOPE_ALL_OPTIONS:
+            return flags
+
+        abbrev_name = display_name
+        is_bool = annotation is bool
+        if is_bool and field_default is True:
+            abbrev_name = f"no-{display_name}"
+
+        short = self.parser.abbreviation_gen.generate(abbrev_name, taken_flags)
+        if short and short not in (display_name, abbrev_name):
+            return (f"-{short}", long_flag)
+
+        return flags
 
     def _argument_from_spec(
         self,
