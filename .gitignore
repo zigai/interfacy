@@ -132,3 +132,4 @@ dmypy.json
 
 *example*.py
 *ruff_cache*
+.example4_layout_stress_snapshot.json
