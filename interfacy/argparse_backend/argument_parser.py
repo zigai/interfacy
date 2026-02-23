@@ -274,7 +274,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 *help_flags,
                 action="help",
                 default=argparse.SUPPRESS,
-                help=argparse._("show this help message and exit"),
+                help=argparse._("Show this help message and exit"),
             )
         self.register("action", "parsers", NestedSubParsersAction)
 
