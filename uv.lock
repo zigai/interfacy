@@ -199,7 +199,7 @@ wheels = [
 
 [[package]]
 name = "interfacy"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "." }
 dependencies = [
     { name = "objinspect" },
@@ -245,7 +245,7 @@ requires-dist = [
     { name = "coverage", marker = "extra == 'dev'" },
     { name = "coverage", marker = "extra == 'test'" },
     { name = "mypy", marker = "extra == 'dev'" },
-    { name = "objinspect", specifier = ">=0.4.1" },
+    { name = "objinspect", specifier = ">=0.4.2" },
     { name = "pre-commit", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest", marker = "extra == 'test'" },
@@ -324,16 +324,16 @@ wheels = [
 
 [[package]]
 name = "objinspect"
-version = "0.4.1"
+version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "stdl" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c6/2e/a4aca4661f5af2c04cd51b2e52aaec50ea4d42bd4f7b09365b92801f4608/objinspect-0.4.1.tar.gz", hash = "sha256:a153f3f3fed231c1eb9811e4f37f052d93cbeb942079f4e66bc1a40bf2e4b5c5", size = 53028, upload-time = "2026-01-30T18:29:35.791Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/64/21f287b7cbadcf61e85947554292e56d74e7877133b0e274f9faad27c222/objinspect-0.4.2.tar.gz", hash = "sha256:123c237ed6b89d0eec8cc8b394db071ff9fd5f2642558e3e95af0bcd630ae344", size = 54682, upload-time = "2026-02-24T18:05:02.78Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/32/76565b2f75bb7644bc6497f3a44fbc9e97bb59aa04d8a55a2e40e7de14e3/objinspect-0.4.1-py3-none-any.whl", hash = "sha256:1d0b12d2b965bbe740e10f4ac0e886dfcd86888a9d18259941c2ddc2f4e2fafd", size = 18733, upload-time = "2026-01-30T18:29:34.159Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/8b/03357f48dc88771a57c9ed5cd3a3b255d0c21c88be09039bd157b9475ee2/objinspect-0.4.2-py3-none-any.whl", hash = "sha256:83e1166952cec32ced045e3f1017b6e28e3e286891487357bf1121ca71b7b1bc", size = 19891, upload-time = "2026-02-24T18:05:01.204Z" },
 ]
 
 [[package]]
