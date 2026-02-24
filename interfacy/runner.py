@@ -1,4 +1,6 @@
+import asyncio
 import inspect
+import threading
 from dataclasses import asdict, fields, is_dataclass
 from types import NoneType
 from typing import TYPE_CHECKING, Any, cast
@@ -58,6 +60,35 @@ class SchemaRunner:
                 return self._run_with_chain(command, group_args, depth=0)
             return self.run_command(command, self.namespace)
         return self.run_multiple(commands)
+
+    def _run_awaitable(self, awaitable: object) -> object:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(cast(Any, awaitable))
+
+        result: object | None = None
+        error: BaseException | None = None
+
+        def _runner() -> None:
+            nonlocal result, error
+            try:
+                result = asyncio.run(cast(Any, awaitable))
+            except BaseException as exc:  # noqa: BLE001 - propagate user/runtime errors
+                error = exc
+
+        thread = threading.Thread(target=_runner)
+        thread.start()
+        thread.join()
+
+        if error is not None:
+            raise error
+        return result
+
+    def _resolve_result(self, value: object) -> object:
+        if not inspect.isawaitable(value):
+            return value
+        return self._run_awaitable(value)
 
     def _apply_pipe(
         self,
@@ -122,7 +153,8 @@ class SchemaRunner:
             positional_args,
             keyword_args,
         )
-        result = func.call(*positional_args, **keyword_args)
+        result = func.call_async(*positional_args, **keyword_args)
+        result = self._resolve_result(result)
 
         logger.info("Result: %s", result)
         return result
@@ -139,7 +171,8 @@ class SchemaRunner:
         instance = method.class_instance
         if instance:
             method_args, method_kwargs = self._build_call_args(method, cli_args)
-            return method.call(*method_args, **method_kwargs)
+            result = method.call_async(*method_args, **method_kwargs)
+            return self._resolve_result(result)
 
         instance = Class(method.cls)
         if instance.init_method:
@@ -159,7 +192,8 @@ class SchemaRunner:
             method_args,
             method_kwargs,
         )
-        return instance.call_method(method.name, *method_args, **method_kwargs)
+        result = instance.call_method_async(method.name, *method_args, **method_kwargs)
+        return self._resolve_result(result)
 
     def run_class(self, command: Command, args: dict[str, Any]) -> object:
         """
@@ -211,7 +245,8 @@ class SchemaRunner:
             method_args,
             method_kwargs,
         )
-        return runtime_cls.call_method(method.name, *method_args, **method_kwargs)
+        result = runtime_cls.call_method_async(method.name, *method_args, **method_kwargs)
+        return self._resolve_result(result)
 
     def run_multiple(
         self,
@@ -388,7 +423,8 @@ class SchemaRunner:
                     method_args,
                     method_kwargs,
                 )
-                return obj.func(instance, *method_args, **method_kwargs)
+                result = obj.call_async(instance, *method_args, **method_kwargs)
+                return self._resolve_result(result)
             args = self._apply_pipe(command, args)
             args = self._reconstruct_expanded_models(
                 args, [*self._initializer_for(command), *self._arguments_for(command)]
