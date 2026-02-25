@@ -1,7 +1,7 @@
 
 [project]
 name = "interfacy"
-version = "0.4.1"
+version = "0.4.2"
 description = "CLI framework for building command-line interfaces from Python functions, classes, and class instances"
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
     "stdl>=0.7.0",
     "objinspect>=0.4.2",
-    "strto>=0.2.6",
+    "strto>=0.2.7",
     "tomlkit>=0.12",
     "tomli>=2.0; python_version < '3.11'",
 ]
@@ -190,31 +190,13 @@ ignore = [
 exclude = ["build"]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = [
-    "F401", # Unused import
-    "E402", # Module import not at top of file
-]
-"interfacy/argparse_backend/argument_parser.py" = [
-    "C901", # argparse-derived internals with targeted patches
-]
-"interfacy/argparse_backend/help_formatter.py" = [
-    "C901", # argparse-derived internals with targeted patches
-]
-"interfacy/appearance/layout.py" = [
-    "RUF009", # stdl.TextStyle is immutable (frozen dataclass); direct defaults are intentional
-]
-"interfacy/appearance/colors.py" = [
-    "RUF009", # stdl.TextStyle is immutable (frozen dataclass); direct defaults are intentional
-]
-"interfacy/appearance/layouts.py" = [
-    "RUF009", # stdl.TextStyle is immutable (frozen dataclass); direct defaults are intentional
-]
-"tests/conftest.py" = [
-    "UP006", # intentional legacy typing.List/Dict coverage
-    "UP007", # intentional legacy typing.Union coverage
-    "UP035", # intentional imports from typing for legacy coverage
-    "UP045", # intentional Optional[T] legacy coverage
-]
+"__init__.py" = ["F401", "E402"]
+"interfacy/argparse_backend/argument_parser.py" = ["C901"]
+"interfacy/argparse_backend/help_formatter.py" = ["C901"]
+"interfacy/appearance/layout.py" = ["RUF009"]
+"interfacy/appearance/colors.py" = ["RUF009"]
+"interfacy/appearance/layouts.py" = ["RUF009"]
+"tests/conftest.py" = ["UP006", "UP007", "UP035", "UP045"]
 "**/tests/**/*.py" = [
     "S104",
     "S105",

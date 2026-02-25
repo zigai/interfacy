@@ -199,7 +199,7 @@ wheels = [
 
 [[package]]
 name = "interfacy"
-version = "0.4.1"
+version = "0.4.2"
 source = { editable = "." }
 dependencies = [
     { name = "objinspect" },
@@ -253,7 +253,7 @@ requires-dist = [
     { name = "pytest-mock", marker = "extra == 'test'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "stdl", specifier = ">=0.7.0" },
-    { name = "strto", specifier = ">=0.2.6" },
+    { name = "strto", specifier = ">=0.2.7" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "tomlkit", specifier = ">=0.12" },
 ]
@@ -534,15 +534,15 @@ wheels = [
 
 [[package]]
 name = "strto"
-version = "0.2.6"
+version = "0.2.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "objinspect" },
     { name = "stdl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e6/19/9cd3f9a2c3b772ec4a14ffa5c846faeced0d6595bc27018c71010f8bdd37/strto-0.2.6.tar.gz", hash = "sha256:7d2b8614266a0ce43b69d85c8b23c9b36b00ee397bc3a2c8151dd7043dd99b75", size = 73574, upload-time = "2026-01-30T18:38:51.849Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/4e/688fa874ac972587665f28def43aec66648c7ca1d0feaddaa52265642c62/strto-0.2.7.tar.gz", hash = "sha256:7ab5e632721350128ab0c50cd599de839694eabb4196af256ac7ea9f4f35aa4b", size = 74717, upload-time = "2026-02-25T12:06:50.298Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dc/e2/92b68da3641dd86ba6a74df1b8700d49647ec0874a15dc65b84f7affeea6/strto-0.2.6-py3-none-any.whl", hash = "sha256:c878e634c34cdbf7f43d6e573ed40910b304ec32c026ecfafc9c766cf2e035ea", size = 14434, upload-time = "2026-01-30T18:38:50.954Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/1a/cc3e85c726d94b641d1a65cb143eca8c194507d5cd387ea9fbdd44870b72/strto-0.2.7-py3-none-any.whl", hash = "sha256:cf314a121ef0dc1c0f8ebb5cbd7665f67fdf62f0613cd7a0b7eb743d55b7cc9d", size = 15093, upload-time = "2026-02-25T12:06:48.574Z" },
 ]
 
 [[package]]
