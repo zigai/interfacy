@@ -4,6 +4,7 @@ import argparse
 import signal
 import sys
 import time
+import warnings
 from collections.abc import Callable, Sequence
 from types import FrameType
 from typing import Any, ClassVar, Literal
@@ -109,10 +110,13 @@ class ClickParser(InterfacyParser):
         return f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
 
     def _remaining_args(self, ctx: click.Context) -> list[str]:
-        protected = getattr(ctx, "_protected_args", None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            protected = list(getattr(ctx, "protected_args", []))
+        args = list(ctx.args)
         if protected:
-            return [*protected, *ctx.args]
-        return list(ctx.args)
+            return [*protected, *args]
+        return args
 
     def _choice_type(self, argument: Argument) -> click.ParamType | None:
         if not argument.choices:
@@ -406,6 +410,10 @@ class ClickParser(InterfacyParser):
         if self.enable_tab_completion:
             self.install_tab_completion(root)
         return root
+
+    def get_last_schema(self) -> ParserSchema | None:
+        """Return the most recently built parser schema for this backend."""
+        return self._last_schema
 
     def _params_to_schema(
         self,

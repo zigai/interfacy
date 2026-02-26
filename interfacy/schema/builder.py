@@ -3,16 +3,17 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields, is_dataclass
+from dataclasses import field as dataclass_field
 from inspect import Parameter as InspectParameter
 from inspect import _ParameterKind
-from types import NoneType
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter, inspect
-from objinspect.typing import is_union_type, type_args
+from objinspect.typing import type_args
 
 from interfacy.exceptions import InvalidCommandError, ReservedFlagError
 from interfacy.pipe import PipeTargets
+from interfacy.schema.model_argument_mapper import ModelArgumentMapper
 from interfacy.schema.schema import (
     MODEL_DEFAULT_UNSET,
     Argument,
@@ -88,6 +89,9 @@ class ParserSchemaBuilder:
     """
 
     parser: InterfacyParser
+    model_argument_mapper: ModelArgumentMapper = dataclass_field(
+        default_factory=ModelArgumentMapper
+    )
 
     def build(self) -> ParserSchema:
         """Build a ParserSchema for all registered commands."""
@@ -402,7 +406,7 @@ class ParserSchemaBuilder:
                 annotation = builtin_map[base_name]
 
         if param.is_typed:
-            model_type, is_optional_model = self._unwrap_optional(annotation)
+            model_type, is_optional_model = self.model_argument_mapper.unwrap_optional(annotation)
             if self._should_expand_model(model_type):
                 return self._expand_model_parameter(
                     param=param,
@@ -450,56 +454,11 @@ class ParserSchemaBuilder:
     def _nested_separator(self) -> str:
         return getattr(self.parser.flag_strategy, "nested_separator", ".")
 
-    def _unwrap_optional(self, annotation: object) -> tuple[object, bool]:
-        if not is_union_type(annotation):
-            return annotation, False
-        union_args = type_args(annotation)
-        if NoneType not in union_args or len(union_args) != 2:
-            return annotation, False
-        inner = next(arg for arg in union_args if arg is not NoneType)
-        return inner, True
-
-    def _is_pydantic_model(self, typ: object) -> bool:
-        return isinstance(typ, type) and (
-            hasattr(typ, "model_fields") or hasattr(typ, "__fields__")
-        )
-
-    def _is_plain_class_model(self, typ: object) -> bool:
-        if not isinstance(typ, type):
-            return False
-        if typ in {str, int, float, bool, bytes, list, dict, tuple, set}:
-            return False
-        try:
-            cls_info = Class(
-                typ,
-                init=True,
-                public=True,
-                inherited=True,
-                static_methods=True,
-                protected=False,
-                private=False,
-                classmethod=True,
-            )
-        except OBJINSPECT_CLASS_ERRORS:
-            return False
-        init_method = cls_info.init_method
-        if init_method is None:
-            return False
-        params = [
-            p
-            for p in init_method.params
-            if p.kind not in (InspectParameter.VAR_POSITIONAL, InspectParameter.VAR_KEYWORD)
-        ]
-        return len(params) > 0
-
     def _should_expand_model(self, param_type: object) -> bool:
-        if not getattr(self.parser, "expand_model_params", True):
-            return False
-        if not isinstance(param_type, type):
-            return False
-        if is_dataclass(param_type) or self._is_pydantic_model(param_type):
-            return True
-        return self._is_plain_class_model(param_type)
+        return self.model_argument_mapper.should_expand_model(
+            param_type,
+            expand_model_params=getattr(self.parser, "expand_model_params", True),
+        )
 
     def _get_model_fields(self, model_type: type) -> list[_ModelFieldSpec]:
         if is_dataclass(model_type):
@@ -508,7 +467,7 @@ class ParserSchemaBuilder:
             return self._get_pydantic_v2_model_fields(model_type)
         if hasattr(model_type, "__fields__"):
             return self._get_pydantic_v1_model_fields(model_type)
-        if self._is_plain_class_model(model_type):
+        if self.model_argument_mapper.is_plain_class_model(model_type):
             return self._get_plain_class_model_fields(model_type)
         return []
 
@@ -699,7 +658,7 @@ class ParserSchemaBuilder:
                 if base_name in builtin_map:
                     annotation = builtin_map[base_name]
 
-            inner_type, is_optional_model = self._unwrap_optional(annotation)
+            inner_type, is_optional_model = self.model_argument_mapper.unwrap_optional(annotation)
             new_path = (*path, field.name)
 
             if self._should_expand_model(inner_type) and depth < max_depth:

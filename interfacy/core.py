@@ -682,5 +682,14 @@ class InterfacyParser:
         builder = ParserSchemaBuilder(self)
         return builder.build()
 
+    def get_last_schema(self) -> "ParserSchema | None":
+        """
+        Return the most recently built parser schema, if available.
+
+        Backends can override this to expose cached schema state to shared runtime
+        components without relying on private attributes.
+        """
+        return None
+
 
 __all__ = ["ExitCode", "InterfacyParser"]

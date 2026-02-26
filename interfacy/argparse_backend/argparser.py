@@ -653,6 +653,10 @@ class Argparser(InterfacyParser):
             self.install_tab_completion(parser)
         return parser
 
+    def get_last_schema(self) -> ParserSchema | None:
+        """Return the most recently built parser schema for this backend."""
+        return self._last_schema
+
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
         """
         Parse CLI args into a nested dict keyed by command name.

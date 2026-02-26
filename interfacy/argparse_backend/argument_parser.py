@@ -538,7 +538,6 @@ class ArgumentParser(argparse.ArgumentParser):
             result = parse_func(arg_string)
 
         except argparse.ArgumentTypeError as exc:
-            getattr(action.type, "__name__", repr(action.type))
             msg = str(sys.exc_info()[1])
             raise argparse.ArgumentError(action, msg) from exc
 
