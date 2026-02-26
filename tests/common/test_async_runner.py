@@ -1,3 +1,4 @@
+import asyncio
 import inspect as pyinspect
 import warnings
 
@@ -18,6 +19,17 @@ class AsyncMath:
 class AsyncOps:
     async def triple(self, value: int) -> int:
         return value * 3
+
+
+class SyncLoopMath:
+    def __init__(self, prefix: str = "math") -> None:
+        self.prefix = prefix
+
+    def pow(self, base: int, exponent: int = 2) -> str:
+        async def _pow() -> str:
+            return f"{self.prefix}:{base**exponent}"
+
+        return asyncio.run(_pow())
 
 
 def _assert_not_awaitable(result: object) -> None:
@@ -77,6 +89,50 @@ class TestAsyncExecution:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             result = parser.run(args=["workspace", "amath", "pow", "2", "-e", "3"])
+
+        assert result == "math:8"
+        _assert_not_awaitable(result)
+        _assert_no_unawaited_runtime_warning(caught)
+
+
+class TestSyncExecution:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_sync_function_can_call_asyncio_run(self, parser: InterfacyParser) -> None:
+        def bootstrap(name: str) -> str:
+            async def _bootstrap() -> str:
+                return f"Hello, {name}!"
+
+            return asyncio.run(_bootstrap())
+
+        parser.add_command(bootstrap)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = parser.run(args=["Ada"])
+
+        assert result == "Hello, Ada!"
+        _assert_not_awaitable(result)
+        _assert_no_unawaited_runtime_warning(caught)
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_sync_class_subcommand_can_call_asyncio_run(self, parser: InterfacyParser) -> None:
+        parser.add_command(SyncLoopMath)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = parser.run(args=["pow", "2", "-e", "3"])
+
+        assert result == "math:8"
+        _assert_not_awaitable(result)
+        _assert_no_unawaited_runtime_warning(caught)
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_sync_group_chain_leaf_can_call_asyncio_run(self, parser: InterfacyParser) -> None:
+        workspace = CommandGroup("workspace")
+        workspace.add_command(SyncLoopMath, name="smath")
+        parser.add_command(workspace)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = parser.run(args=["workspace", "smath", "pow", "2", "-e", "3"])
 
         assert result == "math:8"
         _assert_not_awaitable(result)
