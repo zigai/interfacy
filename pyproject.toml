@@ -1,7 +1,7 @@
 
 [project]
 name = "interfacy"
-version = "0.4.3"
+version = "0.4.4"
 description = "CLI framework for building command-line interfaces from Python functions, classes, and class instances"
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
