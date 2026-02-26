@@ -150,7 +150,7 @@ class SchemaRunner:
             positional_args,
             keyword_args,
         )
-        result = func.call_async(*positional_args, **keyword_args)
+        result = func.call(*positional_args, **keyword_args)
         result = self._resolve_result(result)
 
         logger.info("Result: %s", result)
@@ -168,7 +168,7 @@ class SchemaRunner:
         instance = method.class_instance
         if instance:
             method_args, method_kwargs = self._build_call_args(method, cli_args)
-            result = method.call_async(*method_args, **method_kwargs)
+            result = method.call(*method_args, **method_kwargs)
             return self._resolve_result(result)
 
         instance = Class(method.cls)
@@ -189,7 +189,7 @@ class SchemaRunner:
             method_args,
             method_kwargs,
         )
-        result = instance.call_method_async(method.name, *method_args, **method_kwargs)
+        result = instance.call_method(method.name, *method_args, **method_kwargs)
         return self._resolve_result(result)
 
     def run_class(self, command: Command, args: dict[str, Any]) -> object:
@@ -242,7 +242,7 @@ class SchemaRunner:
             method_args,
             method_kwargs,
         )
-        result = runtime_cls.call_method_async(method.name, *method_args, **method_kwargs)
+        result = runtime_cls.call_method(method.name, *method_args, **method_kwargs)
         return self._resolve_result(result)
 
     def run_multiple(
@@ -420,7 +420,7 @@ class SchemaRunner:
                     method_args,
                     method_kwargs,
                 )
-                result = obj.call_async(instance, *method_args, **method_kwargs)
+                result = obj.call(instance, *method_args, **method_kwargs)
                 return self._resolve_result(result)
             args = self._apply_pipe(command, args)
             args = self._reconstruct_expanded_models(
