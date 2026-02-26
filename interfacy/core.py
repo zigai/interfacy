@@ -16,6 +16,12 @@ from interfacy.exceptions import (
     DuplicateCommandError,
     InvalidCommandError,
 )
+from interfacy.help_option_sort import (
+    DEFAULT_HELP_OPTION_SORT_RULES,
+    HelpOptionSortRule,
+    default_help_option_sort_rules,
+    resolve_help_option_sort_rules,
+)
 from interfacy.logger import get_logger
 from interfacy.naming import (
     AbbreviationGenerator,
@@ -36,12 +42,11 @@ if TYPE_CHECKING:
 COMMAND_KEY: Final[str] = "command"
 PIPE_UNSET: Final[object] = object()
 AbbreviationScope = Literal["top_level_options", "all_options"]
-HelpOptionSort = Literal["declaration", "alphabetical"]
+HelpOptionSort = list[HelpOptionSortRule] | None
 _ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
     "top_level_options",
     "all_options",
 )
-_HELP_OPTION_SORT_VALUES: tuple[HelpOptionSort, ...] = ("declaration", "alphabetical")
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -62,12 +67,8 @@ def _validate_abbreviation_scope(value: AbbreviationScope) -> AbbreviationScope:
     return value
 
 
-def _validate_help_option_sort(value: HelpOptionSort) -> HelpOptionSort:
-    if value not in _HELP_OPTION_SORT_VALUES:
-        raise ConfigurationError(
-            "help_option_sort must be one of: " + ", ".join(_HELP_OPTION_SORT_VALUES)
-        )
-    return value
+def _validate_help_option_sort(value: object) -> HelpOptionSort:
+    return resolve_help_option_sort_rules(value, value_name="help_option_sort")
 
 
 class ExitCode(IntEnum):
@@ -101,7 +102,8 @@ class InterfacyParser:
         abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
         abbreviation_max_generated_len (int): Max generated short-flag length.
         abbreviation_scope (AbbreviationScope): Which option groups receive generated short flags.
-        help_option_sort (HelpOptionSort): Ordering of option rows in help output.
+        help_option_sort (list[HelpOptionSortRule] | None): Rules for option row ordering in
+            help output. When unset, layout defaults are used, then global defaults.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
         include_inherited_methods (bool): Include inherited methods for class commands.
@@ -135,7 +137,7 @@ class InterfacyParser:
         abbreviation_gen: AbbreviationGenerator | None = None,
         abbreviation_max_generated_len: int = 1,
         abbreviation_scope: AbbreviationScope = "top_level_options",
-        help_option_sort: HelpOptionSort = "declaration",
+        help_option_sort: list[HelpOptionSortRule] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -165,6 +167,7 @@ class InterfacyParser:
         )
         self.abbreviation_scope = _validate_abbreviation_scope(abbreviation_scope)
         self.help_option_sort = _validate_help_option_sort(help_option_sort)
+        self.help_option_sort_effective = default_help_option_sort_rules()
 
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file
@@ -184,13 +187,50 @@ class InterfacyParser:
         self.help_layout = help_layout or InterfacyLayout()
         if help_colors is not None:
             self.help_layout.style = help_colors
-        self.help_layout.help_option_sort = self.help_option_sort
+        self._refresh_help_option_sort_rules()
         self.help_colors = self.help_layout.style
         self.help_layout.flag_generator = self.flag_strategy
         self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
         self.help_layout.name_registry = self.name_registry
 
         self.commands: dict[str, Command] = {}
+
+    def _resolve_help_option_sort_from_layout(
+        self,
+        help_layout: HelpLayout,
+    ) -> list[HelpOptionSortRule]:
+        user_rules = _validate_help_option_sort(self.help_option_sort)
+        if user_rules:
+            return list(user_rules)
+
+        layout_rules = resolve_help_option_sort_rules(
+            getattr(help_layout, "help_option_sort_default", None),
+            value_name=f"{help_layout.__class__.__name__}.help_option_sort_default",
+        )
+        if layout_rules:
+            return list(layout_rules)
+
+        return list(DEFAULT_HELP_OPTION_SORT_RULES)
+
+    def _refresh_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
+        """Resolve and apply effective help option sort rules to the active layout."""
+        if self.help_layout is None:
+            self.help_option_sort_effective = list(DEFAULT_HELP_OPTION_SORT_RULES)
+            return list(self.help_option_sort_effective)
+
+        effective_rules = self._resolve_help_option_sort_from_layout(self.help_layout)
+        self.help_option_sort_effective = list(effective_rules)
+        self.help_layout.help_option_sort_rules = list(effective_rules)
+        return list(effective_rules)
+
+    def refresh_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
+        """
+        Public hook to recompute help option sort rules after runtime settings changes.
+
+        Returns:
+            list[HelpOptionSortRule]: Effective rules applied to the current layout.
+        """
+        return self._refresh_help_option_sort_rules()
 
     def add_command(
         self,

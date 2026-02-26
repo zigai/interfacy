@@ -257,8 +257,7 @@ def _apply_settings_to_parser(parser: InterfacyParser, settings: dict[str, Any])
         )
 
     _apply_layout_settings(parser, settings)
-    if settings.get("help_option_sort") is not None and parser.help_layout is not None:
-        parser.help_layout.help_option_sort = parser.help_option_sort
+    parser.refresh_help_option_sort_rules()
 
 
 def main(argv: Sequence[str] | None = None) -> ExitCode:

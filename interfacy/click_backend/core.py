@@ -39,6 +39,7 @@ from interfacy.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
+from interfacy.help_option_sort import HelpOptionSortRule
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
@@ -69,7 +70,7 @@ class ClickParser(InterfacyParser):
         abbreviation_gen: AbbreviationGenerator | None = None,
         abbreviation_max_generated_len: int = 1,
         abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
-        help_option_sort: Literal["declaration", "alphabetical"] = "declaration",
+        help_option_sort: list[HelpOptionSortRule] | None = None,
         pipe_targets: PipeTargets | dict[str, str] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,

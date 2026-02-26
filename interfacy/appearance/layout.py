@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from inspect import Parameter as StdParameter
@@ -15,6 +16,11 @@ from stdl.st import (
     with_style,
 )
 
+from interfacy.help_option_sort import (
+    DEFAULT_HELP_OPTION_SORT_RULES,
+    HelpOptionSortRule,
+    resolve_help_option_sort_rules,
+)
 from interfacy.naming import CommandNameRegistry, FlagStrategy
 from interfacy.util import (
     format_default_for_help,
@@ -87,9 +93,11 @@ class HelpLayout:
         usage_text_style (TextStyle | None): Optional style for usage text.
         section_title_map (dict[str, str] | None): Optional section title mapping.
         section_heading_style (TextStyle | None): Optional section title style.
+        help_option_sort_default (list[HelpOptionSortRule] | None): Optional layout-level
+            default sorting rules.
+        help_option_sort_rules (list[HelpOptionSortRule]): Active sorting rules.
         layout_mode (Literal["auto", "adaptive", "template"]): Layout selection mode.
         doc_inline_code_mode (Literal["bold", "strip"]): Inline code rendering mode.
-        help_option_sort (Literal["declaration", "alphabetical"]): Option row ordering mode.
     """
 
     style: InterfacyColors = field(default_factory=InterfacyColors)
@@ -138,7 +146,10 @@ class HelpLayout:
     parser_command_usage_suffix: str = "[OPTIONS] command [ARGS]"
     subcommand_usage_placeholder: str = "{command}"
     description_before_usage: bool = False
-    help_option_sort: Literal["declaration", "alphabetical"] = "declaration"
+    help_option_sort_default: list[HelpOptionSortRule] | None = None
+    help_option_sort_rules: list[HelpOptionSortRule] = field(
+        default_factory=lambda: list(DEFAULT_HELP_OPTION_SORT_RULES)
+    )
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
 
@@ -1230,23 +1241,77 @@ class HelpLayout:
         if self._arg_is_bool(arg):
             primary_bool = self.get_primary_boolean_flag_for_argument(arg)
             if primary_bool.startswith("--"):
-                return primary_bool[2:]
+                return primary_bool[2:].lower()
             if primary_bool.startswith("-"):
-                return primary_bool[1:]
+                return primary_bool[1:].lower()
 
         if longs:
-            return longs[0][2:]
+            return longs[0][2:].lower()
         if shorts:
-            return shorts[0][1:]
-        return arg.display_name or arg.name
+            return shorts[0][1:].lower()
+        return (arg.display_name or arg.name).lower()
+
+    @staticmethod
+    def _option_has_short_flag(arg: "Argument") -> bool:
+        return any(flag.startswith("-") and not flag.startswith("--") for flag in arg.flags)
+
+    def _option_requires_value(self, arg: "Argument") -> bool:
+        return not self._arg_is_bool(arg)
+
+    def _option_name_length(self, arg: "Argument") -> int:
+        return len(self._option_sort_key(arg))
+
+    @staticmethod
+    def _option_alias_count(arg: "Argument") -> int:
+        return len(arg.flags)
+
+    def _resolve_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
+        active_rules = resolve_help_option_sort_rules(
+            self.help_option_sort_rules,
+            value_name=f"{self.__class__.__name__}.help_option_sort_rules",
+            allow_none=False,
+        )
+        if active_rules:
+            return list(active_rules)
+
+        layout_default_rules = resolve_help_option_sort_rules(
+            self.help_option_sort_default,
+            value_name=f"{self.__class__.__name__}.help_option_sort_default",
+        )
+        if layout_default_rules:
+            return list(layout_default_rules)
+
+        return list(DEFAULT_HELP_OPTION_SORT_RULES)
+
+    def _option_rule_extractors(
+        self,
+    ) -> dict[HelpOptionSortRule, Callable[["Argument"], str | int]]:
+        return {
+            "required_first": lambda arg: 0 if arg.required else 1,
+            "short_first": lambda arg: 0 if self._option_has_short_flag(arg) else 1,
+            "value_first": lambda arg: 0 if self._option_requires_value(arg) else 1,
+            "bool_last": lambda arg: 1 if self._arg_is_bool(arg) else 0,
+            "no_default_first": lambda arg: 0 if not self._arg_has_default(arg) else 1,
+            "choices_first": lambda arg: 0 if bool(arg.choices) else 1,
+            "name_length": self._option_name_length,
+            # More aliases should be displayed earlier.
+            "alias_count": lambda arg: -self._option_alias_count(arg),
+            "alphabetical": self._option_sort_key,
+        }
 
     def order_option_arguments_for_help(self, options: list["Argument"]) -> list["Argument"]:
-        if self.help_option_sort != "alphabetical":
+        rules = self._resolve_help_option_sort_rules()
+        if not rules:
             return options
 
+        extractors = self._option_rule_extractors()
+        rule_extractors = [extractors[rule] for rule in rules]
         indexed_options = list(enumerate(options))
         indexed_options.sort(
-            key=lambda item: (self._option_sort_key(item[1]), item[0]),
+            key=lambda item: (
+                tuple(extractor(item[1]) for extractor in rule_extractors),
+                item[0],
+            ),
         )
         return [option for _, option in indexed_options]
 

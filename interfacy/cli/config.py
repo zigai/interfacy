@@ -20,6 +20,10 @@ from interfacy.appearance.layouts import (
     Modern,
 )
 from interfacy.exceptions import ConfigurationError
+from interfacy.help_option_sort import (
+    HelpOptionSortRule,
+    resolve_help_option_sort_rules,
+)
 from interfacy.naming.abbreviations import DefaultAbbreviationGenerator, NoAbbreviations
 from interfacy.naming.flag_strategy import (
     DefaultFlagStrategy,
@@ -43,7 +47,7 @@ class InterfacyConfig:
         abbreviation_gen (str | None): Abbreviation generator name or import path.
         abbreviation_max_generated_len (int | None): Max generated abbreviation length.
         abbreviation_scope (str | None): Where generated abbreviations are allowed.
-        help_option_sort (str | None): Option row ordering in help output.
+        help_option_sort (list[str] | None): Option row ordering rules in help output.
         print_result (bool | None): Whether to print command results.
         full_error_traceback (bool | None): Whether to show full tracebacks.
         tab_completion (bool | None): Whether to enable tab completion.
@@ -61,7 +65,7 @@ class InterfacyConfig:
     abbreviation_gen: str | None = None
     abbreviation_max_generated_len: int | None = None
     abbreviation_scope: str | None = None
-    help_option_sort: str | None = None
+    help_option_sort: list[str] | None = None
     print_result: bool | None = None
     full_error_traceback: bool | None = None
     tab_completion: bool | None = None
@@ -305,20 +309,8 @@ def _resolve_abbreviation_scope(value: object) -> str | None:
     return resolved
 
 
-def _resolve_help_option_sort(value: object) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ConfigurationError("help_option_sort must be a string")
-    key = _normalize_name(value)
-    lookup = {
-        "declaration": "declaration",
-        "alphabetical": "alphabetical",
-    }
-    resolved = lookup.get(key)
-    if resolved is None:
-        raise ConfigurationError("help_option_sort must be one of: declaration, alphabetical")
-    return resolved
+def _resolve_help_option_sort(value: object) -> list[HelpOptionSortRule] | None:
+    return resolve_help_option_sort_rules(value, value_name="help_option_sort")
 
 
 def _to_config_dict(config: InterfacyConfig | dict[str, Any]) -> dict[str, Any]:
