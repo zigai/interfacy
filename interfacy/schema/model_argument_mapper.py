@@ -18,6 +18,12 @@ class ModelArgumentMapper:
     """Shared model flattening/reconstruction helpers for schema builder and runner."""
 
     def unwrap_optional(self, annotation: object) -> tuple[object, bool]:
+        """
+        Strip `None` from a simple optional union annotation.
+
+        Args:
+            annotation (object): Raw annotation object or type alias.
+        """
         annotation = resolve_type_alias(annotation)
         if not is_union_type(annotation):
             return annotation, False
@@ -29,11 +35,23 @@ class ModelArgumentMapper:
 
     @staticmethod
     def is_pydantic_model(typ: object) -> bool:
+        """
+        Return whether a type looks like a Pydantic model.
+
+        Args:
+            typ (object): Candidate type object.
+        """
         return isinstance(typ, type) and (
             hasattr(typ, "model_fields") or hasattr(typ, "__fields__")
         )
 
     def is_plain_class_model(self, annotation: object) -> bool:
+        """
+        Return whether a regular class should be treated as a model type.
+
+        Args:
+            annotation (object): Candidate annotation object.
+        """
         if not isinstance(annotation, type):
             return False
         if annotation in {str, int, float, bool, bytes, list, dict, tuple, set}:
@@ -62,6 +80,12 @@ class ModelArgumentMapper:
         return len(params) > 0
 
     def is_model_type(self, annotation: object) -> bool:
+        """
+        Return whether an annotation is supported for model expansion.
+
+        Args:
+            annotation (object): Candidate annotation object.
+        """
         if not isinstance(annotation, type):
             return False
         if (
@@ -73,6 +97,13 @@ class ModelArgumentMapper:
         return self.is_plain_class_model(annotation)
 
     def should_expand_model(self, param_type: object, *, expand_model_params: bool = True) -> bool:
+        """
+        Return whether a parameter type should be flattened into CLI arguments.
+
+        Args:
+            param_type (object): Parameter annotation to evaluate.
+            expand_model_params (bool): Global switch enabling model expansion.
+        """
         if not expand_model_params:
             return False
         if not isinstance(param_type, type):
@@ -86,6 +117,13 @@ class ModelArgumentMapper:
         args: dict[str, Any],
         arguments: list[Argument],
     ) -> dict[str, Any]:
+        """
+        Rebuild expanded model parameters from flattened argument values.
+
+        Args:
+            args (dict[str, Any]): Parsed command arguments to mutate and normalize.
+            arguments (list[Argument]): Command argument schemas with expansion metadata.
+        """
         grouped = self._group_expanded_arguments(arguments)
         if not grouped:
             return args

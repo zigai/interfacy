@@ -8,6 +8,8 @@ except ImportError as exc:
     _CLICK_IMPORT_ERROR = exc
 
     class ClickParser:  # type: ignore[no-redef]
+        """Raise a deferred ImportError when click support is requested without click installed."""
+
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             raise ImportError(
                 "Click is required to use ClickParser. Install it with "

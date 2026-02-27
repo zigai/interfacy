@@ -8,6 +8,8 @@ import click
 
 
 class ClickHelpFormatter(click.HelpFormatter):
+    """Set Click formatter width from the current terminal when available."""
+
     def __init__(
         self,
         indent_increment: int = 2,
@@ -25,6 +27,8 @@ click.Context.formatter_class = ClickHelpFormatter
 
 
 class ClickFuncParamType(click.types.FuncParamType):
+    """Wrap a callable parser as a Click parameter type."""
+
     def __init__(self, func: Callable[[Any], Any], name: str | None = None) -> None:
         self.func = func
         raw_name = name if name is not None else getattr(func, "__name__", None)
@@ -32,6 +36,8 @@ class ClickFuncParamType(click.types.FuncParamType):
 
 
 class ChoiceParamType(click.ParamType):
+    """Validate values against a fixed choice set with optional pre-parsing."""
+
     name = "choice"
 
     def __init__(self, choices: Sequence[Any], parser: Callable[[str], Any] | None = None) -> None:
@@ -47,6 +53,17 @@ class ChoiceParamType(click.ParamType):
     def convert(
         self, value: str, param: click.Parameter | None, ctx: click.Context | None
     ) -> object:
+        """
+        Convert and validate one CLI value against configured choices.
+
+        Args:
+            value (str): Raw CLI token.
+            param (click.Parameter | None): Click parameter metadata.
+            ctx (click.Context | None): Active Click context.
+
+        Raises:
+            click.BadParameter: If conversion fails or value is not in the allowed set.
+        """
         converted: Any = value
         if self.parser is not None:
             try:

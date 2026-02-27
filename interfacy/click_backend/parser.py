@@ -8,6 +8,8 @@ _BaseOptionParser: type[Any] = cast(type[Any], click_parser.OptionParser)
 
 
 class InterfacyOptionParser(_BaseOptionParser):
+    """Parse Click options while supporting varargs option values."""
+
     def _token_looks_like_option(self, arg_text: str) -> bool:
         if arg_text == "--":
             return True

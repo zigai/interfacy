@@ -289,6 +289,7 @@ class ArgumentParser(argparse.ArgumentParser):
         return formatter
 
     def format_help(self) -> str:
+        """Render help text using schema-aware layout rendering when available."""
         layout = self._interfacy_help_layout
         if layout is None:
             return super().format_help()
@@ -306,9 +307,21 @@ class ArgumentParser(argparse.ArgumentParser):
         return super().format_help()
 
     def set_schema_command(self, command: "Command | None") -> None:
+        """
+        Store the active command schema for schema-aware help rendering.
+
+        Args:
+            command (Command | None): Command schema tied to this parser.
+        """
         self._schema_command = command
 
     def set_schema(self, schema: "ParserSchema | None") -> None:
+        """
+        Store the parser schema for schema-aware help rendering.
+
+        Args:
+            schema (ParserSchema | None): Full parser schema tied to this parser.
+        """
         self._schema = schema
 
     def add_subparsers(self, **kwargs: object) -> NestedSubParsersAction:

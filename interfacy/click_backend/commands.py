@@ -24,7 +24,15 @@ def _uses_template_layout(layout: object) -> bool:
 
 
 class InterfacyClickOption(click.Option):
+    """Normalize Click option help records to omit metavar suffixes."""
+
     def get_help_record(self, ctx: click.Context) -> tuple[str, str] | None:
+        """
+        Return a cleaned help-record tuple for one option.
+
+        Args:
+            ctx (click.Context): Active Click context.
+        """
         help_record = super().get_help_record(ctx)
         if help_record is not None:
             name, help_text = help_record
@@ -36,6 +44,8 @@ class InterfacyClickOption(click.Option):
 
 
 class InterfacyListOption(InterfacyClickOption):
+    """Accept repeated values for list-like options while preserving None defaults."""
+
     def __init__(self, *args: object, **kwargs: object) -> None:
         kwargs["nargs"] = 1
         super().__init__(*args, **kwargs)
@@ -43,12 +53,21 @@ class InterfacyListOption(InterfacyClickOption):
         self._interfacy_none_default = kwargs.get("default", None) is None
 
     def type_cast_value(self, ctx: click.Context, value: object) -> object:
+        """
+        Cast a list option value while preserving explicit None defaults.
+
+        Args:
+            ctx (click.Context): Active Click context.
+            value (object): Raw parsed value from Click.
+        """
         if value is None and self._interfacy_none_default:
             return None
         return super().type_cast_value(ctx, value)
 
 
 class InterfacyClickArgument(click.Argument):
+    """Carry argument help text and normalize argument help-row names."""
+
     def __init__(
         self,
         param_decls: Sequence[str],
@@ -60,6 +79,12 @@ class InterfacyClickArgument(click.Argument):
         super().__init__(param_decls, required=required, **attrs)
 
     def get_help_record(self, ctx: click.Context) -> tuple[str, str] | None:
+        """
+        Return a cleaned help-record tuple for one positional argument.
+
+        Args:
+            ctx (click.Context): Active Click context.
+        """
         help_record = super().get_help_record(ctx)
         if help_record is not None:
             name, help_text = help_record
@@ -106,13 +131,27 @@ class _HelpMixin:
 
 
 class InterfacyClickCommand(_HelpMixin, click.Command):
+    """Render command help with Interfacy schema-aware formatting."""
+
     def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:
+        """
+        Build an option parser bound to this command's parameters.
+
+        Args:
+            ctx (click.Context): Active Click context.
+        """
         parser = InterfacyOptionParser(ctx)
         for param in self.get_params(ctx):
             param.add_to_parser(parser, ctx)
         return parser
 
     def get_help(self, ctx: click.Context) -> str:
+        """
+        Render command help using schema-aware formatting when available.
+
+        Args:
+            ctx (click.Context): Active Click context.
+        """
         schema = self.interfacy_parser_schema
         if schema is not None and _uses_template_layout(schema.theme):
             renderer = SchemaHelpRenderer(schema.theme)
@@ -131,13 +170,28 @@ class InterfacyClickCommand(_HelpMixin, click.Command):
 
 
 class InterfacyClickGroup(_HelpMixin, click.Group):
+    """Resolve group aliases and render group help with schema metadata."""
+
     def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:
+        """
+        Build an option parser bound to this group's parameters.
+
+        Args:
+            ctx (click.Context): Active Click context.
+        """
         parser = InterfacyOptionParser(ctx)
         for param in self.get_params(ctx):
             param.add_to_parser(parser, ctx)
         return parser
 
     def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
+        """
+        Resolve a subcommand by canonical name first, then by Interfacy aliases.
+
+        Args:
+            ctx (click.Context): Active Click context.
+            name (str): Command token from CLI input.
+        """
         command = super().get_command(ctx, name)
         if command is not None:
             return command
@@ -152,9 +206,16 @@ class InterfacyClickGroup(_HelpMixin, click.Group):
         return None
 
     def list_commands(self, _ctx: click.Context) -> list[str]:
+        """Return canonical subcommand names in insertion order."""
         return list(self.commands.keys())
 
     def get_help(self, ctx: click.Context) -> str:
+        """
+        Render group help using schema-aware formatting when available.
+
+        Args:
+            ctx (click.Context): Active Click context.
+        """
         schema = self.interfacy_parser_schema
         if schema is not None and _uses_template_layout(schema.theme):
             renderer = SchemaHelpRenderer(schema.theme)
