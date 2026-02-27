@@ -11,13 +11,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from interfacy.appearance.layout import HelpLayout
 from interfacy.appearance.layouts import InterfacyLayout
 from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, load_config
 from interfacy.core import ExitCode, InterfacyParser
-from interfacy.naming.abbreviations import DefaultAbbreviationGenerator
 
 
 def _get_version() -> str:
@@ -98,6 +96,23 @@ def resolve_target(target: str) -> object:
     return _resolve_symbol(module, symbol_ref)
 
 
+def _is_supported_entrypoint_target(target: object) -> bool:
+    from interfacy.group import CommandGroup
+
+    if isinstance(target, (InterfacyParser, CommandGroup)):
+        return False
+
+    # Accept anything Argparser can treat as a command target
+    # (functions, classes, class instances, bound methods), while
+    # still excluding Interfacy-specific orchestration objects above.
+    probe = Argparser(sys_exit_enabled=False, print_result=False)
+    try:
+        probe.add_command(target)
+    except Exception:  # noqa: BLE001 - type gate for user-provided target objects
+        return False
+    return True
+
+
 def resolve_entrypoint_settings() -> dict[str, Any]:
     """Return config-derived defaults for the CLI entrypoint."""
     return apply_config_defaults(
@@ -110,6 +125,7 @@ def resolve_entrypoint_settings() -> dict[str, Any]:
             "abbreviation_max_generated_len": None,
             "abbreviation_scope": None,
             "help_option_sort": None,
+            "help_subcommand_sort": None,
             "print_result": None,
             "full_error_traceback": None,
             "tab_completion": None,
@@ -150,7 +166,10 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
     parser.add_argument(
         "target",
         nargs="?",
-        help="Python file or module with a symbol (e.g. main.py:main or pkg.cli:app).",
+        help=(
+            "Python file or module with a function/class/instance symbol "
+            "(e.g. main.py:main, pkg.cli:App, pkg.cli:service)."
+        ),
     )
     parser.add_argument(
         "ARGS",
@@ -191,6 +210,7 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
         "abbreviation_max_generated_len",
         "abbreviation_scope",
         "help_option_sort",
+        "help_subcommand_sort",
         "print_result",
         "full_error_traceback",
         "tab_completion",
@@ -203,61 +223,6 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
         if value is not None:
             kwargs[key] = value
     return kwargs
-
-
-def _apply_layout_to_command(command: object, layout: HelpLayout) -> None:
-    command.help_layout = layout
-    subcommands = getattr(command, "subcommands", None)
-    if isinstance(subcommands, dict):
-        for subcommand in subcommands.values():
-            _apply_layout_to_command(subcommand, layout)
-
-
-def _apply_layout_settings(parser: InterfacyParser, settings: dict[str, Any]) -> None:
-    help_layout = settings.get("help_layout")
-    help_colors = settings.get("help_colors")
-    if help_layout is None and help_colors is None:
-        return
-
-    layout = help_layout or parser.help_layout or InterfacyLayout()
-    if help_colors is not None:
-        layout.style = help_colors
-    parser.help_layout = layout
-    parser.help_colors = layout.style
-    for command in parser.get_commands():
-        _apply_layout_to_command(command, layout)
-
-
-def _apply_settings_to_parser(parser: InterfacyParser, settings: dict[str, Any]) -> None:
-    parser_settings = {
-        "print_result": "display_result",
-        "full_error_traceback": "full_error_traceback",
-        "tab_completion": "enable_tab_completion",
-        "allow_args_from_file": "allow_args_from_file",
-        "include_inherited_methods": "include_inherited_methods",
-        "include_classmethods": "include_classmethods",
-        "silent_interrupt": "silent_interrupt",
-        "abbreviation_max_generated_len": "abbreviation_max_generated_len",
-        "abbreviation_scope": "abbreviation_scope",
-        "help_option_sort": "help_option_sort",
-    }
-    for key, attr in parser_settings.items():
-        value = settings.get(key)
-        if value is not None:
-            setattr(parser, attr, value)
-
-    abbreviation_gen = settings.get("abbreviation_gen")
-    if abbreviation_gen is not None:
-        parser.abbreviation_gen = abbreviation_gen
-    elif settings.get("abbreviation_max_generated_len") is not None and isinstance(
-        parser.abbreviation_gen, DefaultAbbreviationGenerator
-    ):
-        parser.abbreviation_gen = DefaultAbbreviationGenerator(
-            max_generated_len=parser.abbreviation_max_generated_len
-        )
-
-    _apply_layout_settings(parser, settings)
-    parser.refresh_help_option_sort_rules()
 
 
 def main(argv: Sequence[str] | None = None) -> ExitCode:
@@ -286,12 +251,14 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
         parser.error(str(exc))
         return ExitCode.ERR_INVALID_ARGS
 
-    target_args = [arg for arg in args.ARGS if arg != "--"]
+    if not _is_supported_entrypoint_target(target):
+        parser.error(
+            "Target must resolve to a function, class, or class instance. "
+            "Parser instances, command groups, and other object types are not supported."
+        )
+        return ExitCode.ERR_INVALID_ARGS
 
-    if isinstance(target, InterfacyParser):
-        _apply_settings_to_parser(target, settings)
-        target.run(args=target_args)
-        return ExitCode.SUCCESS
+    target_args = [arg for arg in args.ARGS if arg != "--"]
 
     Argparser(**build_runner_kwargs(settings)).run(target, args=target_args)
     return ExitCode.SUCCESS

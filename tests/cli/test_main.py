@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -133,29 +132,26 @@ def test_main_passthrough_double_dash(
         module_path,
         "\n".join(
             [
-                "from interfacy.argparse_backend import Argparser",
-                "",
                 "def echo(msg: str) -> str:",
                 "    return msg",
-                "",
-                "parser = Argparser(sys_exit_enabled=False, print_result=False)",
-                "parser.add_command(echo)",
                 "",
             ]
         ),
     )
     monkeypatch.syspath_prepend(str(tmp_path))
 
-    result = main([f"{module_path}:parser", "--", "echo", "hi"])
-    assert result == ExitCode.SUCCESS
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:echo", "--", "hi"])
+
+    assert excinfo.value.code == ExitCode.SUCCESS
 
 
-def test_main_applies_config_to_parser_target(
+def test_main_rejects_parser_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    module_name = "config_parser_target"
-    module_path = tmp_path / f"{module_name}.py"
+    module_path = tmp_path / "mod.py"
     _write_module(
         module_path,
         "\n".join(
@@ -171,30 +167,73 @@ def test_main_applies_config_to_parser_target(
             ]
         ),
     )
-    config_path = tmp_path / "config.toml"
-    config_path.write_text(
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:parser", "echo", "hi"])
+
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "function, class, or class instance" in captured.err
+
+
+def test_main_accepts_class_instance_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
         "\n".join(
             [
-                "[behavior]",
-                "print_result = true",
-                "allow_args_from_file = false",
+                "class Worker:",
+                "    def run(self, name: str) -> str:",
+                "        return f'hi {name}'",
+                "",
+                "worker = Worker()",
                 "",
             ]
         ),
-        encoding="utf-8",
     )
-
-    monkeypatch.chdir(tmp_path)
     monkeypatch.syspath_prepend(str(tmp_path))
-    monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
 
-    result = main([f"{module_name}:parser", "echo", "hi"])
-    assert result == ExitCode.SUCCESS
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:worker", "run", "Ada"])
 
-    module = import_module(module_name)
-    parser_obj = module.parser
-    assert parser_obj.display_result is True
-    assert parser_obj.allow_args_from_file is False
+    assert excinfo.value.code == ExitCode.SUCCESS
+    captured = capsys.readouterr()
+    assert "hi Ada" not in captured.out
+
+
+def test_main_rejects_command_group_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
+        "\n".join(
+            [
+                "from interfacy import CommandGroup",
+                "",
+                "def echo(msg: str) -> str:",
+                "    return msg",
+                "",
+                "cli = CommandGroup('app').add_command(echo)",
+                "",
+            ]
+        ),
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:cli", "app", "echo", "hi"])
+
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "function, class, or class instance" in captured.err
 
 
 def test_main_config_print_result_for_function_target(
