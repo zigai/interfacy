@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from inspect import Parameter as StdParameter
 from re import Match
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypeVar
 
 from objinspect import Class, Function, Method, Parameter
 from stdl.st import (
@@ -21,6 +21,11 @@ from interfacy.help_option_sort import (
     HelpOptionSortRule,
     resolve_help_option_sort_rules,
 )
+from interfacy.help_subcommand_sort import (
+    DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
+    HelpSubcommandSortRule,
+    resolve_help_subcommand_sort_rules,
+)
 from interfacy.naming import CommandNameRegistry, FlagStrategy
 from interfacy.util import (
     format_default_for_help,
@@ -31,6 +36,8 @@ from interfacy.util import (
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.schema.schema import Argument, Command
+
+_TNamedItem = TypeVar("_TNamedItem")
 
 
 @dataclass(kw_only=True)
@@ -96,6 +103,10 @@ class HelpLayout:
         help_option_sort_default (list[HelpOptionSortRule] | None): Optional layout-level
             default sorting rules.
         help_option_sort_rules (list[HelpOptionSortRule]): Active sorting rules.
+        help_subcommand_sort_default (list[HelpSubcommandSortRule] | None): Optional
+            layout-level default sorting rules for command/subcommand rows.
+        help_subcommand_sort_rules (list[HelpSubcommandSortRule]): Active command/subcommand
+            sorting rules.
         layout_mode (Literal["auto", "adaptive", "template"]): Layout selection mode.
         doc_inline_code_mode (Literal["bold", "strip"]): Inline code rendering mode.
     """
@@ -149,6 +160,10 @@ class HelpLayout:
     help_option_sort_default: list[HelpOptionSortRule] | None = None
     help_option_sort_rules: list[HelpOptionSortRule] = field(
         default_factory=lambda: list(DEFAULT_HELP_OPTION_SORT_RULES)
+    )
+    help_subcommand_sort_default: list[HelpSubcommandSortRule] | None = None
+    help_subcommand_sort_rules: list[HelpSubcommandSortRule] = field(
+        default_factory=lambda: list(DEFAULT_HELP_SUBCOMMAND_SORT_RULES)
     )
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
@@ -290,21 +305,37 @@ class HelpLayout:
         return self._format_doc_text(description)
 
     def get_parser_command_usage_suffix(self) -> str:
+        """Return the usage suffix appended after the parser program name."""
         return self.parser_command_usage_suffix
 
     def get_subcommand_usage_token(self) -> str:
+        """Return the subcommand placeholder token used in usage lines."""
         legacy_placeholder = getattr(self, "subcommand_usage_token", None)
         if isinstance(legacy_placeholder, str):
             return legacy_placeholder
         return self.subcommand_usage_placeholder
 
     def should_render_description_before_usage(self) -> bool:
+        """Return whether help descriptions should appear before usage text."""
         return self.description_before_usage
 
     def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:
+        """
+        Format a metavar token for usage output.
+
+        Args:
+            name (str): Base metavar text.
+            is_varargs (bool): Whether the metavar represents varargs.
+        """
         return f"{name} ..." if is_varargs else name
 
     def keep_help_default_slot_for_arguments(self, _arguments: list["Argument"]) -> bool:
+        """
+        Decide whether to preserve the empty default column for help rows.
+
+        Args:
+            _arguments (list[Argument]): Argument rows being rendered.
+        """
         return self.keep_empty_default_slot_for_help
 
     def _collapse_empty_default_slot(
@@ -397,8 +428,19 @@ class HelpLayout:
         """
         name = name or command.name
         command_name = self._format_command_display_name(name, aliases)
-        name_column = f"   {command_name}".ljust(ljust)
         description = command.description or ""
+        return self._format_command_row(command_name, description, ljust)
+
+    def _format_commands_title(self) -> str:
+        return self.commands_title
+
+    def _format_command_name_for_help(self, command_name: str) -> str:
+        return command_name
+
+    def _format_command_row(self, command_name: str, description: str, ljust: int) -> str:
+        name_styled = self._format_command_name_for_help(command_name)
+        pad = max(0, ljust - len(command_name) - 3)
+        name_column = f"   {name_styled}{' ' * pad}"
         return f"{name_column} {with_style(description, self.style.description)}"
 
     def get_help_for_class(self, command: Class) -> str:
@@ -408,20 +450,18 @@ class HelpLayout:
         Args:
             command (Class): Inspected class command.
         """
+        methods = [method for method in command.methods if method.name not in self.command_skips]
+        methods = self.order_class_methods_for_help(methods)
         display_names: list[str] = []
-        for method in command.methods:
-            if method.name in self.command_skips:
-                continue
-            method_name = self.flag_generator.command_translator.translate(method.name)
+        for method in methods:
+            method_name = self._translated_method_name(method)
             display_names.append(self._format_command_display_name(method_name, ()))
 
         max_display = max([len(name) for name in display_names], default=0)
         ljust = self.get_commands_ljust(max_display)
-        lines = [self.commands_title]
-        for method in command.methods:
-            if method.name in self.command_skips:
-                continue
-            method_name = self.flag_generator.command_translator.translate(method.name)
+        lines = [self._format_commands_title()]
+        for method in methods:
+            method_name = self._translated_method_name(method)
             lines.append(self.get_command_description(method, ljust, method_name))
         return "\n".join(lines)
 
@@ -631,20 +671,19 @@ class HelpLayout:
         Args:
             commands (dict[str, Command]): Command map keyed by name.
         """
+        ordered_commands = self.order_commands_for_help(commands)
         display_names = [
-            self._format_command_display_name(cmd.cli_name, cmd.aliases)
-            for cmd in commands.values()
+            self._format_command_display_name(cmd.cli_name, cmd.aliases) for cmd in ordered_commands
         ]
         max_display = max([len(name) for name in display_names], default=0)
         ljust = self.get_commands_ljust(max_display)
-        lines = [self.commands_title]
-        for command in commands.values():
+        lines = [self._format_commands_title()]
+        for command in ordered_commands:
             cli_name = command.cli_name
             if command.obj is None:
                 command_name = self._format_command_display_name(cli_name, command.aliases)
-                name_column = f"   {command_name}".ljust(ljust)
                 description = command.raw_description or ""
-                lines.append(f"{name_column} {with_style(description, self.style.description)}")
+                lines.append(self._format_command_row(command_name, description, ljust))
             else:
                 lines.append(
                     self.get_command_description(
@@ -655,6 +694,85 @@ class HelpLayout:
                     )
                 )
         return "\n".join(lines)
+
+    def _translated_method_name(self, method: Method) -> str:
+        if self.flag_generator is None:
+            return method.name
+        return self.flag_generator.command_translator.translate(method.name)
+
+    def _resolve_help_subcommand_sort_rules(self) -> list[HelpSubcommandSortRule]:
+        active_rules = resolve_help_subcommand_sort_rules(
+            self.help_subcommand_sort_rules,
+            value_name=f"{self.__class__.__name__}.help_subcommand_sort_rules",
+            allow_none=False,
+        )
+        if active_rules:
+            return list(active_rules)
+
+        layout_default_rules = resolve_help_subcommand_sort_rules(
+            self.help_subcommand_sort_default,
+            value_name=f"{self.__class__.__name__}.help_subcommand_sort_default",
+        )
+        if layout_default_rules:
+            return list(layout_default_rules)
+
+        return list(DEFAULT_HELP_SUBCOMMAND_SORT_RULES)
+
+    @staticmethod
+    def _subcommand_sort_key(name: str) -> str:
+        return name.lower()
+
+    def _subcommand_name_length(self, name: str) -> int:
+        return len(self._subcommand_sort_key(name))
+
+    def _subcommand_rule_extractors(
+        self,
+    ) -> dict[HelpSubcommandSortRule, Callable[[str], str | int]]:
+        return {
+            "insert_order": lambda _name: 0,
+            "alphabetical": self._subcommand_sort_key,
+            "name_length_asc": self._subcommand_name_length,
+            "name_length_desc": lambda name: -self._subcommand_name_length(name),
+        }
+
+    def _order_named_items_for_help(
+        self,
+        items: list[tuple[str, _TNamedItem]],
+    ) -> list[_TNamedItem]:
+        rules = self._resolve_help_subcommand_sort_rules()
+        if not rules:
+            return [item for _, item in items]
+
+        extractors = self._subcommand_rule_extractors()
+        rule_extractors = [extractors[rule] for rule in rules]
+        indexed_items = list(enumerate(items))
+        indexed_items.sort(
+            key=lambda item: (
+                tuple(extractor(item[1][0]) for extractor in rule_extractors),
+                item[0],
+            ),
+        )
+        return [pair[1] for _, pair in indexed_items]
+
+    def order_commands_for_help(self, commands: dict[str, "Command"]) -> list["Command"]:
+        """
+        Return commands sorted by the active help-subcommand ordering rules.
+
+        Args:
+            commands (dict[str, Command]): Command map keyed by canonical name.
+        """
+        named_commands = [(command.cli_name, command) for command in commands.values()]
+        return self._order_named_items_for_help(named_commands)
+
+    def order_class_methods_for_help(self, methods: list[Method]) -> list[Method]:
+        """
+        Return class methods sorted by the active help-subcommand ordering rules.
+
+        Args:
+            methods (list[Method]): Public methods eligible for subcommand display.
+        """
+        named_methods = [(self._translated_method_name(method), method) for method in methods]
+        return self._order_named_items_for_help(named_methods)
 
     def _use_template_layout(self) -> bool:
         match self.layout_mode:
@@ -1061,6 +1179,12 @@ class HelpLayout:
         return self._enum_matches(arg.value_shape, "FLAG")
 
     def is_argument_boolean(self, arg: "Argument") -> bool:
+        """
+        Return whether an argument schema represents a boolean flag.
+
+        Args:
+            arg (Argument): Argument schema to inspect.
+        """
         return self._arg_is_bool(arg)
 
     def _arg_has_default(self, arg: "Argument") -> bool:
@@ -1092,6 +1216,12 @@ class HelpLayout:
         return base_flag or longs[0]
 
     def get_primary_boolean_flag_for_argument(self, arg: "Argument") -> str:
+        """
+        Return the canonical flag token used to display a boolean option.
+
+        Args:
+            arg (Argument): Argument schema describing a boolean flag.
+        """
         return self._get_primary_boolean_flag_from_argument(arg)
 
     def _build_flag_parts_from_argument(self, arg: "Argument") -> tuple[str, str, str, bool]:
@@ -1300,6 +1430,12 @@ class HelpLayout:
         }
 
     def order_option_arguments_for_help(self, options: list["Argument"]) -> list["Argument"]:
+        """
+        Return options sorted by the active help-option ordering rules.
+
+        Args:
+            options (list[Argument]): Option arguments to sort.
+        """
         rules = self._resolve_help_option_sort_rules()
         if not rules:
             return options
@@ -1316,6 +1452,13 @@ class HelpLayout:
         return [option for _, option in indexed_options]
 
     def format_argument(self, arg: "Argument", indent: int = 2) -> str:
+        """
+        Format one argument schema as a rendered help line.
+
+        Args:
+            arg (Argument): Argument schema to render.
+            indent (int): Leading indent width in spaces.
+        """
         is_option = self._enum_matches(arg.kind, "OPTION")
         template = self.format_option if is_option else self.format_positional
         if not template:
@@ -1364,6 +1507,12 @@ class HelpLayout:
         return text
 
     def prepare_default_field_width_for_arguments(self, arguments: list["Argument"]) -> None:
+        """
+        Compute default-column widths for a batch of rendered arguments.
+
+        Args:
+            arguments (list[Argument]): Argument schemas rendered in one help section.
+        """
         template = self.format_option or self.format_positional or ""
         self._active_pos_flag_width = self._get_pos_flag_width_base()
 

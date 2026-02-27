@@ -97,6 +97,7 @@ class FakeParser:
     model_expansion_max_depth: int = 3
     abbreviation_scope: str = "top_level_options"
     help_option_sort: list[str] | None = None
+    help_subcommand_sort: list[str] | None = None
     abbreviation_max_generated_len: int = 1
 
     def __post_init__(self) -> None:

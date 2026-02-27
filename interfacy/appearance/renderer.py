@@ -32,6 +32,14 @@ def _make_help_argument(help_text: str) -> Argument:
 
 
 class SchemaHelpRenderer:
+    """
+    Render parser and command help text from schema objects.
+
+    Attributes:
+        layout (HelpLayout): Active help layout used for formatting.
+        terminal_width (int): Target terminal width in columns.
+    """
+
     def __init__(
         self,
         layout: HelpLayout,
@@ -41,6 +49,13 @@ class SchemaHelpRenderer:
         self.terminal_width = terminal_width or _get_terminal_width()
 
     def render_parser_help(self, schema: ParserSchema, prog: str) -> str:
+        """
+        Render help text for a parser schema and program name.
+
+        Args:
+            schema (ParserSchema): Parser schema to render.
+            prog (str): Program name or invocation prefix.
+        """
         if len(schema.commands) == 1:
             cmd = next(iter(schema.commands.values()))
             if cmd.is_leaf:
@@ -61,6 +76,15 @@ class SchemaHelpRenderer:
         parser_description: str | None = None,
         parser_epilog: str | None = None,
     ) -> str:
+        """
+        Render help text for one command schema.
+
+        Args:
+            command (Command): Command schema to render.
+            prog (str): Program name or invocation prefix.
+            parser_description (str | None): Optional parser-level description override.
+            parser_epilog (str | None): Optional parser-level epilog text.
+        """
         layout = self.layout
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
@@ -251,7 +275,8 @@ class SchemaHelpRenderer:
         if "{command}" not in token or not command.subcommands:
             return token
 
-        choices = [subcommand.cli_name for subcommand in command.subcommands.values()]
+        ordered_subcommands = self.layout.order_commands_for_help(command.subcommands)
+        choices = [subcommand.cli_name for subcommand in ordered_subcommands]
         if not choices:
             return token
         return token.replace("{command}", "{" + ",".join(choices) + "}")

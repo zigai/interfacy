@@ -40,6 +40,7 @@ from interfacy.exceptions import (
     UnsupportedParameterTypeError,
 )
 from interfacy.help_option_sort import HelpOptionSortRule
+from interfacy.help_subcommand_sort import HelpSubcommandSortRule
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
@@ -50,6 +51,8 @@ logger = get_logger(__name__)
 
 
 class ClickParser(InterfacyParser):
+    """Build and execute Interfacy command schemas on top of Click."""
+
     RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
 
     def __init__(
@@ -71,6 +74,7 @@ class ClickParser(InterfacyParser):
         abbreviation_max_generated_len: int = 1,
         abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         pipe_targets: PipeTargets | dict[str, str] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -94,6 +98,7 @@ class ClickParser(InterfacyParser):
             abbreviation_max_generated_len=abbreviation_max_generated_len,
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,
             full_error_traceback=full_error_traceback,
@@ -109,6 +114,9 @@ class ClickParser(InterfacyParser):
 
     def _command_key_for_depth(self, depth: int) -> str:
         return f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
+
+    def _ordered_commands_for_help(self, commands: dict[str, Command]) -> list[Command]:
+        return self.help_layout.order_commands_for_help(commands)
 
     def _remaining_args(self, ctx: click.Context) -> list[str]:
         with warnings.catch_warnings():
@@ -327,6 +335,13 @@ class ClickParser(InterfacyParser):
     def build_click_command(
         self, command: Command, depth: int = 0
     ) -> InterfacyClickCommand | InterfacyClickGroup:
+        """
+        Build a Click command or group from one Interfacy command schema.
+
+        Args:
+            command (Command): Command schema to convert.
+            depth (int): Nesting depth from the parser root.
+        """
         is_group_like = (
             command.command_type in ("group", "instance")
             or command.subcommands is not None
@@ -358,7 +373,7 @@ class ClickParser(InterfacyParser):
         self._attach_param_metadata(group, param_bindings, arg_specs, suppress_defaults, command)
 
         if command.subcommands:
-            for subcommand in command.subcommands.values():
+            for subcommand in self._ordered_commands_for_help(command.subcommands):
                 group.add_command(
                     self.build_click_command(subcommand, depth + 1), name=subcommand.cli_name
                 )
@@ -390,7 +405,7 @@ class ClickParser(InterfacyParser):
             root.interfacy_parser_schema = schema
             root.interfacy_epilog = self._combine_epilog(schema.commands_help, schema.epilog)
 
-            for cmd in schema.commands.values():
+            for cmd in self._ordered_commands_for_help(schema.commands):
                 root.add_command(self.build_click_command(cmd), name=cmd.cli_name)
             return root
 
@@ -678,15 +693,52 @@ class ClickParser(InterfacyParser):
         return result
 
     def parser_from_function(self, *args: object, **kwargs: object) -> object:
+        """
+        Reject direct function-parser construction for the Click backend.
+
+        Args:
+            *args (object): Unused positional arguments.
+            **kwargs (object): Unused keyword arguments.
+
+        Raises:
+            NotImplementedError: Always; ClickParser builds from parser schema only.
+        """
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
     def parser_from_class(self, *args: object, **kwargs: object) -> object:
+        """
+        Reject direct class-parser construction for the Click backend.
+
+        Args:
+            *args (object): Unused positional arguments.
+            **kwargs (object): Unused keyword arguments.
+
+        Raises:
+            NotImplementedError: Always; ClickParser builds from parser schema only.
+        """
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
     def parser_from_multiple_commands(self, *args: object, **kwargs: object) -> object:
+        """
+        Reject direct multi-command parser construction for the Click backend.
+
+        Args:
+            *args (object): Unused positional arguments.
+            **kwargs (object): Unused keyword arguments.
+
+        Raises:
+            NotImplementedError: Always; ClickParser builds from parser schema only.
+        """
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
     def install_tab_completion(self, *_args: object, **_kwargs: object) -> None:
+        """
+        Keep tab-completion installation as a no-op for ClickParser.
+
+        Args:
+            *_args (object): Unused positional arguments.
+            **_kwargs (object): Unused keyword arguments.
+        """
         return None
 
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from inspect import Parameter as StdParameter
 from typing import TYPE_CHECKING, Literal
 
-from objinspect import Class, Function, Method, Parameter
+from objinspect import Parameter
 from stdl.st import TextStyle, ansi_len, colored, with_style
 
 from interfacy.appearance.colors import ClapColors, NoColor
@@ -13,7 +13,7 @@ from interfacy.appearance.layout import HelpLayout
 from interfacy.util import format_default_for_help, format_type_for_help, get_param_choices
 
 if TYPE_CHECKING:
-    from interfacy.schema.schema import Argument, Command
+    from interfacy.schema.schema import Argument
 
 
 @dataclass(kw_only=True)
@@ -660,92 +660,13 @@ class ClapLayout(HelpLayout):
             return name
         return ", ".join((name, *aliases))
 
-    def get_command_description(
-        self,
-        command: Class | Function | Method,
-        ljust: int,
-        name: str | None = None,
-        aliases: tuple[str, ...] = (),
-    ) -> str:
-        """
-        Return a styled command description line.
-
-        Args:
-            command (Class | Function | Method): Command to describe.
-            ljust (int): Column width for the name.
-            name (str | None): Override display name.
-            aliases (tuple[str, ...]): Alternate CLI names.
-        """
-        name = name or command.name
-        command_name = self._format_command_display_name(name, aliases)
-        name_styled = with_style(command_name, self.style.flag_long)
-        pad = max(0, ljust - len(command_name) - 3)
-        name_column = f"   {name_styled}{' ' * pad}"
-        description = command.description or ""
-        return f"{name_column} {with_style(description, self.style.description)}"
-
     def _format_commands_title(self) -> str:
         if self.section_heading_style is not None:
             return with_style(self.commands_title, self.section_heading_style)
         return self.commands_title
 
-    def get_help_for_class(self, command: Class) -> str:
-        """
-        Build help text for class subcommands with styled headings.
-
-        Args:
-            command (Class): Inspected class command.
-        """
-        display_names: list[str] = []
-        for method in command.methods:
-            if method.name in self.command_skips:
-                continue
-            method_name = self.flag_generator.command_translator.translate(method.name)
-            display_names.append(self._format_command_display_name(method_name, ()))
-
-        max_display = max([len(name) for name in display_names], default=0)
-        ljust = self.get_commands_ljust(max_display)
-        lines = [self._format_commands_title()]
-        for method in command.methods:
-            if method.name in self.command_skips:
-                continue
-            method_name = self.flag_generator.command_translator.translate(method.name)
-            lines.append(self.get_command_description(method, ljust, method_name))
-        return "\n".join(lines)
-
-    def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:
-        """
-        Build a styled command listing for multiple commands.
-
-        Args:
-            commands (dict[str, Command]): Command map keyed by name.
-        """
-        display_names = [
-            self._format_command_display_name(cmd.cli_name, cmd.aliases)
-            for cmd in commands.values()
-        ]
-        max_display = max([len(name) for name in display_names], default=0)
-        ljust = self.get_commands_ljust(max_display)
-        lines = [self._format_commands_title()]
-        for command in commands.values():
-            cli_name = command.cli_name
-            if command.obj is None:
-                command_name = self._format_command_display_name(cli_name, command.aliases)
-                name_styled = with_style(command_name, self.style.flag_long)
-                pad = max(0, ljust - len(command_name) - 3)
-                name_column = f"   {name_styled}{' ' * pad}"
-                description = command.raw_description or ""
-                lines.append(f"{name_column} {with_style(description, self.style.description)}")
-            else:
-                lines.append(
-                    self.get_command_description(
-                        command.obj,
-                        ljust,
-                        cli_name,
-                        command.aliases,
-                    )
-                )
-        return "\n".join(lines)
+    def _format_command_name_for_help(self, command_name: str) -> str:
+        return with_style(command_name, self.style.flag_long)
 
 
 @dataclass(kw_only=True)

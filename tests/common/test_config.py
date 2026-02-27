@@ -26,6 +26,7 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
                 'style = "keyword_only"',
                 'translation_mode = "snake"',
                 'help_option_sort = ["bool_last", "alphabetical"]',
+                'help_subcommand_sort = ["name_length_desc"]',
                 "",
                 "[abbreviations]",
                 'generator = "default"',
@@ -51,6 +52,7 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
             "abbreviation_max_generated_len": None,
             "abbreviation_scope": None,
             "help_option_sort": None,
+            "help_subcommand_sort": None,
             "print_result": None,
             "full_error_traceback": None,
             "tab_completion": None,
@@ -71,6 +73,7 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
     assert overrides["abbreviation_max_generated_len"] == 2
     assert overrides["abbreviation_scope"] == "all_options"
     assert overrides["help_option_sort"] == ["bool_last", "alphabetical"]
+    assert overrides["help_subcommand_sort"] == ["name_length_desc"]
     assert overrides["print_result"] is True
 
 
@@ -90,6 +93,7 @@ def test_apply_config_defaults_respects_overrides(tmp_path: Path) -> None:
             "abbreviation_max_generated_len": None,
             "abbreviation_scope": None,
             "help_option_sort": None,
+            "help_subcommand_sort": None,
             "print_result": None,
             "full_error_traceback": None,
             "tab_completion": None,
@@ -128,6 +132,44 @@ def test_load_config_rejects_string_help_option_sort(tmp_path: Path) -> None:
                 "abbreviation_max_generated_len": None,
                 "abbreviation_scope": None,
                 "help_option_sort": None,
+                "help_subcommand_sort": None,
+                "print_result": None,
+                "full_error_traceback": None,
+                "tab_completion": None,
+                "allow_args_from_file": None,
+                "include_inherited_methods": None,
+                "include_classmethods": None,
+                "silent_interrupt": None,
+            },
+        )
+
+
+def test_load_config_rejects_string_help_subcommand_sort(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[flags]",
+                'help_subcommand_sort = "alphabetical"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+    with pytest.raises(ConfigurationError, match="help_subcommand_sort must be a list"):
+        apply_config_defaults(
+            config,
+            {
+                "help_layout": None,
+                "help_colors": None,
+                "flag_strategy": None,
+                "abbreviation_gen": None,
+                "abbreviation_max_generated_len": None,
+                "abbreviation_scope": None,
+                "help_option_sort": None,
+                "help_subcommand_sort": None,
                 "print_result": None,
                 "full_error_traceback": None,
                 "tab_completion": None,

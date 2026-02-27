@@ -32,6 +32,7 @@ from interfacy.exceptions import (
     UnsupportedParameterTypeError,
 )
 from interfacy.help_option_sort import HelpOptionSortRule
+from interfacy.help_subcommand_sort import HelpSubcommandSortRule
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
@@ -73,6 +74,8 @@ class Argparser(InterfacyParser):
         abbreviation_max_generated_len (int): Max generated short-flag length.
         abbreviation_scope (Literal["top_level_options", "all_options"]): Scope for generation.
         help_option_sort (list[HelpOptionSortRule] | None): Help option row ordering rules.
+        help_subcommand_sort (list[HelpSubcommandSortRule] | None): Help command row ordering
+            rules.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
         include_inherited_methods (bool): Include inherited methods for class commands.
@@ -106,6 +109,7 @@ class Argparser(InterfacyParser):
         abbreviation_max_generated_len: int = 1,
         abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -130,6 +134,7 @@ class Argparser(InterfacyParser):
             abbreviation_max_generated_len=abbreviation_max_generated_len,
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
             pipe_targets=pipe_targets,
             tab_completion=tab_completion,
             print_result=print_result,
@@ -468,6 +473,9 @@ class Argparser(InterfacyParser):
         ordered_options = self.help_layout.order_option_arguments_for_help(options)
         return [*positionals, *ordered_options]
 
+    def _ordered_commands_for_help(self, commands: dict[str, Command]) -> list[Command]:
+        return self.help_layout.order_commands_for_help(commands)
+
     def _add_initializer_arguments(self, parser: ArgumentParser, command: Command) -> None:
         for argument in self._ordered_arguments_for_help(command.initializer):
             self._add_argument_from_schema(parser, argument)
@@ -504,7 +512,7 @@ class Argparser(InterfacyParser):
     ) -> None:
         if not command.subcommands:
             return
-        for sub_cmd in command.subcommands.values():
+        for sub_cmd in self._ordered_commands_for_help(command.subcommands):
             parser_kwargs: dict[str, Any] = {
                 "description": sub_cmd.description,
                 "help": self._escape_argparse_help_text(sub_cmd.description),
@@ -591,7 +599,7 @@ class Argparser(InterfacyParser):
                     else None
                 ),
             )
-            for cmd in schema.commands.values():
+            for cmd in self._ordered_commands_for_help(schema.commands):
                 subparser = subparsers.add_parser(
                     cmd.cli_name,
                     description=cmd.description,

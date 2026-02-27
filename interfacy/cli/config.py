@@ -24,6 +24,10 @@ from interfacy.help_option_sort import (
     HelpOptionSortRule,
     resolve_help_option_sort_rules,
 )
+from interfacy.help_subcommand_sort import (
+    HelpSubcommandSortRule,
+    resolve_help_subcommand_sort_rules,
+)
 from interfacy.naming.abbreviations import DefaultAbbreviationGenerator, NoAbbreviations
 from interfacy.naming.flag_strategy import (
     DefaultFlagStrategy,
@@ -48,6 +52,7 @@ class InterfacyConfig:
         abbreviation_max_generated_len (int | None): Max generated abbreviation length.
         abbreviation_scope (str | None): Where generated abbreviations are allowed.
         help_option_sort (list[str] | None): Option row ordering rules in help output.
+        help_subcommand_sort (list[str] | None): Command row ordering rules in help output.
         print_result (bool | None): Whether to print command results.
         full_error_traceback (bool | None): Whether to show full tracebacks.
         tab_completion (bool | None): Whether to enable tab completion.
@@ -66,6 +71,7 @@ class InterfacyConfig:
     abbreviation_max_generated_len: int | None = None
     abbreviation_scope: str | None = None
     help_option_sort: list[str] | None = None
+    help_subcommand_sort: list[str] | None = None
     print_result: bool | None = None
     full_error_traceback: bool | None = None
     tab_completion: bool | None = None
@@ -113,6 +119,7 @@ def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
             "style": "flag_style",
             "translation_mode": "translation_mode",
             "help_option_sort": "help_option_sort",
+            "help_subcommand_sort": "help_subcommand_sort",
         },
     )
     apply(
@@ -313,6 +320,10 @@ def _resolve_help_option_sort(value: object) -> list[HelpOptionSortRule] | None:
     return resolve_help_option_sort_rules(value, value_name="help_option_sort")
 
 
+def _resolve_help_subcommand_sort(value: object) -> list[HelpSubcommandSortRule] | None:
+    return resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
+
+
 def _to_config_dict(config: InterfacyConfig | dict[str, Any]) -> dict[str, Any]:
     if isinstance(config, InterfacyConfig):
         return asdict(config)
@@ -335,28 +346,21 @@ def apply_config_defaults(
     cfg = _to_config_dict(config)
     resolved = overrides.copy()
 
-    if overrides.get("help_layout") is None:
-        resolved["help_layout"] = _resolve_help_layout(cfg.get("help_layout"))
-
-    if overrides.get("help_colors") is None:
-        resolved["help_colors"] = _resolve_help_colors(cfg.get("help_colors"))
-
-    if overrides.get("flag_strategy") is None:
-        resolved["flag_strategy"] = _resolve_flag_strategy(cfg.get("flag_strategy"), cfg)
-
-    if overrides.get("abbreviation_gen") is None:
-        resolved["abbreviation_gen"] = _resolve_abbreviation_gen(cfg.get("abbreviation_gen"), cfg)
-
-    if overrides.get("abbreviation_max_generated_len") is None:
-        resolved["abbreviation_max_generated_len"] = _resolve_abbreviation_max_generated_len(
+    resolved_defaults = {
+        "help_layout": _resolve_help_layout(cfg.get("help_layout")),
+        "help_colors": _resolve_help_colors(cfg.get("help_colors")),
+        "flag_strategy": _resolve_flag_strategy(cfg.get("flag_strategy"), cfg),
+        "abbreviation_gen": _resolve_abbreviation_gen(cfg.get("abbreviation_gen"), cfg),
+        "abbreviation_max_generated_len": _resolve_abbreviation_max_generated_len(
             cfg.get("abbreviation_max_generated_len")
-        )
-
-    if overrides.get("abbreviation_scope") is None:
-        resolved["abbreviation_scope"] = _resolve_abbreviation_scope(cfg.get("abbreviation_scope"))
-
-    if overrides.get("help_option_sort") is None:
-        resolved["help_option_sort"] = _resolve_help_option_sort(cfg.get("help_option_sort"))
+        ),
+        "abbreviation_scope": _resolve_abbreviation_scope(cfg.get("abbreviation_scope")),
+        "help_option_sort": _resolve_help_option_sort(cfg.get("help_option_sort")),
+        "help_subcommand_sort": _resolve_help_subcommand_sort(cfg.get("help_subcommand_sort")),
+    }
+    for key, value in resolved_defaults.items():
+        if overrides.get(key) is None:
+            resolved[key] = value
 
     passthrough_keys = [
         "print_result",
