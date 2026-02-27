@@ -16,6 +16,7 @@ from stdl.st import (
     with_style,
 )
 
+from interfacy.appearance.type_help import format_type_for_help
 from interfacy.help_option_sort import (
     DEFAULT_HELP_OPTION_SORT_RULES,
     HelpOptionSortRule,
@@ -29,7 +30,6 @@ from interfacy.help_subcommand_sort import (
 from interfacy.naming import CommandNameRegistry, FlagStrategy
 from interfacy.util import (
     format_default_for_help,
-    format_type_for_help,
     get_param_choices,
     simplified_type_name,
 )

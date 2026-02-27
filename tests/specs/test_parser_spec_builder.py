@@ -21,6 +21,10 @@ def fn_optional_list_union(values: list[int] | None):
     return values or []
 
 
+def fn_union_list_and_scalar(values: list[int] | str | None):
+    return values
+
+
 def doc_summary(obj) -> str | None:
     doc = inspect.getdoc(obj)
     if not doc:
@@ -269,3 +273,15 @@ class TestOptionalUnionListArg:
         assert parser.parse_args(["1"])["values"] == [1]
         assert parser.parse_args(["1", "2"])["values"] == [1, 2]
         assert parser.parse_args([])["values"] == []
+
+
+def test_list_union_with_additional_types_is_not_treated_as_optional_list(parser: Argparser):
+    """Verify list | X | None remains a scalar union and not nargs='*'."""
+    parser.add_command(fn_union_list_and_scalar)
+
+    schema = parser.build_parser_schema()
+    argument = schema.commands["fn-union-list-and-scalar"].parameters[0]
+
+    assert argument.value_shape is ValueShape.SINGLE
+    assert argument.nargs is None
+    assert argument.type == list[int] | str | None

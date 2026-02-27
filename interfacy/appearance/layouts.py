@@ -10,7 +10,8 @@ from stdl.st import TextStyle, ansi_len, colored, with_style
 
 from interfacy.appearance.colors import ClapColors, NoColor
 from interfacy.appearance.layout import HelpLayout
-from interfacy.util import format_default_for_help, format_type_for_help, get_param_choices
+from interfacy.appearance.type_help import format_type_for_help
+from interfacy.util import format_default_for_help, get_param_choices
 
 if TYPE_CHECKING:
     from interfacy.schema.schema import Argument

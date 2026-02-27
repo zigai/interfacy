@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from stdl.st import TextStyle
 
 from interfacy import util
+from interfacy.appearance import type_help
 from interfacy.appearance.layout import InterfacyColors
 
 
@@ -12,7 +13,7 @@ def _marker(text: str, style: TextStyle) -> str:
 
 
 def test_type_hint_brackets_default_to_white(monkeypatch) -> None:
-    monkeypatch.setattr(util, "with_style", _marker)
+    monkeypatch.setattr(type_help, "with_style", _marker)
     theme = InterfacyColors()
 
     rendered = util.format_type_for_help("list[str]", theme.type, theme=theme)
@@ -21,7 +22,7 @@ def test_type_hint_brackets_default_to_white(monkeypatch) -> None:
 
 
 def test_type_hint_uses_full_token_styles(monkeypatch) -> None:
-    monkeypatch.setattr(util, "with_style", _marker)
+    monkeypatch.setattr(type_help, "with_style", _marker)
     theme = SimpleNamespace(
         type=TextStyle(color="green"),
         type_keyword=TextStyle(color="magenta"),
@@ -55,7 +56,7 @@ def test_type_hint_uses_full_token_styles(monkeypatch) -> None:
 
 
 def test_optional_suffix_uses_operator_style(monkeypatch) -> None:
-    monkeypatch.setattr(util, "with_style", _marker)
+    monkeypatch.setattr(type_help, "with_style", _marker)
     theme = InterfacyColors()
     theme.type_operator = TextStyle(color="red")
 
@@ -68,7 +69,7 @@ def test_optional_suffix_uses_operator_style(monkeypatch) -> None:
 
 
 def test_format_type_for_help_remains_backward_compatible(monkeypatch) -> None:
-    monkeypatch.setattr(util, "with_style", _marker)
+    monkeypatch.setattr(type_help, "with_style", _marker)
     style = TextStyle(color="blue")
 
     rendered = util.format_type_for_help("list[str]", style)

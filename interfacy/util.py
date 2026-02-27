@@ -9,17 +9,10 @@ from typing import Any, Literal
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices as objinspect_get_choices
 from objinspect.typing import get_literal_choices, is_union_type, type_args, type_origin
-from stdl.st import with_style
 
 from interfacy import console
 
 _MISSING = object()
-_TYPE_ALIAS_RESOLUTION_ERRORS = (AttributeError, NameError, RecursionError, TypeError)
-_TYPE_HINT_RESOLUTION_ERRORS = (AttributeError, NameError, TypeError, ValueError)
-_LITERAL_PARSE_ERRORS = (SyntaxError, TypeError, ValueError)
-_INTROSPECTION_ERRORS = (AttributeError, KeyError, NameError, TypeError, ValueError)
-_STRINGIFY_ERRORS = (RecursionError, TypeError, ValueError)
-_STYLE_RENDER_ERRORS = (AttributeError, TypeError, ValueError)
 
 
 def simplified_type_name(name: str) -> str:
@@ -31,7 +24,7 @@ def simplified_type_name(name: str) -> str:
     - Collapses Optional/Union with None into a trailing '?' (e.g. "str | None" -> "str?")
     """
     name = name.strip().strip("'\"")
-    name = name.split(".")[-1]
+    name = _strip_qualified_names(name)
     name = re.sub(r"\s+", " ", name)
     optional_suffix = False  # Handle Optional[...] and Union[..., None] forms
 
@@ -121,7 +114,7 @@ def extract_optional_union_list(t: object) -> tuple[object, object | None] | Non
         return None
 
     union_args = type_args(t)
-    if not any(arg is NoneType for arg in union_args):
+    if len(union_args) != 2 or not any(arg is NoneType for arg in union_args):
         return None
 
     for arg in union_args:
@@ -130,6 +123,54 @@ def extract_optional_union_list(t: object) -> tuple[object, object | None] | Non
             element_type = element_args[0] if element_args else None
             return arg, element_type
     return None
+
+
+def _consume_quoted_segment(text: str, start: int) -> int:
+    quote = text[start]
+    index = start + 1
+    escaped = False
+    while index < len(text):
+        current = text[index]
+        if escaped:
+            escaped = False
+        elif current == "\\":
+            escaped = True
+        elif current == quote:
+            return index + 1
+        index += 1
+    return index
+
+
+def _consume_dotted_identifier(text: str, start: int) -> int:
+    index = start + 1
+    while index < len(text) and (text[index].isalnum() or text[index] in {"_", "."}):
+        index += 1
+    return index
+
+
+def _strip_qualified_names(name: str) -> str:
+    """Drop module prefixes from dotted type identifiers while preserving literals."""
+    parts: list[str] = []
+    index = 0
+    while index < len(name):
+        ch = name[index]
+        if ch in {"'", '"'}:
+            end = _consume_quoted_segment(name, index)
+            parts.append(name[index:end])
+            index = end
+            continue
+
+        if ch.isalpha() or ch == "_":
+            end = _consume_dotted_identifier(name, index)
+            token = name[index:end]
+            parts.append(token.split(".")[-1])
+            index = end
+            continue
+
+        parts.append(ch)
+        index += 1
+
+    return "".join(parts)
 
 
 def resolve_type_alias(annotation: object) -> object:
@@ -149,7 +190,7 @@ def resolve_type_alias(annotation: object) -> object:
 def _resolve_type_alias_value(annotation: object) -> object:
     try:
         return annotation.__value__
-    except _TYPE_ALIAS_RESOLUTION_ERRORS:
+    except (AttributeError, NameError, RecursionError, TypeError):
         return _MISSING
 
 
@@ -178,9 +219,9 @@ def _resolve_callable_hints(
     except TypeError:
         try:
             return typing.get_type_hints(fn, globalns=globalns, localns=localns)
-        except _TYPE_HINT_RESOLUTION_ERRORS:
+        except (AttributeError, NameError, TypeError, ValueError):
             return None
-    except _TYPE_HINT_RESOLUTION_ERRORS:
+    except (AttributeError, NameError, ValueError):
         return None
 
 
@@ -250,7 +291,7 @@ def _parse_literal_choices_from_string(annotation: str) -> list[Any] | None:
 
     try:
         parsed = ast.literal_eval(f"({inner})")
-    except _LITERAL_PARSE_ERRORS:
+    except (SyntaxError, TypeError, ValueError):
         return None
 
     if not isinstance(parsed, tuple):
@@ -265,7 +306,7 @@ def _literal_choices_from_annotation(annotation: object) -> list[object] | None:
 
     try:
         raw = get_literal_choices(annotation)
-    except _INTROSPECTION_ERRORS:
+    except (AttributeError, KeyError, NameError, TypeError, ValueError):
         return None
 
     if not raw:
@@ -278,7 +319,7 @@ def _objinspect_choices_from_annotation(
 ) -> list[object] | None:
     try:
         raw = objinspect_get_choices(annotation)
-    except _INTROSPECTION_ERRORS:
+    except (AttributeError, KeyError, NameError, TypeError, ValueError):
         return None
 
     if not raw:
@@ -320,7 +361,7 @@ def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[ob
     if hasattr(param, "get_infered_type"):
         try:
             inferred = param.get_infered_type()
-        except _INTROSPECTION_ERRORS:
+        except (AttributeError, KeyError, NameError, TypeError, ValueError):
             inferred = None
 
     if inferred is None and getattr(param, "has_default", False):
@@ -383,218 +424,9 @@ def format_type_for_help(annotation: object, style: object, theme: object | None
     - token-level styling when a theme provides dedicated type token styles
     - falling back gracefully if coloring fails
     """
-    return _format_type_for_help(annotation, style, theme)
+    from interfacy.appearance.type_help import format_type_for_help as _format_type_for_help
 
-
-_TYPE_BRACKETS = frozenset("[](){}")
-_TYPE_PUNCTUATION = frozenset({",", ":"})
-_TYPE_OPERATORS = frozenset({"|", "?"})
-_TYPE_KEYWORDS = frozenset(
-    {
-        "Annotated",
-        "Any",
-        "ClassVar",
-        "Final",
-        "Literal",
-        "Never",
-        "NoReturn",
-        "None",
-        "NoneType",
-        "NotRequired",
-        "Optional",
-        "Required",
-        "Self",
-        "TypeAlias",
-        "TypeGuard",
-        "TypeVar",
-        "Union",
-    }
-)
-
-
-def _safe_style(text: str, style: object) -> str:
-    try:
-        return with_style(text, style)
-    except _STYLE_RENDER_ERRORS:
-        return text
-
-
-def _stringify_type_for_help(annotation: object) -> str:
-    if isinstance(annotation, str):
-        return simplified_type_name(annotation)
-
-    resolved = resolve_type_alias(annotation)
-    optional_union_name = _stringify_optional_union_type(resolved)
-    if optional_union_name is not None:
-        return optional_union_name
-
-    generic_type_name = _stringify_generic_type(resolved)
-    if generic_type_name is not None:
-        return generic_type_name
-
-    return simplified_type_name(_stringify_fallback_type_name(resolved))
-
-
-def _stringify_optional_union_type(annotation: object) -> str | None:
-    try:
-        if not is_union_type(annotation):
-            return None
-        args = list(type_args(annotation))
-    except _INTROSPECTION_ERRORS:
-        return None
-
-    if len(args) != 2 or not any(arg is NoneType for arg in args):
-        return None
-
-    base = next((arg for arg in args if arg is not NoneType), None)
-    if base is None:
-        return "Any?"
-
-    base_name = _stringify_type_for_help(base)
-    if base_name.endswith("?"):
-        return base_name
-    return f"{base_name}?"
-
-
-def _safe_stringify(value: object) -> str:
-    try:
-        return str(value)
-    except _STRINGIFY_ERRORS:
-        return object.__repr__(value)
-
-
-def _stringify_generic_type(annotation: object) -> str | None:
-    try:
-        origin = type_origin(annotation)
-        args = type_args(annotation)
-    except _INTROSPECTION_ERRORS:
-        return None
-
-    if origin is None or not args:
-        return None
-
-    return simplified_type_name(_safe_stringify(annotation))
-
-
-def _stringify_fallback_type_name(annotation: object) -> str:
-    if isinstance(annotation, type):
-        return annotation.__name__
-
-    name = getattr(annotation, "__name__", None)
-    if isinstance(name, str):
-        return name
-
-    return _safe_stringify(annotation)
-
-
-def _consume_space(text: str, start: int) -> int:
-    index = start + 1
-    while index < len(text) and text[index].isspace():
-        index += 1
-    return index
-
-
-def _consume_quoted_literal(text: str, start: int) -> int:
-    quote = text[start]
-    index = start + 1
-    escaped = False
-    while index < len(text):
-        current = text[index]
-        if escaped:
-            escaped = False
-        elif current == "\\":
-            escaped = True
-        elif current == quote:
-            index += 1
-            break
-        index += 1
-    return index
-
-
-def _consume_numeric_literal(text: str, start: int) -> int:
-    index = start + 1
-    while index < len(text) and (text[index].isdigit() or text[index] == "."):
-        index += 1
-    return index
-
-
-def _consume_identifier(text: str, start: int) -> int:
-    index = start + 1
-    while index < len(text) and (text[index].isalnum() or text[index] in {"_", "."}):
-        index += 1
-    return index
-
-
-def _next_type_token(type_text: str, start: int) -> tuple[str, str, int]:
-    ch = type_text[start]
-    kind = "other"
-    value = ch
-    next_index = start + 1
-
-    if ch.isspace():
-        next_index = _consume_space(type_text, start)
-        kind = "space"
-        value = type_text[start:next_index]
-    elif ch in _TYPE_BRACKETS:
-        kind = "bracket"
-    elif ch in _TYPE_PUNCTUATION:
-        kind = "punctuation"
-    elif ch in _TYPE_OPERATORS:
-        kind = "operator"
-    elif ch in {"'", '"'}:
-        next_index = _consume_quoted_literal(type_text, start)
-        kind = "literal"
-        value = type_text[start:next_index]
-    elif ch.isdigit():
-        next_index = _consume_numeric_literal(type_text, start)
-        kind = "literal"
-        value = type_text[start:next_index]
-    elif ch.isalpha() or ch == "_":
-        next_index = _consume_identifier(type_text, start)
-        value = type_text[start:next_index]
-        kind = "keyword" if value in _TYPE_KEYWORDS else "name"
-
-    return kind, value, next_index
-
-
-def _tokenize_type_text(type_text: str) -> list[tuple[str, str]]:
-    tokens: list[tuple[str, str]] = []
-    index = 0
-    while index < len(type_text):
-        kind, value, index = _next_type_token(type_text, index)
-        tokens.append((kind, value))
-    return tokens
-
-
-def _resolve_type_token_styles(style: object, theme: object | None) -> dict[str, object]:
-    def pick(name: str, fallback: object) -> object:
-        if theme is not None and hasattr(theme, name):
-            return getattr(theme, name)
-        return fallback
-
-    return {
-        "name": style,
-        "keyword": pick("type_keyword", style),
-        "bracket": pick("type_bracket", style),
-        "punctuation": pick("type_punctuation", style),
-        "operator": pick("type_operator", style),
-        "literal": pick("type_literal", style),
-        "other": style,
-    }
-
-
-def _format_type_for_help(annotation: object, style: object, theme: object | None = None) -> str:
-    type_text = _stringify_type_for_help(annotation)
-    styles = _resolve_type_token_styles(style, theme)
-    tokens = _tokenize_type_text(type_text)
-
-    rendered: list[str] = []
-    for kind, value in tokens:
-        if kind == "space":
-            rendered.append(value)
-        else:
-            rendered.append(_safe_style(value, styles.get(kind, style)))
-    return "".join(rendered)
+    return _format_type_for_help(annotation, style, theme=theme)
 
 
 __all__ = [
