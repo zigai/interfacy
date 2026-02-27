@@ -305,7 +305,6 @@ class HelpLayout:
         return self._format_doc_text(description)
 
     def get_parser_command_usage_suffix(self) -> str:
-        """Return the usage suffix appended after the parser program name."""
         return self.parser_command_usage_suffix
 
     def get_subcommand_usage_token(self) -> str:
@@ -316,7 +315,6 @@ class HelpLayout:
         return self.subcommand_usage_placeholder
 
     def should_render_description_before_usage(self) -> bool:
-        """Return whether help descriptions should appear before usage text."""
         return self.description_before_usage
 
     def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:

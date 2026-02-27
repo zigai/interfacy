@@ -471,7 +471,6 @@ class InterfacyParser:
         return command
 
     def get_commands(self) -> list["Command"]:
-        """Return the list of registered commands."""
         return list(self.commands.values())
 
     def get_command_by_cli_name(self, cli_name: str) -> "Command":
@@ -490,7 +489,6 @@ class InterfacyParser:
         return self.commands[canonical]
 
     def get_args(self) -> list[str]:
-        """Return CLI arguments from sys.argv."""
         return sys.argv[1:]
 
     def exit(self, code: ExitCode) -> ExitCode:
