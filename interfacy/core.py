@@ -11,11 +11,7 @@ from strto import StrToTypeParser, get_parser
 from interfacy import console
 from interfacy.appearance.layout import InterfacyColors
 from interfacy.appearance.layouts import HelpLayout, InterfacyLayout
-from interfacy.exceptions import (
-    ConfigurationError,
-    DuplicateCommandError,
-    InvalidCommandError,
-)
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
 from interfacy.help_option_sort import (
     DEFAULT_HELP_OPTION_SORT_RULES,
     HelpOptionSortRule,
@@ -770,30 +766,15 @@ class InterfacyParser:
         ...
 
     def log(self, message: str) -> None:
-        """
-        Log an informational message using the console helpers.
-
-        Args:
-            message (str): Message text to log.
-        """
+        """Log an informational message using the console helpers."""
         console.log(self.logger_message_tag, message)
 
     def log_error(self, message: str) -> None:
-        """
-        Log an error message using the console helpers.
-
-        Args:
-            message (str): Message text to log.
-        """
+        """Log an error message using the console helpers."""
         console.log_error(self.logger_message_tag, message)
 
     def log_exception(self, e: BaseException) -> None:
-        """
-        Log an exception using the console helpers.
-
-        Args:
-            e (BaseException): Exception to log.
-        """
+        """Log an exception using the console helpers."""
         console.log_exception(self.logger_message_tag, e, full_traceback=self.full_error_traceback)
 
     def log_interrupt(self) -> None:
