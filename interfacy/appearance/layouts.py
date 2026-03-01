@@ -671,6 +671,93 @@ class ClapLayout(HelpLayout):
 
 
 @dataclass(kw_only=True)
+class StandardLayout(HelpLayout):
+    """Layout that follows the default ``argparse`` help output."""
+
+    style: NoColor = field(default_factory=NoColor)
+
+    include_metavar_in_flag_display: bool = False
+    required_indicator: str = ""
+    enable_required_indicator: bool = False
+    default_label_for_help: str = ""
+    clear_metavar: bool = True
+
+    help_position: int = 32
+    layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
+
+    @staticmethod
+    def _normalize_whitespace(text: str) -> str:
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def _collapse_duplicate_terminal_period(text: str) -> str:
+        if not text:
+            return text
+
+        stripped = text.rstrip()
+        trailing_ws = text[len(stripped) :]
+        if stripped.endswith("..") and not stripped.endswith("..."):
+            stripped = stripped[:-1]
+        return stripped + trailing_ws
+
+    @classmethod
+    def _description_mentions_same_default(cls, description: str, default_text: str) -> bool:
+        if not description or not default_text:
+            return False
+
+        normalized_description = cls._normalize_whitespace(description).lower()
+        normalized_default = cls._normalize_whitespace(default_text).lower()
+        if not normalized_default:
+            return False
+
+        return f"[default: {normalized_default}]" in normalized_description
+
+    @classmethod
+    def _with_default_sentence(cls, description: str, has_default: bool, default: object) -> str:
+        if not has_default:
+            return description
+
+        default_text = format_default_for_help(default)
+        if default_text == "":
+            default_text = "''"
+
+        if cls._description_mentions_same_default(description, default_text):
+            return description
+
+        default_block = f"[default: {default_text}]"
+        if not description:
+            return default_block
+        return f"{description.rstrip()} {default_block}"
+
+    def get_help_for_parameter(
+        self,
+        param: Parameter,
+        flags: tuple[str, ...] | None = None,  # noqa: ARG002 - API compatibility
+    ) -> str:
+        """
+        Return help text following argparse's default style.
+
+        Args:
+            param (Parameter): Parameter metadata.
+            flags (tuple[str, ...] | None): CLI flags for display.
+        """
+        description = self.format_description(param.description or "")
+        has_default = param.has_default and param.default is not None and not param.is_required
+        return self._with_default_sentence(description, has_default, param.default)
+
+    def format_argument(
+        self,
+        arg: "Argument",
+        indent: int = 2,  # noqa: ARG002 - API compatibility
+    ) -> str:
+        description = self.format_description(arg.help or "")
+        has_default = (
+            not arg.required and arg.default is not argparse.SUPPRESS and arg.default is not None
+        )
+        return self._with_default_sentence(description, has_default, arg.default)
+
+
+@dataclass(kw_only=True)
 class ArgparseLayout(HelpLayout):
     """Layout that follows the default ``argparse`` help output."""
 
@@ -764,6 +851,10 @@ class ArgparseLayout(HelpLayout):
         return self._with_default_sentence(description, has_default, arg.default)
 
 
+# Backward compatibility alias.
+SimpleLayout = StandardLayout
+
+
 __all__ = [
     "Aligned",
     "AlignedTyped",
@@ -771,4 +862,6 @@ __all__ = [
     "ClapLayout",
     "InterfacyLayout",
     "Modern",
+    "SimpleLayout",
+    "StandardLayout",
 ]

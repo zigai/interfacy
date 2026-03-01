@@ -6,6 +6,8 @@ from interfacy.appearance.layouts import (
     ClapLayout,
     InterfacyLayout,
     Modern,
+    SimpleLayout,
+    StandardLayout,
 )
 
 __all__ = [
@@ -17,4 +19,6 @@ __all__ = [
     "InterfacyColors",
     "InterfacyLayout",
     "Modern",
+    "SimpleLayout",
+    "StandardLayout",
 ]
