@@ -195,7 +195,7 @@ class ClickParser(InterfacyParser):
             attrs["nargs"] = nargs
         if param_type is not None:
             attrs["type"] = param_type
-        if nargs != -1 and not suppress:
+        if nargs != -1 and not suppress and not argument.required:
             attrs["default"] = default
         return InterfacyClickArgument((argument.display_name,), **attrs), suppress
 
@@ -231,7 +231,7 @@ class ClickParser(InterfacyParser):
         attrs["is_flag"] = True
         if not boolean_behavior.supports_negative:
             attrs["flag_value"] = True
-        if not suppress:
+        if not suppress and not argument.required:
             attrs["default"] = default
         param_decls = self._flag_param_declarations(argument, param_name)
         return InterfacyClickOption(param_decls, **attrs), suppress
@@ -249,12 +249,12 @@ class ClickParser(InterfacyParser):
         if param_type is not None:
             attrs["type"] = param_type
         if argument.value_shape == ValueShape.LIST:
-            if not suppress:
+            if not suppress and not argument.required:
                 attrs["default"] = default
             return InterfacyListOption([param_name, *argument.flags], **attrs), suppress
         if argument.value_shape == ValueShape.TUPLE and isinstance(argument.nargs, int):
             attrs["nargs"] = argument.nargs
-        if not suppress:
+        if not suppress and not argument.required:
             attrs["default"] = default
         return InterfacyClickOption([param_name, *argument.flags], **attrs), suppress
 
@@ -582,6 +582,15 @@ class ClickParser(InterfacyParser):
             raise exc
         return exc
 
+    def _handle_click_usage_error(self, exc: click.UsageError) -> SystemExit:
+        """Mirror argparse parse/help exits for Click usage errors."""
+        exc.show(file=sys.stderr)
+        exit_code = 0 if isinstance(exc, click.exceptions.NoArgsIsHelpError) else exc.exit_code
+        system_exit = SystemExit(exit_code)
+        if self.sys_exit_enabled:
+            raise system_exit from exc
+        return system_exit
+
     def _handle_parse_failure(
         self,
         exc: (
@@ -593,11 +602,8 @@ class ClickParser(InterfacyParser):
             | click.UsageError
         ),
     ) -> Exception:
-        if isinstance(exc, click.exceptions.NoArgsIsHelpError):
-            parse_error = ConfigurationError(str(exc))
-            self.log_exception(parse_error)
-            self.exit(ExitCode.ERR_PARSING)
-            return parse_error
+        if isinstance(exc, click.UsageError):
+            return self._handle_click_usage_error(exc)
         self.log_exception(exc)
         self.exit(ExitCode.ERR_PARSING)
         return exc

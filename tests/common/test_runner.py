@@ -9,6 +9,7 @@ from tests.conftest import (
     fn_bool_required,
     fn_enum_arg,
     fn_list_int,
+    fn_literal_arg,
     fn_two_lists,
     pow,
 )
@@ -126,7 +127,33 @@ class TestEnums:
 class TestLiterals:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_literal_positional(self, parser: InterfacyParser):
-        pass
+        """Verify execution mapping Literal arguments from positional input."""
+        parser.add_command(fn_literal_arg)
+        assert parser.run(args=["RED"]) == "RED"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_literal_positional_invalid_value_exits_parse_error(self, parser: InterfacyParser):
+        """Verify invalid Literal positional input exits with parse error."""
+        parser.add_command(fn_literal_arg)
+        result = parser.run(args=["PURPLE"])
+        assert isinstance(result, SystemExit)
+        assert result.code == 2
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_literal_positional_missing_required_exits_parse_error(self, parser: InterfacyParser):
+        """Verify missing required Literal positional input exits with parse error."""
+        parser.add_command(fn_literal_arg)
+        result = parser.run(args=[])
+        assert isinstance(result, SystemExit)
+        assert result.code == 2
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_literal_kw_only_missing_required_exits_parse_error(self, parser: InterfacyParser):
+        """Verify missing required Literal option exits with parse error."""
+        parser.add_command(fn_literal_arg)
+        result = parser.run(args=[])
+        assert isinstance(result, SystemExit)
+        assert result.code == 2
 
 
 class TestListNargs:
