@@ -18,6 +18,7 @@ from interfacy.appearance import (
     HelpLayout,
     InterfacyLayout,
     Modern,
+    StandardLayout,
 )
 
 
@@ -232,6 +233,7 @@ LAYOUTS: tuple[type[HelpLayout], ...] = (
     Aligned,
     AlignedTyped,
     Modern,
+    StandardLayout,
     ArgparseLayout,
     ClapLayout,
 )
@@ -262,6 +264,7 @@ def test_root_help_contains_usage_options_and_commands_sections(
         Aligned,
         AlignedTyped,
         Modern,
+        StandardLayout,
         ArgparseLayout,
     ],
 )
@@ -288,6 +291,7 @@ def test_usage_boolean_tokens_use_primary_form_without_alternation(
         Aligned,
         AlignedTyped,
         Modern,
+        StandardLayout,
         ArgparseLayout,
     ],
 )

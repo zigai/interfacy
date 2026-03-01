@@ -17,6 +17,7 @@ from interfacy.appearance.layouts import (
     ArgparseLayout,
     ClapLayout,
     InterfacyLayout,
+    StandardLayout,
 )
 from interfacy.argparse_backend import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
@@ -54,6 +55,45 @@ def test_layout_constructor_signature_exposes_supported_settings() -> None:
     assert "clear_metavar" in signature.parameters
     assert "help_position" in signature.parameters
     assert signature.parameters["clear_metavar"].kind == inspect.Parameter.KEYWORD_ONLY
+
+
+def test_standard_layout_hides_option_metavar_by_default() -> None:
+    def demo(*, level: int = 2) -> None:
+        return None
+
+    parser = Argparser(help_layout=StandardLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = parser.build_parser().format_help()
+
+    assert "-l, --level LEVEL" not in help_text
+    assert "--level" in help_text
+
+
+def test_standard_layout_renders_defaults_with_bracket_default_block() -> None:
+    def demo(*, level: int = 2) -> None:
+        """Set output level."""
+        return None
+
+    parser = Argparser(help_layout=StandardLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = parser.build_parser().format_help()
+    level_line = next(line for line in help_text.splitlines() if "--level" in line)
+
+    assert "[default: 2]" in level_line
+    assert "Defaults to 2." not in level_line
+
+
+def test_standard_layout_does_not_duplicate_existing_bracket_default_block() -> None:
+    def demo(*, level: int = 2) -> None:
+        """Set output level [default: 2]."""
+        return None
+
+    parser = Argparser(help_layout=StandardLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = parser.build_parser().format_help()
+    level_line = next(line for line in help_text.splitlines() if "--level" in line)
+
+    assert level_line.count("[default: 2]") == 1
 
 
 def test_color_theme_constructor_signature_exposes_supported_settings() -> None:
