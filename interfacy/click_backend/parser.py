@@ -1,10 +1,31 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from collections.abc import Callable
+from typing import Any, Protocol, cast
 
 import click.parser as click_parser
 
-_BaseOptionParser: type[Any] = cast(type[Any], click_parser.OptionParser)
+
+class _OptionLike(Protocol):
+    nargs: int
+
+
+class _ParsingStateLike(Protocol):
+    rargs: list[str]
+
+
+def _click_parser_symbol(name: str) -> object:
+    """Load a click.parser symbol by name without direct private-member access."""
+    try:
+        return vars(click_parser)[name]
+    except KeyError as exc:  # pragma: no cover - Click internals unexpectedly changed
+        raise RuntimeError(f"Unsupported Click parser internals: missing {name!r}.") from exc
+
+
+_BaseOptionParser: type[Any] = cast(type[Any], _click_parser_symbol("_OptionParser"))
+_normalize_opt: Callable[[str, object], str] = cast(
+    Callable[[str, object], str], _click_parser_symbol("_normalize_opt")
+)
 
 
 class InterfacyOptionParser(_BaseOptionParser):
@@ -17,14 +38,14 @@ class InterfacyOptionParser(_BaseOptionParser):
             return False
 
         option_token = arg_text.split("=", 1)[0]
-        normalized = click_parser.normalize_opt(option_token, self.ctx)
+        normalized = _normalize_opt(option_token, self.ctx)
         if normalized in self._long_opt or normalized in self._short_opt:
             return True
 
         if arg_text.startswith("-") and not arg_text.startswith("--") and len(arg_text) > 2:
             prefix = arg_text[0]
             for ch in arg_text[1:]:
-                short_opt = click_parser.normalize_opt(f"{prefix}{ch}", self.ctx)
+                short_opt = _normalize_opt(f"{prefix}{ch}", self.ctx)
                 if short_opt in self._short_opt:
                     return True
         return False
@@ -32,8 +53,8 @@ class InterfacyOptionParser(_BaseOptionParser):
     def _get_value_from_state(
         self,
         option_name: str,
-        option: click_parser.Option,
-        state: click_parser.ParsingState,
+        option: _OptionLike,
+        state: _ParsingStateLike,
     ) -> object:
         if getattr(option, "nargs", 1) != -1:
             return super()._get_value_from_state(option_name, option, state)
