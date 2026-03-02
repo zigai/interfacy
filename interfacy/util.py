@@ -3,6 +3,7 @@ import re
 import typing
 from collections.abc import Callable
 from enum import Enum
+from pathlib import PurePath
 from types import NoneType
 from typing import Any, Literal
 
@@ -13,6 +14,9 @@ from objinspect.typing import get_literal_choices, is_union_type, type_args, typ
 from interfacy import console
 
 _MISSING = object()
+_PATH_DEFAULT_REPR_RE = re.compile(
+    r"^(?:Path|PosixPath|WindowsPath|PurePath|PurePosixPath|PureWindowsPath)\((.+)\)$"
+)
 
 
 def simplified_type_name(name: str) -> str:
@@ -387,6 +391,17 @@ def format_default_for_help(value: object) -> str:
         if isinstance(raw, (str, int, float, bool)):
             return str(raw)
         return value.name
+    if isinstance(value, PurePath):
+        return repr(str(value))
+    if isinstance(value, str):
+        match = _PATH_DEFAULT_REPR_RE.fullmatch(value.strip())
+        if match is not None:
+            try:
+                parsed = ast.literal_eval(match.group(1))
+            except (SyntaxError, ValueError):
+                parsed = None
+            if isinstance(parsed, str):
+                return repr(parsed)
     return str(value)
 
 
