@@ -732,7 +732,7 @@ class StandardLayout(HelpLayout):
     def get_help_for_parameter(
         self,
         param: Parameter,
-        flags: tuple[str, ...] | None = None,  # noqa: ARG002 - API compatibility
+        flags: tuple[str, ...] | None = None,
     ) -> str:
         """
         Return help text following argparse's default style.
@@ -743,7 +743,19 @@ class StandardLayout(HelpLayout):
         """
         description = self.format_description(param.description or "")
         has_default = param.has_default and param.default is not None and not param.is_required
-        return self._with_default_sentence(description, has_default, param.default)
+        default_value = param.default
+        if has_default and self._param_is_bool(param):
+            primary_flag = self._get_primary_boolean_flag(param, flags or ())
+            if not primary_flag:
+                primary_flag = f"--{(param.name or 'value').replace('_', '-')}"
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=primary_flag,
+                )
+            )
+        return self._with_default_sentence(description, has_default, default_value)
 
     def format_argument(
         self,
@@ -754,7 +766,18 @@ class StandardLayout(HelpLayout):
         has_default = (
             not arg.required and arg.default is not argparse.SUPPRESS and arg.default is not None
         )
-        return self._with_default_sentence(description, has_default, arg.default)
+        default_value = arg.default
+        if has_default and self._arg_is_bool(arg):
+            if arg.boolean_behavior is not None:
+                default_value = arg.boolean_behavior.default
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=self._get_primary_boolean_flag_from_argument(arg),
+                )
+            )
+        return self._with_default_sentence(description, has_default, default_value)
 
 
 @dataclass(kw_only=True)
@@ -826,7 +849,7 @@ class ArgparseLayout(HelpLayout):
     def get_help_for_parameter(
         self,
         param: Parameter,
-        flags: tuple[str, ...] | None = None,  # noqa: ARG002 - API compatibility
+        flags: tuple[str, ...] | None = None,
     ) -> str:
         """
         Return help text following argparse's default style.
@@ -837,7 +860,19 @@ class ArgparseLayout(HelpLayout):
         """
         description = self.format_description(param.description or "")
         has_default = param.has_default and param.default is not None and not param.is_required
-        return self._with_default_sentence(description, has_default, param.default)
+        default_value = param.default
+        if has_default and self._param_is_bool(param):
+            primary_flag = self._get_primary_boolean_flag(param, flags or ())
+            if not primary_flag:
+                primary_flag = f"--{(param.name or 'value').replace('_', '-')}"
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=primary_flag,
+                )
+            )
+        return self._with_default_sentence(description, has_default, default_value)
 
     def format_argument(
         self,
@@ -848,7 +883,18 @@ class ArgparseLayout(HelpLayout):
         has_default = (
             not arg.required and arg.default is not argparse.SUPPRESS and arg.default is not None
         )
-        return self._with_default_sentence(description, has_default, arg.default)
+        default_value = arg.default
+        if has_default and self._arg_is_bool(arg):
+            if arg.boolean_behavior is not None:
+                default_value = arg.boolean_behavior.default
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=self._get_primary_boolean_flag_from_argument(arg),
+                )
+            )
+        return self._with_default_sentence(description, has_default, default_value)
 
 
 # Backward compatibility alias.

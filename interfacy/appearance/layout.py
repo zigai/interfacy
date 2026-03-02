@@ -276,6 +276,22 @@ class HelpLayout:
             return ""
         return "true" if bool(value) else "false"
 
+    @staticmethod
+    def _is_positive_boolean_long_flag(flag: str) -> bool:
+        return flag.startswith("--") and not flag.startswith("--no-")
+
+    def _suppress_false_default_for_positive_boolean_flag(
+        self,
+        default_text: str,
+        *,
+        long_flag: str,
+    ) -> str:
+        if default_text.lower() != "false":
+            return default_text
+        if self._is_positive_boolean_long_flag(long_flag):
+            return ""
+        return default_text
+
     def _format_doc_text(self, text: str) -> str:
         """Format inline code spans wrapped in backticks in docstrings."""
         if not text:
@@ -1130,6 +1146,10 @@ class HelpLayout:
         if self._param_is_bool(param):
             val = param.default if param.has_default else False
             default_raw = self._format_bool_default_for_help(val)
+            default_raw = self._suppress_false_default_for_positive_boolean_flag(
+                default_raw,
+                long_flag=flag_long,
+            )
         elif not param.is_required and param.default is not None:
             default_raw = format_default_for_help(param.default)
 
@@ -1314,6 +1334,10 @@ class HelpLayout:
                 else:
                     val = False
                 default_raw = self._format_bool_default_for_help(val)
+                default_raw = self._suppress_false_default_for_positive_boolean_flag(
+                    default_raw,
+                    long_flag=flag_long,
+                )
         elif not arg.required and self._arg_has_default(arg):
             default_raw = format_default_for_help(arg.default)
 
@@ -1533,7 +1557,12 @@ class HelpLayout:
                     val = arg.default
                 else:
                     val = False
-                defaults.append(self._format_bool_default_for_help(val))
+                default_text = self._format_bool_default_for_help(val)
+                default_text = self._suppress_false_default_for_positive_boolean_flag(
+                    default_text,
+                    long_flag=self._get_primary_boolean_flag_from_argument(arg),
+                )
+                defaults.append(default_text)
             elif not arg.required and self._arg_has_default(arg):
                 defaults.append(format_default_for_help(arg.default))
 
