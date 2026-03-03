@@ -90,6 +90,44 @@ class TestBasicGroupConstruction:
         assert "sub" in repr_str
 
 
+class TestGroupKeyCollisions:
+    def test_add_command_same_key_overwrites_existing_entry(self) -> None:
+        """Verify group command keys are last-write-wins."""
+        group = CommandGroup("cli")
+        group.add_command(attach, name="task")
+        group.add_command(detach, name="task")
+
+        assert len(group.commands) == 1
+        assert group.commands["task"].obj is detach
+
+    def test_add_group_same_key_overwrites_existing_subgroup(self) -> None:
+        """Verify subgroup keys are last-write-wins."""
+        parent = CommandGroup("workspace")
+        first = CommandGroup("module")
+        second = CommandGroup("module")
+
+        parent.add_group(first)
+        parent.add_group(second)
+
+        assert len(parent.subgroups) == 1
+        assert parent.subgroups["module"] is second
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_command_key_overrides_same_name_subgroup_in_schema(
+        self, parser: InterfacyParser
+    ) -> None:
+        """Verify command/subgroup key collisions resolve to the command at runtime."""
+        workspace = CommandGroup("workspace")
+        subgroup = CommandGroup("task")
+        subgroup.add_command(attach)
+        workspace.add_group(subgroup)
+        workspace.add_command(greet, name="task")
+
+        parser.add_command(workspace)
+        result = parser.run(args=["workspace", "task", "Ada"])
+        assert result == "Hello, Ada!"
+
+
 class TestGroupWithFunctions:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_single_group_with_one_function(self, parser: InterfacyParser):
