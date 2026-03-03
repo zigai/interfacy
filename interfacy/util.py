@@ -394,6 +394,8 @@ def format_default_for_help(value: object) -> str:
     if isinstance(value, PurePath):
         return repr(str(value))
     if isinstance(value, str):
+        if value == "":
+            return '""'
         match = _PATH_DEFAULT_REPR_RE.fullmatch(value.strip())
         if match is not None:
             try:

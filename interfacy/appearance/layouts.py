@@ -718,7 +718,7 @@ class StandardLayout(HelpLayout):
             return description
 
         default_text = format_default_for_help(default)
-        if default_text == "":
+        if default_text in {"", '""'}:
             default_text = "''"
 
         if cls._description_mentions_same_default(description, default_text):
@@ -833,7 +833,7 @@ class ArgparseLayout(HelpLayout):
         description = cls._collapse_duplicate_terminal_period(description)
 
         default_text = format_default_for_help(default)
-        if default_text == "":
+        if default_text in {"", '""'}:
             default_text = "''"
 
         if cls._description_mentions_same_default(description, default_text):

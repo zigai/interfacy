@@ -284,6 +284,22 @@ def test_interfacy_layout_help_and_type_metadata_align_in_same_column() -> None:
     assert help_line.index("Show") == level_line.index("[default=")
 
 
+def test_interfacy_layout_displays_empty_string_defaults_explicitly() -> None:
+    def db_tool(*, db_path: str = "") -> None:
+        """SQLite database path. Use the configured default when empty."""
+        return None
+
+    parser = Argparser(help_layout=InterfacyLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(db_tool)
+
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    db_line = next(
+        line for line in help_text.splitlines() if "--db-path" in line and "[default=" in line
+    )
+
+    assert '[default="", type: str]' in db_line
+
+
 def test_interfacy_layout_does_not_add_extra_leading_space_for_ansi_only_description() -> None:
     layout = InterfacyLayout()
     values = {

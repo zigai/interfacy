@@ -14,3 +14,11 @@ def test_simplified_type_name_preserves_quoted_literal_values() -> None:
 def test_extract_optional_union_list_requires_exactly_list_or_none_union() -> None:
     assert util.extract_optional_union_list(list[int] | None) == (list[int], int)
     assert util.extract_optional_union_list(list[int] | str | None) is None
+
+
+def test_format_default_for_help_renders_empty_string_with_quotes() -> None:
+    assert util.format_default_for_help("") == '""'
+
+
+def test_format_default_for_help_keeps_non_empty_strings_unquoted() -> None:
+    assert util.format_default_for_help("sqlite.db") == "sqlite.db"
