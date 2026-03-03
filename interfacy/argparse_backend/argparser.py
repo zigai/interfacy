@@ -829,6 +829,7 @@ class Argparser(InterfacyParser):
             *commands (Callable[..., Any] | type | object): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
+        self._set_runtime_process_title()
         original_handler, sigint_handler = self._install_sigint_handler()
         try:
             parse_result = self._parse_run_input(commands, args)

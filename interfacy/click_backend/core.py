@@ -673,6 +673,7 @@ class ClickParser(InterfacyParser):
             *commands (Callable[..., Any]): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
+        self._set_runtime_process_title()
         original_handler = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, self._sigint_handler)
         try:

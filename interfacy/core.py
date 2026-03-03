@@ -33,6 +33,7 @@ from interfacy.naming import (
     FlagStrategy,
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
+from interfacy.process_title import set_process_title_from_argv
 from interfacy.schema.builder import ParserSchemaBuilder
 from interfacy.util import resolve_objinspect_annotations
 
@@ -486,6 +487,10 @@ class InterfacyParser:
 
     def get_args(self) -> list[str]:
         return sys.argv[1:]
+
+    def _set_runtime_process_title(self) -> None:
+        """Best-effort process title update for terminal and multiplexer integrations."""
+        set_process_title_from_argv()
 
     def exit(self, code: ExitCode) -> ExitCode:
         """
