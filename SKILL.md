@@ -1,96 +1,148 @@
 ---
 name: interfacy
-description: Build and review CLIs that use the Interfacy library (user-facing usage, not core maintenance). Use when deciding Argparser vs ClickParser, registering function/class/group commands, configuring help layouts and sort rules, modeling typed arguments and model expansion, wiring stdin piping, and handling CLI entrypoint targets.
+description: Build and review Interfacy Argparser CLIs for library users. Enforce strict public-API contracts, explicit banned patterns, fail-fast behavior, and correct help/parsing/runtime semantics.
 ---
 
-# Interfacy Operating Guide
+# Interfacy Argparser Skill
 
-Use this guide when building CLIs with Interfacy as a library user. Prefer source and test behavior over assumptions from examples.
+Prioritize correct CLI behavior. Use only public API contracts. Enforce hard rules and explicit anti-pattern bans.
 
-## Treat results and exit codes as separate concepts
+## Scope
 
-- Treat command return values, including `int`, strictly as command results, never as process exit codes.
-- Let Interfacy control process exit status through its own exit path.
-- Use `sys_exit_enabled=False` for embedding/tests where returned `SystemExit` objects are needed instead of process termination.
-- Avoid wrappers that map command return values to process exits via `raise SystemExit(main())`.
+- This skill is Argparser-only (`interfacy.Argparser`).
+- This skill is public-API-only; do not depend on undocumented internals.
+- If behavior is unclear from public docs/tests, ask the user before asserting semantics.
 
-## Pick backend deliberately
+## Canonical snippets
 
-- Use `Argparser` as the default backend.
-- Use `ClickParser` only when Click backend behavior is explicitly desired.
-- Treat Click as optional and handle missing-install import errors.
-- Do not call `ClickParser.parser_from_function`, `ClickParser.parser_from_class`, or `ClickParser.parser_from_multiple_commands`; they are intentionally unsupported.
-- Do not assume Click backend supports argparse tab-completion installation semantics.
+Typed function command:
 
-## Model commands intentionally
+```python
+from interfacy import Argparser
+
+def greet(name: str, times: int = 1) -> str:
+    return " ".join([f"Hello {name}"] * times)
+
+def main() -> None:
+    Argparser(print_result=True).run(greet)
+
+if __name__ == "__main__":
+    main()
+```
+
+Class namespace command:
+
+```python
+from interfacy import Argparser
+
+class Math:
+    def add(self, left: int, right: int) -> int:
+        return left + right
+
+Argparser(print_result=True).run(Math)
+```
+
+Expanded model flags:
+
+```python
+from dataclasses import dataclass
+from interfacy import Argparser
+
+@dataclass
+class User:
+    name: str
+    age: int
+
+def greet(user: User) -> str:
+    return f"{user.name}:{user.age}"
+
+Argparser(print_result=True).run(greet)
+```
+
+Explicit stdin piping:
+
+```python
+from interfacy import Argparser
+
+def ingest(payload: str) -> str:
+    return payload
+
+Argparser().add_command(ingest, pipe_targets={"bindings": "payload", "priority": "pipe"})
+```
+
+CLI entrypoint target syntax:
+
+```bash
+interfacy path_or_module:symbol --help
+```
+
+## Hard rules: results vs exit codes
+
+- Treat command return values (including `int`) as command results only, never process exit codes.
+- Let Interfacy handle exit status internally.
+- Keep `sys_exit_enabled=True` for end-user CLIs unless embedding/testing requires otherwise.
+- Use `sys_exit_enabled=False` only when callers need to catch/inspect `SystemExit`.
+- Never use `main(argv) -> int` + `raise SystemExit(main())` patterns for Interfacy command scripts.
+- Never add wrappers that convert command return values into process exits.
+
+## Hard rules: command modeling
 
 - Use typed functions for leaf commands.
-- Use classes when initializer options plus method subcommands are desired.
-- Use class instances when state is preconfigured and initializer CLI options must remain hidden.
+- Use classes when constructor options plus method subcommands are needed.
+- Use class instances when constructor options must not be exposed on CLI.
 - Use `CommandGroup` for explicitly shaped nested command trees.
 - Use `@parser.command(...)` or `add_command(...)` consistently; both are valid.
-- Keep canonical names and aliases globally unique.
-- Avoid re-registering the same commands by repeatedly passing them to `run(*commands)` on an already configured parser.
-- Avoid duplicate command/subgroup names inside `CommandGroup`; later entries overwrite earlier entries.
+- Keep command names and aliases unique.
+- Do not repeatedly pass the same command objects to `run(*commands)` on an already configured parser.
+- Do not define duplicate keys in `CommandGroup`.
 
-## Use type shapes that parse predictably
+## Hard rules: typing and parsing
 
 - Add concrete type annotations for all user-facing CLI params.
 - Use `list[T]` or `list[T] | None` when list nargs behavior is required.
-- Avoid unions like `list[T] | X | None` when expecting list nargs behavior.
-- Remember that bool params are handled as flag options.
-- Expect short-only bool flags to have no generated negative counterpart.
-- For heterogeneous fixed tuples, expect per-element parsing behavior.
+- Do not use unions like `list[T] | X | None` when expecting list nargs behavior.
+- Treat bool params as flag options.
 - Use dataclass, Pydantic, or plain-class models for expansion when nested flags are desired.
 - Use optional model types (`Model | None`) when absence of nested flags should resolve to `None`.
 - Use model defaults intentionally; provided nested flags merge onto default model values.
 
-## Configure stdin piping explicitly
+## Hard rules: piping
 
 - Configure piping with `pipe_targets` or `pipe_to(...)`.
 - Use Python parameter names in pipe targets, not rendered CLI flag strings.
 - Set `priority` explicitly: `cli` keeps CLI-provided values, `pipe` overrides them.
 - Set `allow_partial=True` only when fewer chunks than targets is acceptable.
-- Expect required targets with missing values to raise a pipe input error.
+- Expect missing required pipe targets to fail fast.
 
-## Configure help layout and sorting explicitly
+## Hard rules: help behavior
 
-- Choose layout family intentionally: template-style vs argparse-style.
+- Choose help layout intentionally.
 - Set `help_option_sort` and `help_subcommand_sort` when deterministic ordering matters.
 - Pass sort rules as `list[str]` tokens, not single strings.
-- Treat empty sort lists as unset/default behavior, not hard disable.
-- If replacing `parser.help_layout` after parser creation, rewire parser-owned layout dependencies.
-- Expect missing required subcommand cases to print full help and exit with code `0`.
+- Treat empty sort lists as default behavior.
 
-## Use CLI entrypoint targets correctly
+## Hard rules: entrypoint targets
 
 - Pass entrypoint targets as `module_or_file:symbol`.
 - Use functions, classes, class instances, or bound methods as targets.
 - Do not pass `Argparser` or `CommandGroup` objects as entrypoint targets.
-- Expect passthrough `--` separators to be stripped before forwarding target args.
 - Use config defaults intentionally; they apply only when corresponding overrides are `None`.
 
-## Avoid these bad practices
+## Hard rules: failure handling
 
-- Avoid import-time CLI execution (`cli()` at module top level).
-- Avoid broad `except SystemExit` handlers that hide parser/runtime failures.
-- Avoid assuming `return 0` or `return 1` from commands controls process exit status.
-- Avoid using stress/demo examples as production templates.
-- Avoid mutable default lists in command signatures.
-- Avoid depending on alias names appearing in usage-choice braces.
-- Avoid relying on undocumented backend parity; verify behavior per backend when needed.
+- Let parse/runtime failures surface; do not mask them with broad exception wrappers.
+- Do not add broad `except SystemExit` handlers that hide failures.
+- Treat `SystemExit(0)` help flows and `SystemExit(2)` parse failures as distinct outcomes.
 
-## Treat known quirks as unstable behavior
+## Banned patterns
 
-- Treat “missing required subcommand prints full help and exits `0`” as current behavior, not a stability guarantee.
-- Treat `CommandGroup` duplicate-key overwrite behavior as an implementation quirk; do not build workflows that rely on overwrite order.
-- Treat Click parser in-place argument list mutation as backend-internal behavior; do not rely on post-parse `args` identity/content.
-- Treat stateful internals (for example list-positional flag generation counters) as non-contract behavior.
+- Do not execute CLI at import time (`cli()` at module top level).
+- Do not use mutable default lists/dicts in command signatures.
+- Do not rely on alias names appearing in usage-choice braces.
 
-## Verify with focused tests
+## Light verification checklist
 
-- Runtime and exit behavior: `tests/common/test_system_exit_handling.py`, `tests/common/test_interrupt.py`, `tests/common/test_runner.py`, `tests/common/test_runner_varargs.py`.
-- Schema and typing behavior: `tests/schema/`, `tests/specs/test_parser_spec_builder.py`, `tests/common/test_naming.py`.
-- Help/layout behavior: `tests/argparse/layout/`, `tests/common/test_help_option_sort.py`, `tests/common/test_help_subcommand_sort.py`, `tests/common/test_help_missing_subcommand.py`.
-- Click backend behavior: `tests/click/` and shared command/group/decorator tests in `tests/common/`.
-- Entrypoint/config behavior: `tests/cli/test_main.py`, `tests/common/test_config.py`.
+- Confirm help path behavior with `--help` on root and subcommands.
+- Confirm parse failures surface as parse errors (not swallowed).
+- Confirm command return values print/flow as results, not exit codes.
+- Confirm piping behavior for required targets and chosen `priority`.
