@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from interfacy._sort_rule_utils import resolve_sort_rules
+from interfacy.sort_rule_utils import resolve_sort_rules
 
 HelpOptionSortRule = Literal[
     "required_first",

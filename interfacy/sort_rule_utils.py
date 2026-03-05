@@ -5,7 +5,7 @@ from typing import TypeVar
 
 from interfacy.exceptions import ConfigurationError
 
-_SortRule = TypeVar("_SortRule", bound=str)
+T = TypeVar("T", bound=str)
 
 
 def normalize_sort_rule_name(value: str) -> str:
@@ -17,10 +17,10 @@ def resolve_sort_rules(
     value: object,
     *,
     value_name: str,
-    allowed_values: Sequence[_SortRule],
+    allowed_values: Sequence[T],
     allow_none: bool = True,
     empty_means_none: bool = True,
-) -> list[_SortRule] | None:
+) -> list[T] | None:
     """Validate and normalize a list of named sort rules."""
     if value is None:
         if allow_none:
@@ -31,8 +31,8 @@ def resolve_sort_rules(
         raise ConfigurationError(f"{value_name} must be a list")
 
     lookup = {normalize_sort_rule_name(token): token for token in allowed_values}
-    result: list[_SortRule] = []
-    seen: set[_SortRule] = set()
+    result: list[T] = []
+    seen: set[T] = set()
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError(f"{value_name} values must be strings")
