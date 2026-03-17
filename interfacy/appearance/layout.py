@@ -16,17 +16,15 @@ from stdl.st import (
     with_style,
 )
 
-from interfacy.appearance.type_help import format_type_for_help
-from interfacy.help_option_sort import (
+from interfacy.appearance.help_sort import (
     DEFAULT_HELP_OPTION_SORT_RULES,
-    HelpOptionSortRule,
-    resolve_help_option_sort_rules,
-)
-from interfacy.help_subcommand_sort import (
     DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
+    HelpOptionSortRule,
     HelpSubcommandSortRule,
+    resolve_help_option_sort_rules,
     resolve_help_subcommand_sort_rules,
 )
+from interfacy.appearance.type_help import format_type_for_help
 from interfacy.naming import CommandNameRegistry, FlagStrategy
 from interfacy.util import (
     format_default_for_help,
@@ -457,15 +455,21 @@ class HelpLayout:
         name_column = f"   {name_styled}{' ' * pad}"
         return f"{name_column} {with_style(description, self.style.description)}"
 
-    def get_help_for_class(self, command: Class) -> str:
+    def get_help_for_class(
+        self,
+        command: Class,
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> str:
         """
         Build help text for class subcommands.
 
         Args:
             command (Class): Inspected class command.
+            rules (list[HelpSubcommandSortRule] | None): Optional explicit ordering rules.
         """
         methods = [method for method in command.methods if method.name not in self.command_skips]
-        methods = self.order_class_methods_for_help(methods)
+        methods = self.order_class_methods_for_help(methods, rules=rules)
         display_names: list[str] = []
         for method in methods:
             method_name = self._translated_method_name(method)
@@ -678,14 +682,20 @@ class HelpLayout:
             is_required=is_required,
         )
 
-    def get_help_for_multiple_commands(self, commands: dict[str, "Command"]) -> str:
+    def get_help_for_multiple_commands(
+        self,
+        commands: dict[str, "Command"],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> str:
         """
         Build a command listing for multiple top-level commands.
 
         Args:
             commands (dict[str, Command]): Command map keyed by name.
+            rules (list[HelpSubcommandSortRule] | None): Optional explicit ordering rules.
         """
-        ordered_commands = self.order_commands_for_help(commands)
+        ordered_commands = self.order_commands_for_help(commands, rules=rules)
         display_names = [
             self._format_command_display_name(cmd.cli_name, cmd.aliases) for cmd in ordered_commands
         ]
@@ -714,7 +724,18 @@ class HelpLayout:
             return method.name
         return self.flag_generator.command_translator.translate(method.name)
 
-    def _resolve_help_subcommand_sort_rules(self) -> list[HelpSubcommandSortRule]:
+    def _resolve_help_subcommand_sort_rules(
+        self,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> list[HelpSubcommandSortRule]:
+        if rules is not None:
+            return list(
+                resolve_help_subcommand_sort_rules(
+                    rules,
+                    value_name=f"{self.__class__.__name__}.help_subcommand_sort_rules",
+                    allow_none=False,
+                )
+            )
         active_rules = resolve_help_subcommand_sort_rules(
             self.help_subcommand_sort_rules,
             value_name=f"{self.__class__.__name__}.help_subcommand_sort_rules",
@@ -752,13 +773,15 @@ class HelpLayout:
     def _order_named_items_for_help(
         self,
         items: list[tuple[str, _TNamedItem]],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
     ) -> list[_TNamedItem]:
-        rules = self._resolve_help_subcommand_sort_rules()
-        if not rules:
+        active_rules = self._resolve_help_subcommand_sort_rules(rules)
+        if not active_rules:
             return [item for _, item in items]
 
         extractors = self._subcommand_rule_extractors()
-        rule_extractors = [extractors[rule] for rule in rules]
+        rule_extractors = [extractors[rule] for rule in active_rules]
         indexed_items = list(enumerate(items))
         indexed_items.sort(
             key=lambda item: (
@@ -768,25 +791,37 @@ class HelpLayout:
         )
         return [pair[1] for _, pair in indexed_items]
 
-    def order_commands_for_help(self, commands: dict[str, "Command"]) -> list["Command"]:
+    def order_commands_for_help(
+        self,
+        commands: dict[str, "Command"],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> list["Command"]:
         """
         Return commands sorted by the active help-subcommand ordering rules.
 
         Args:
             commands (dict[str, Command]): Command map keyed by canonical name.
+            rules (list[HelpSubcommandSortRule] | None): Optional explicit ordering rules.
         """
         named_commands = [(command.cli_name, command) for command in commands.values()]
-        return self._order_named_items_for_help(named_commands)
+        return self._order_named_items_for_help(named_commands, rules=rules)
 
-    def order_class_methods_for_help(self, methods: list[Method]) -> list[Method]:
+    def order_class_methods_for_help(
+        self,
+        methods: list[Method],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> list[Method]:
         """
         Return class methods sorted by the active help-subcommand ordering rules.
 
         Args:
             methods (list[Method]): Public methods eligible for subcommand display.
+            rules (list[HelpSubcommandSortRule] | None): Optional explicit ordering rules.
         """
         named_methods = [(self._translated_method_name(method), method) for method in methods]
-        return self._order_named_items_for_help(named_methods)
+        return self._order_named_items_for_help(named_methods, rules=rules)
 
     def _use_template_layout(self) -> bool:
         match self.layout_mode:
@@ -1417,7 +1452,18 @@ class HelpLayout:
     def _option_alias_count(arg: "Argument") -> int:
         return len(arg.flags)
 
-    def _resolve_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
+    def _resolve_help_option_sort_rules(
+        self,
+        rules: list[HelpOptionSortRule] | None = None,
+    ) -> list[HelpOptionSortRule]:
+        if rules is not None:
+            return list(
+                resolve_help_option_sort_rules(
+                    rules,
+                    value_name=f"{self.__class__.__name__}.help_option_sort_rules",
+                    allow_none=False,
+                )
+            )
         active_rules = resolve_help_option_sort_rules(
             self.help_option_sort_rules,
             value_name=f"{self.__class__.__name__}.help_option_sort_rules",
@@ -1451,19 +1497,25 @@ class HelpLayout:
             "alphabetical": self._option_sort_key,
         }
 
-    def order_option_arguments_for_help(self, options: list["Argument"]) -> list["Argument"]:
+    def order_option_arguments_for_help(
+        self,
+        options: list["Argument"],
+        *,
+        rules: list[HelpOptionSortRule] | None = None,
+    ) -> list["Argument"]:
         """
         Return options sorted by the active help-option ordering rules.
 
         Args:
             options (list[Argument]): Option arguments to sort.
+            rules (list[HelpOptionSortRule] | None): Optional explicit ordering rules.
         """
-        rules = self._resolve_help_option_sort_rules()
-        if not rules:
+        active_rules = self._resolve_help_option_sort_rules(rules)
+        if not active_rules:
             return options
 
         extractors = self._option_rule_extractors()
-        rule_extractors = [extractors[rule] for rule in rules]
+        rule_extractors = [extractors[rule] for rule in active_rules]
         indexed_options = list(enumerate(options))
         indexed_options.sort(
             key=lambda item: (

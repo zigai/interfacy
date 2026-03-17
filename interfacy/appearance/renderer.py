@@ -1,19 +1,12 @@
 from __future__ import annotations
 
-import os
 import re
 
 from stdl.st import ansi_len, with_style
 
 from interfacy.appearance.layout import HelpLayout
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
-
-
-def _get_terminal_width() -> int:
-    try:
-        return os.get_terminal_size().columns
-    except (OSError, AttributeError):
-        return 80
+from interfacy.util import get_terminal_width
 
 
 def _make_help_argument(help_text: str) -> Argument:
@@ -46,7 +39,7 @@ class SchemaHelpRenderer:
         terminal_width: int | None = None,
     ) -> None:
         self.layout = layout
-        self.terminal_width = terminal_width or _get_terminal_width()
+        self.terminal_width = terminal_width or get_terminal_width()
 
     def render_parser_help(self, schema: ParserSchema, prog: str) -> str:
         """
@@ -89,7 +82,10 @@ class SchemaHelpRenderer:
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
         options = [a for a in all_args if a.kind == ArgumentKind.OPTION]
-        options = layout.order_option_arguments_for_help(options)
+        options = layout.order_option_arguments_for_help(
+            options,
+            rules=command.help_option_sort_effective,
+        )
 
         layout.prepare_default_field_width_for_arguments(all_args)
 
@@ -113,7 +109,10 @@ class SchemaHelpRenderer:
             sections.append(options_section)
 
         if command.subcommands:
-            subcommand_help = layout.get_help_for_multiple_commands(command.subcommands)
+            subcommand_help = layout.get_help_for_multiple_commands(
+                command.subcommands,
+                rules=command.help_subcommand_sort_effective,
+            )
             sections.append(subcommand_help)
 
         epilog_block = self._build_epilog_block(command, parser_epilog)
@@ -217,7 +216,10 @@ class SchemaHelpRenderer:
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
         options = [a for a in all_args if a.kind == ArgumentKind.OPTION]
-        options = self.layout.order_option_arguments_for_help(options)
+        options = self.layout.order_option_arguments_for_help(
+            options,
+            rules=command.help_option_sort_effective,
+        )
         compact_options_usage = self.layout.compact_options_usage
 
         usage_prefix = self._get_usage_prefix()
@@ -275,7 +277,10 @@ class SchemaHelpRenderer:
         if "{command}" not in token or not command.subcommands:
             return token
 
-        ordered_subcommands = self.layout.order_commands_for_help(command.subcommands)
+        ordered_subcommands = self.layout.order_commands_for_help(
+            command.subcommands,
+            rules=command.help_subcommand_sort_effective,
+        )
         choices = [subcommand.cli_name for subcommand in ordered_subcommands]
         if not choices:
             return token

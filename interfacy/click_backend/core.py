@@ -21,6 +21,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - handled by optional dep
 from objinspect import Class
 from strto import StrToTypeParser
 
+from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.click_backend.commands import (
     InterfacyClickArgument,
@@ -39,8 +40,6 @@ from interfacy.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
-from interfacy.help_option_sort import HelpOptionSortRule
-from interfacy.help_subcommand_sort import HelpSubcommandSortRule
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
@@ -115,8 +114,13 @@ class ClickParser(InterfacyParser):
     def _command_key_for_depth(self, depth: int) -> str:
         return f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
 
-    def _ordered_commands_for_help(self, commands: dict[str, Command]) -> list[Command]:
-        return self.help_layout.order_commands_for_help(commands)
+    def _ordered_commands_for_help(
+        self,
+        commands: dict[str, Command],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> list[Command]:
+        return self.help_layout.order_commands_for_help(commands, rules=rules)
 
     def _remaining_args(self, ctx: click.Context) -> list[str]:
         with warnings.catch_warnings():
@@ -291,7 +295,10 @@ class ClickParser(InterfacyParser):
         )
 
     def _build_click_params(
-        self, arguments: list[Argument]
+        self,
+        arguments: list[Argument],
+        *,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
     ) -> tuple[list[click.Parameter], dict[str, str], dict[str, Argument], set[str]]:
         params: list[click.Parameter] = []
         param_bindings: dict[str, str] = {}
@@ -303,7 +310,7 @@ class ClickParser(InterfacyParser):
         options = [arg for arg in arguments if arg.kind == ArgumentKind.OPTION]
         ordered_arguments = [
             *positionals,
-            *self.help_layout.order_option_arguments_for_help(options),
+            *self.help_layout.order_option_arguments_for_help(options, rules=help_option_sort),
         ]
 
         for argument in ordered_arguments:
@@ -349,7 +356,8 @@ class ClickParser(InterfacyParser):
         )
         if not is_group_like:
             params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
-                command.parameters
+                command.parameters,
+                help_option_sort=command.help_option_sort_effective,
             )
             click_command = InterfacyClickCommand(
                 name=command.cli_name,
@@ -362,7 +370,8 @@ class ClickParser(InterfacyParser):
             return click_command
 
         params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
-            command.initializer
+            command.initializer,
+            help_option_sort=command.help_option_sort_effective,
         )
         group = InterfacyClickGroup(
             name=command.cli_name,
@@ -373,7 +382,10 @@ class ClickParser(InterfacyParser):
         self._attach_param_metadata(group, param_bindings, arg_specs, suppress_defaults, command)
 
         if command.subcommands:
-            for subcommand in self._ordered_commands_for_help(command.subcommands):
+            for subcommand in self._ordered_commands_for_help(
+                command.subcommands,
+                rules=command.help_subcommand_sort_effective,
+            ):
                 group.add_command(
                     self.build_click_command(subcommand, depth + 1), name=subcommand.cli_name
                 )

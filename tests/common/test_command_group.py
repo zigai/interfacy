@@ -3,7 +3,17 @@ import pytest
 from interfacy import CommandGroup
 from interfacy.core import InterfacyParser
 from interfacy.exceptions import ConfigurationError
-from tests.conftest import Container, Database, Math, attach, detach, greet, pow
+from tests.conftest import (
+    Container,
+    Database,
+    DerivedOperation,
+    Math,
+    TextTools,
+    attach,
+    detach,
+    greet,
+    pow,
+)
 
 
 class TestBasicGroupConstruction:
@@ -215,6 +225,31 @@ class TestGroupWithClasses:
             parser.run(args=["workspace", "container", "stop", "mycontainer"])
             == "Stopped mycontainer"
         )
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_classmethod_override_applies_to_group_entry(self, parser: InterfacyParser):
+        """Verify group entry can enable classmethods via per-command override."""
+        workspace = CommandGroup("workspace")
+        workspace.add_command(TextTools, name="tools", include_classmethods=True)
+
+        parser.add_command(workspace)
+        schema = parser.build_parser_schema()
+        workspace_cmd = schema.commands["workspace"]
+        assert workspace_cmd.subcommands is not None
+        tools_cmd = workspace_cmd.subcommands["tools"]
+        subcommands = tools_cmd.subcommands or {}
+
+        assert "tool-name" in subcommands
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_inherited_override_applies_to_group_entry(self, parser: InterfacyParser):
+        """Verify group entry can include inherited methods via per-command override."""
+        workspace = CommandGroup("workspace")
+        workspace.add_command(DerivedOperation, name="ops", include_inherited_methods=True)
+
+        parser.add_command(workspace)
+        result = parser.run(args=["workspace", "ops", "describe"])
+        assert result == "base"
 
 
 class TestGroupWithInstances:

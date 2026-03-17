@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from objinspect import Class, Function, Method
 
+from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout
 from interfacy.pipe import PipeTargets
 
@@ -143,6 +144,15 @@ class Command:
     is_instance: bool = False
     parent_path: tuple[str, ...] = ()
     stored_instance: object | None = None
+    include_inherited_methods: bool | None = None
+    include_classmethods: bool | None = None
+    expand_model_params: bool | None = None
+    model_expansion_max_depth: int | None = None
+    abbreviation_scope: Literal["top_level_options", "all_options"] | None = None
+    help_option_sort: list[HelpOptionSortRule] | None = None
+    help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
+    help_option_sort_effective: list[HelpOptionSortRule] | None = None
+    help_subcommand_sort_effective: list[HelpSubcommandSortRule] | None = None
 
     @cached_property
     def description(self) -> str | None:

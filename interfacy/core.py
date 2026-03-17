@@ -2,28 +2,26 @@ import sys
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypedDict, TypeVar
 
 from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
 from strto import StrToTypeParser, get_parser
 
 from interfacy import console
+from interfacy.appearance.help_sort import (
+    DEFAULT_HELP_OPTION_SORT_RULES,
+    DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
+    HelpOptionSortRule,
+    HelpSubcommandSortRule,
+    default_help_option_sort_rules,
+    default_help_subcommand_sort_rules,
+    resolve_help_option_sort_rules,
+    resolve_help_subcommand_sort_rules,
+)
 from interfacy.appearance.layout import InterfacyColors
 from interfacy.appearance.layouts import HelpLayout, InterfacyLayout
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
-from interfacy.help_option_sort import (
-    DEFAULT_HELP_OPTION_SORT_RULES,
-    HelpOptionSortRule,
-    default_help_option_sort_rules,
-    resolve_help_option_sort_rules,
-)
-from interfacy.help_subcommand_sort import (
-    DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
-    HelpSubcommandSortRule,
-    default_help_subcommand_sort_rules,
-    resolve_help_subcommand_sort_rules,
-)
 from interfacy.logger import get_logger
 from interfacy.naming import (
     AbbreviationGenerator,
@@ -33,9 +31,8 @@ from interfacy.naming import (
     FlagStrategy,
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
-from interfacy.process_title import set_process_title_from_argv
 from interfacy.schema.builder import ParserSchemaBuilder
-from interfacy.util import resolve_objinspect_annotations
+from interfacy.util import resolve_objinspect_annotations, set_process_title_from_argv
 
 if TYPE_CHECKING:
     from interfacy.group import CommandGroup
@@ -47,37 +44,53 @@ PIPE_UNSET: Final[object] = object()
 AbbreviationScope = Literal["top_level_options", "all_options"]
 HelpOptionSort = list[HelpOptionSortRule] | None
 HelpSubcommandSort = list[HelpSubcommandSortRule] | None
-_ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
+ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
     "top_level_options",
     "all_options",
 )
 
 F = TypeVar("F", bound=Callable[..., Any])
 SortRuleT = TypeVar("SortRuleT")
+ValidateInputT = TypeVar("ValidateInputT")
+ValidateOutputT = TypeVar("ValidateOutputT")
+
+
+class ResolvedCommandSettings(TypedDict):
+    abbreviation_scope: AbbreviationScope | None
+    help_option_sort: HelpOptionSort
+    help_subcommand_sort: HelpSubcommandSort
+    model_expansion_max_depth: int | None
+
 
 logger = get_logger(__name__)
 
 
-def _validate_abbreviation_max_generated_len(value: int) -> int:
+def validate_abbreviation_max_generated_len(value: int) -> int:
     if value < 1:
         raise ConfigurationError("abbreviation_max_generated_len must be >= 1")
     return value
 
 
-def _validate_abbreviation_scope(value: AbbreviationScope) -> AbbreviationScope:
-    if value not in _ABBREVIATION_SCOPE_VALUES:
+def validate_abbreviation_scope(value: AbbreviationScope) -> AbbreviationScope:
+    if value not in ABBREVIATION_SCOPE_VALUES:
         raise ConfigurationError(
-            "abbreviation_scope must be one of: " + ", ".join(_ABBREVIATION_SCOPE_VALUES)
+            "abbreviation_scope must be one of: " + ", ".join(ABBREVIATION_SCOPE_VALUES)
         )
     return value
 
 
-def _validate_help_option_sort(value: object) -> HelpOptionSort:
+def validate_help_option_sort(value: object) -> HelpOptionSort:
     return resolve_help_option_sort_rules(value, value_name="help_option_sort")
 
 
-def _validate_help_subcommand_sort(value: object) -> HelpSubcommandSort:
+def validate_help_subcommand_sort(value: object) -> HelpSubcommandSort:
     return resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
+
+
+def validate_model_expansion_max_depth(value: int) -> int:
+    if value < 1:
+        raise ConfigurationError("model_expansion_max_depth must be >= 1")
+    return value
 
 
 class ExitCode(IntEnum):
@@ -174,14 +187,16 @@ class InterfacyParser:
         self.include_inherited_methods = include_inherited_methods
         self.include_classmethods = include_classmethods
         self.expand_model_params = expand_model_params
-        self.model_expansion_max_depth = model_expansion_max_depth
-        self.abbreviation_max_generated_len = _validate_abbreviation_max_generated_len(
+        self.model_expansion_max_depth = validate_model_expansion_max_depth(
+            model_expansion_max_depth
+        )
+        self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
             abbreviation_max_generated_len
         )
-        self.abbreviation_scope = _validate_abbreviation_scope(abbreviation_scope)
-        self.help_option_sort = _validate_help_option_sort(help_option_sort)
+        self.abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
+        self.help_option_sort = validate_help_option_sort(help_option_sort)
         self.help_option_sort_effective = default_help_option_sort_rules()
-        self.help_subcommand_sort = _validate_help_subcommand_sort(help_subcommand_sort)
+        self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
         self.help_subcommand_sort_effective = default_help_subcommand_sort_rules()
 
         self.autorun = run
@@ -218,7 +233,7 @@ class InterfacyParser:
         return self._resolve_help_sort_from_layout(
             help_layout=help_layout,
             user_value=self.help_option_sort,
-            user_validator=_validate_help_option_sort,
+            user_validator=validate_help_option_sort,
             layout_default_attr="help_option_sort_default",
             layout_resolver=resolve_help_option_sort_rules,
             default_rules=DEFAULT_HELP_OPTION_SORT_RULES,
@@ -263,7 +278,7 @@ class InterfacyParser:
         return self._resolve_help_sort_from_layout(
             help_layout=help_layout,
             user_value=self.help_subcommand_sort,
-            user_validator=_validate_help_subcommand_sort,
+            user_validator=validate_help_subcommand_sort,
             layout_default_attr="help_subcommand_sort_default",
             layout_resolver=resolve_help_subcommand_sort_rules,
             default_rules=DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
@@ -314,6 +329,68 @@ class InterfacyParser:
         """
         return self._refresh_help_subcommand_sort_rules()
 
+    @staticmethod
+    def _validate_optional(
+        value: ValidateInputT | None,
+        validator: Callable[[ValidateInputT], ValidateOutputT],
+    ) -> ValidateOutputT | None:
+        if value is None:
+            return None
+        return validator(value)
+
+    @staticmethod
+    def _copy_optional_list(value: list[SortRuleT] | None) -> list[SortRuleT] | None:
+        if value is None:
+            return None
+        return list(value)
+
+    def _resolve_command_settings(
+        self,
+        *,
+        abbreviation_scope: AbbreviationScope | None,
+        help_option_sort: list[HelpOptionSortRule] | None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None,
+        model_expansion_max_depth: int | None,
+    ) -> ResolvedCommandSettings:
+        return {
+            "abbreviation_scope": self._validate_optional(
+                abbreviation_scope,
+                validate_abbreviation_scope,
+            ),
+            "help_option_sort": self._validate_optional(
+                help_option_sort,
+                validate_help_option_sort,
+            ),
+            "help_subcommand_sort": self._validate_optional(
+                help_subcommand_sort,
+                validate_help_subcommand_sort,
+            ),
+            "model_expansion_max_depth": self._validate_optional(
+                model_expansion_max_depth,
+                validate_model_expansion_max_depth,
+            ),
+        }
+
+    @staticmethod
+    def _apply_command_settings(
+        command: "Command",
+        *,
+        include_inherited_methods: bool | None,
+        include_classmethods: bool | None,
+        expand_model_params: bool | None,
+        model_expansion_max_depth: int | None,
+        abbreviation_scope: AbbreviationScope | None,
+        help_option_sort: HelpOptionSort,
+        help_subcommand_sort: HelpSubcommandSort,
+    ) -> None:
+        command.include_inherited_methods = include_inherited_methods
+        command.include_classmethods = include_classmethods
+        command.expand_model_params = expand_model_params
+        command.model_expansion_max_depth = model_expansion_max_depth
+        command.abbreviation_scope = abbreviation_scope
+        command.help_option_sort = InterfacyParser._copy_optional_list(help_option_sort)
+        command.help_subcommand_sort = InterfacyParser._copy_optional_list(help_subcommand_sort)
+
     def add_command(
         self,
         command: object,
@@ -321,6 +398,13 @@ class InterfacyParser:
         description: str | None = None,
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
+        include_inherited_methods: bool | None = None,
+        include_classmethods: bool | None = None,
+        expand_model_params: bool | None = None,
+        model_expansion_max_depth: int | None = None,
+        abbreviation_scope: AbbreviationScope | None = None,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
     ) -> "Command":
         """
         Register a command callable or group with the parser.
@@ -331,22 +415,53 @@ class InterfacyParser:
             description (str | None): Optional description override.
             aliases (Sequence[str] | None): Alternative CLI names.
             pipe_targets (PipeTargets | dict[str, Any] | Sequence[str] | str | None): Pipe config.
+            include_inherited_methods (bool | None): Override inherited-method inclusion.
+            include_classmethods (bool | None): Override classmethod inclusion.
+            expand_model_params (bool | None): Override model expansion toggle.
+            model_expansion_max_depth (int | None): Override model expansion depth.
+            abbreviation_scope (AbbreviationScope | None): Override abbreviation scope.
+            help_option_sort (list[HelpOptionSortRule] | None): Override option sort rules.
+            help_subcommand_sort (list[HelpSubcommandSortRule] | None): Override subcommand sort.
 
         Raises:
             DuplicateCommandError: If the command name is already registered.
         """
         from interfacy.group import CommandGroup
 
+        resolved_settings = self._resolve_command_settings(
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+            model_expansion_max_depth=model_expansion_max_depth,
+        )
+
         if isinstance(command, CommandGroup):
-            return self.add_group(command, name=name, description=description, aliases=aliases)
+            return self.add_group(
+                command,
+                name=name,
+                description=description,
+                aliases=aliases,
+                include_inherited_methods=include_inherited_methods,
+                include_classmethods=include_classmethods,
+                expand_model_params=expand_model_params,
+                **resolved_settings,
+            )
 
         obj = inspect(
             command,
             init=True,
             public=True,
-            inherited=self.include_inherited_methods,
+            inherited=(
+                include_inherited_methods
+                if include_inherited_methods is not None
+                else self.include_inherited_methods
+            ),
             static_methods=True,
-            classmethod=self.include_classmethods,
+            classmethod=(
+                include_classmethods
+                if include_classmethods is not None
+                else self.include_classmethods
+            ),
             protected=False,
             private=False,
         )
@@ -384,6 +499,13 @@ class InterfacyParser:
             pipe_targets=None,
             help_layout=self.help_layout,
         )
+        self._apply_command_settings(
+            command,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
+            expand_model_params=expand_model_params,
+            **resolved_settings,
+        )
         self.commands[canonical_name] = command
         logger.debug("Added command: %s", command)
         return command
@@ -394,6 +516,13 @@ class InterfacyParser:
         description: str | None = None,
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
+        include_inherited_methods: bool | None = None,
+        include_classmethods: bool | None = None,
+        expand_model_params: bool | None = None,
+        model_expansion_max_depth: int | None = None,
+        abbreviation_scope: AbbreviationScope | None = None,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
     ) -> Callable[[F], F]:
         """
         Decorator to register a command with the parser.
@@ -406,6 +535,13 @@ class InterfacyParser:
             description: Override the description (defaults to docstring).
             aliases: Alternative names for this command.
             pipe_targets: Configure stdin piping for this command.
+            include_inherited_methods: Override inherited-method inclusion.
+            include_classmethods: Override classmethod inclusion.
+            expand_model_params: Override model expansion toggle.
+            model_expansion_max_depth: Override model expansion depth.
+            abbreviation_scope: Override abbreviation scope.
+            help_option_sort: Override help option sort rules.
+            help_subcommand_sort: Override help subcommand sort rules.
 
         Returns:
             A decorator that registers the callable and returns it unchanged.
@@ -418,6 +554,13 @@ class InterfacyParser:
                 description=description,
                 aliases=aliases,
                 pipe_targets=pipe_targets,
+                include_inherited_methods=include_inherited_methods,
+                include_classmethods=include_classmethods,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
             )
             return func
 
@@ -429,6 +572,13 @@ class InterfacyParser:
         name: str | None = None,
         description: str | None = None,
         aliases: Sequence[str] | None = None,
+        include_inherited_methods: bool | None = None,
+        include_classmethods: bool | None = None,
+        expand_model_params: bool | None = None,
+        model_expansion_max_depth: int | None = None,
+        abbreviation_scope: AbbreviationScope | None = None,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
     ) -> "Command":
         """
         Add a CommandGroup to the parser for deeply nested CLI structures.
@@ -438,6 +588,13 @@ class InterfacyParser:
             name: Override the group name
             description: Override the description
             aliases: Alternative names for this group
+            include_inherited_methods: Override inherited-method inclusion.
+            include_classmethods: Override classmethod inclusion.
+            expand_model_params: Override model expansion toggle.
+            model_expansion_max_depth: Override model expansion depth.
+            abbreviation_scope: Override abbreviation scope.
+            help_option_sort: Override help option sort rules.
+            help_subcommand_sort: Override help subcommand sort rules.
 
         Returns:
             The Command schema for the group
@@ -456,13 +613,34 @@ class InterfacyParser:
         if canonical_name in self.commands:
             raise DuplicateCommandError(canonical_name)
 
+        resolved_settings = self._resolve_command_settings(
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+            model_expansion_max_depth=model_expansion_max_depth,
+        )
+
         builder = ParserSchemaBuilder(self)
-        command = builder.build_from_group(group, canonical_name=canonical_name)
+        command = builder.build_from_group(
+            group,
+            canonical_name=canonical_name,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
+            expand_model_params=expand_model_params,
+            **resolved_settings,
+        )
 
         if description is not None:
             command.raw_description = description
 
         command.aliases = tuple(command_aliases)
+        self._apply_command_settings(
+            command,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
+            expand_model_params=expand_model_params,
+            **resolved_settings,
+        )
         self.commands[canonical_name] = command
         logger.debug("Added group: %s", command)
         return command

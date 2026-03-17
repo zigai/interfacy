@@ -165,6 +165,66 @@ def test_model_expansion_respects_max_depth() -> None:
     assert "level1.level2.level3.leaf" not in names
 
 
+def test_per_command_override_enables_model_expansion_when_parser_disabled() -> None:
+    parser = Argparser(
+        sys_exit_enabled=False,
+        expand_model_params=False,
+    )
+    parser.add_command(greet_with_address, expand_model_params=True)
+
+    schema = parser.build_parser_schema()
+    command = schema.commands["greet-with-address"]
+    names = {arg.name for arg in command.parameters}
+
+    assert "user.name" in names
+    assert command.expand_model_params is True
+
+    result = parser.run(
+        args=[
+            "--user.name",
+            "Alice",
+            "--user.age",
+            "30",
+            "--user.address.city",
+            "Austin",
+            "--user.address.zip",
+            "78701",
+        ],
+    )
+    assert result == "Hello Alice, age 30 from Austin 78701"
+
+
+def test_per_command_override_model_expansion_depth() -> None:
+    parser = Argparser(
+        sys_exit_enabled=False,
+        model_expansion_max_depth=2,
+    )
+    parser.add_command(uses_levels, model_expansion_max_depth=4)
+
+    schema = parser.build_parser_schema()
+    command = schema.commands["uses-levels"]
+    names = {arg.name for arg in command.parameters}
+
+    assert "level1.level2.level3.leaf" in names
+    assert command.model_expansion_max_depth == 4
+
+    result = parser.run(args=["--level1.level2.level3.leaf", "x"])
+    assert result == "x"
+
+
+def test_per_command_override_abbreviation_scope() -> None:
+    parser = Argparser(
+        sys_exit_enabled=False,
+        abbreviation_scope="top_level_options",
+    )
+    parser.add_command(greet_with_address, abbreviation_scope="all_options")
+    schema = parser.build_parser_schema()
+    command = schema.commands["greet-with-address"]
+
+    name_arg = next(arg for arg in command.parameters if arg.name == "user.name")
+    assert any(flag.startswith("-") and not flag.startswith("--") for flag in name_arg.flags)
+
+
 def test_docstring_help_used_for_dataclass_fields() -> None:
     parser = FakeParser(help_layout=InterfacyLayout())
     parser.register_command(Function(greet_with_address), canonical_name="greet-docs")

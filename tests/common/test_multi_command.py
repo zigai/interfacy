@@ -249,6 +249,16 @@ class TestMethodFiltering:
         assert "tool-name" in subcommands
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_class_methods_override_per_command(self, parser: InterfacyParser):
+        """Verify classmethod inclusion can be overridden per command."""
+        parser.include_classmethods = False
+        parser.add_command(TextTools, include_classmethods=True)
+        schema = parser.build_parser_schema()
+        subcommands = schema.get_command("text-tools").subcommands or {}
+
+        assert "tool-name" in subcommands
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_properties_not_commands(self, parser: InterfacyParser):
         """Verify properties are not treated as subcommands."""
         parser.add_command(TextTools)
@@ -264,6 +274,16 @@ class TestInheritance:
         """Verify inherited methods are included as subcommands."""
         parser.include_inherited_methods = True
         parser.add_command(DerivedOperation)
+        schema = parser.build_parser_schema()
+        subcommands = schema.get_command("derived-operation").subcommands or {}
+
+        assert "describe" in subcommands
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_inherited_methods_override_per_command(self, parser: InterfacyParser):
+        """Verify inherited method inclusion can be overridden per command."""
+        parser.include_inherited_methods = False
+        parser.add_command(DerivedOperation, include_inherited_methods=True)
         schema = parser.build_parser_schema()
         subcommands = schema.get_command("derived-operation").subcommands or {}
 

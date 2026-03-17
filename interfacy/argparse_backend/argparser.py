@@ -14,6 +14,7 @@ from objinspect.typing import type_args
 from strto import StrToTypeParser
 
 from interfacy import console
+from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.argparse_backend.argument_parser import (
     ArgumentParser,
@@ -31,18 +32,10 @@ from interfacy.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
-from interfacy.help_option_sort import HelpOptionSortRule
-from interfacy.help_subcommand_sort import HelpSubcommandSortRule
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
-from interfacy.schema.schema import (
-    Argument,
-    ArgumentKind,
-    Command,
-    ParserSchema,
-    ValueShape,
-)
+from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 from interfacy.util import (
     extract_optional_union_list,
     get_param_choices,
@@ -74,8 +67,7 @@ class Argparser(InterfacyParser):
         abbreviation_max_generated_len (int): Max generated short-flag length.
         abbreviation_scope (Literal["top_level_options", "all_options"]): Scope for generation.
         help_option_sort (list[HelpOptionSortRule] | None): Help option row ordering rules.
-        help_subcommand_sort (list[HelpSubcommandSortRule] | None): Help command row ordering
-            rules.
+        help_subcommand_sort (list[HelpSubcommandSortRule] | None): Help command row ordering rules.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
         include_inherited_methods (bool): Include inherited methods for class commands.
@@ -464,24 +456,40 @@ class Argparser(InterfacyParser):
     def _command_dest(self, depth: int) -> str:
         return f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
 
-    def _ordered_arguments_for_help(self, arguments: Sequence[Argument]) -> list[Argument]:
+    def _ordered_arguments_for_help(
+        self,
+        arguments: Sequence[Argument],
+        *,
+        rules: list[HelpOptionSortRule] | None = None,
+    ) -> list[Argument]:
         if not arguments:
             return []
 
         positionals = [arg for arg in arguments if arg.kind == ArgumentKind.POSITIONAL]
         options = [arg for arg in arguments if arg.kind == ArgumentKind.OPTION]
-        ordered_options = self.help_layout.order_option_arguments_for_help(options)
+        ordered_options = self.help_layout.order_option_arguments_for_help(options, rules=rules)
         return [*positionals, *ordered_options]
 
-    def _ordered_commands_for_help(self, commands: dict[str, Command]) -> list[Command]:
-        return self.help_layout.order_commands_for_help(commands)
+    def _ordered_commands_for_help(
+        self,
+        commands: dict[str, Command],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> list[Command]:
+        return self.help_layout.order_commands_for_help(commands, rules=rules)
 
     def _add_initializer_arguments(self, parser: ArgumentParser, command: Command) -> None:
-        for argument in self._ordered_arguments_for_help(command.initializer):
+        for argument in self._ordered_arguments_for_help(
+            command.initializer,
+            rules=command.help_option_sort_effective,
+        ):
             self._add_argument_from_schema(parser, argument)
 
     def _add_parameter_arguments(self, parser: ArgumentParser, command: Command) -> None:
-        for argument in self._ordered_arguments_for_help(command.parameters):
+        for argument in self._ordered_arguments_for_help(
+            command.parameters,
+            rules=command.help_option_sort_effective,
+        ):
             self._add_argument_from_schema(parser, argument)
 
     def _create_command_subparsers(
@@ -512,7 +520,10 @@ class Argparser(InterfacyParser):
     ) -> None:
         if not command.subcommands:
             return
-        for sub_cmd in self._ordered_commands_for_help(command.subcommands):
+        for sub_cmd in self._ordered_commands_for_help(
+            command.subcommands,
+            rules=command.help_subcommand_sort_effective,
+        ):
             parser_kwargs: dict[str, Any] = {
                 "description": sub_cmd.description,
                 "help": self._escape_argparse_help_text(sub_cmd.description),
@@ -815,12 +826,10 @@ class Argparser(InterfacyParser):
             self.exit(ExitCode.ERR_RUNTIME)
             return exc
 
-    @staticmethod
-    def _is_exception_result(value: object) -> bool:
-        return isinstance(value, BaseException)
-
     def run(
-        self, *commands: Callable[..., Any] | type | object, args: list[str] | None = None
+        self,
+        *commands: Callable[..., Any] | type | object,
+        args: list[str] | None = None,
     ) -> object:
         """
         Register commands, parse args, and execute the selected command.
@@ -836,7 +845,7 @@ class Argparser(InterfacyParser):
         finally:
             signal.signal(signal.SIGINT, original_handler)
 
-        if self._is_exception_result(parse_result):
+        if isinstance(parse_result, BaseException):
             return parse_result
         resolved_args, namespace = parse_result
 
@@ -846,7 +855,7 @@ class Argparser(InterfacyParser):
         finally:
             signal.signal(signal.SIGINT, original_handler)
 
-        if self._is_exception_result(result):
+        if isinstance(result, BaseException):
             return result
 
         if self.display_result:

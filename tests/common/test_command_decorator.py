@@ -114,6 +114,16 @@ class TestDecoratorOnClass:
         assert parser.run(args=["math", "add", "2", "3"]) == 5
         assert parser.run(args=["greet", "World"]) == "Hello, World!"
 
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_decorator_supports_per_command_overrides(self, parser: InterfacyParser):
+        """Verify decorator supports per-command registration overrides."""
+        parser.command(name="tools", include_classmethods=True)(TextTools)
+        parser.command()(greet)
+        schema = parser.build_parser_schema()
+        subcommands = schema.commands["tools"].subcommands or {}
+
+        assert "tool-name" in subcommands
+
 
 class TestDecoratorErrors:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)

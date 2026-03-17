@@ -2,39 +2,25 @@ import pytest
 
 from interfacy.appearance.layouts import InterfacyLayout
 from interfacy.argparse_backend import Argparser
+from tests.conftest import TextTools, attach, greet, pow
 
 
-def cmd_zeta() -> str:
-    return "zeta"
+class TodoCommands:
+    def remove(self) -> str:
+        return "remove"
 
-
-def cmd_alpha() -> str:
-    return "alpha"
-
-
-def cmd_mu() -> str:
-    return "mu"
-
-
-class VerboseOps:
-    def tiny(self) -> str:
-        return "tiny"
-
-    def moderate_size(self) -> str:
-        return "moderate"
-
-    def extraordinarily_verbose_operation(self) -> str:
-        return "verbose"
+    def add(self) -> str:
+        return "add"
 
 
 def test_argparse_help_subcommand_sort_default_insert_order() -> None:
     parser = Argparser(sys_exit_enabled=False)
-    parser.add_command(cmd_zeta, name="zeta-cmd")
-    parser.add_command(cmd_alpha, name="alpha-cmd")
-    parser.add_command(cmd_mu, name="mu-cmd")
+    parser.add_command(pow)
+    parser.add_command(greet)
+    parser.add_command(attach)
     help_text = parser.build_parser().format_help()
 
-    assert help_text.index("zeta-cmd") < help_text.index("alpha-cmd") < help_text.index("mu-cmd")
+    assert help_text.index("pow") < help_text.index("greet") < help_text.index("attach")
 
 
 def test_argparse_help_subcommand_sort_alphabetical() -> None:
@@ -42,12 +28,12 @@ def test_argparse_help_subcommand_sort_alphabetical() -> None:
         help_subcommand_sort=["alphabetical"],
         sys_exit_enabled=False,
     )
-    parser.add_command(cmd_zeta, name="zeta-cmd")
-    parser.add_command(cmd_alpha, name="alpha-cmd")
-    parser.add_command(cmd_mu, name="mu-cmd")
+    parser.add_command(pow)
+    parser.add_command(greet)
+    parser.add_command(attach)
     help_text = parser.build_parser().format_help()
 
-    assert help_text.index("alpha-cmd") < help_text.index("mu-cmd") < help_text.index("zeta-cmd")
+    assert help_text.index("attach") < help_text.index("greet") < help_text.index("pow")
 
 
 def test_argparse_help_subcommand_sort_layout_default_used_when_user_unset() -> None:
@@ -55,12 +41,12 @@ def test_argparse_help_subcommand_sort_layout_default_used_when_user_unset() -> 
         help_layout=InterfacyLayout(help_subcommand_sort_default=["name_length_desc"]),
         sys_exit_enabled=False,
     )
-    parser.add_command(cmd_mu, name="mu")
-    parser.add_command(cmd_zeta, name="zeta-command")
-    parser.add_command(cmd_alpha, name="alpha")
+    parser.add_command(pow, name="run")
+    parser.add_command(greet, name="status")
+    parser.add_command(attach, name="deploy-service")
     help_text = parser.build_parser().format_help()
 
-    assert help_text.index("zeta-command") < help_text.index("alpha") < help_text.index("mu")
+    assert help_text.index("deploy-service") < help_text.index("status") < help_text.index("run")
 
 
 def test_argparse_help_subcommand_sort_user_rules_override_layout_default() -> None:
@@ -69,12 +55,12 @@ def test_argparse_help_subcommand_sort_user_rules_override_layout_default() -> N
         help_subcommand_sort=["insert_order"],
         sys_exit_enabled=False,
     )
-    parser.add_command(cmd_zeta, name="zeta-cmd")
-    parser.add_command(cmd_alpha, name="alpha-cmd")
-    parser.add_command(cmd_mu, name="mu-cmd")
+    parser.add_command(pow)
+    parser.add_command(greet)
+    parser.add_command(attach)
     help_text = parser.build_parser().format_help()
 
-    assert help_text.index("zeta-cmd") < help_text.index("alpha-cmd") < help_text.index("mu-cmd")
+    assert help_text.index("pow") < help_text.index("greet") < help_text.index("attach")
 
 
 def test_argparse_help_subcommand_sort_nested_name_length_desc() -> None:
@@ -82,15 +68,23 @@ def test_argparse_help_subcommand_sort_nested_name_length_desc() -> None:
         help_subcommand_sort=["name_length_desc"],
         sys_exit_enabled=False,
     )
-    parser.add_command(VerboseOps, name="ops")
+    parser.add_command(TextTools, name="tools")
     root = parser.build_parser()
     help_text = root.format_help()
 
-    assert (
-        help_text.index("extraordinarily-verbose-operation")
-        < help_text.index("moderate-size")
-        < help_text.index("tiny")
+    assert help_text.index("prefix-text") < help_text.index("repeat") < help_text.index("join")
+
+
+def test_argparse_help_subcommand_sort_per_command_override() -> None:
+    parser = Argparser(
+        help_subcommand_sort=["insert_order"],
+        sys_exit_enabled=False,
     )
+    parser.add_command(TodoCommands, help_subcommand_sort=["alphabetical"])
+    root = parser.build_parser()
+    help_text = root.format_help()
+
+    assert help_text.index("add") < help_text.index("remove")
 
 
 def test_click_help_subcommand_sort_alphabetical_top_level() -> None:
@@ -103,13 +97,13 @@ def test_click_help_subcommand_sort_alphabetical_top_level() -> None:
         help_subcommand_sort=["alphabetical"],
         sys_exit_enabled=False,
     )
-    parser.add_command(cmd_zeta, name="zeta-cmd")
-    parser.add_command(cmd_alpha, name="alpha-cmd")
-    parser.add_command(cmd_mu, name="mu-cmd")
+    parser.add_command(pow)
+    parser.add_command(greet)
+    parser.add_command(attach)
     root = parser.build_parser()
     help_text = root.get_help(Context(root))
 
-    assert help_text.index("alpha-cmd") < help_text.index("mu-cmd") < help_text.index("zeta-cmd")
+    assert help_text.index("attach") < help_text.index("greet") < help_text.index("pow")
 
 
 def test_click_help_subcommand_sort_nested_name_length_asc() -> None:
@@ -122,12 +116,25 @@ def test_click_help_subcommand_sort_nested_name_length_asc() -> None:
         help_subcommand_sort=["name_length_asc"],
         sys_exit_enabled=False,
     )
-    parser.add_command(VerboseOps, name="ops")
+    parser.add_command(TextTools, name="tools")
     root = parser.build_parser()
     help_text = root.get_help(Context(root))
 
-    assert (
-        help_text.index("tiny")
-        < help_text.index("moderate-size")
-        < help_text.index("extraordinarily-verbose-operation")
+    assert help_text.index("join") < help_text.index("repeat") < help_text.index("prefix-text")
+
+
+def test_click_help_subcommand_sort_per_command_override() -> None:
+    pytest.importorskip("click")
+    from click import Context
+
+    from interfacy import ClickParser
+
+    parser = ClickParser(
+        help_subcommand_sort=["insert_order"],
+        sys_exit_enabled=False,
     )
+    parser.add_command(TodoCommands, help_subcommand_sort=["alphabetical"])
+    root = parser.build_parser()
+    help_text = root.get_help(Context(root))
+
+    assert help_text.index("add") < help_text.index("remove")

@@ -2,7 +2,52 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
+
+from interfacy.appearance.help_sort import (
+    HelpOptionSortRule,
+    HelpSubcommandSortRule,
+    resolve_help_option_sort_rules,
+    resolve_help_subcommand_sort_rules,
+)
+from interfacy.exceptions import ConfigurationError
+
+AbbreviationScope = Literal["top_level_options", "all_options"]
+ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = ("top_level_options", "all_options")
+
+
+def validate_abbreviation_scope(value: AbbreviationScope | None) -> AbbreviationScope | None:
+    if value is None:
+        return None
+    if value not in ABBREVIATION_SCOPE_VALUES:
+        raise ConfigurationError(
+            "abbreviation_scope must be one of: " + ", ".join(ABBREVIATION_SCOPE_VALUES)
+        )
+    return value
+
+
+def validate_help_option_sort(
+    value: object,
+) -> list[HelpOptionSortRule] | None:
+    if value is None:
+        return None
+    return resolve_help_option_sort_rules(value, value_name="help_option_sort")
+
+
+def validate_help_subcommand_sort(
+    value: object,
+) -> list[HelpSubcommandSortRule] | None:
+    if value is None:
+        return None
+    return resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
+
+
+def validate_model_expansion_max_depth(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if value < 1:
+        raise ConfigurationError("model_expansion_max_depth must be >= 1")
+    return value
 
 
 @dataclass
@@ -14,6 +59,13 @@ class CommandEntry:
     description: str | None
     aliases: tuple[str, ...]
     is_instance: bool
+    include_inherited_methods: bool | None = None
+    include_classmethods: bool | None = None
+    expand_model_params: bool | None = None
+    model_expansion_max_depth: int | None = None
+    abbreviation_scope: AbbreviationScope | None = None
+    help_option_sort: list[HelpOptionSortRule] | None = None
+    help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
 
 
 class CommandGroup:
@@ -46,6 +98,13 @@ class CommandGroup:
         name: str | None = None,
         description: str | None = None,
         aliases: tuple[str, ...] | list[str] | None = None,
+        include_inherited_methods: bool | None = None,
+        include_classmethods: bool | None = None,
+        expand_model_params: bool | None = None,
+        model_expansion_max_depth: int | None = None,
+        abbreviation_scope: AbbreviationScope | None = None,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
     ) -> CommandGroup:
         """
         Add a command to this group.
@@ -55,7 +114,21 @@ class CommandGroup:
             name: Override the command name (defaults to function/class name).
             description: Override the description.
             aliases: Alternative names for this command.
+            include_inherited_methods: Override inherited-method inclusion.
+            include_classmethods: Override classmethod inclusion.
+            expand_model_params: Override model expansion toggle.
+            model_expansion_max_depth: Override model expansion depth.
+            abbreviation_scope: Override abbreviation scope.
+            help_option_sort: Override help option sort rules.
+            help_subcommand_sort: Override help subcommand sort rules.
         """
+        resolved_abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
+        resolved_help_option_sort = validate_help_option_sort(help_option_sort)
+        resolved_help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
+        resolved_model_expansion_max_depth = validate_model_expansion_max_depth(
+            model_expansion_max_depth
+        )
+
         is_instance = False
         cmd_name: str
 
@@ -80,6 +153,15 @@ class CommandGroup:
             description=description,
             aliases=tuple(aliases) if aliases else (),
             is_instance=is_instance,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=resolved_model_expansion_max_depth,
+            abbreviation_scope=resolved_abbreviation_scope,
+            help_option_sort=list(resolved_help_option_sort) if resolved_help_option_sort else None,
+            help_subcommand_sort=list(resolved_help_subcommand_sort)
+            if resolved_help_subcommand_sort
+            else None,
         )
         self._commands[cmd_name] = entry
         return self

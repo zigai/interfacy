@@ -1,22 +1,85 @@
 import ast
+import os
 import re
+import sys
 import typing
 from collections.abc import Callable
 from enum import Enum
-from pathlib import PurePath
+from pathlib import PurePath, PurePosixPath
 from types import NoneType
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices as objinspect_get_choices
 from objinspect.typing import get_literal_choices, is_union_type, type_args, type_origin
+from setproctitle import setproctitle
+from stdl.st import TextStyle
 
 from interfacy import console
+
+
+class TypeStyleTheme(Protocol):
+    type_keyword: TextStyle
+    type_bracket: TextStyle
+    type_punctuation: TextStyle
+    type_operator: TextStyle
+    type_literal: TextStyle
+
 
 _MISSING = object()
 _PATH_DEFAULT_REPR_RE = re.compile(
     r"^(?:Path|PosixPath|WindowsPath|PurePath|PurePosixPath|PureWindowsPath)\((.+)\)$"
 )
+_DEFAULT_PROCESS_TITLE = "interfacy"
+
+
+def derive_process_title(argv0: str | None = None) -> str:
+    """
+    Derive a user-facing process title from argv[0].
+
+    Args:
+        argv0 (str | None): Executable path/name override. Defaults to sys.argv[0].
+    """
+    candidate = argv0
+    if candidate is None:
+        candidate = sys.argv[0] if sys.argv else ""
+    candidate = candidate.strip()
+    if not candidate:
+        return _DEFAULT_PROCESS_TITLE
+
+    normalized = candidate.replace("\\", "/")
+    title = PurePosixPath(normalized).name.removesuffix(".exe")
+    if not title:
+        return _DEFAULT_PROCESS_TITLE
+    return title
+
+
+def set_process_title(title: str) -> bool:
+    """
+    Set process title using best available mechanism.
+
+    Args:
+        title (str): Target process title.
+    """
+    normalized = title.strip()
+    if not normalized:
+        return False
+
+    try:
+        setproctitle(normalized)
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+        return False
+    return True
+
+
+def set_process_title_from_argv(argv0: str | None = None) -> bool:
+    """
+    Derive and apply process title from argv[0].
+
+    Args:
+        argv0 (str | None): Executable path/name override.
+    """
+    return set_process_title(derive_process_title(argv0))
 
 
 def simplified_type_name(name: str) -> str:
@@ -407,6 +470,24 @@ def format_default_for_help(value: object) -> str:
     return str(value)
 
 
+def get_terminal_width(default: int = 80) -> int:
+    """
+    Return terminal width in columns with a safe fallback.
+
+    Args:
+        default (int): Width to return when terminal size cannot be detected.
+    """
+    try:
+        return os.get_terminal_size().columns
+    except (OSError, AttributeError):
+        return default
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from a string."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def show_result(result: object, handler: Callable[[object], object | None] = print) -> None:
     """
     Display a result value using the shared console helpers.
@@ -431,7 +512,11 @@ def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
     return prefix + name
 
 
-def format_type_for_help(annotation: object, style: object, theme: object | None = None) -> str:
+def format_type_for_help(
+    annotation: object,
+    style: TextStyle,
+    theme: TypeStyleTheme | None = None,
+) -> str:
     """
     Return a styled, readable type string for CLI help.
 
@@ -453,6 +538,7 @@ __all__ = [
     "get_annotation_choices",
     "get_fixed_tuple_info",
     "get_param_choices",
+    "get_terminal_width",
     "inverted_bool_flag_name",
     "is_fixed_tuple",
     "is_list_or_list_alias",
@@ -460,4 +546,5 @@ __all__ = [
     "resolve_type_alias",
     "show_result",
     "simplified_type_name",
+    "strip_ansi",
 ]
