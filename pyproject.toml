@@ -187,6 +187,7 @@ ignore = [
     "PGH004",
     "N806",
     "FBT001",
+    "SLF001",
 ]
 exclude = ["build"]
 
@@ -206,7 +207,6 @@ exclude = ["build"]
     "RUF003",
     "RUF012",
     "UP031",
-    "SLF001",
     "ARG",
     "N806",
     "ANN001",
@@ -215,7 +215,6 @@ exclude = ["build"]
     "ANN204",
     "ANN401",
     "S",
-    "SLF001",
     "INP001",
     "PLW0108",
     "EM102",

@@ -22,12 +22,6 @@ logger = get_logger(__name__)
 DEST_KEY = "dest"
 ActionType = Callable[[str], Any] | type[Any] | str | None
 NargsPattern = Literal["?", "*", "+"]
-_SUBPARSERS_ACTION_ATTR = "_SubParsersAction"
-_CONTAINER_DEFAULTS_ATTR = "_defaults"
-_CONTAINER_ACTIONS_ATTR = "_actions"
-_ARGPARSE_SUBPARSERS_ACTION = cast(
-    type[argparse.Action], getattr(argparse, _SUBPARSERS_ACTION_ATTR)
-)
 
 
 def _uses_template_layout(layout: "HelpLayout | None") -> bool:
@@ -55,7 +49,7 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
     return result
 
 
-class NestedSubParsersAction(_ARGPARSE_SUBPARSERS_ACTION):  # type: ignore[type-arg,misc]
+class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[private-member-access]
     """
     Subparser action that supports nested destination paths.
 
@@ -456,7 +450,7 @@ class ArgumentParser(argparse.ArgumentParser):
 
     @staticmethod
     def _container_defaults(container: argparse._ActionsContainer) -> dict[str, object]:
-        defaults = getattr(container, _CONTAINER_DEFAULTS_ATTR, None)
+        defaults = getattr(container, "_defaults", None)
         if isinstance(defaults, dict):
             return defaults
         return {}
@@ -465,11 +459,11 @@ class ArgumentParser(argparse.ArgumentParser):
     def _set_container_defaults(
         container: argparse._ActionsContainer, defaults: dict[str, object]
     ) -> None:
-        setattr(container, _CONTAINER_DEFAULTS_ATTR, defaults)
+        container._defaults = defaults
 
     @staticmethod
     def _iter_container_actions(container: argparse._ActionsContainer) -> list[argparse.Action]:
-        actions = getattr(container, _CONTAINER_ACTIONS_ATTR, ())
+        actions = getattr(container, "_actions", ())
         if not isinstance(actions, list):
             actions = list(actions)
         return [action for action in actions if isinstance(action, argparse.Action)]
@@ -575,9 +569,7 @@ class ArgumentParser(argparse.ArgumentParser):
         marker = "the following arguments are required:"
         if marker in message:
             subparser_actions = [
-                action
-                for action in self._actions
-                if isinstance(action, _ARGPARSE_SUBPARSERS_ACTION)
+                action for action in self._actions if isinstance(action, argparse._SubParsersAction)
             ]
             subparser_dests: set[str] = {action.dest for action in subparser_actions}
             subparser_choices: set[str] = set()

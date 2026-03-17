@@ -45,13 +45,6 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
 
-    @staticmethod
-    def _style_heading(heading: str, heading_style: object) -> str:
-        try:
-            return with_style(heading, heading_style)
-        except (AttributeError, TypeError, ValueError):
-            return heading
-
     def start_section(self, heading: str | None) -> None:
         """
         Start a help section with optional layout styling.
@@ -74,7 +67,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     heading = mapped
             heading_style = getattr(layout, "section_heading_style", None)
             if heading_style is not None:
-                heading = self._style_heading(str(heading), heading_style)
+                heading = with_style(str(heading), heading_style)
         return super().start_section(heading)
 
     def _split_lines(self, text: str, width: int) -> list[str]:

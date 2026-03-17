@@ -1,12 +1,25 @@
 from types import NoneType
+from typing import Protocol
 
 from objinspect.typing import is_union_type, type_args, type_origin
-from stdl.st import with_style
+from stdl.st import TextStyle, with_style
 
 from interfacy.util import resolve_type_alias, simplified_type_name
 
 
-def format_type_for_help(annotation: object, style: object, theme: object | None = None) -> str:
+class TypeStyleTheme(Protocol):
+    type_keyword: TextStyle
+    type_bracket: TextStyle
+    type_punctuation: TextStyle
+    type_operator: TextStyle
+    type_literal: TextStyle
+
+
+def format_type_for_help(
+    annotation: object,
+    style: TextStyle,
+    theme: TypeStyleTheme | None = None,
+) -> str:
     return TypeHelpFormatter(style, theme=theme).format(annotation)
 
 
@@ -36,7 +49,12 @@ class TypeHelpFormatter:
         }
     )
 
-    def __init__(self, style: object, *, theme: object | None = None) -> None:
+    def __init__(
+        self,
+        style: TextStyle,
+        *,
+        theme: TypeStyleTheme | None = None,
+    ) -> None:
         self.style = style
         self.theme = theme
         self.token_styles = self._resolve_type_token_styles()
@@ -48,11 +66,11 @@ class TypeHelpFormatter:
             if kind == "space":
                 rendered.append(value)
             else:
-                rendered.append(self._safe_style(value, self.token_styles.get(kind, self.style)))
+                rendered.append(with_style(value, self.token_styles.get(kind, self.style)))
         return "".join(rendered)
 
-    def _resolve_type_token_styles(self) -> dict[str, object]:
-        def pick(name: str) -> object:
+    def _resolve_type_token_styles(self) -> dict[str, TextStyle]:
+        def pick(name: str) -> TextStyle:
             if self.theme is not None and hasattr(self.theme, name):
                 return getattr(self.theme, name)
             return self.style
@@ -66,13 +84,6 @@ class TypeHelpFormatter:
             "literal": pick("type_literal"),
             "other": self.style,
         }
-
-    @staticmethod
-    def _safe_style(text: str, style: object) -> str:
-        try:
-            return with_style(text, style)
-        except (AttributeError, TypeError, ValueError):
-            return text
 
     def _stringify(self, annotation: object) -> str:
         if isinstance(annotation, str):
@@ -216,4 +227,4 @@ class TypeHelpFormatter:
         return tokens
 
 
-__all__ = ["TypeHelpFormatter", "format_type_for_help"]
+__all__ = ["TypeHelpFormatter", "TypeStyleTheme", "format_type_for_help"]

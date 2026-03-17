@@ -1,7 +1,7 @@
 import pytest
 
 from interfacy.core import InterfacyParser
-from interfacy.process_title import (
+from interfacy.util import (
     derive_process_title,
     set_process_title,
     set_process_title_from_argv,
@@ -25,8 +25,8 @@ def test_set_process_title_prefers_setproctitle_backend(monkeypatch: pytest.Monk
     calls: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
-        "interfacy.process_title._set_process_title_with_setproctitle",
-        lambda title: calls.append(("setproctitle", title)) or True,
+        "interfacy.util.setproctitle",
+        lambda title: calls.append(("setproctitle", title)),
     )
 
     assert set_process_title("my-cli") is True
@@ -38,10 +38,11 @@ def test_set_process_title_does_not_fallback_when_setproctitle_fails(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    monkeypatch.setattr(
-        "interfacy.process_title._set_process_title_with_setproctitle",
-        lambda title: calls.append(("setproctitle", title)) or False,
-    )
+    def _raise_runtime_error(title: str) -> None:
+        calls.append(("setproctitle", title))
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("interfacy.util.setproctitle", _raise_runtime_error)
 
     assert set_process_title("my-cli") is False
     assert calls == [("setproctitle", "my-cli")]
@@ -51,7 +52,7 @@ def test_set_process_title_from_argv_uses_derived_name(monkeypatch: pytest.Monke
     seen: list[str] = []
 
     monkeypatch.setattr(
-        "interfacy.process_title.set_process_title",
+        "interfacy.util.set_process_title",
         lambda title: seen.append(title) or True,
     )
 

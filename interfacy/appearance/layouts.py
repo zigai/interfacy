@@ -11,7 +11,7 @@ from stdl.st import TextStyle, ansi_len, colored, with_style
 from interfacy.appearance.colors import ClapColors, NoColor
 from interfacy.appearance.layout import HelpLayout
 from interfacy.appearance.type_help import format_type_for_help
-from interfacy.util import format_default_for_help, get_param_choices
+from interfacy.util import format_default_for_help, get_param_choices, strip_ansi
 
 if TYPE_CHECKING:
     from interfacy.schema.schema import Argument
@@ -181,10 +181,6 @@ class Aligned(InterfacyLayout):
             return False
         return normalized.lower() != "none"
 
-    @staticmethod
-    def _strip_ansi(text: str) -> str:
-        return re.sub(r"\x1b\[[0-9;]*m", "", text)
-
     def _suppress_positive_false_boolean_default(
         self,
         values: dict[str, str],
@@ -194,7 +190,7 @@ class Aligned(InterfacyLayout):
         if not is_boolean:
             return values
 
-        default_text = self._strip_ansi(values.get("default", "")).strip().lower()
+        default_text = strip_ansi(values.get("default", "")).strip().lower()
         long_flag = values.get("flag_long", "")
         is_positive_boolean_flag = long_flag.startswith("--") and not long_flag.startswith("--no-")
 
@@ -209,7 +205,7 @@ class Aligned(InterfacyLayout):
         if not flag_long:
             return values
 
-        if ansi_len(self._strip_ansi(flag_long)) > self.long_flag_width:
+        if ansi_len(strip_ansi(flag_long)) > self.long_flag_width:
             values["flag_long_col"] = values.get("flag_long_col", "") + " "
 
         return values
@@ -277,10 +273,6 @@ class AlignedTyped(InterfacyLayout):
             return False
         return normalized.lower() != "none"
 
-    @staticmethod
-    def _strip_ansi(text: str) -> str:
-        return re.sub(r"\x1b\[[0-9;]*m", "", text)
-
     def _suppress_positive_false_boolean_default(
         self,
         values: dict[str, str],
@@ -290,7 +282,7 @@ class AlignedTyped(InterfacyLayout):
         if not is_boolean:
             return values
 
-        default_text = self._strip_ansi(values.get("default", "")).strip().lower()
+        default_text = strip_ansi(values.get("default", "")).strip().lower()
         long_flag = values.get("flag_long", "")
         is_positive_boolean_flag = long_flag.startswith("--") and not long_flag.startswith("--no-")
 
@@ -305,7 +297,7 @@ class AlignedTyped(InterfacyLayout):
         if not flag_long:
             return values
 
-        if ansi_len(self._strip_ansi(flag_long)) > self.long_flag_width:
+        if ansi_len(strip_ansi(flag_long)) > self.long_flag_width:
             values["flag_long_col"] = values.get("flag_long_col", "") + " "
 
         return values
