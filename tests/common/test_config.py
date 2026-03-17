@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from interfacy.appearance.colors import Aurora
-from interfacy.appearance.layouts import InterfacyLayout, Modern
+from interfacy.appearance.layout import InterfacyColors
+from interfacy.appearance.layouts import AlignedTyped, ClapLayout, InterfacyLayout, Modern
 from interfacy.cli.config import apply_config_defaults, load_config
 from interfacy.exceptions import ConfigurationError
 from interfacy.naming.abbreviations import DefaultAbbreviationGenerator
@@ -179,3 +180,41 @@ def test_load_config_rejects_string_help_subcommand_sort(tmp_path: Path) -> None
                 "silent_interrupt": None,
             },
         )
+
+
+def test_load_config_prefers_top_level_over_section_alias(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                'help_layout = "clap"',
+                "",
+                "[appearance]",
+                'layout = "modern"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+    overrides = apply_config_defaults(config, {"help_layout": None})
+    assert isinstance(overrides["help_layout"], ClapLayout)
+
+
+def test_load_config_resolves_legacy_layout_alias(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('help_layout = "alignedtype"\n', encoding="utf-8")
+
+    config = load_config(config_path)
+    overrides = apply_config_defaults(config, {"help_layout": None})
+    assert isinstance(overrides["help_layout"], AlignedTyped)
+
+
+def test_load_config_resolves_default_color_alias(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('help_colors = "default"\n', encoding="utf-8")
+
+    config = load_config(config_path)
+    overrides = apply_config_defaults(config, {"help_colors": None})
+    assert isinstance(overrides["help_colors"], InterfacyColors)

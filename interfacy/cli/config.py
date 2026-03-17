@@ -2,33 +2,27 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, fields
+from functools import cache
 from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from stdl.fs import toml_load
 
-from interfacy.appearance.colors import Aurora, NoColor
-from interfacy.appearance.layout import HelpLayout, InterfacyColors
-from interfacy.appearance.layouts import (
-    Aligned,
-    AlignedTyped,
-    ArgparseLayout,
-    ClapLayout,
-    InterfacyLayout,
-    Modern,
-)
-from interfacy.exceptions import ConfigurationError
-from interfacy.help_option_sort import (
-    HelpOptionSortRule,
+import interfacy.appearance.colors as appearance_colors  # noqa: F401
+import interfacy.appearance.layouts as appearance_layouts  # noqa: F401
+from interfacy.appearance.help_sort import (
     resolve_help_option_sort_rules,
-)
-from interfacy.help_subcommand_sort import (
-    HelpSubcommandSortRule,
     resolve_help_subcommand_sort_rules,
 )
-from interfacy.naming.abbreviations import DefaultAbbreviationGenerator, NoAbbreviations
+from interfacy.appearance.layout import HelpLayout, InterfacyColors
+from interfacy.exceptions import ConfigurationError
+from interfacy.naming.abbreviations import (
+    AbbreviationGenerator,
+    DefaultAbbreviationGenerator,
+    NoAbbreviations,
+)
 from interfacy.naming.flag_strategy import (
     DefaultFlagStrategy,
     FlagStrategy,
@@ -36,58 +30,102 @@ from interfacy.naming.flag_strategy import (
     TranslationMode,
 )
 
+_ComponentT = TypeVar("_ComponentT")
+_ResolverResultT = TypeVar("_ResolverResultT")
+_UNSET = object()
 
-@dataclass
-class InterfacyConfig:
-    """
-    Configuration values loaded from Interfacy config files.
+_ABBREVIATION_SCOPE_LOOKUP: dict[str, str] = {
+    "topleveloptions": "top_level_options",
+    "alloptions": "all_options",
+}
 
-    Attributes:
-        help_layout (str | None): Help layout name or import path.
-        help_colors (str | None): Help color theme name or import path.
-        flag_strategy (str | None): Flag strategy name or import path.
-        flag_style (FlagStyle | None): Flag style override.
-        translation_mode (TranslationMode | None): Flag translation mode.
-        abbreviation_gen (str | None): Abbreviation generator name or import path.
-        abbreviation_max_generated_len (int | None): Max generated abbreviation length.
-        abbreviation_scope (str | None): Where generated abbreviations are allowed.
-        help_option_sort (list[str] | None): Option row ordering rules in help output.
-        help_subcommand_sort (list[str] | None): Command row ordering rules in help output.
-        print_result (bool | None): Whether to print command results.
-        full_error_traceback (bool | None): Whether to show full tracebacks.
-        tab_completion (bool | None): Whether to enable tab completion.
-        allow_args_from_file (bool | None): Whether to allow @file args.
-        include_inherited_methods (bool | None): Include inherited methods.
-        include_classmethods (bool | None): Include classmethods.
-        silent_interrupt (bool | None): Suppress interrupt messages.
-    """
+_HELP_LAYOUT_ALIASES: dict[str, str] = {
+    "default": "interfacy",
+    "alignedtype": "alignedtyped",
+}
 
-    help_layout: str | None = None
-    help_colors: str | None = None
-    flag_strategy: str | None = None
-    flag_style: FlagStyle | None = None
-    translation_mode: TranslationMode | None = None
-    abbreviation_gen: str | None = None
-    abbreviation_max_generated_len: int | None = None
-    abbreviation_scope: str | None = None
-    help_option_sort: list[str] | None = None
-    help_subcommand_sort: list[str] | None = None
-    print_result: bool | None = None
-    full_error_traceback: bool | None = None
-    tab_completion: bool | None = None
-    allow_args_from_file: bool | None = None
-    include_inherited_methods: bool | None = None
-    include_classmethods: bool | None = None
-    silent_interrupt: bool | None = None
+_HELP_COLORS_ALIASES: dict[str, str] = {
+    "default": "interfacy",
+    "none": "nocolor",
+}
 
 
 def _normalize_name(value: str) -> str:
     return value.replace("-", "").replace("_", "").lower()
 
 
-def _default_config_paths() -> list[Path]:
+@dataclass
+class InterfacyConfig:
+    help_layout: str | None = field(
+        default=None,
+        metadata={"section": "appearance", "aliases": ("layout",)},
+    )
+    help_colors: str | None = field(
+        default=None,
+        metadata={"section": "appearance", "aliases": ("colors",)},
+    )
+    flag_strategy: str | None = field(
+        default=None,
+        metadata={"section": "flags", "aliases": ("strategy",)},
+    )
+    flag_style: FlagStyle | None = field(
+        default=None,
+        metadata={"section": "flags", "aliases": ("style",)},
+    )
+    translation_mode: TranslationMode | None = field(default=None, metadata={"section": "flags"})
+    abbreviation_gen: str | None = field(
+        default=None,
+        metadata={"section": "abbreviations", "aliases": ("generator",)},
+    )
+    abbreviation_max_generated_len: int | None = field(
+        default=None,
+        metadata={"section": "abbreviations", "aliases": ("max_generated_len",)},
+    )
+    abbreviation_scope: str | None = field(
+        default=None,
+        metadata={"section": "abbreviations", "aliases": ("scope",)},
+    )
+    help_option_sort: list[str] | None = field(
+        default=None,
+        metadata={"section": "flags"},
+    )
+    help_subcommand_sort: list[str] | None = field(
+        default=None,
+        metadata={"section": "flags"},
+    )
+    print_result: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    full_error_traceback: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    tab_completion: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    allow_args_from_file: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    include_inherited_methods: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    include_classmethods: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    silent_interrupt: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+
+
+def get_default_config_paths() -> list[Path]:
     env_path = os.environ.get("INTERFACY_CONFIG")
-    paths = []
+    paths: list[Path] = []
     if env_path:
         paths.append(Path(env_path))
     paths.append(Path.home() / ".config" / "interfacy" / "config.toml")
@@ -103,71 +141,38 @@ def _load_toml(path: Path) -> dict[str, Any]:
 
 def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
     data = dict(raw)
+    flattened: dict[str, Any] = {}
 
-    def apply(section: str, mapping: dict[str, str]) -> None:
-        section_value = data.get(section)
-        if isinstance(section_value, dict):
-            for source_key, target_key in mapping.items():
-                if target_key not in data and source_key in section_value:
-                    data[target_key] = section_value.get(source_key)
+    for config_field in fields(InterfacyConfig):
+        field_name = config_field.name
+        if field_name in data:
+            flattened[field_name] = data[field_name]
+            continue
 
-    apply("appearance", {"layout": "help_layout", "colors": "help_colors"})
-    apply(
-        "flags",
-        {
-            "strategy": "flag_strategy",
-            "style": "flag_style",
-            "translation_mode": "translation_mode",
-            "help_option_sort": "help_option_sort",
-            "help_subcommand_sort": "help_subcommand_sort",
-        },
-    )
-    apply(
-        "abbreviations",
-        {
-            "generator": "abbreviation_gen",
-            "max_generated_len": "abbreviation_max_generated_len",
-            "scope": "abbreviation_scope",
-        },
-    )
-    apply(
-        "behavior",
-        {
-            "print_result": "print_result",
-            "full_error_traceback": "full_error_traceback",
-            "tab_completion": "tab_completion",
-            "allow_args_from_file": "allow_args_from_file",
-            "include_inherited_methods": "include_inherited_methods",
-            "include_classmethods": "include_classmethods",
-            "silent_interrupt": "silent_interrupt",
-        },
-    )
-    return {k: v for k, v in data.items() if k in InterfacyConfig.__annotations__}
+        section = cast(str | None, config_field.metadata.get("section"))
+        if section is None:
+            continue
+        section_data = data.get(section)
+        if not isinstance(section_data, dict):
+            continue
 
+        keys = (field_name, *cast(tuple[str, ...], config_field.metadata.get("aliases", ())))
+        for key in keys:
+            if key in section_data:
+                flattened[field_name] = section_data[key]
+                break
 
-def _coerce_config(raw: dict[str, Any]) -> InterfacyConfig:
-    return InterfacyConfig(**_flatten_config(raw))
+    return flattened
 
 
 def load_config(path: Path | None = None) -> InterfacyConfig:
-    """
-    Load Interfacy configuration from disk.
-
-    Args:
-        path (Path | None): Optional explicit config path.
-
-    Raises:
-        FileNotFoundError: If an explicit path is provided and missing.
-        ConfigurationError: If the config file is invalid.
-    """
     if path is not None:
         if not path.exists():
             raise FileNotFoundError(path)
-        return _coerce_config(_load_toml(path))
-
-    for candidate in _default_config_paths():
+        return InterfacyConfig(**_flatten_config(_load_toml(path)))
+    for candidate in get_default_config_paths():
         if candidate.exists():
-            return _coerce_config(_load_toml(candidate))
+            return InterfacyConfig(**_flatten_config(_load_toml(candidate)))
     return InterfacyConfig()
 
 
@@ -186,61 +191,71 @@ def _import_symbol(value: str) -> object:
         ) from exc
 
 
-def _resolve_from_lookup(
+def _resolve_symbol_value(value: str) -> object:
+    symbol = _import_symbol(value)
+    return symbol() if isinstance(symbol, type) else symbol
+
+
+@cache
+def _component_registry(
+    base_class: type[_ComponentT],
+    *,
+    include_base: bool = False,
+    suffix: str | None = None,
+) -> dict[str, type[_ComponentT]]:
+    registry: dict[str, type[_ComponentT]] = {}
+    seen: set[type[_ComponentT]] = set()
+    stack: list[type[_ComponentT]] = [base_class] if include_base else []
+    stack.extend(cast(list[type[_ComponentT]], base_class.__subclasses__()))
+
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+
+        class_name = _normalize_name(current.__name__)
+        registry.setdefault(class_name, current)
+        if suffix and class_name.endswith(suffix):
+            alias = class_name.removesuffix(suffix)
+            if alias:
+                registry.setdefault(alias, current)
+
+        stack.extend(cast(list[type[_ComponentT]], current.__subclasses__()))
+
+    return registry
+
+
+def _resolve_named_component(
     value: object,
     *,
     value_name: str,
-    instance_type: type,
-    lookup: Mapping[str, type],
-) -> object | None:
+    component_type: type[_ResolverResultT],
+    registry: Mapping[str, type[_ResolverResultT]],
+    aliases: Mapping[str, str] | None = None,
+) -> _ResolverResultT | None:
     if value is None:
         return None
-    if isinstance(value, instance_type):
+    if isinstance(value, component_type):
         return value
-    if isinstance(value, str):
-        if ":" in value:
-            symbol = _import_symbol(value)
-            return symbol() if isinstance(symbol, type) else symbol
-        key = _normalize_name(value)
-        resolved = lookup.get(key)
-        if resolved is not None:
-            return resolved()
-    raise ConfigurationError(f"Unknown {value_name} value: {value}")
+    if not isinstance(value, str):
+        raise ConfigurationError(f"Unknown {value_name} value: {value}")
 
+    if ":" in value:
+        resolved = _resolve_symbol_value(value)
+        if isinstance(resolved, component_type):
+            return resolved
+        raise ConfigurationError(
+            f"{value_name} symbol must resolve to {component_type.__name__}, got {type(resolved)}"
+        )
 
-def _resolve_help_layout(value: object) -> HelpLayout | None:
-    lookup = {
-        "default": InterfacyLayout,
-        "interfacy": InterfacyLayout,
-        "aligned": Aligned,
-        "alignedtyped": AlignedTyped,
-        "alignedtype": AlignedTyped,
-        "modern": Modern,
-        "argparse": ArgparseLayout,
-        "clap": ClapLayout,
-    }
-    return _resolve_from_lookup(
-        value,
-        value_name="help_layout",
-        instance_type=HelpLayout,
-        lookup=lookup,
-    )
-
-
-def _resolve_help_colors(value: object) -> InterfacyColors | None:
-    lookup = {
-        "default": InterfacyColors,
-        "interfacy": InterfacyColors,
-        "aurora": Aurora,
-        "nocolor": NoColor,
-        "none": NoColor,
-    }
-    return _resolve_from_lookup(
-        value,
-        value_name="help_colors",
-        instance_type=InterfacyColors,
-        lookup=lookup,
-    )
+    key = _normalize_name(value)
+    if aliases is not None:
+        key = aliases.get(key, key)
+    resolved_type = registry.get(key)
+    if resolved_type is None:
+        raise ConfigurationError(f"Unknown {value_name} value: {value}")
+    return resolved_type()
 
 
 def _resolve_flag_strategy(value: object, config: dict[str, Any]) -> FlagStrategy | None:
@@ -250,23 +265,30 @@ def _resolve_flag_strategy(value: object, config: dict[str, Any]) -> FlagStrateg
         return value
     if callable(getattr(value, "get_arg_flags", None)):
         return cast(FlagStrategy, value)
-    if isinstance(value, str):
-        if ":" in value:
-            symbol = _import_symbol(value)
-            resolved = symbol() if isinstance(symbol, type) else symbol
-            return cast(FlagStrategy, resolved)
-        key = _normalize_name(value)
-        if key in {"default", "standard"}:
-            style = config.get("flag_style")
-            translation_mode = config.get("translation_mode")
-            return DefaultFlagStrategy(
-                style=style or "required_positional",
-                translation_mode=translation_mode or "kebab",
-            )
+    if not isinstance(value, str):
+        raise ConfigurationError(f"Unknown flag_strategy value: {value}")
+    if ":" in value:
+        return cast(FlagStrategy, _resolve_symbol_value(value))
+    if _normalize_name(value) in {"default", "standard"}:
+        return DefaultFlagStrategy(
+            style=config.get("flag_style") or "required_positional",
+            translation_mode=config.get("translation_mode") or "kebab",
+        )
     raise ConfigurationError(f"Unknown flag_strategy value: {value}")
 
 
-def _resolve_abbreviation_gen(value: object, config: dict[str, Any]) -> object | None:
+def _resolve_abbreviation_max_generated_len(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
+    return value
+
+
+def _resolve_abbreviation_gen(
+    value: object,
+    config: dict[str, Any],
+) -> AbbreviationGenerator | None:
     max_generated_len = _resolve_abbreviation_max_generated_len(
         config.get("abbreviation_max_generated_len")
     )
@@ -274,28 +296,23 @@ def _resolve_abbreviation_gen(value: object, config: dict[str, Any]) -> object |
         if max_generated_len is None:
             return None
         return DefaultAbbreviationGenerator(max_generated_len=max_generated_len)
-    if isinstance(value, (DefaultAbbreviationGenerator, NoAbbreviations)):
+    if isinstance(value, AbbreviationGenerator):
         return value
-    if isinstance(value, str):
-        if ":" in value:
-            symbol = _import_symbol(value)
-            return symbol() if isinstance(symbol, type) else symbol
-        key = _normalize_name(value)
-        if key in {"default", "standard"}:
-            return DefaultAbbreviationGenerator(max_generated_len=max_generated_len or 1)
-        if key in {"none", "noabbrev", "noabbreviations"}:
-            return NoAbbreviations()
+    if not isinstance(value, str):
+        raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
+    if ":" in value:
+        resolved = _resolve_symbol_value(value)
+        if isinstance(resolved, AbbreviationGenerator):
+            return resolved
+        raise ConfigurationError(
+            f"abbreviation_gen symbol must resolve to AbbreviationGenerator, got {type(resolved)}"
+        )
+    key = _normalize_name(value)
+    if key in {"default", "standard"}:
+        return DefaultAbbreviationGenerator(max_generated_len=max_generated_len or 1)
+    if key in {"none", "noabbrev", "noabbreviations"}:
+        return NoAbbreviations()
     raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
-
-
-def _resolve_abbreviation_max_generated_len(value: object) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
-    if value < 1:
-        raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
-    return value
 
 
 def _resolve_abbreviation_scope(value: object) -> str | None:
@@ -303,12 +320,7 @@ def _resolve_abbreviation_scope(value: object) -> str | None:
         return None
     if not isinstance(value, str):
         raise ConfigurationError("abbreviation_scope must be a string")
-    key = _normalize_name(value)
-    lookup = {
-        "topleveloptions": "top_level_options",
-        "alloptions": "all_options",
-    }
-    resolved = lookup.get(key)
+    resolved = _ABBREVIATION_SCOPE_LOOKUP.get(_normalize_name(value))
     if resolved is None:
         raise ConfigurationError(
             "abbreviation_scope must be one of: top_level_options, all_options"
@@ -316,70 +328,80 @@ def _resolve_abbreviation_scope(value: object) -> str | None:
     return resolved
 
 
-def _resolve_help_option_sort(value: object) -> list[HelpOptionSortRule] | None:
-    return resolve_help_option_sort_rules(value, value_name="help_option_sort")
+def _resolve_default_for_field(
+    field_name: str,
+    value: object,
+    config_data: dict[str, Any],
+) -> object:
+    resolved: object = _UNSET
 
+    if field_name == "help_layout":
+        resolved = _resolve_named_component(
+            value,
+            value_name="help_layout",
+            component_type=HelpLayout,
+            registry=_component_registry(HelpLayout, suffix="layout"),
+            aliases=_HELP_LAYOUT_ALIASES,
+        )
+    elif field_name == "help_colors":
+        resolved = _resolve_named_component(
+            value,
+            value_name="help_colors",
+            component_type=InterfacyColors,
+            registry=_component_registry(
+                InterfacyColors,
+                include_base=True,
+                suffix="colors",
+            ),
+            aliases=_HELP_COLORS_ALIASES,
+        )
+    elif field_name == "flag_strategy":
+        resolved = _resolve_flag_strategy(value, config_data)
+    elif field_name == "abbreviation_gen":
+        resolved = _resolve_abbreviation_gen(value, config_data)
+    elif field_name == "abbreviation_max_generated_len":
+        resolved = _resolve_abbreviation_max_generated_len(value)
+    elif field_name == "abbreviation_scope":
+        resolved = _resolve_abbreviation_scope(value)
+    elif field_name == "help_option_sort":
+        resolved = resolve_help_option_sort_rules(value, value_name="help_option_sort")
+    elif field_name == "help_subcommand_sort":
+        resolved = resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
 
-def _resolve_help_subcommand_sort(value: object) -> list[HelpSubcommandSortRule] | None:
-    return resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
-
-
-def _to_config_dict(config: InterfacyConfig | dict[str, Any]) -> dict[str, Any]:
-    if isinstance(config, InterfacyConfig):
-        return asdict(config)
-    if isinstance(config, dict):
-        return dict(config)
-    raise ConfigurationError(f"Unsupported config type: {type(config)}")
+    return resolved
 
 
 def apply_config_defaults(
     config: InterfacyConfig | dict[str, Any],
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Apply config defaults to an overrides dict.
+    if isinstance(config, InterfacyConfig):
+        config_data = asdict(config)
+    elif isinstance(config, dict):
+        config_data = dict(config)
+    else:
+        raise ConfigurationError(f"Unsupported config type: {type(config)}")
 
-    Args:
-        config (InterfacyConfig | dict[str, Any]): Base config source.
-        overrides (dict[str, Any]): Explicit overrides to merge.
-    """
-    cfg = _to_config_dict(config)
-    resolved = overrides.copy()
+    resolved = dict(overrides)
 
-    resolved_defaults = {
-        "help_layout": _resolve_help_layout(cfg.get("help_layout")),
-        "help_colors": _resolve_help_colors(cfg.get("help_colors")),
-        "flag_strategy": _resolve_flag_strategy(cfg.get("flag_strategy"), cfg),
-        "abbreviation_gen": _resolve_abbreviation_gen(cfg.get("abbreviation_gen"), cfg),
-        "abbreviation_max_generated_len": _resolve_abbreviation_max_generated_len(
-            cfg.get("abbreviation_max_generated_len")
-        ),
-        "abbreviation_scope": _resolve_abbreviation_scope(cfg.get("abbreviation_scope")),
-        "help_option_sort": _resolve_help_option_sort(cfg.get("help_option_sort")),
-        "help_subcommand_sort": _resolve_help_subcommand_sort(cfg.get("help_subcommand_sort")),
-    }
-    for key, value in resolved_defaults.items():
-        if overrides.get(key) is None:
-            resolved[key] = value
+    for config_field in fields(InterfacyConfig):
+        field_name = config_field.name
+        if resolved.get(field_name) is not None:
+            continue
 
-    passthrough_keys = [
-        "print_result",
-        "full_error_traceback",
-        "tab_completion",
-        "allow_args_from_file",
-        "include_inherited_methods",
-        "include_classmethods",
-        "silent_interrupt",
-    ]
-    for key in passthrough_keys:
-        if overrides.get(key) is None and key in cfg:
-            resolved[key] = cfg.get(key)
+        value = config_data.get(field_name)
+        default_value = _resolve_default_for_field(field_name, value, config_data)
+        if default_value is not _UNSET:
+            resolved[field_name] = default_value
+            continue
+
+        if (
+            cast(bool, config_field.metadata.get("passthrough", False))
+            and field_name in config_data
+        ):
+            resolved[field_name] = value
 
     return resolved
 
 
-__all__ = [
-    "InterfacyConfig",
-    "apply_config_defaults",
-    "load_config",
-]
+__all__ = ["InterfacyConfig", "apply_config_defaults", "get_default_config_paths", "load_config"]

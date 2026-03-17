@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from collections.abc import Sequence
 from importlib import import_module
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import version
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from types import ModuleType
@@ -14,24 +13,8 @@ from typing import Any
 from interfacy.appearance.layouts import InterfacyLayout
 from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
-from interfacy.cli.config import apply_config_defaults, load_config
+from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
 from interfacy.core import ExitCode, InterfacyParser
-
-
-def _get_version() -> str:
-    try:
-        return version("interfacy")
-    except PackageNotFoundError:
-        return "unknown"
-
-
-def _default_config_paths() -> list[Path]:
-    env_path = os.environ.get("INTERFACY_CONFIG")
-    paths: list[Path] = []
-    if env_path:
-        paths.append(Path(env_path))
-    paths.append(Path.home() / ".config" / "interfacy" / "config.toml")
-    return paths
 
 
 def _split_target(target: str) -> tuple[str, str]:
@@ -50,7 +33,7 @@ def _split_target(target: str) -> tuple[str, str]:
     return module_ref, symbol_ref
 
 
-def _load_module_from_path(path: Path) -> ModuleType:
+def load_module_from_path(path: Path) -> ModuleType:
     module_name = f"interfacy_entry_{path.stem}_{abs(hash(str(path)))}"
     spec = spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
@@ -64,14 +47,14 @@ def _load_module_from_path(path: Path) -> ModuleType:
     return module
 
 
-def _load_module(module_ref: str) -> ModuleType:
+def load_module(module_ref: str) -> ModuleType:
     path = Path(module_ref)
     if module_ref.endswith(".py") or path.exists():
         if not path.exists():
             raise FileNotFoundError(f"Python file not found: {path}")
         if path.is_dir():
             raise ValueError(f"Expected a Python file, got directory: {path}")
-        return _load_module_from_path(path)
+        return load_module_from_path(path)
     return import_module(module_ref)
 
 
@@ -92,7 +75,7 @@ def resolve_target(target: str) -> object:
         target (str): Target spec "module:object" or "path.py:object".
     """
     module_ref, symbol_ref = _split_target(target)
-    module = _load_module(module_ref)
+    module = load_module(module_ref)
     return _resolve_symbol(module, symbol_ref)
 
 
@@ -179,7 +162,7 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"interfacy {_get_version()}",
+        version=f"interfacy {version('interfacy')}",
         help="show version and exit.",
     )
     parser.add_argument(
@@ -237,7 +220,7 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
     args = parser.parse_args(argv)
 
     if args.config_paths:
-        for path in _default_config_paths():
+        for path in get_default_config_paths():
             print(path)
         return ExitCode.SUCCESS
 
