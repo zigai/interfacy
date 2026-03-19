@@ -21,6 +21,7 @@ from interfacy.appearance.layouts import (
 )
 from interfacy.argparse_backend import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
+from interfacy.schema.schema import Command, ParserSchema
 
 
 @dataclass
@@ -212,6 +213,82 @@ def test_group_function_commands_render_kebab_case_names() -> None:
 
     assert "cache-prune" in help_text
     assert "cache_prune" not in help_text
+
+
+def test_grouped_root_help_omits_help_option_when_add_help_disabled() -> None:
+    layout = ArgparseLayout()
+    parser = ArgumentParser(prog="manual", help_layout=layout, add_help=False)
+    parser.set_schema(
+        ParserSchema(
+            raw_description=None,
+            raw_epilog=None,
+            commands={
+                "clone": Command(
+                    obj=None,
+                    canonical_name="clone",
+                    cli_name="clone",
+                    aliases=(),
+                    raw_description="Clone a repository.",
+                    help_group="setup",
+                ),
+                "status": Command(
+                    obj=None,
+                    canonical_name="status",
+                    cli_name="status",
+                    aliases=(),
+                    raw_description="Show current status.",
+                ),
+            },
+            command_key=None,
+            allow_args_from_file=False,
+            pipe_targets=None,
+            theme=layout,
+        )
+    )
+
+    help_text = parser.format_help()
+
+    assert "--help" not in help_text
+    assert "options:" not in help_text
+
+
+def test_grouped_subcommand_help_preserves_custom_help_flag_prefix() -> None:
+    layout = ArgparseLayout()
+    parser = ArgumentParser(prog="manual ops", help_layout=layout, prefix_chars="+")
+    parser.set_schema_command(
+        Command(
+            obj=None,
+            canonical_name="ops",
+            cli_name="ops",
+            aliases=(),
+            raw_description="Operations.",
+            help_layout=layout,
+            subcommands={
+                "clone": Command(
+                    obj=None,
+                    canonical_name="clone",
+                    cli_name="clone",
+                    aliases=(),
+                    raw_description="Clone a repository.",
+                    help_group="setup",
+                ),
+                "status": Command(
+                    obj=None,
+                    canonical_name="status",
+                    cli_name="status",
+                    aliases=(),
+                    raw_description="Show current status.",
+                ),
+            },
+            is_leaf=False,
+        )
+    )
+
+    help_text = parser.format_help()
+
+    assert "[++help]" in help_text
+    assert "  ++help" in help_text
+    assert "--help" not in help_text
 
 
 def test_interfacy_layout_usage_lists_concrete_subcommand_choices() -> None:

@@ -239,6 +239,72 @@ LAYOUTS: tuple[type[HelpLayout], ...] = (
 )
 
 
+HELP_ALIGNMENT_MATRIX_ARGS: tuple[tuple[str, ...], ...] = (
+    ("--help",),
+    ("dense-parameters", "--help"),
+    ("path-ops", "--help"),
+    ("keyword-only-options", "--help"),
+    ("report-tool", "output-dir", "--help"),
+    ("report-tool", "output-dir", "compare", "--help"),
+    ("report-tool", "output-dir", "summarize", "--help"),
+    ("ops", "workspace", "--help"),
+    ("ops", "workspace", "cache-prune", "--help"),
+    ("ops", "workspace", "nested-tools", "--help"),
+    ("ops", "workspace", "nested-tools", "cache-clean", "--help"),
+)
+
+ALIGNMENT_SECTION_TITLES: tuple[str, ...] = ("options:", "commands:")
+
+_MULTISPACE_GAP_RE = re.compile(r"\s{2,}")
+
+
+def _extract_section_rows(help_text: str, section_title: str) -> list[str]:
+    lines = help_text.splitlines()
+    rows: list[str] = []
+    lower_title = section_title.lower()
+
+    for idx, line in enumerate(lines):
+        if line.strip().lower() != lower_title:
+            continue
+
+        cursor = idx + 1
+        while cursor < len(lines):
+            current = lines[cursor]
+            stripped = current.strip()
+            if not stripped:
+                break
+            if not current.startswith(" ") and stripped.endswith(":"):
+                break
+            rows.append(current)
+            cursor += 1
+
+    return rows
+
+
+def _extract_payload_start_column(line: str, section_title: str) -> int | None:
+    lower_section = section_title.lower()
+
+    for gap in _MULTISPACE_GAP_RE.finditer(line):
+        head = line[: gap.start()].rstrip()
+        payload = line[gap.end() :]
+        if not head or not payload:
+            continue
+
+        if lower_section == "options:":
+            if "--" not in head:
+                continue
+            if payload.startswith("-"):
+                continue
+            return gap.end()
+
+        if lower_section == "commands:":
+            if payload.startswith("{"):
+                continue
+            return gap.end()
+
+    return None
+
+
 @pytest.mark.parametrize("layout_cls", LAYOUTS)
 def test_root_help_contains_usage_options_and_commands_sections(
     layout_cls: type[HelpLayout],
@@ -598,3 +664,42 @@ def test_argparse_commands_descriptions_stay_inline_when_width_is_sufficient(
         r"(?m)^\s*path-ops\s+Mix positionals, varargs, and keyword-only options\.$",
         help_text,
     )
+
+
+@pytest.mark.parametrize("layout_cls", LAYOUTS)
+def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
+    layout_cls: type[HelpLayout],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    argparse_req_pos: Argparser,
+) -> None:
+    failures: list[str] = []
+
+    for args in HELP_ALIGNMENT_MATRIX_ARGS:
+        help_text = strip_ansi(
+            render_help_for_args(layout_cls, list(args), monkeypatch, capsys, argparse_req_pos)
+        )
+        for section_title in ALIGNMENT_SECTION_TITLES:
+            rows = _extract_section_rows(help_text, section_title)
+            payload_columns: list[tuple[str, int]] = []
+            for row in rows:
+                payload_start = _extract_payload_start_column(row, section_title)
+                if payload_start is None:
+                    continue
+                payload_columns.append((row.strip(), payload_start))
+
+            if len(payload_columns) < 2:
+                continue
+
+            unique_columns = sorted({col for _, col in payload_columns})
+            if len(unique_columns) == 1:
+                continue
+
+            rendered_rows = ", ".join(f"{col}: {row}" for row, col in payload_columns)
+            failures.append(
+                "layout="
+                f"{layout_cls.__name__} args={list(args)} section={section_title} "
+                f"columns={unique_columns} rows=[{rendered_rows}]"
+            )
+
+    assert not failures, "Misaligned help payload columns:\n" + "\n".join(failures)
