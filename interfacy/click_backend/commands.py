@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING
 
 import click
 
-from interfacy.appearance.renderer import SchemaHelpRenderer
+from interfacy.appearance.renderer import (
+    SchemaHelpRenderer,
+    command_has_grouped_subcommands,
+    has_grouped_commands,
+)
 from interfacy.click_backend.parser import InterfacyOptionParser
 
 if TYPE_CHECKING:
@@ -153,7 +157,9 @@ class InterfacyClickCommand(_HelpMixin, click.Command):
             ctx (click.Context): Active Click context.
         """
         schema = self.interfacy_parser_schema
-        if schema is not None and _uses_template_layout(schema.theme):
+        if schema is not None and (
+            _uses_template_layout(schema.theme) or has_grouped_commands(schema.commands)
+        ):
             renderer = SchemaHelpRenderer(schema.theme)
             return renderer.render_parser_help(schema, ctx.command_path)
 
@@ -161,7 +167,10 @@ class InterfacyClickCommand(_HelpMixin, click.Command):
         if (
             schema_command is not None
             and schema_command.help_layout is not None
-            and _uses_template_layout(schema_command.help_layout)
+            and (
+                _uses_template_layout(schema_command.help_layout)
+                or command_has_grouped_subcommands(schema_command)
+            )
         ):
             renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)
@@ -217,7 +226,9 @@ class InterfacyClickGroup(_HelpMixin, click.Group):
             ctx (click.Context): Active Click context.
         """
         schema = self.interfacy_parser_schema
-        if schema is not None and _uses_template_layout(schema.theme):
+        if schema is not None and (
+            _uses_template_layout(schema.theme) or has_grouped_commands(schema.commands)
+        ):
             renderer = SchemaHelpRenderer(schema.theme)
             return renderer.render_parser_help(schema, ctx.command_path)
 
@@ -225,7 +236,10 @@ class InterfacyClickGroup(_HelpMixin, click.Group):
         if (
             schema_command is not None
             and schema_command.help_layout is not None
-            and _uses_template_layout(schema_command.help_layout)
+            and (
+                _uses_template_layout(schema_command.help_layout)
+                or command_has_grouped_subcommands(schema_command)
+            )
         ):
             renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)

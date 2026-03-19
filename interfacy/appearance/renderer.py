@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 from stdl.st import ansi_len, with_style
 
@@ -8,20 +9,41 @@ from interfacy.appearance.layout import HelpLayout
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 from interfacy.util import get_terminal_width
 
+_DEFAULT_HELP_ARGUMENT = object()
 
-def _make_help_argument(help_text: str) -> Argument:
+
+def _make_help_argument(
+    help_text: str,
+    *,
+    flags: tuple[str, ...] = ("--help",),
+) -> Argument:
     return Argument(
         name="help",
         display_name="help",
         kind=ArgumentKind.OPTION,
         value_shape=ValueShape.FLAG,
-        flags=("--help",),
+        flags=flags,
         required=False,
         default=None,
         help=help_text,
         type=None,
         parser=None,
+        is_help_action=True,
     )
+
+
+def has_grouped_commands(commands: dict[str, Command] | None) -> bool:
+    """Return whether any command in a mapping has a help-group label."""
+    if not commands:
+        return False
+    return any(command.help_group is not None for command in commands.values())
+
+
+def command_has_grouped_subcommands(command: Command | None) -> bool:
+    """Return whether a command has subcommands with help-group labels."""
+    if command is None:
+        return False
+    return has_grouped_commands(command.subcommands)
 
 
 class SchemaHelpRenderer:
@@ -37,9 +59,11 @@ class SchemaHelpRenderer:
         self,
         layout: HelpLayout,
         terminal_width: int | None = None,
+        help_argument: Argument | None | object = _DEFAULT_HELP_ARGUMENT,
     ) -> None:
         self.layout = layout
         self.terminal_width = terminal_width or get_terminal_width()
+        self._help_argument = help_argument
 
     def render_parser_help(self, schema: ParserSchema, prog: str) -> str:
         """
@@ -86,8 +110,11 @@ class SchemaHelpRenderer:
             options,
             rules=command.help_option_sort_effective,
         )
+        help_arg = self._get_help_argument()
 
-        layout.prepare_default_field_width_for_arguments(all_args)
+        layout.prepare_default_field_width_for_arguments(
+            [*([help_arg] if help_arg is not None else []), *all_args]
+        )
 
         sections: list[str] = []
         usage = self._build_usage(command, prog)
@@ -98,12 +125,11 @@ class SchemaHelpRenderer:
         if positionals_section is not None:
             sections.append(positionals_section)
 
-        help_arg = _make_help_argument(layout.help_option_description)
-        options_with_help = [help_arg, *options]
+        options_with_help = [*([help_arg] if help_arg is not None else []), *options]
         options_section = self._render_argument_section(
             "options",
             options_with_help,
-            normalize_help_only=not options,
+            normalize_help_only=help_arg is not None and not options,
         )
         if options_section is not None:
             sections.append(options_section)
@@ -156,23 +182,34 @@ class SchemaHelpRenderer:
         try:
             for arg in arguments:
                 rendered = self.layout.format_argument(arg)
-                if normalize_help_only and arg.name == "help":
-                    rendered = self._normalize_help_only_option_line(rendered)
+                if normalize_help_only and arg.is_help_action:
+                    rendered = self._normalize_help_only_option_line(rendered, arg)
                 lines.append(self._indent(rendered))
         finally:
             self.layout.keep_empty_default_slot_for_help = previous_keep
         return "\n".join(lines)
 
-    @staticmethod
-    def _build_epilog_block(command: Command, parser_epilog: str | None) -> str | None:
+    def _build_epilog_block(self, command: Command, parser_epilog: str | None) -> str | None:
         epilog_parts: list[str] = []
         if command.epilog:
-            normalized_epilog = re.sub(r"\x1b\[[0-9;]*m", "", command.epilog)
-            is_legacy_command_epilog = (
-                command.subcommands is not None
-                and normalized_epilog.lstrip().lower().startswith("commands:")
-            )
-            if not is_legacy_command_epilog:
+            normalized_epilog = re.sub(r"\x1b\[[0-9;]*m", "", command.epilog).strip()
+            is_generated_subcommand_epilog = False
+            if command.subcommands is not None:
+                generated_subcommand_help = self.layout.get_help_for_multiple_commands(
+                    command.subcommands,
+                    rules=command.help_subcommand_sort_effective,
+                )
+                normalized_generated_help = re.sub(
+                    r"\x1b\[[0-9;]*m",
+                    "",
+                    generated_subcommand_help,
+                ).strip()
+                is_generated_subcommand_epilog = (
+                    normalized_epilog.lower().startswith("commands:")
+                    or normalized_epilog == normalized_generated_help
+                )
+
+            if not is_generated_subcommand_epilog:
                 epilog_parts.append(command.epilog)
         if parser_epilog:
             epilog_parts.append(parser_epilog)
@@ -196,11 +233,14 @@ class SchemaHelpRenderer:
             if schema.description:
                 sections.append(schema.description)
 
-        help_arg = _make_help_argument(layout.help_option_description)
-        layout.prepare_default_field_width_for_arguments([help_arg])
-        heading = self._style_section_heading("options")
-        help_line = self._normalize_help_only_option_line(layout.format_argument(help_arg))
-        sections.append(f"{heading}\n{self._indent(help_line)}")
+        help_arg = self._get_help_argument()
+        if help_arg is not None:
+            layout.prepare_default_field_width_for_arguments([help_arg])
+            heading = self._style_section_heading("options")
+            help_line = self._normalize_help_only_option_line(
+                layout.format_argument(help_arg), help_arg
+            )
+            sections.append(f"{heading}\n{self._indent(help_line)}")
 
         if schema.commands_help:
             sections.append(schema.commands_help)
@@ -233,7 +273,9 @@ class SchemaHelpRenderer:
                 if arg.required
             )
         else:
-            parts.append("[--help]")
+            help_arg = self._get_help_argument()
+            if help_arg is not None:
+                parts.append(self._usage_token_for_option(help_arg))
             parts.extend(self._usage_token_for_option(arg) for arg in options)
 
         for arg in positionals:
@@ -287,8 +329,8 @@ class SchemaHelpRenderer:
         return token.replace("{command}", "{" + ",".join(choices) + "}")
 
     def _usage_token_for_option(self, arg: Argument, *, compact_style: bool = False) -> str:
-        longs = [flag for flag in arg.flags if flag.startswith("--")]
-        shorts = [flag for flag in arg.flags if flag.startswith("-") and not flag.startswith("--")]
+        longs = [flag for flag in arg.flags if len(flag) > 2]
+        shorts = [flag for flag in arg.flags if len(flag) <= 2]
         primary_flag = longs[0] if longs else (shorts[0] if shorts else f"--{arg.display_name}")
 
         is_bool = self.layout.is_argument_boolean(arg)
@@ -388,10 +430,37 @@ class SchemaHelpRenderer:
         lines = text.splitlines()
         return "\n".join(prefix + line for line in lines)
 
-    @staticmethod
-    def _normalize_help_only_option_line(line: str) -> str:
-        """Normalize synthetic help-only rows for aligned layouts."""
-        return re.sub(r"^\s+(--help\b)", r"\1", line)
+    def _get_help_argument(self) -> Argument | None:
+        if self._help_argument is _DEFAULT_HELP_ARGUMENT:
+            return _make_help_argument(self.layout.help_option_description)
+        if self._help_argument is None:
+            return None
+        return replace(
+            self._help_argument,
+            help=self.layout.help_option_description,
+            is_help_action=True,
+        )
+
+    def _normalize_help_only_option_line(self, line: str, help_arg: Argument) -> str:
+        """Normalize synthetic help-only rows so the configured help flag stays visible."""
+        normalized = line.lstrip()
+        if any(flag and flag in normalized for flag in help_arg.flags):
+            return normalized
+
+        description = line.strip()
+        primary_flag = self.layout.get_primary_boolean_flag_for_argument(help_arg) or (
+            help_arg.flags[0] if help_arg.flags else "--help"
+        )
+        if not description:
+            return primary_flag
+
+        help_position = self.layout.help_position
+        padding = max(2, help_position - len(primary_flag)) if help_position is not None else 2
+        return f"{primary_flag}{' ' * padding}{description}"
 
 
-__all__ = ["SchemaHelpRenderer"]
+__all__ = [
+    "SchemaHelpRenderer",
+    "command_has_grouped_subcommands",
+    "has_grouped_commands",
+]

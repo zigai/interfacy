@@ -234,6 +234,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> None:
         command.include_inherited_methods = include_inherited_methods
         command.include_classmethods = include_classmethods
@@ -244,6 +245,7 @@ class ParserSchemaBuilder:
         command.help_subcommand_sort = (
             list(help_subcommand_sort) if help_subcommand_sort is not None else None
         )
+        command.help_group = help_group
         command.help_option_sort_effective = list(settings.help_option_sort)
         command.help_subcommand_sort_effective = list(settings.help_subcommand_sort)
 
@@ -269,6 +271,7 @@ class ParserSchemaBuilder:
                     abbreviation_scope=command.abbreviation_scope,
                     help_option_sort=command.help_option_sort,
                     help_subcommand_sort=command.help_subcommand_sort,
+                    help_group=command.help_group,
                 )
                 commands[canonical_name] = rebuilt
 
@@ -338,6 +341,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Command:
         """
         Build a Command schema for a callable or class.
@@ -356,6 +360,7 @@ class ParserSchemaBuilder:
             help_option_sort (list[HelpOptionSortRule] | None): Per-command option rules.
             help_subcommand_sort (list[HelpSubcommandSortRule] | None): Per-command
                 subcommand rules.
+            help_group (str | None): Optional help-only command group heading.
         """
         settings = self._merge_build_settings(
             parent_settings,
@@ -382,6 +387,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=abbreviation_scope,
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
             )
 
         if isinstance(obj, Method):
@@ -398,6 +404,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=abbreviation_scope,
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
             )
 
         if isinstance(obj, Class):
@@ -414,6 +421,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=abbreviation_scope,
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
             )
         raise InvalidCommandError(obj)
 
@@ -434,6 +442,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.parser.RESERVED_FLAGS]
@@ -472,6 +481,7 @@ class ParserSchemaBuilder:
             cli_name=cli_name,
             aliases=aliases,
             raw_description=raw_description,
+            help_group=help_group,
             parameters=parameters,
             pipe_targets=pipe_config,
             help_layout=self.parser.help_layout,
@@ -486,6 +496,7 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_group=help_group,
         )
         return command
 
@@ -504,6 +515,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.parser.RESERVED_FLAGS]
@@ -569,6 +581,7 @@ class ParserSchemaBuilder:
             cli_name=cli_name,
             aliases=aliases,
             raw_description=raw_description,
+            help_group=help_group,
             parameters=parameters,
             initializer=initializer,
             pipe_targets=method_pipe_config,
@@ -584,6 +597,7 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_group=help_group,
         )
         return command
 
@@ -602,6 +616,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.parser.RESERVED_FLAGS]
@@ -690,6 +705,7 @@ class ParserSchemaBuilder:
             cli_name=cli_name,
             aliases=aliases,
             raw_description=raw_description,
+            help_group=help_group,
             parameters=[],
             initializer=initializer,
             subcommands=subcommands,
@@ -710,6 +726,7 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_group=help_group,
         )
         return command
 
@@ -1376,6 +1393,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Command:
         """Build Command schema from a CommandGroup (manual construction)."""
         settings = self._merge_build_settings(
@@ -1400,12 +1418,13 @@ class ParserSchemaBuilder:
 
         subcommands: dict[str, Command] = {}
 
-        for name, subgroup in group.subgroups.items():
+        for name, subgroup_entry in group.subgroup_entries.items():
             sub_cli_name = self.parser.flag_strategy.command_translator.translate(name)
             subcommands[sub_cli_name] = self.build_from_group(
-                subgroup,
+                subgroup_entry.group,
                 current_path,
                 parent_settings=settings,
+                help_group=subgroup_entry.help_group,
             )
 
         for name, entry in group.commands.items():
@@ -1429,6 +1448,7 @@ class ParserSchemaBuilder:
             cli_name=cli_name,
             aliases=group.aliases,
             raw_description=group.description,
+            help_group=help_group,
             parameters=[],
             initializer=initializer,
             subcommands=subcommands or None,
@@ -1448,6 +1468,7 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_group=help_group,
         )
         return command
 
@@ -1524,6 +1545,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=entry.abbreviation_scope,
                 help_option_sort=entry.help_option_sort,
                 help_subcommand_sort=entry.help_subcommand_sort,
+                help_group=entry.help_group,
             )
         if isinstance(entry.obj, type):
             return self._build_from_class_recursive(
@@ -1537,6 +1559,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=entry.abbreviation_scope,
                 help_option_sort=entry.help_option_sort,
                 help_subcommand_sort=entry.help_subcommand_sort,
+                help_group=entry.help_group,
             )
         obj = inspect(entry.obj)
         resolve_objinspect_annotations(obj)
@@ -1555,6 +1578,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=entry.abbreviation_scope,
                 help_option_sort=entry.help_option_sort,
                 help_subcommand_sort=entry.help_subcommand_sort,
+                help_group=entry.help_group,
             )
         raise InvalidCommandError(entry.name)
 
@@ -1571,6 +1595,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Command:
         """Build from a class instance - methods as commands, no __init__ args."""
         instance = entry.obj
@@ -1615,6 +1640,7 @@ class ParserSchemaBuilder:
             cli_name=cli_name,
             aliases=entry.aliases,
             raw_description=raw_description,
+            help_group=help_group,
             parameters=[],
             initializer=[],
             subcommands=subcommands or None,
@@ -1636,6 +1662,7 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_group=help_group,
         )
         return command
 
@@ -1652,6 +1679,7 @@ class ParserSchemaBuilder:
         abbreviation_scope: str | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Command:
         """Build from a class - methods AND nested classes (recursive)."""
         from interfacy.group import CommandEntry
@@ -1738,6 +1766,7 @@ class ParserSchemaBuilder:
             cli_name=cli_name,
             aliases=entry.aliases,
             raw_description=raw_description,
+            help_group=help_group,
             parameters=[],
             initializer=initializer,
             subcommands=subcommands or None,
@@ -1757,6 +1786,7 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_group=help_group,
         )
         return command
 

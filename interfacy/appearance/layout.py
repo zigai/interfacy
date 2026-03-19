@@ -446,6 +446,12 @@ class HelpLayout:
     def _format_commands_title(self) -> str:
         return self.commands_title
 
+    def _format_command_group_heading(self, group_title: str) -> str:
+        heading = group_title
+        if self.section_heading_style is not None:
+            heading = with_style(heading, self.section_heading_style)
+        return heading
+
     def _format_command_name_for_help(self, command_name: str) -> str:
         return command_name
 
@@ -454,6 +460,96 @@ class HelpLayout:
         pad = max(0, ljust - len(command_name) - 3)
         name_column = f"   {name_styled}{' ' * pad}"
         return f"{name_column} {with_style(description, self.style.description)}"
+
+    def _command_display_name(self, command: "Command") -> str:
+        return self._format_command_display_name(command.cli_name, command.aliases)
+
+    def _render_help_row_for_command(self, command: "Command", ljust: int) -> str:
+        cli_name = command.cli_name
+        if command.obj is None:
+            command_name = self._format_command_display_name(cli_name, command.aliases)
+            description = command.raw_description or ""
+            return self._format_command_row(command_name, description, ljust)
+        return self.get_command_description(
+            command.obj,
+            ljust,
+            cli_name,
+            command.aliases,
+        )
+
+    def _commands_ljust_for_help_rows(self, commands: list["Command"]) -> int:
+        display_names = [self._command_display_name(command) for command in commands]
+        max_display = max([len(name) for name in display_names], default=0)
+        return self.get_commands_ljust(max_display)
+
+    @staticmethod
+    def _has_command_help_groups(commands: list["Command"]) -> bool:
+        return any(command.help_group is not None for command in commands)
+
+    @staticmethod
+    def _partition_commands_by_help_group(
+        commands: list["Command"],
+    ) -> tuple[list[str], dict[str, list["Command"]], list["Command"]]:
+        grouped_command_order: list[str] = []
+        grouped_commands = {}
+        ungrouped_commands = []
+        for command in commands:
+            group = command.help_group
+            if group is None:
+                ungrouped_commands.append(command)
+                continue
+            if group not in grouped_commands:
+                grouped_commands[group] = []
+                grouped_command_order.append(group)
+            grouped_commands[group].append(command)
+        return grouped_command_order, grouped_commands, ungrouped_commands
+
+    def _render_ungrouped_commands_help(
+        self,
+        commands: dict[str, "Command"],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> str:
+        ordered_commands = self.order_commands_for_help(commands, rules=rules)
+        ljust = self._commands_ljust_for_help_rows(ordered_commands)
+        lines = [self._format_commands_title()]
+        lines.extend(
+            self._render_help_row_for_command(command, ljust) for command in ordered_commands
+        )
+        return "\n".join(lines)
+
+    def _render_grouped_commands_help(
+        self,
+        *,
+        grouped_command_order: list[str],
+        ordered_grouped_commands: dict[str, list["Command"]],
+        ordered_ungrouped_commands: list["Command"],
+    ) -> str:
+        all_commands = []
+        for group in grouped_command_order:
+            all_commands.extend(ordered_grouped_commands[group])
+        all_commands.extend(ordered_ungrouped_commands)
+        ljust = self._commands_ljust_for_help_rows(all_commands)
+
+        lines: list[str] = []
+        for idx, group in enumerate(grouped_command_order):
+            if idx > 0:
+                lines.append("")
+            lines.append(self._format_command_group_heading(group))
+            lines.extend(
+                self._render_help_row_for_command(command, ljust)
+                for command in ordered_grouped_commands[group]
+            )
+
+        if ordered_ungrouped_commands:
+            if grouped_command_order:
+                lines.append("")
+            lines.extend(
+                self._render_help_row_for_command(command, ljust)
+                for command in ordered_ungrouped_commands
+            )
+
+        return "\n".join(lines)
 
     def get_help_for_class(
         self,
@@ -599,6 +695,7 @@ class HelpLayout:
         template: str,
         values: dict[str, str],
         is_required: bool,
+        is_help_option: bool = False,
     ) -> str:
         if is_required and values.get("required") and values["required"] not in rendered:
             rendered = f"{rendered} {values['required']}"
@@ -610,7 +707,7 @@ class HelpLayout:
             rendered,
             template,
             values.get("default", ""),
-            is_help_option=values.get("flag_long", "") == "--help",
+            is_help_option=is_help_option,
         )
         return rendered.rstrip()
 
@@ -622,6 +719,7 @@ class HelpLayout:
         raw_description: str,
         indent: int,
         is_required: bool,
+        is_help_option: bool = False,
     ) -> str:
         default_overflow, skip_wrap = self._prepare_template_default_overflow(
             template=template,
@@ -655,6 +753,7 @@ class HelpLayout:
             template=template,
             values=values,
             is_required=is_required,
+            is_help_option=is_help_option,
         )
 
     def format_parameter(self, param: Parameter, flags: tuple[str, ...]) -> str:
@@ -680,6 +779,7 @@ class HelpLayout:
             raw_description=raw_description,
             indent=2,  # argparse adds a fixed two-space indent for each help line
             is_required=is_required,
+            is_help_option=values.get("flag_long", "") == "--help",
         )
 
     def get_help_for_multiple_commands(
@@ -695,29 +795,27 @@ class HelpLayout:
             commands (dict[str, Command]): Command map keyed by name.
             rules (list[HelpSubcommandSortRule] | None): Optional explicit ordering rules.
         """
-        ordered_commands = self.order_commands_for_help(commands, rules=rules)
-        display_names = [
-            self._format_command_display_name(cmd.cli_name, cmd.aliases) for cmd in ordered_commands
-        ]
-        max_display = max([len(name) for name in display_names], default=0)
-        ljust = self.get_commands_ljust(max_display)
-        lines = [self._format_commands_title()]
-        for command in ordered_commands:
-            cli_name = command.cli_name
-            if command.obj is None:
-                command_name = self._format_command_display_name(cli_name, command.aliases)
-                description = command.raw_description or ""
-                lines.append(self._format_command_row(command_name, description, ljust))
-            else:
-                lines.append(
-                    self.get_command_description(
-                        command.obj,
-                        ljust,
-                        cli_name,
-                        command.aliases,
-                    )
-                )
-        return "\n".join(lines)
+        commands_in_insertion_order = list(commands.values())
+        if not self._has_command_help_groups(commands_in_insertion_order):
+            return self._render_ungrouped_commands_help(commands, rules=rules)
+
+        grouped_command_order, grouped_commands, ungrouped_commands = (
+            self._partition_commands_by_help_group(commands_in_insertion_order)
+        )
+
+        ordered_grouped_commands = {
+            group: self._order_command_list_for_help(grouped_commands[group], rules=rules)
+            for group in grouped_command_order
+        }
+        ordered_ungrouped_commands = self._order_command_list_for_help(
+            ungrouped_commands,
+            rules=rules,
+        )
+        return self._render_grouped_commands_help(
+            grouped_command_order=grouped_command_order,
+            ordered_grouped_commands=ordered_grouped_commands,
+            ordered_ungrouped_commands=ordered_ungrouped_commands,
+        )
 
     def _translated_method_name(self, method: Method) -> str:
         if self.flag_generator is None:
@@ -804,7 +902,15 @@ class HelpLayout:
             commands (dict[str, Command]): Command map keyed by canonical name.
             rules (list[HelpSubcommandSortRule] | None): Optional explicit ordering rules.
         """
-        named_commands = [(command.cli_name, command) for command in commands.values()]
+        return self._order_command_list_for_help(list(commands.values()), rules=rules)
+
+    def _order_command_list_for_help(
+        self,
+        commands: list["Command"],
+        *,
+        rules: list[HelpSubcommandSortRule] | None = None,
+    ) -> list["Command"]:
+        named_commands = [(command.cli_name, command) for command in commands]
         return self._order_named_items_for_help(named_commands, rules=rules)
 
     def order_class_methods_for_help(
@@ -1360,7 +1466,7 @@ class HelpLayout:
 
         default_raw = ""
         if is_bool:
-            is_synthetic_help = arg.name == "help" and "--help" in arg.flags
+            is_synthetic_help = arg.is_help_action
             if not is_synthetic_help:
                 if arg.boolean_behavior is not None:
                     val = arg.boolean_behavior.default
@@ -1548,6 +1654,7 @@ class HelpLayout:
             raw_description=raw_description,
             indent=indent,
             is_required=is_required,
+            is_help_option=arg.is_help_action,
         )
 
     def _format_argument_legacy(self, arg: "Argument", _indent: int = 2) -> str:
@@ -1603,6 +1710,8 @@ class HelpLayout:
         defaults: list[str] = []
         for arg in arguments:
             if self._arg_is_bool(arg):
+                if arg.is_help_action:
+                    continue
                 if arg.boolean_behavior is not None:
                     val = arg.boolean_behavior.default
                 elif self._arg_has_default(arg):

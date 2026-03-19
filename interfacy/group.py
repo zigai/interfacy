@@ -11,6 +11,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_subcommand_sort_rules,
 )
 from interfacy.exceptions import ConfigurationError
+from interfacy.util import validate_help_group
 
 AbbreviationScope = Literal["top_level_options", "all_options"]
 ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = ("top_level_options", "all_options")
@@ -66,6 +67,15 @@ class CommandEntry:
     abbreviation_scope: AbbreviationScope | None = None
     help_option_sort: list[HelpOptionSortRule] | None = None
     help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
+    help_group: str | None = None
+
+
+@dataclass
+class SubgroupEntry:
+    """Internal representation of a subgroup added to a group."""
+
+    group: CommandGroup
+    help_group: str | None = None
 
 
 class CommandGroup:
@@ -89,7 +99,7 @@ class CommandGroup:
         self.description = description
         self.aliases = tuple(aliases) if aliases else ()
         self._commands: dict[str, CommandEntry] = {}
-        self._subgroups: dict[str, CommandGroup] = {}
+        self._subgroups: dict[str, SubgroupEntry] = {}
         self._group_args_source: type | Callable[..., Any] | None = None
 
     def add_command(
@@ -105,6 +115,7 @@ class CommandGroup:
         abbreviation_scope: AbbreviationScope | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> CommandGroup:
         """
         Add a command to this group.
@@ -121,6 +132,7 @@ class CommandGroup:
             abbreviation_scope: Override abbreviation scope.
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
+            help_group: Optional help-only group heading for this command in help listings.
         """
         resolved_abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
         resolved_help_option_sort = validate_help_option_sort(help_option_sort)
@@ -128,6 +140,7 @@ class CommandGroup:
         resolved_model_expansion_max_depth = validate_model_expansion_max_depth(
             model_expansion_max_depth
         )
+        resolved_help_group = validate_help_group(help_group)
 
         is_instance = False
         cmd_name: str
@@ -162,6 +175,7 @@ class CommandGroup:
             help_subcommand_sort=list(resolved_help_subcommand_sort)
             if resolved_help_subcommand_sort
             else None,
+            help_group=resolved_help_group,
         )
         self._commands[cmd_name] = entry
         return self
@@ -170,6 +184,7 @@ class CommandGroup:
         self,
         group: CommandGroup,
         name: str | None = None,
+        help_group: str | None = None,
     ) -> CommandGroup:
         """
         Add a nested subgroup.
@@ -177,9 +192,11 @@ class CommandGroup:
         Args:
             group: The CommandGroup to add as a subgroup.
             name: Override the subgroup name.
+            help_group: Optional help-only group heading for this subgroup command.
         """
         group_name = name or group.name
-        self._subgroups[group_name] = group
+        resolved_help_group = validate_help_group(help_group)
+        self._subgroups[group_name] = SubgroupEntry(group=group, help_group=resolved_help_group)
         return self
 
     def with_args(self, source: type | Callable[..., Any]) -> CommandGroup:
@@ -200,6 +217,11 @@ class CommandGroup:
     @property
     def subgroups(self) -> dict[str, CommandGroup]:
         """Return a copy of the subgroups dictionary."""
+        return {name: entry.group for name, entry in self._subgroups.items()}
+
+    @property
+    def subgroup_entries(self) -> dict[str, SubgroupEntry]:
+        """Return subgroup entries with associated metadata."""
         return dict(self._subgroups)
 
     @property
@@ -225,4 +247,4 @@ class CommandGroup:
         )
 
 
-__all__ = ["CommandEntry", "CommandGroup"]
+__all__ = ["CommandEntry", "CommandGroup", "SubgroupEntry"]

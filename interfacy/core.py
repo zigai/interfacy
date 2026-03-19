@@ -32,7 +32,11 @@ from interfacy.naming import (
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.schema.builder import ParserSchemaBuilder
-from interfacy.util import resolve_objinspect_annotations, set_process_title_from_argv
+from interfacy.util import (
+    resolve_objinspect_annotations,
+    set_process_title_from_argv,
+    validate_help_group,
+)
 
 if TYPE_CHECKING:
     from interfacy.group import CommandGroup
@@ -60,6 +64,7 @@ class ResolvedCommandSettings(TypedDict):
     help_option_sort: HelpOptionSort
     help_subcommand_sort: HelpSubcommandSort
     model_expansion_max_depth: int | None
+    help_group: str | None
 
 
 logger = get_logger(__name__)
@@ -351,6 +356,7 @@ class InterfacyParser:
         help_option_sort: list[HelpOptionSortRule] | None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None,
         model_expansion_max_depth: int | None,
+        help_group: str | None,
     ) -> ResolvedCommandSettings:
         return {
             "abbreviation_scope": self._validate_optional(
@@ -369,6 +375,7 @@ class InterfacyParser:
                 model_expansion_max_depth,
                 validate_model_expansion_max_depth,
             ),
+            "help_group": validate_help_group(help_group),
         }
 
     @staticmethod
@@ -382,6 +389,7 @@ class InterfacyParser:
         abbreviation_scope: AbbreviationScope | None,
         help_option_sort: HelpOptionSort,
         help_subcommand_sort: HelpSubcommandSort,
+        help_group: str | None,
     ) -> None:
         command.include_inherited_methods = include_inherited_methods
         command.include_classmethods = include_classmethods
@@ -390,6 +398,7 @@ class InterfacyParser:
         command.abbreviation_scope = abbreviation_scope
         command.help_option_sort = InterfacyParser._copy_optional_list(help_option_sort)
         command.help_subcommand_sort = InterfacyParser._copy_optional_list(help_subcommand_sort)
+        command.help_group = help_group
 
     def add_command(
         self,
@@ -405,6 +414,7 @@ class InterfacyParser:
         abbreviation_scope: AbbreviationScope | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> "Command":
         """
         Register a command callable or group with the parser.
@@ -422,6 +432,7 @@ class InterfacyParser:
             abbreviation_scope (AbbreviationScope | None): Override abbreviation scope.
             help_option_sort (list[HelpOptionSortRule] | None): Override option sort rules.
             help_subcommand_sort (list[HelpSubcommandSortRule] | None): Override subcommand sort.
+            help_group (str | None): Optional help-only command group heading.
 
         Raises:
             DuplicateCommandError: If the command name is already registered.
@@ -433,6 +444,7 @@ class InterfacyParser:
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
             model_expansion_max_depth=model_expansion_max_depth,
+            help_group=help_group,
         )
 
         if isinstance(command, CommandGroup):
@@ -523,6 +535,7 @@ class InterfacyParser:
         abbreviation_scope: AbbreviationScope | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> Callable[[F], F]:
         """
         Decorator to register a command with the parser.
@@ -542,6 +555,7 @@ class InterfacyParser:
             abbreviation_scope: Override abbreviation scope.
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
+            help_group: Optional help-only command group heading.
 
         Returns:
             A decorator that registers the callable and returns it unchanged.
@@ -561,6 +575,7 @@ class InterfacyParser:
                 abbreviation_scope=abbreviation_scope,
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
             )
             return func
 
@@ -579,6 +594,7 @@ class InterfacyParser:
         abbreviation_scope: AbbreviationScope | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
     ) -> "Command":
         """
         Add a CommandGroup to the parser for deeply nested CLI structures.
@@ -595,6 +611,7 @@ class InterfacyParser:
             abbreviation_scope: Override abbreviation scope.
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
+            help_group: Optional help-only command group heading.
 
         Returns:
             The Command schema for the group
@@ -618,6 +635,7 @@ class InterfacyParser:
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
             model_expansion_max_depth=model_expansion_max_depth,
+            help_group=help_group,
         )
 
         builder = ParserSchemaBuilder(self)

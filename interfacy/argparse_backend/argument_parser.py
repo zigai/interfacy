@@ -8,9 +8,14 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from objinspect.typing import type_name
 from typing_extensions import Never
 
-from interfacy.appearance.renderer import SchemaHelpRenderer
+from interfacy.appearance.renderer import (
+    SchemaHelpRenderer,
+    command_has_grouped_subcommands,
+    has_grouped_commands,
+)
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.logger import get_logger
+from interfacy.schema.schema import Argument, ArgumentKind, ValueShape
 
 if TYPE_CHECKING:
     from interfacy.appearance.layout import HelpLayout
@@ -47,6 +52,23 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
         else:
             result[k] = v
     return result
+
+
+def _action_to_help_argument(action: argparse.Action) -> Argument:
+    help_text = action.help if isinstance(action.help, str) else None
+    return Argument(
+        name=action.dest or "help",
+        display_name=action.dest or "help",
+        kind=ArgumentKind.OPTION,
+        value_shape=ValueShape.FLAG,
+        flags=tuple(action.option_strings),
+        required=False,
+        default=action.default,
+        help=help_text,
+        type=None,
+        parser=None,
+        is_help_action=True,
+    )
 
 
 class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[private-member-access]
@@ -287,10 +309,17 @@ class ArgumentParser(argparse.ArgumentParser):
         layout = self._interfacy_help_layout
         if layout is None:
             return super().format_help()
-        if not _uses_template_layout(layout):
+
+        has_grouped_help = False
+        if self._schema is not None:
+            has_grouped_help = has_grouped_commands(self._schema.commands)
+        elif self._schema_command is not None:
+            has_grouped_help = command_has_grouped_subcommands(self._schema_command)
+
+        if not _uses_template_layout(layout) and not has_grouped_help:
             return super().format_help()
 
-        renderer = SchemaHelpRenderer(layout)
+        renderer = SchemaHelpRenderer(layout, help_argument=self._get_help_argument_for_schema())
 
         if self._schema is not None:
             return renderer.render_parser_help(self._schema, self.prog)
@@ -299,6 +328,12 @@ class ArgumentParser(argparse.ArgumentParser):
             return renderer.render_command_help(self._schema_command, self.prog)
 
         return super().format_help()
+
+    def _get_help_argument_for_schema(self) -> Argument | None:
+        for action in self._actions:
+            if isinstance(action, argparse._HelpAction):  # type: ignore[private-member-access]
+                return _action_to_help_argument(action)
+        return None
 
     def set_schema_command(self, command: "Command | None") -> None:
         """

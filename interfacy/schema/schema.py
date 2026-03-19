@@ -78,6 +78,7 @@ class Argument:
         original_model_type (type | None): Model type expanded into flags.
         parent_is_optional (bool): Whether an ancestor model is optional.
         model_default (Any): Default model instance or sentinel.
+        is_help_action (bool): Whether this argument is the parser's built-in help action.
     """
 
     name: str
@@ -102,6 +103,7 @@ class Argument:
     original_model_type: builtins.type[Any] | None = None
     parent_is_optional: bool = False
     model_default: Any = MODEL_DEFAULT_UNSET
+    is_help_action: bool = False
 
 
 @dataclass
@@ -115,6 +117,7 @@ class Command:
         cli_name (str): CLI-facing command name.
         aliases (tuple[str, ...]): Alternative CLI names.
         raw_description (str | None): Raw docstring description.
+        help_group (str | None): Optional help-only grouping label for command listings.
         help_layout (HelpLayout | None): Help layout used for formatting.
         pipe_targets (PipeTargets | None): Pipe target configuration for stdin.
         parameters (list[Argument]): Argument specs for command parameters.
@@ -133,6 +136,7 @@ class Command:
     cli_name: str
     aliases: tuple[str, ...]
     raw_description: str | None
+    help_group: str | None = None
     help_layout: HelpLayout | None = None
     pipe_targets: PipeTargets | None = None
     parameters: list[Argument] = field(default_factory=list)

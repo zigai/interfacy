@@ -16,6 +16,7 @@ from setproctitle import setproctitle
 from stdl.st import TextStyle
 
 from interfacy import console
+from interfacy.exceptions import ConfigurationError
 
 
 class TypeStyleTheme(Protocol):
@@ -31,6 +32,27 @@ _PATH_DEFAULT_REPR_RE = re.compile(
     r"^(?:Path|PosixPath|WindowsPath|PurePath|PurePosixPath|PureWindowsPath)\((.+)\)$"
 )
 _DEFAULT_PROCESS_TITLE = "interfacy"
+
+
+def validate_help_group(
+    value: object,
+    *,
+    value_name: str = "help_group",
+    allow_none: bool = True,
+) -> str | None:
+    """Validate and normalize a help-group label."""
+    if value is None:
+        if allow_none:
+            return None
+        raise ConfigurationError(f"{value_name} must be a non-empty string")
+
+    if not isinstance(value, str):
+        raise ConfigurationError(f"{value_name} must be a non-empty string")
+
+    if not value.strip():
+        raise ConfigurationError(f"{value_name} must be a non-empty string")
+
+    return value
 
 
 def derive_process_title(argv0: str | None = None) -> str:
@@ -547,4 +569,5 @@ __all__ = [
     "show_result",
     "simplified_type_name",
     "strip_ansi",
+    "validate_help_group",
 ]
