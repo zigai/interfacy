@@ -35,8 +35,15 @@ myst_enable_extensions = [
 myst_heading_anchors = 3
 
 autoclass_content = "both"
+autodoc_class_signature = "separated"
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
+autodoc_typehints = "description"
+autodoc_typehints_description_target = "documented_params"
+autodoc_typehints_format = "short"
+add_module_names = False
+python_use_unqualified_type_names = True
+python_maximum_signature_line_length = 68
 
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False

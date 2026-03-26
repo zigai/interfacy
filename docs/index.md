@@ -1,17 +1,13 @@
 # Interfacy
 
-Interfacy turns Python callables into CLIs using type annotations and docstrings.
-This landing page stays close to the project README and adds generated API
-reference alongside it.
-
 ```{toctree}
 :hidden:
 :maxdepth: 1
 
-api
+api/index
 ```
 
 ```{include} ../README.md
-:start-after: "## Features"
+:start-after: "[![license](https://img.shields.io/github/license/zigai/interfacy.svg)](https://github.com/zigai/interfacy/blob/main/LICENSE)"
 :end-before: "## License"
 ```
