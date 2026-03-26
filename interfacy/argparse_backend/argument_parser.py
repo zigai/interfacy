@@ -15,11 +15,11 @@ from interfacy.appearance.renderer import (
 )
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.logger import get_logger
-from interfacy.schema.schema import Argument, ArgumentKind, ValueShape
+from interfacy.schema.schema import Argument, ArgumentKind, BooleanBehavior, Command, ValueShape
 
 if TYPE_CHECKING:
     from interfacy.appearance.layout import HelpLayout
-    from interfacy.schema.schema import Command, ParserSchema
+    from interfacy.schema.schema import ParserSchema
 
 logger = get_logger(__name__)
 
@@ -69,6 +69,23 @@ def _action_to_help_argument(action: argparse.Action) -> Argument:
         parser=None,
         is_help_action=True,
     )
+
+
+def _action_metavar(action: argparse.Action) -> str | None:
+    metavar = action.metavar
+    return metavar if isinstance(metavar, str) else None
+
+
+def _action_value_shape(action: argparse.Action) -> ValueShape:
+    if getattr(action, "nargs", None) == 0:
+        return ValueShape.FLAG
+    if isinstance(action, argparse._AppendAction):  # type: ignore[private-member-access]
+        return ValueShape.LIST
+    if isinstance(action.nargs, int) and action.nargs > 1:
+        return ValueShape.TUPLE
+    if action.nargs in ("*", "+"):
+        return ValueShape.LIST
+    return ValueShape.SINGLE
 
 
 class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[private-member-access]
@@ -327,6 +344,9 @@ class ArgumentParser(argparse.ArgumentParser):
         if self._schema_command is not None:
             return renderer.render_command_help(self._schema_command, self.prog)
 
+        if _uses_template_layout(layout):
+            return renderer.render_command_help(self._build_implicit_schema_command(), self.prog)
+
         return super().format_help()
 
     def _get_help_argument_for_schema(self) -> Argument | None:
@@ -352,6 +372,144 @@ class ArgumentParser(argparse.ArgumentParser):
             schema (ParserSchema | None): Full parser schema tied to this parser.
         """
         self._schema = schema
+
+    def _build_implicit_schema_command(self) -> Command:
+        layout = self._interfacy_help_layout
+        if layout is None:
+            raise ValueError("Cannot synthesize a schema command without a help layout.")
+
+        parameters: list[Argument] = []
+        subcommands: dict[str, Command] | None = None
+
+        for action in self._actions:
+            if isinstance(action, argparse._HelpAction):  # type: ignore[private-member-access]
+                continue
+            if isinstance(action, argparse._SubParsersAction):  # type: ignore[private-member-access]
+                subcommands = self._subcommands_from_action(action)
+                continue
+            parameters.append(self._argument_from_action(action))
+
+        command_name = self._command_name_for_schema()
+        return Command(
+            obj=None,
+            canonical_name=command_name,
+            cli_name=command_name,
+            aliases=(),
+            raw_description=self.description,
+            help_layout=layout,
+            parameters=parameters,
+            subcommands=subcommands,
+            raw_epilog=self.epilog,
+            is_leaf=not bool(subcommands),
+        )
+
+    def _command_name_for_schema(self) -> str:
+        prog = str(self.prog or "command").strip()
+        if not prog:
+            return "command"
+        return prog.split()[-1]
+
+    def _original_dest_name(self, dest: str) -> str:
+        original = self._original_destinations.get(dest)
+        if original is not None:
+            return original
+        if self.nest_separator in dest:
+            return dest.rsplit(self.nest_separator, maxsplit=1)[-1]
+        return dest
+
+    def _display_name_for_dest(self, dest: str) -> str:
+        return self._original_dest_name(dest).replace("_", "-")
+
+    def _subcommands_from_action(
+        self,
+        action: argparse._SubParsersAction,  # type: ignore[private-member-access]
+    ) -> dict[str, Command] | None:
+        layout = self._interfacy_help_layout
+        if layout is None:
+            return None
+
+        parser_names: dict[int, list[str]] = {}
+        for name, parser in action.choices.items():
+            parser_names.setdefault(id(parser), []).append(name)
+
+        commands: dict[str, Command] = {}
+        for choice_action in getattr(action, "_choices_actions", ()):
+            choice_name = getattr(choice_action, "dest", None)
+            if not isinstance(choice_name, str):
+                continue
+
+            parser = action.choices.get(choice_name)
+            if not isinstance(parser, ArgumentParser):
+                continue
+
+            aliases = tuple(
+                name for name in parser_names.get(id(parser), ()) if name != choice_name
+            )
+            raw_description = (
+                choice_action.help
+                if isinstance(choice_action.help, str) and choice_action.help != argparse.SUPPRESS
+                else parser.description
+            )
+            commands[choice_name] = Command(
+                obj=None,
+                canonical_name=choice_name,
+                cli_name=choice_name,
+                aliases=aliases,
+                raw_description=raw_description,
+                help_layout=parser._interfacy_help_layout or layout,
+                is_leaf=not parser._has_subcommands_action(),
+            )
+
+        return commands or None
+
+    def _has_subcommands_action(self) -> bool:
+        return any(
+            isinstance(action, argparse._SubParsersAction)  # type: ignore[private-member-access]
+            for action in self._actions
+        )
+
+    def _argument_from_action(self, action: argparse.Action) -> Argument:
+        value_shape = _action_value_shape(action)
+        dest_name = self._original_dest_name(action.dest)
+        display_name = self._display_name_for_dest(action.dest)
+        kind = ArgumentKind.OPTION if action.option_strings else ArgumentKind.POSITIONAL
+
+        arg_type = action.type if isinstance(action.type, type) else None
+        parser = action.type if callable(action.type) else None
+        if arg_type is None and value_shape != ValueShape.FLAG:
+            arg_type = str
+
+        boolean_behavior: BooleanBehavior | None = None
+        if value_shape == ValueShape.FLAG and action.option_strings:
+            negative_form = next(
+                (flag for flag in action.option_strings if flag.startswith("--no-")),
+                None,
+            )
+            boolean_behavior = BooleanBehavior(
+                supports_negative=negative_form is not None,
+                negative_form=negative_form,
+                default=action.default,
+            )
+
+        choices = tuple(action.choices) if action.choices is not None else None
+        nargs = action.nargs if isinstance(action.nargs, (str, int)) else None
+
+        return Argument(
+            name=dest_name,
+            display_name=display_name,
+            kind=kind,
+            value_shape=value_shape,
+            flags=tuple(action.option_strings) if action.option_strings else (display_name,),
+            required=bool(getattr(action, "required", False)),
+            default=action.default,
+            help=action.help if isinstance(action.help, str) else None,
+            type=arg_type,
+            parser=parser,
+            metavar=_action_metavar(action),
+            nargs=nargs,
+            boolean_behavior=boolean_behavior,
+            choices=choices,
+        )
 
     def add_subparsers(self, **kwargs: object) -> NestedSubParsersAction:
         """

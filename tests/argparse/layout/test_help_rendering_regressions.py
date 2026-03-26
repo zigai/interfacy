@@ -17,6 +17,7 @@ from interfacy.appearance.layouts import (
     ArgparseLayout,
     ClapLayout,
     InterfacyLayout,
+    Modern,
     StandardLayout,
 )
 from interfacy.argparse_backend import Argparser
@@ -194,6 +195,57 @@ def test_nested_manual_parser_uses_leaf_metavar_for_append_action() -> None:
     help_text = deploy.format_help()
     assert "--tag TAG" in help_text
     assert "DEPLOY__TAG" not in help_text
+
+
+def test_manual_modern_layout_renders_template_details_without_attached_schema() -> None:
+    parser = ArgumentParser(
+        prog="deploy",
+        description="Deploy an application build.",
+        help_layout=Modern(),
+    )
+    parser.add_argument(
+        "environment",
+        choices=("staging", "production"),
+        help="Target environment.",
+    )
+    parser.add_argument("--region", default="us-east-1", help="Cloud region.")
+    parser.add_argument(
+        "--strategy",
+        choices=("rolling", "blue-green", "canary"),
+        default="rolling",
+        help="Deployment strategy.",
+    )
+    parser.add_argument(
+        "--color",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable color output.",
+    )
+
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.format_help())
+
+    assert "↳ choices: staging, production" in help_text
+    assert "↳ default: us-east-1 | type: str" in help_text
+    assert "↳ default: rolling | choices: rolling, blue-green, canary" in help_text
+    assert "--no-color" in help_text
+    assert "↳ default: true" in help_text
+
+
+def test_manual_modern_layout_lists_subcommands_without_attached_schema() -> None:
+    parser = ArgumentParser(
+        prog="manual",
+        description="Manual CLI.",
+        help_layout=Modern(),
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("clone", help="Clone a repository.")
+    subparsers.add_parser("status", help="Show current status.")
+
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.format_help())
+
+    assert "{clone,status}" in help_text
+    assert re.search(r"^\s*clone\s+Clone a repository\.$", help_text, re.MULTILINE)
+    assert re.search(r"^\s*status\s+Show current status\.$", help_text, re.MULTILINE)
 
 
 def test_group_function_commands_render_kebab_case_names() -> None:
