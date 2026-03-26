@@ -68,11 +68,9 @@ class TestCustomCommandNames:
     def test_help_displays_custom_name_verbatim(self, custom_name: str):
         """Verify that the generated help text displays the custom command name."""
         _, parser = build_parser_with_custom_name(custom_name)
-
-        epilog = parser.epilog or ""
-        assert isinstance(epilog, str)
-        assert custom_name in epilog
-        assert "custom" not in epilog
+        help_text = parser.format_help()
+        assert custom_name in help_text
+        assert "\n  custom\n" not in help_text
 
     @pytest.mark.parametrize("custom_name", ["CustomCommand"])
     def test_runner_executes_custom_command_when_namespace_uses_custom_key(self, custom_name: str):
@@ -108,9 +106,9 @@ class TestCommandAliases:
         """Verify that command aliases are listed in the help output."""
         aliases = ["pick", "choose"]
         _, parser = build_parser_with_aliases(aliases)
-        epilog = parser.epilog or ""
+        help_text = parser.format_help()
         for alias in aliases:
-            assert alias in epilog
+            assert alias in help_text
 
     def test_runner_executes_command_via_alias(self):
         """Verify that the command can be executed by invoking one of its aliases."""

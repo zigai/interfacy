@@ -5,6 +5,14 @@ from interfacy.argparse_backend import Argparser
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
 
 
+def _help_section(help_text: str, heading: str) -> str:
+    for candidate in (f"{heading}:", f"{heading.capitalize()}:"):
+        parts = help_text.split(candidate, maxsplit=1)
+        if len(parts) == 2:
+            return parts[1]
+    raise AssertionError(f"Section {heading!r} not found in help text:\n{help_text}")
+
+
 def smart_options(
     *,
     environment: str,
@@ -31,13 +39,14 @@ def test_argparse_default_help_option_sort_smart() -> None:
     )
     parser.add_command(smart_options)
     help_text = parser.build_parser().format_help()
+    options_section = _help_section(help_text, "options")
 
     assert (
-        help_text.index("--environment")
-        < help_text.index("--replicas")
-        < help_text.index("--timeout")
+        options_section.index("--environment")
+        < options_section.index("--replicas")
+        < options_section.index("--timeout")
     )
-    assert help_text.index("--timeout") < help_text.index("--dry-run")
+    assert options_section.index("--timeout") < options_section.index("--dry-run")
 
 
 def test_argparse_help_option_sort_short_first() -> None:
@@ -48,9 +57,12 @@ def test_argparse_help_option_sort_short_first() -> None:
     )
     parser.add_command(short_priority_options)
     help_text = parser.build_parser().format_help()
+    options_section = _help_section(help_text, "options")
 
     assert (
-        help_text.index("--api-key") < help_text.index("--zeta") < help_text.index("--account-id")
+        options_section.index("--api-key")
+        < options_section.index("--zeta")
+        < options_section.index("--account-id")
     )
 
 
@@ -167,7 +179,7 @@ def test_click_help_option_sort_per_command_override() -> None:
     parser.add_command(smart_options, help_option_sort=["bool_last", "alphabetical"])
     command = parser.build_parser()
     help_text = command.get_help(Context(command))
-    options_section = help_text.split("options:", maxsplit=1)[1]
+    options_section = _help_section(help_text, "options")
 
     assert (
         options_section.index("--environment")
