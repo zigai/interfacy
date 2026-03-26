@@ -154,6 +154,10 @@ add a separate callable API.
 ## Help Sorting
 
 ```{eval-rst}
+.. autodata:: interfacy.appearance.help_sort.HelpOptionSortRule
+```
+
+```{eval-rst}
 .. autodata:: interfacy.appearance.help_sort.HELP_OPTION_SORT_RULE_VALUES
 ```
 
@@ -175,6 +179,10 @@ add a separate callable API.
 
 ```{eval-rst}
 .. autofunction:: interfacy.appearance.help_sort.default_help_option_sort_rules
+```
+
+```{eval-rst}
+.. autodata:: interfacy.appearance.help_sort.HelpSubcommandSortRule
 ```
 
 ```{eval-rst}
