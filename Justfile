@@ -27,6 +27,10 @@ test: _require-hatch
 build: _require-uv
   uv build
 
+# build the documentation site locally
+docs: _require-uv
+  uv run --extra docs sphinx-build -W --keep-going -b html docs docs/_build/html
+
 # setup or update local dev environment, keeps previously installed extras
 sync: _require-uv
   uv sync --inexact --extra dev

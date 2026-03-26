@@ -64,6 +64,16 @@ dev = [
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
 test = ["pytest", "pytest-mock", "coverage", "click>=8.3.1"]
+docs = [
+    "click>=8.3.1",
+    "myst-parser",
+    "sphinx",
+    "sphinx-book-theme",
+    "sphinx-copybutton",
+    "sphinx-notfound-page",
+    "sphinxcontrib-mermaid",
+    "sphinxext-opengraph",
+]
 
 [project.urls]
 Repository = "https://github.com/zigai/interfacy"
@@ -193,6 +203,7 @@ exclude = ["build"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "E402"]
+"docs/conf.py" = ["A001", "INP001"]
 "interfacy/argparse_backend/argument_parser.py" = ["C901"]
 "interfacy/argparse_backend/help_formatter.py" = ["C901"]
 "interfacy/appearance/layout.py" = ["RUF009"]
