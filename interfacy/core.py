@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypedDict, Type
 
 from objinspect import Class, Function, Method, Parameter, inspect
 from stdl.fs import read_piped
-from strto import StrToTypeParser, get_parser
+from strto import StrToTypeParser
 
 from interfacy import console
 from interfacy.appearance.help_sort import (
@@ -32,6 +32,7 @@ from interfacy.naming import (
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.schema.builder import ParserSchemaBuilder
+from interfacy.type_parsers import build_default_type_parser
 from interfacy.util import (
     resolve_objinspect_annotations,
     set_process_title_from_argv,
@@ -217,7 +218,11 @@ class InterfacyParser:
         self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator(
             max_generated_len=self.abbreviation_max_generated_len
         )
-        self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
+        self.type_parser = (
+            type_parser
+            if type_parser is not None
+            else build_default_type_parser(from_file=allow_args_from_file)
+        )
         self.flag_strategy = flag_strategy or DefaultFlagStrategy()
         self.help_layout = help_layout or StandardLayout()
         if help_colors is not None:
@@ -230,6 +235,31 @@ class InterfacyParser:
         self.help_layout.name_registry = self.name_registry
 
         self.commands: dict[str, Command] = {}
+
+    def _snapshot_backend_registration_state(self) -> object | None:
+        """Capture backend-specific mutable registration state."""
+        return None
+
+    def _restore_backend_registration_state(self, snapshot: object | None) -> None:
+        """Restore backend-specific mutable registration state."""
+
+    def _snapshot_registration_state(self) -> dict[str, object]:
+        """Capture mutable registration state so inline run() registrations can be temporary."""
+        return {
+            "commands": dict(self.commands),
+            "pipe_target_overrides": dict(self._pipe_target_overrides),
+            "pipe_buffer": self._pipe_buffer,
+            "name_registry": self.name_registry.snapshot(),
+            "backend": self._snapshot_backend_registration_state(),
+        }
+
+    def _restore_registration_state(self, snapshot: dict[str, object]) -> None:
+        """Restore a previously captured registration snapshot."""
+        self.commands = dict(snapshot["commands"])
+        self._pipe_target_overrides = dict(snapshot["pipe_target_overrides"])
+        self._pipe_buffer = snapshot["pipe_buffer"]
+        self.name_registry.restore(snapshot["name_registry"])
+        self._restore_backend_registration_state(snapshot.get("backend"))
 
     def _resolve_help_option_sort_from_layout(
         self,

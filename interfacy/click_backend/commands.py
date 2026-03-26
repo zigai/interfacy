@@ -40,9 +40,8 @@ class InterfacyClickOption(click.Option):
         help_record = super().get_help_record(ctx)
         if help_record is not None:
             name, help_text = help_record
-            if " " in name:
-                parts = name.split(" ")
-                name = " ".join(parts[:-1])
+            if " " in name and not self.is_flag:
+                name = name.rsplit(" ", 1)[0]
             return name, help_text
         return None
 

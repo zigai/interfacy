@@ -28,6 +28,7 @@ logger = get_logger(__name__)
 DEST_KEY = "dest"
 ActionType = Callable[[str], Any] | type[Any] | str | None
 NargsPattern = Literal["?", "*", "+"]
+SUBCOMMANDS_KEY = "_subcommands"
 
 
 def _uses_template_layout(layout: "HelpLayout | None") -> bool:
@@ -184,6 +185,11 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             NestedArgumentParser: A new parser for the subcommand.
         """
         kwargs.setdefault("help_layout", self._child_help_layout)
+        nested_components = [*self.base_nest_path_components]
+        if nested_components:
+            nested_components.extend([SUBCOMMANDS_KEY, nest_dir or name])
+        else:
+            nested_components.append(nest_dir or name)
 
         return cast(
             ArgumentParser,
@@ -203,7 +209,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
                 conflict_handler=conflict_handler,
                 add_help=add_help,
                 allow_abbrev=allow_abbrev,
-                nest_path=[*self.base_nest_path_components, nest_dir or name],
+                nest_path=nested_components,
                 nest_separator=self.nest_separator,
                 exit_on_error=exit_on_error,
                 **kwargs,
@@ -789,7 +795,7 @@ class ArgumentParser(argparse.ArgumentParser):
 
                 if is_missing_subcommand:
                     self.print_help(sys.stderr)
-                    raise SystemExit(0)
+                    raise SystemExit(2)
 
         super().error(message)
 

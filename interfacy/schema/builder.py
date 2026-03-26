@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from dataclasses import field as dataclass_field
 from inspect import Parameter as InspectParameter
@@ -19,7 +19,8 @@ from interfacy.appearance.help_sort import (
     resolve_help_option_sort_rules,
     resolve_help_subcommand_sort_rules,
 )
-from interfacy.exceptions import InvalidCommandError, ReservedFlagError
+from interfacy.exceptions import DuplicateCommandError, InvalidCommandError, ReservedFlagError
+from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
 from interfacy.pipe import PipeTargets
 from interfacy.schema.model_argument_mapper import ModelArgumentMapper
 from interfacy.schema.schema import (
@@ -446,6 +447,7 @@ class ParserSchemaBuilder:
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.parser.RESERVED_FLAGS]
+        flag_state = FlagAllocationState()
         if pipe_config is None and canonical_name is not None:
             pipe_config = self.parser.resolve_pipe_targets_by_names(
                 canonical_name=canonical_name,
@@ -466,6 +468,7 @@ class ParserSchemaBuilder:
                 taken_flags,
                 pipe_param_names,
                 settings=resolved_settings,
+                flag_allocation_state=flag_state,
             )
         ]
         raw_description = description or (function.description if function.has_docstring else None)
@@ -519,6 +522,8 @@ class ParserSchemaBuilder:
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.parser.RESERVED_FLAGS]
+        init_flag_state = FlagAllocationState()
+        method_flag_state = FlagAllocationState()
 
         initializer: list[Argument] = []
         is_initialized = hasattr(method.func, "__self__")
@@ -545,6 +550,7 @@ class ParserSchemaBuilder:
                     taken_flags,
                     init_pipe_names,
                     settings=resolved_settings,
+                    flag_allocation_state=init_flag_state,
                 )
             ]
         else:
@@ -569,6 +575,7 @@ class ParserSchemaBuilder:
                 taken_flags,
                 pipe_param_names,
                 settings=resolved_settings,
+                flag_allocation_state=method_flag_state,
             )
         ]
 
@@ -623,6 +630,7 @@ class ParserSchemaBuilder:
         command_key = self.parser.COMMAND_KEY
         if command_key:
             taken_flags.append(command_key)
+        init_flag_state = FlagAllocationState()
 
         initializer: list[Argument] = []
         class_pipe_config = None
@@ -657,6 +665,7 @@ class ParserSchemaBuilder:
                     taken_flags,
                     init_pipe_names,
                     settings=resolved_settings,
+                    flag_allocation_state=init_flag_state,
                 )
             ]
 
@@ -737,6 +746,7 @@ class ParserSchemaBuilder:
         pipe_param_names: set[str] | None = None,
         *,
         settings: _CommandBuildSettings | None = None,
+        flag_allocation_state: FlagAllocationState | None = None,
     ) -> list[Argument]:
         resolved_settings = settings or self._base_build_settings()
         annotation = resolve_type_alias(param.type)
@@ -762,11 +772,13 @@ class ParserSchemaBuilder:
         if translated_name in taken_flags:
             raise ReservedFlagError(translated_name)
 
-        flags = self.parser.flag_strategy.get_arg_flags(
+        flags = get_arg_flags_for_parameter(
+            self.parser.flag_strategy,
             translated_name,
             param,
             taken_flags,
             self.parser.abbreviation_gen,
+            allocation_state=flag_allocation_state,
         )
         taken_flags.append(translated_name)
 
@@ -833,7 +845,7 @@ class ParserSchemaBuilder:
                 default = field_info.default_factory
 
             description = None
-            if isinstance(field_info.metadata, dict):
+            if isinstance(field_info.metadata, Mapping):
                 description = field_info.metadata.get("description") or field_info.metadata.get(
                     "help"
                 )
@@ -1260,7 +1272,8 @@ class ParserSchemaBuilder:
             return False
 
         state.value_shape = ValueShape.LIST
-        state.nargs = "*"
+        list_is_effectively_optional = state.is_optional_union_list and allow_optional_union_list
+        state.nargs = "+" if spec.is_required and not list_is_effectively_optional else "*"
         if element_type is not None:
             state.parsed_type = element_type
             if element_type is not str:
@@ -1358,6 +1371,8 @@ class ParserSchemaBuilder:
                 and state.nargs is None
             ):
                 state.nargs = "?"
+            elif state.value_shape is ValueShape.LIST and kind is ArgumentKind.POSITIONAL:
+                state.nargs = "*"
             return False
         if allow_optional_union_list:
             return False if state.is_optional_union_list else spec.is_required
@@ -1417,9 +1432,24 @@ class ParserSchemaBuilder:
             initializer = self._build_args_from_source(group_args_source, settings=settings)
 
         subcommands: dict[str, Command] = {}
+        translated_child_names: set[str] = set()
+
+        def register_translated_child(name: str, aliases: tuple[str, ...] = ()) -> None:
+            cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            translated_aliases = tuple(
+                self.parser.flag_strategy.command_translator.translate(alias) for alias in aliases
+            )
+            candidates = (cli_name, *translated_aliases)
+            if len(set(candidates)) != len(candidates):
+                raise DuplicateCommandError(cli_name)
+            for candidate in candidates:
+                if candidate in translated_child_names:
+                    raise DuplicateCommandError(candidate)
+            translated_child_names.update(candidates)
 
         for name, subgroup_entry in group.subgroup_entries.items():
             sub_cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            register_translated_child(name)
             subcommands[sub_cli_name] = self.build_from_group(
                 subgroup_entry.group,
                 current_path,
@@ -1429,6 +1459,7 @@ class ParserSchemaBuilder:
 
         for name, entry in group.commands.items():
             sub_cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            register_translated_child(name, entry.aliases)
             subcommands[sub_cli_name] = self._build_command_entry(
                 entry,
                 current_path,
@@ -1488,6 +1519,7 @@ class ParserSchemaBuilder:
         obj = inspect(source, init=True)
         resolve_objinspect_annotations(obj)
         taken_flags = [*self.parser.RESERVED_FLAGS]
+        flag_state = FlagAllocationState()
 
         if isinstance(obj, Class) and obj.init_method:
             self._prepare_layout_for_params(obj.init_method.params)
@@ -1499,6 +1531,7 @@ class ParserSchemaBuilder:
                     taken_flags,
                     set(),
                     settings=settings,
+                    flag_allocation_state=flag_state,
                 )
             ]
         if isinstance(obj, Function):
@@ -1511,6 +1544,7 @@ class ParserSchemaBuilder:
                     taken_flags,
                     set(),
                     settings=settings,
+                    flag_allocation_state=flag_state,
                 )
             ]
         return []
@@ -1700,6 +1734,7 @@ class ParserSchemaBuilder:
         command_key = self.parser.COMMAND_KEY
         if command_key:
             taken_flags.append(command_key)
+        init_flag_state = FlagAllocationState()
 
         initializer: list[Argument] = []
         if cls.has_init and not cls.is_initialized:
@@ -1712,6 +1747,7 @@ class ParserSchemaBuilder:
                     taken_flags,
                     set(),
                     settings=settings,
+                    flag_allocation_state=init_flag_state,
                 )
             ]
 

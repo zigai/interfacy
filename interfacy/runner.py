@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 COMMAND_KEY_BASE = "command"
+SUBCOMMANDS_KEY = "_subcommands"
 
 
 class SchemaRunner:
@@ -208,9 +209,9 @@ class SchemaRunner:
             runtime_cls = Class(cls.cls)
 
         command_name = args[self.COMMAND_KEY]
-        command_args = args[command_name]
+        command_args = self._subcommand_bucket(args, command_name)
         del args[self.COMMAND_KEY]
-        del args[command_name]
+        args.pop(command_name, None)
         logger.info("Namespace: %s", command_args)
 
         resolved_name = self.builder.flag_strategy.command_translator.reverse(command_name)
@@ -374,10 +375,40 @@ class SchemaRunner:
         if subcommand is None:
             raise ConfigurationError(f"Unknown subcommand '{subcommand_name}'")
 
-        subcommand_args = args.get(subcommand.cli_name, args.get(subcommand_name, {}))
+        subcommand_args = self._subcommand_bucket(
+            args,
+            subcommand.cli_name,
+            fallback_name=subcommand_name,
+        )
         if not isinstance(subcommand_args, dict):
             subcommand_args = {}
         return subcommand, subcommand_args
+
+    def _subcommand_bucket(
+        self,
+        args: dict[str, Any],
+        subcommand_name: str,
+        *,
+        fallback_name: str | None = None,
+    ) -> dict[str, Any]:
+        nested = args.get(SUBCOMMANDS_KEY)
+        if isinstance(nested, dict):
+            bucket = nested.get(subcommand_name)
+            if isinstance(bucket, dict):
+                return bucket
+            if fallback_name is not None:
+                fallback_bucket = nested.get(fallback_name)
+                if isinstance(fallback_bucket, dict):
+                    return fallback_bucket
+
+        direct_bucket = args.get(subcommand_name)
+        if isinstance(direct_bucket, dict):
+            return direct_bucket
+        if fallback_name is not None:
+            fallback_direct_bucket = args.get(fallback_name)
+            if isinstance(fallback_direct_bucket, dict):
+                return fallback_direct_bucket
+        return {}
 
     def _match_subcommand(
         self,

@@ -71,6 +71,16 @@ class CommandNameRegistry:
             return cli_name
         return self._alias_to_canonical.get(cli_name)
 
+    def snapshot(self) -> tuple[set[str], dict[str, str]]:
+        """Return a copy of the current registry state."""
+        return set(self._canonical), dict(self._alias_to_canonical)
+
+    def restore(self, snapshot: tuple[set[str], dict[str, str]]) -> None:
+        """Restore a previously captured registry snapshot."""
+        canonical, alias_to_canonical = snapshot
+        self._canonical = set(canonical)
+        self._alias_to_canonical = dict(alias_to_canonical)
+
     def _ensure_unique(self, canonical: str, aliases: tuple[str, ...]) -> None:
         if not canonical:
             raise DuplicateCommandError(canonical)

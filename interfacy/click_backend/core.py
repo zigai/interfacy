@@ -105,8 +105,6 @@ class ClickParser(InterfacyParser):
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
         )
-        if list in self.type_parser.parsers:
-            del self.type_parser.parsers[list]
         self._last_schema: ParserSchema | None = None
         self._root_command: click.Command | None = None
         self._last_interrupt_time: float = 0.0
@@ -439,6 +437,18 @@ class ClickParser(InterfacyParser):
             self.install_tab_completion(root)
         return root
 
+    def _snapshot_backend_registration_state(self) -> object | None:
+        return {
+            "last_schema": self._last_schema,
+            "root_command": self._root_command,
+        }
+
+    def _restore_backend_registration_state(self, snapshot: object | None) -> None:
+        if not isinstance(snapshot, dict):
+            return
+        self._last_schema = snapshot.get("last_schema")
+        self._root_command = snapshot.get("root_command")
+
     def get_last_schema(self) -> ParserSchema | None:
         """Return the most recently built parser schema for this backend."""
         return self._last_schema
@@ -685,31 +695,37 @@ class ClickParser(InterfacyParser):
             *commands (Callable[..., Any]): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
+        registration_snapshot = self._snapshot_registration_state() if commands else None
         self._set_runtime_process_title()
         original_handler = signal.getsignal(signal.SIGINT)
         signal.signal(signal.SIGINT, self._sigint_handler)
         try:
-            parse_ok, parse_payload = self._register_commands_and_parse(commands, args)
+            try:
+                parse_ok, parse_payload = self._register_commands_and_parse(commands, args)
+            finally:
+                signal.signal(signal.SIGINT, original_handler)
+
+            if not parse_ok:
+                return parse_payload
+
+            parsed_args, namespace = parse_payload
+            signal.signal(signal.SIGINT, self._sigint_handler)
+            try:
+                run_ok, run_payload = self._execute_schema_runner(namespace, parsed_args)
+            finally:
+                signal.signal(signal.SIGINT, original_handler)
+            if not run_ok:
+                return run_payload
+
+            result = run_payload
+            if self.display_result:
+                self.result_display_fn(result)
+
+            self.exit(ExitCode.SUCCESS)
+            return result
         finally:
-            signal.signal(signal.SIGINT, original_handler)
-        if not parse_ok:
-            return parse_payload
-
-        parsed_args, namespace = parse_payload
-        signal.signal(signal.SIGINT, self._sigint_handler)
-        try:
-            run_ok, run_payload = self._execute_schema_runner(namespace, parsed_args)
-        finally:
-            signal.signal(signal.SIGINT, original_handler)
-        if not run_ok:
-            return run_payload
-
-        result = run_payload
-        if self.display_result:
-            self.result_display_fn(result)
-
-        self.exit(ExitCode.SUCCESS)
-        return result
+            if registration_snapshot is not None:
+                self._restore_registration_state(registration_snapshot)
 
     def parser_from_function(self, *args: object, **kwargs: object) -> object:
         """

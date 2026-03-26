@@ -34,6 +34,7 @@ from interfacy.exceptions import (
 )
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
+from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
 from interfacy.pipe import PipeTargets
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 from interfacy.util import (
@@ -44,6 +45,8 @@ from interfacy.util import (
 )
 
 logger = get_logger(__name__)
+
+SUBCOMMANDS_KEY = "_subcommands"
 
 
 class Argparser(InterfacyParser):
@@ -145,7 +148,6 @@ class Argparser(InterfacyParser):
         self._parser: ArgumentParser | None = None
         self._last_interrupt_time: float = 0.0
         self._last_schema: ParserSchema | None = None
-        del self.type_parser.parsers[list]
 
     def _new_parser(self, name: str | None = None) -> ArgumentParser:
         return ArgumentParser(
@@ -157,12 +159,20 @@ class Argparser(InterfacyParser):
         param: Parameter,
         parser: ArgumentParser,
         taken_flags: list[str],
+        allocation_state: FlagAllocationState | None = None,
     ) -> argparse.Action:
         if param.name in taken_flags:
             raise ReservedFlagError(param.name)
 
         name = self.flag_strategy.argument_translator.translate(param.name)
-        flags = self.flag_strategy.get_arg_flags(name, param, taken_flags, self.abbreviation_gen)
+        flags = get_arg_flags_for_parameter(
+            self.flag_strategy,
+            name,
+            param,
+            taken_flags,
+            self.abbreviation_gen,
+            allocation_state=allocation_state,
+        )
         extra_args = self._extra_add_arg_params(param, flags)
         add_flags = flags
         if extra_args.get("action") is argparse.BooleanOptionalAction:
@@ -179,12 +189,18 @@ class Argparser(InterfacyParser):
         """Create an ArgumentParser from a Function."""
         taken_flags = [] if taken_flags is None else taken_flags
         parser = parser or self._new_parser()
+        allocation_state = FlagAllocationState()
 
         if function.has_docstring:
             parser.description = self.help_layout.format_description(function.description)
 
         for param in function.params:
-            self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
+            self._add_parameter_to_parser(
+                param=param,
+                parser=parser,
+                taken_flags=taken_flags,
+                allocation_state=allocation_state,
+            )
 
         return parser
 
@@ -196,14 +212,26 @@ class Argparser(InterfacyParser):
     ) -> ArgumentParser:
         """Create an ArgumentParser from a Method."""
         parser = parser or self._new_parser()
+        init_allocation_state = FlagAllocationState()
+        method_allocation_state = FlagAllocationState()
 
         is_initialized = hasattr(method.func, "__self__")
         if (init := Class(method.cls).init_method) and not is_initialized:
             for param in init.params:
-                self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
+                self._add_parameter_to_parser(
+                    param=param,
+                    parser=parser,
+                    taken_flags=taken_flags,
+                    allocation_state=init_allocation_state,
+                )
 
         for param in method.params:
-            self._add_parameter_to_parser(param=param, parser=parser, taken_flags=taken_flags)
+            self._add_parameter_to_parser(
+                param=param,
+                parser=parser,
+                taken_flags=taken_flags,
+                allocation_state=method_allocation_state,
+            )
 
         if method.has_docstring:
             parser.description = self.help_layout.format_description(method.description)
@@ -218,6 +246,7 @@ class Argparser(InterfacyParser):
     ) -> ArgumentParser:
         """Create an ArgumentParser from a Class."""
         parser = parser or self._new_parser()
+        init_allocation_state = FlagAllocationState()
 
         if cls.has_docstring:
             parser.description = self.help_layout.format_description(cls.description)
@@ -229,6 +258,7 @@ class Argparser(InterfacyParser):
                     parser=parser,
                     param=param,
                     taken_flags=[*self.RESERVED_FLAGS, self.COMMAND_KEY],
+                    allocation_state=init_allocation_state,
                 )
 
         if subparser is None:
@@ -315,7 +345,13 @@ class Argparser(InterfacyParser):
     ) -> None:
         list_annotation, element_type = self._resolve_list_annotation(annotation)
         if list_annotation is not None:
-            extra["nargs"] = "*"
+            extra["nargs"] = (
+                "+"
+                if param.is_required
+                and self._is_positional_flags(extra.get("_interfacy_flags", ()))
+                and extract_optional_union_list(annotation) is None
+                else "*"
+            )
             if element_type is not None:
                 extra["type"] = self.type_parser.get_parse_func(element_type)
         else:
@@ -344,6 +380,7 @@ class Argparser(InterfacyParser):
 
         """
         extra: dict[str, Any] = {"help": self._parameter_help(param, flags)}
+        extra["_interfacy_flags"] = flags
 
         annotation = resolve_type_alias(param.type) if param.is_typed else None
         is_bool_param = param.is_typed and annotation is bool
@@ -361,10 +398,12 @@ class Argparser(InterfacyParser):
         if is_bool_param:
             extra["action"] = argparse.BooleanOptionalAction
             extra["default"] = param.default if not param.is_required else False
+            extra.pop("_interfacy_flags", None)
             return extra
 
         if not param.is_required:
             extra["default"] = param.default
+        extra.pop("_interfacy_flags", None)
         return extra
 
     def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
@@ -673,9 +712,43 @@ class Argparser(InterfacyParser):
             self.install_tab_completion(parser)
         return parser
 
+    def _snapshot_backend_registration_state(self) -> object | None:
+        return {
+            "parser": self._parser,
+            "last_schema": self._last_schema,
+        }
+
+    def _restore_backend_registration_state(self, snapshot: object | None) -> None:
+        if not isinstance(snapshot, dict):
+            return
+        self._parser = snapshot.get("parser")
+        self._last_schema = snapshot.get("last_schema")
+
     def get_last_schema(self) -> ParserSchema | None:
         """Return the most recently built parser schema for this backend."""
         return self._last_schema
+
+    def _normalize_subcommand_buckets(self, namespace: dict[str, Any]) -> bool:
+        removable = True
+        for value in namespace.values():
+            if isinstance(value, dict) and not self._normalize_subcommand_buckets(value):
+                removable = False
+
+        subcommand_bucket = namespace.get(SUBCOMMANDS_KEY)
+        if not isinstance(subcommand_bucket, dict):
+            return removable
+
+        for name, bucket in subcommand_bucket.items():
+            if isinstance(bucket, dict) and not self._normalize_subcommand_buckets(bucket):
+                removable = False
+            if name in namespace:
+                removable = False
+                continue
+            namespace[name] = bucket
+
+        if removable:
+            namespace.pop(SUBCOMMANDS_KEY, None)
+        return removable
 
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
         """
@@ -702,6 +775,7 @@ class Argparser(InterfacyParser):
             else:
                 namespace[canonical] = {}
 
+        self._normalize_subcommand_buckets(namespace)
         namespace = self._convert_tuple_args(namespace)
         return namespace
 
@@ -738,8 +812,13 @@ class Argparser(InterfacyParser):
         if not command.subcommands:
             return
 
+        nested_subcommands = namespace.get(SUBCOMMANDS_KEY)
         for subcommand in command.subcommands.values():
             sub_namespace = namespace.get(subcommand.cli_name)
+            if not isinstance(sub_namespace, dict) and isinstance(nested_subcommands, dict):
+                candidate = nested_subcommands.get(subcommand.cli_name)
+                if isinstance(candidate, dict):
+                    sub_namespace = candidate
             if isinstance(sub_namespace, dict):
                 self._convert_command_tuple_arguments(subcommand, sub_namespace)
 
@@ -838,31 +917,36 @@ class Argparser(InterfacyParser):
             *commands (Callable[..., Any] | type | object): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
+        registration_snapshot = self._snapshot_registration_state() if commands else None
         self._set_runtime_process_title()
         original_handler, sigint_handler = self._install_sigint_handler()
         try:
-            parse_result = self._parse_run_input(commands, args)
-        finally:
-            signal.signal(signal.SIGINT, original_handler)
+            try:
+                parse_result = self._parse_run_input(commands, args)
+            finally:
+                signal.signal(signal.SIGINT, original_handler)
 
-        if isinstance(parse_result, BaseException):
-            return parse_result
-        resolved_args, namespace = parse_result
+            if isinstance(parse_result, BaseException):
+                return parse_result
+            resolved_args, namespace = parse_result
 
-        signal.signal(signal.SIGINT, sigint_handler)
-        try:
-            result = self._run_runner(namespace, resolved_args)
-        finally:
-            signal.signal(signal.SIGINT, original_handler)
+            signal.signal(signal.SIGINT, sigint_handler)
+            try:
+                result = self._run_runner(namespace, resolved_args)
+            finally:
+                signal.signal(signal.SIGINT, original_handler)
 
-        if isinstance(result, BaseException):
+            if isinstance(result, BaseException):
+                return result
+
+            if self.display_result:
+                self.result_display_fn(result)
+
+            self.exit(ExitCode.SUCCESS)
             return result
-
-        if self.display_result:
-            self.result_display_fn(result)
-
-        self.exit(ExitCode.SUCCESS)
-        return result
+        finally:
+            if registration_snapshot is not None:
+                self._restore_registration_state(registration_snapshot)
 
 
 __all__ = ["Argparser"]

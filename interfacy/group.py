@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from inspect import isroutine
 from typing import Any, Literal
 
 from interfacy.appearance.help_sort import (
@@ -10,7 +11,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_option_sort_rules,
     resolve_help_subcommand_sort_rules,
 )
-from interfacy.exceptions import ConfigurationError
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from interfacy.util import validate_help_group
 
 AbbreviationScope = Literal["top_level_options", "all_options"]
@@ -102,6 +103,27 @@ class CommandGroup:
         self._subgroups: dict[str, SubgroupEntry] = {}
         self._group_args_source: type | Callable[..., Any] | None = None
 
+    def _ensure_unique_child_name(self, name: str) -> None:
+        if name in self._commands or name in self._subgroups:
+            raise DuplicateCommandError(name)
+
+    @staticmethod
+    def _is_instance_command(command: Callable[..., Any] | type | object) -> bool:
+        if isinstance(command, type):
+            return False
+        if not callable(command):
+            return True
+        if isroutine(command):
+            return False
+
+        for attr_name in dir(type(command)):
+            if attr_name.startswith("_") or attr_name == "__call__":
+                continue
+            attr = getattr(type(command), attr_name, None)
+            if callable(attr):
+                return True
+        return False
+
     def add_command(
         self,
         command: Callable[..., Any] | type | object,
@@ -142,20 +164,21 @@ class CommandGroup:
         )
         resolved_help_group = validate_help_group(help_group)
 
-        is_instance = False
+        is_instance = self._is_instance_command(command)
         cmd_name: str
 
         if isinstance(command, type):
             cmd_name = name or command.__name__
-        elif callable(command):
+        elif not is_instance and callable(command):
             callable_name = getattr(command, "__name__", None)
             fallback_name = (
                 callable_name if isinstance(callable_name, str) else type(command).__name__
             )
             cmd_name = name or fallback_name
         else:
-            is_instance = True
             cmd_name = name or type(command).__name__
+
+        self._ensure_unique_child_name(cmd_name)
 
         if description is None and hasattr(command, "__doc__") and command.__doc__:
             description = command.__doc__.split("\n")[0].strip()
@@ -195,6 +218,7 @@ class CommandGroup:
             help_group: Optional help-only group heading for this subgroup command.
         """
         group_name = name or group.name
+        self._ensure_unique_child_name(group_name)
         resolved_help_group = validate_help_group(help_group)
         self._subgroups[group_name] = SubgroupEntry(group=group, help_group=resolved_help_group)
         return self
