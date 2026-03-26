@@ -56,6 +56,8 @@ def _normalize_name(value: str) -> str:
 
 @dataclass
 class InterfacyConfig:
+    """Configuration values loaded for the Interfacy CLI entrypoint."""
+
     help_layout: str | None = field(
         default=None,
         metadata={"section": "appearance", "aliases": ("layout",)},
@@ -166,6 +168,7 @@ def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_config(path: Path | None = None) -> InterfacyConfig:
+    """Load CLI configuration from an explicit path or the default search locations."""
     if path is not None:
         if not path.exists():
             raise FileNotFoundError(path)
@@ -375,6 +378,7 @@ def apply_config_defaults(
     config: InterfacyConfig | dict[str, Any],
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
+    """Merge config-derived defaults into a dictionary of explicit parser overrides."""
     if isinstance(config, InterfacyConfig):
         config_data = asdict(config)
     elif isinstance(config, dict):

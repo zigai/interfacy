@@ -76,6 +76,12 @@ pre-commit run --all-files
 
 We follow the [Google docstring format](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html) for code documentation. All user-facing classes and functions must be documented with docstrings and type hints.
 
+To build the documentation site locally, run:
+
+```sh
+just docs
+```
+
 ## Release Process
 
 New versions are automatically published to [PyPI](https://pypi.org/project/interfacy/) when a GitHub release is created.
