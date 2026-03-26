@@ -2,11 +2,13 @@ import pytest
 from objinspect import Function
 from stdl.st import kebab_case
 
+from interfacy.argparse_backend import Argparser
 from interfacy.exceptions import DuplicateCommandError
 from interfacy.naming.abbreviations import DefaultAbbreviationGenerator, NoAbbreviations
 from interfacy.naming.command_naming import CommandNameRegistry
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
 from interfacy.naming.name_mapping import NameMapping, reverse_translations
+from tests.conftest import fn_list_int, fn_list_str
 
 
 def test_command_name_registry_collisions():
@@ -137,3 +139,41 @@ def test_flag_strategy_positional_logic():
 
     param_opt = Function(fn_timeout).params[0]
     assert strategy.get_arg_flags("timeout", param_opt, taken, gen) == ("--timeout",)
+
+
+def test_required_list_positional_flag_generation_is_not_shared_across_commands():
+    """Each command should independently get positional flags for its first required list."""
+    parser = Argparser(
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        sys_exit_enabled=False,
+        help_layout=None,
+    )
+    parser.add_command(fn_list_int, name="ints")
+    parser.add_command(fn_list_str, name="strings")
+
+    schema = parser.build_parser_schema()
+
+    ints_arg = schema.commands["ints"].parameters[0]
+    strings_arg = schema.commands["strings"].parameters[0]
+
+    assert ints_arg.flags == ("values",)
+    assert strings_arg.flags == ("items",)
+
+
+def test_required_list_positional_flag_generation_is_stable_across_rebuilds():
+    """Rebuilding a parser schema should not mutate required list flag generation."""
+    parser = Argparser(
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        sys_exit_enabled=False,
+        help_layout=None,
+    )
+    parser.add_command(fn_list_int)
+
+    first_schema = parser.build_parser_schema()
+    second_schema = parser.build_parser_schema()
+
+    first_arg = first_schema.commands["fn-list-int"].parameters[0]
+    second_arg = second_schema.commands["fn-list-int"].parameters[0]
+
+    assert first_arg.flags == ("values",)
+    assert second_arg.flags == ("values",)

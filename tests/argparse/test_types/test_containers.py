@@ -53,6 +53,26 @@ class TestContainers:
 
         assert parser.run(args=args) == ["alpha", "beta", "gamma"]
 
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_required_list_positional_rejects_empty_input(self, parser: InterfacyParser):
+        """Required list positionals should fail when no values are provided."""
+        parser.add_command(fn_list_str)
+
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args([])
+
+        assert excinfo.value.code == 2
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    def test_required_list_option_rejects_flag_without_values(self, parser: InterfacyParser):
+        """Required list options should fail when the flag is present without any values."""
+        parser.add_command(fn_list_str)
+
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(["--items"])
+
+        assert excinfo.value.code == 2
+
     @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
     def test_list_str_optional_with_values(self, parser: InterfacyParser):
         """Verify optional union list parses provided values."""

@@ -133,7 +133,7 @@ def test_list_argument_uses_list_shape(parser: Argparser):
 
     assert argument.flags == ("values",)
     assert argument.value_shape is ValueShape.LIST
-    assert argument.nargs == "*"
+    assert argument.nargs == "+"
     assert callable(argument.parser)
 
 
@@ -224,17 +224,17 @@ def test_keyword_only_strategy_keeps_argument_metadata():
     assert flags[1] == ("-e", "--exponent")
 
 
-def test_boolean_short_flag_has_no_negative_form(parser: Argparser):
-    """Verify that boolean arguments with only short flags do not support negative forms."""
+def test_boolean_single_letter_flag_uses_long_form_for_negative_support(parser: Argparser):
+    """Single-letter booleans should still get a long flag so negative forms can exist."""
     parser.add_command(fn_bool_short_flag)
 
     schema = parser.build_parser_schema()
     argument = schema.commands["fn-bool-short-flag"].parameters[0]
 
-    assert argument.flags == ("-x",)
+    assert argument.flags == ("--x",)
     assert argument.boolean_behavior is not None
-    assert argument.boolean_behavior.supports_negative is False
-    assert argument.boolean_behavior.negative_form is None
+    assert argument.boolean_behavior.supports_negative is True
+    assert argument.boolean_behavior.negative_form == "--no-x"
 
 
 def test_optional_list_argument_metadata(parser: Argparser):

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 from objinspect import Function
@@ -27,6 +27,15 @@ class User:
 
 def greet(user: User) -> str:
     return f"Hello {user.name}, age {user.age}"
+
+
+@dataclass
+class UserWithMetadataDescription:
+    name: str = field(metadata={"description": "Display name from metadata."})
+
+
+def greet_metadata(user: UserWithMetadataDescription) -> str:
+    return f"Hello {user.name}"
 
 
 def maybe_user(user: User | None = None) -> User | None:
@@ -238,6 +247,18 @@ def test_docstring_help_used_for_dataclass_fields() -> None:
     assert "Age in years." in help_text["user.age"]
     assert "City name." in help_text["user.address.city"]
     assert "Postal or ZIP code." in help_text["user.address.zip"]
+
+
+def test_metadata_description_used_for_dataclass_fields() -> None:
+    parser = FakeParser(help_layout=InterfacyLayout())
+    parser.register_command(Function(greet_metadata), canonical_name="greet-metadata")
+    builder = ParserSchemaBuilder(parser)
+    schema = builder.build()
+
+    cmd = schema.commands["greet-metadata"]
+    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+
+    assert "Display name from metadata." in help_text["user.name"]
 
 
 def test_help_output_contains_expanded_flags() -> None:

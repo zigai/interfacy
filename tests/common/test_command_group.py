@@ -2,7 +2,7 @@ import pytest
 
 from interfacy import CommandGroup
 from interfacy.core import InterfacyParser
-from interfacy.exceptions import ConfigurationError
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from tests.conftest import (
     Container,
     Database,
@@ -57,6 +57,26 @@ class TestBasicGroupConstruction:
         assert "db" in group.commands
         assert group.commands["db"].is_instance
 
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_add_command_with_callable_instance_behaves_like_instance_group(
+        self, parser: InterfacyParser
+    ) -> None:
+        """Callable instances added to groups should behave like instance subcommand groups."""
+
+        class CallableTool:
+            def __call__(self, name: str) -> str:
+                return f"call {name}"
+
+            def extra(self, name: str) -> str:
+                return f"extra {name}"
+
+        group = CommandGroup("cli")
+        group.add_command(CallableTool(), name="tool")
+
+        parser.add_command(group)
+
+        assert parser.run(args=["cli", "tool", "extra", "Ada"]) == "extra Ada"
+
     def test_add_group_for_nesting(self):
         """Verify subgroups can be added."""
         parent = CommandGroup("workspace")
@@ -101,41 +121,70 @@ class TestBasicGroupConstruction:
 
 
 class TestGroupKeyCollisions:
-    def test_add_command_same_key_overwrites_existing_entry(self) -> None:
-        """Verify group command keys are last-write-wins."""
+    def test_add_command_same_key_rejected(self) -> None:
+        """Duplicate command keys should be rejected immediately."""
         group = CommandGroup("cli")
         group.add_command(attach, name="task")
-        group.add_command(detach, name="task")
 
-        assert len(group.commands) == 1
-        assert group.commands["task"].obj is detach
+        with pytest.raises(DuplicateCommandError):
+            group.add_command(detach, name="task")
 
-    def test_add_group_same_key_overwrites_existing_subgroup(self) -> None:
-        """Verify subgroup keys are last-write-wins."""
+    def test_add_group_same_key_rejected(self) -> None:
+        """Duplicate subgroup keys should be rejected immediately."""
         parent = CommandGroup("workspace")
         first = CommandGroup("module")
         second = CommandGroup("module")
 
         parent.add_group(first)
-        parent.add_group(second)
 
-        assert len(parent.subgroups) == 1
-        assert parent.subgroups["module"] is second
+        with pytest.raises(DuplicateCommandError):
+            parent.add_group(second)
+
+    def test_add_command_duplicate_name_raises_duplicate_command_error(self) -> None:
+        """Duplicate command names within a group should be rejected."""
+        group = CommandGroup("cli")
+        group.add_command(attach, name="task")
+
+        with pytest.raises(DuplicateCommandError):
+            group.add_command(detach, name="task")
+
+    def test_add_group_duplicate_name_raises_duplicate_command_error(self) -> None:
+        """Duplicate subgroup names within a group should be rejected."""
+        parent = CommandGroup("workspace")
+        parent.add_group(CommandGroup("module"))
+
+        with pytest.raises(DuplicateCommandError):
+            parent.add_group(CommandGroup("module"))
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_command_key_overrides_same_name_subgroup_in_schema(
+    def test_translated_group_child_name_collision_raises_duplicate_command_error(
         self, parser: InterfacyParser
     ) -> None:
-        """Verify command/subgroup key collisions resolve to the command at runtime."""
+        """Translated child names that collapse to the same CLI name should be rejected."""
+
+        def first() -> None:
+            return None
+
+        def second() -> None:
+            return None
+
+        group = CommandGroup("workspace")
+        group.add_command(first, name="foo_bar")
+        group.add_command(second, name="foo-bar")
+
+        with pytest.raises(DuplicateCommandError):
+            parser.add_command(group)
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_command_key_cannot_match_same_name_subgroup(self, parser: InterfacyParser) -> None:
+        """Command/subgroup key collisions should be rejected."""
         workspace = CommandGroup("workspace")
         subgroup = CommandGroup("task")
         subgroup.add_command(attach)
         workspace.add_group(subgroup)
-        workspace.add_command(greet, name="task")
 
-        parser.add_command(workspace)
-        result = parser.run(args=["workspace", "task", "Ada"])
-        assert result == "Hello, Ada!"
+        with pytest.raises(DuplicateCommandError):
+            workspace.add_command(greet, name="task")
 
 
 class TestGroupWithFunctions:
@@ -371,6 +420,20 @@ class TestGroupErrors:
         assert isinstance(result, SystemExit)
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_missing_subcommand_exits_with_parse_error_code(self, parser: InterfacyParser):
+        """Missing nested subcommands should exit with argparse's parse error status."""
+        workspace = CommandGroup("workspace")
+        module = CommandGroup("module")
+        workspace.add_group(module)
+        module.add_command(attach)
+
+        parser.add_command(workspace)
+        result = parser.run(args=["workspace", "module"])
+
+        assert isinstance(result, SystemExit)
+        assert result.code == 2
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
     def test_invalid_subcommand_error(self, parser: InterfacyParser):
         """Verify invalid subcommand produces error."""
         cli = CommandGroup("cli")
@@ -379,6 +442,25 @@ class TestGroupErrors:
         parser.add_command(cli)
         result = parser.run(args=["cli", "nonexistent"])
         assert isinstance(result, SystemExit)
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_parent_argument_name_can_match_subcommand_name_without_namespace_conflict(
+        self, parser: InterfacyParser
+    ) -> None:
+        """Parent args and subcommand names should not collide in nested namespaces."""
+
+        def group_args(build: str) -> str:
+            return build
+
+        def build(target: str) -> str:
+            return f"build:{target}"
+
+        root = CommandGroup("root").with_args(group_args)
+        root.add_command(build, name="build")
+
+        parser.add_command(root)
+
+        assert parser.run(args=["root", "config", "build", "artifact"]) == "build:artifact"
 
 
 class TestGroupAliases:

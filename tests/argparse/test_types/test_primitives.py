@@ -64,6 +64,20 @@ class TestPrimitives:
         assert parser.run(args=["--no-value"]) is False
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    def test_single_letter_bool_default_true_accepts_negative_long_flag(
+        self, parser: InterfacyParser
+    ):
+        """Single-letter booleans defaulting to True should accept a --no-x form."""
+
+        def short_toggle(x: bool = True) -> bool:
+            return x
+
+        parser.add_command(short_toggle)
+
+        assert parser.run(args=[]) is True
+        assert parser.run(args=["--no-x"]) is False
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_bool_default_false(self, parser: InterfacyParser):
         """Verify that a boolean defaulting to False handles empty input and --flag."""
         parser.add_command(fn_bool_default_false)

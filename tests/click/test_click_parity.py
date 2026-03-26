@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import click
 import pytest
 
 from interfacy.group import CommandGroup
@@ -56,6 +57,25 @@ class TestClickBooleanFlags:
         assert parser.run(args=["--no-value"]) is False
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
+    def test_bool_default_true_help_keeps_negative_flag_form(self, parser):
+        parser.add_command(fn_bool_default_true)
+
+        command = parser.build_parser()
+        help_text = command.get_help(click.Context(command))
+
+        assert "--no-value" in help_text
+
+    @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
+    def test_single_letter_bool_default_true_accepts_negative_long_flag(self, parser):
+        def short_toggle(x: bool = True) -> bool:
+            return x
+
+        parser.add_command(short_toggle)
+
+        assert parser.run(args=[]) is True
+        assert parser.run(args=["--no-x"]) is False
+
+    @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_bool_default_false(self, parser):
         parser.add_command(fn_bool_default_false)
         assert parser.run(args=[]) is False
@@ -98,6 +118,38 @@ class TestClickClassCommands:
         parser.add_command(Math)
         assert parser.run(args=["pow", "2", "-e", "2"]) == 4
         assert parser.run(args=["--rounding", "2", "pow", "2", "-e", "2"]) == 4
+
+    @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
+    def test_single_top_level_class_command_namespace_and_run(self, parser):
+        parser.add_command(Math)
+
+        namespace = parser.parse_args(["pow", "2", "-e", "2"])
+
+        assert namespace == {
+            "rounding": 6,
+            "command": "pow",
+            "pow": {
+                "base": 2,
+                "exponent": 2,
+            },
+        }
+        assert parser.run(args=["pow", "2", "-e", "2"]) == 4
+
+    @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
+    def test_single_top_level_instance_command_namespace_and_run(self, parser):
+        math = Math(rounding=2)
+        parser.add_command(math)  # type: ignore[arg-type]
+
+        namespace = parser.parse_args(["pow", "2", "-e", "2"])
+
+        assert namespace == {
+            "command": "pow",
+            "pow": {
+                "base": 2,
+                "exponent": 2,
+            },
+        }
+        assert parser.run(args=["pow", "2", "-e", "2"]) == 4
 
 
 class TestClickNestedGroups:

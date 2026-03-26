@@ -41,6 +41,18 @@ class TestPowFunctionParsing:
         assert parser.run(args=["--base", "2", "--exponent", "4"]) == 16
 
 
+class TestParserReuse:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_run_can_be_called_twice_with_same_inline_command(self, parser: InterfacyParser):
+        """Reusing one parser instance across repeated run() calls should be stable."""
+
+        def greet_once(name: str) -> str:
+            return f"hello {name}"
+
+        assert parser.run(greet_once, args=["Ada"]) == "hello Ada"
+        assert parser.run(greet_once, args=["Ada"]) == "hello Ada"
+
+
 class TestMathClassParsing:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_class(self, parser: InterfacyParser):
