@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from objinspect.typing import type_name
 from typing_extensions import Never
 
+from interfacy.appearance.layouts import StandardLayout
 from interfacy.appearance.renderer import (
     SchemaHelpRenderer,
     command_has_grouped_subcommands,
@@ -292,7 +293,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 raise
             base_init_kwargs.pop("color")
             super().__init__(**base_init_kwargs)
-        self._interfacy_help_layout = help_layout
+        self._interfacy_help_layout = help_layout or StandardLayout()
         self._schema_command: Command | None = None
         self._schema: ParserSchema | None = None
         self.add_help = add_help

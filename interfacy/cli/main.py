@@ -10,7 +10,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from interfacy.appearance.layouts import InterfacyLayout
+from interfacy.appearance.layout import HelpLayout
+from interfacy.appearance.layouts import StandardLayout
 from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
@@ -120,8 +121,8 @@ def resolve_entrypoint_settings() -> dict[str, Any]:
     )
 
 
-def _resolve_help_layout(settings: dict[str, Any]) -> InterfacyLayout:
-    help_layout = settings.get("help_layout") or InterfacyLayout()
+def _resolve_help_layout(settings: dict[str, Any]) -> HelpLayout:
+    help_layout = settings.get("help_layout") or StandardLayout()
     help_colors = settings.get("help_colors")
     if help_colors is not None:
         help_layout.style = help_colors

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 @dataclass(kw_only=True)
 class InterfacyLayout(HelpLayout):
-    """Default Interfacy layout."""
+    """Interfacy-branded template layout."""
 
     pos_flag_width: int = 24
 
@@ -664,7 +664,7 @@ class ClapLayout(HelpLayout):
 
 @dataclass(kw_only=True)
 class StandardLayout(HelpLayout):
-    """Layout that follows the default ``argparse`` help output."""
+    """Default layout that follows the standard ``argparse`` help output."""
 
     style: NoColor = field(default_factory=NoColor)
 

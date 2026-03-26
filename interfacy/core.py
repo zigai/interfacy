@@ -20,7 +20,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_subcommand_sort_rules,
 )
 from interfacy.appearance.layout import InterfacyColors
-from interfacy.appearance.layouts import HelpLayout, InterfacyLayout
+from interfacy.appearance.layouts import HelpLayout, StandardLayout
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import (
@@ -219,7 +219,7 @@ class InterfacyParser:
         )
         self.type_parser = type_parser or get_parser(from_file=allow_args_from_file)
         self.flag_strategy = flag_strategy or DefaultFlagStrategy()
-        self.help_layout = help_layout or InterfacyLayout()
+        self.help_layout = help_layout or StandardLayout()
         if help_colors is not None:
             self.help_layout.style = help_colors
         self._refresh_help_option_sort_rules()

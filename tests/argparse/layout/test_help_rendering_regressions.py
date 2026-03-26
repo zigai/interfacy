@@ -197,6 +197,11 @@ def test_nested_manual_parser_uses_leaf_metavar_for_append_action() -> None:
     assert "DEPLOY__TAG" not in help_text
 
 
+def test_argument_parser_defaults_to_standard_layout() -> None:
+    parser = ArgumentParser(prog="manual")
+    assert isinstance(parser._interfacy_help_layout, StandardLayout)
+
+
 def test_manual_modern_layout_renders_template_details_without_attached_schema() -> None:
     parser = ArgumentParser(
         prog="deploy",
