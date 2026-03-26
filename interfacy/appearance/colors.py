@@ -7,6 +7,8 @@ from interfacy.appearance.layout import InterfacyColors
 
 @dataclass(kw_only=True)
 class NoColor(InterfacyColors):
+    """Color theme that renders help output without accent colors."""
+
     type: TextStyle = TextStyle(color="white")
     type_keyword: TextStyle = TextStyle(color="white")
     type_bracket: TextStyle = TextStyle(color="white")
