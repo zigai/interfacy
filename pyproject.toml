@@ -52,18 +52,20 @@ interfacy = "interfacy.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
+    "pytest>=9.0.2",
     "pytest-mock",
-    "ruff",
-    "pre-commit",
-    "coverage",
-    "mypy",
+    "ruff==0.15.8",
+    "pre-commit>=4.5.1",
+    "coverage>=7.13.5",
+    "mypy>=1.19.1",
     "click>=8.3.1",
     "argcomplete",
+    "rattle-lint>=1.0.5",
+    "rattle-blank-lines>=0.2.4",
 ]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
-test = ["pytest", "pytest-mock", "coverage", "click>=8.3.1"]
+test = ["pytest>=9.0.2", "pytest-mock", "coverage>=7.13.5", "click>=8.3.1"]
 docs = [
     "click>=8.3.1",
     "myst-parser",
@@ -134,6 +136,11 @@ ignore_missing_imports = true
 
 [tool.codespell]
 skip = '.git,uv.lock'
+
+[tool.rattle]
+root = true
+enable = ["rattle_blank_lines.rules"]
+disable = ["rattle.rules"]
 
 [tool.ruff]
 line-length = 100
