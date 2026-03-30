@@ -12,6 +12,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_subcommand_sort_rules,
 )
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
+from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
 from interfacy.util import validate_help_group
 
 AbbreviationScope = Literal["top_level_options", "all_options"]
@@ -69,6 +70,7 @@ class CommandEntry:
     help_option_sort: list[HelpOptionSortRule] | None = None
     help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
     help_group: str | None = None
+    executable_flags: list[ExecutableFlag] | None = None
 
 
 @dataclass
@@ -77,6 +79,7 @@ class SubgroupEntry:
 
     group: CommandGroup
     help_group: str | None = None
+    executable_flags: list[ExecutableFlag] | None = None
 
 
 class CommandGroup:
@@ -138,6 +141,7 @@ class CommandGroup:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
     ) -> CommandGroup:
         """
         Add a command to this group.
@@ -155,6 +159,7 @@ class CommandGroup:
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only group heading for this command in help listings.
+            executable_flags: Zero-argument executable flags registered on this command node.
         """
         resolved_abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
         resolved_help_option_sort = validate_help_option_sort(help_option_sort)
@@ -163,6 +168,10 @@ class CommandGroup:
             model_expansion_max_depth
         )
         resolved_help_group = validate_help_group(help_group)
+        resolved_executable_flags = normalize_executable_flags(
+            executable_flags,
+            value_name="executable_flags",
+        )
 
         is_instance = self._is_instance_command(command)
         cmd_name: str
@@ -199,6 +208,7 @@ class CommandGroup:
             if resolved_help_subcommand_sort
             else None,
             help_group=resolved_help_group,
+            executable_flags=list(resolved_executable_flags) if resolved_executable_flags else None,
         )
         self._commands[cmd_name] = entry
         return self
@@ -208,6 +218,7 @@ class CommandGroup:
         group: CommandGroup,
         name: str | None = None,
         help_group: str | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
     ) -> CommandGroup:
         """
         Add a nested subgroup.
@@ -216,11 +227,22 @@ class CommandGroup:
             group: The CommandGroup to add as a subgroup.
             name: Override the subgroup name.
             help_group: Optional help-only group heading for this subgroup command.
+            executable_flags: Zero-argument executable flags registered on the subgroup node.
         """
         group_name = name or group.name
         self._ensure_unique_child_name(group_name)
         resolved_help_group = validate_help_group(help_group)
-        self._subgroups[group_name] = SubgroupEntry(group=group, help_group=resolved_help_group)
+        resolved_executable_flags = normalize_executable_flags(
+            executable_flags,
+            value_name="executable_flags",
+        )
+        self._subgroups[group_name] = SubgroupEntry(
+            group=group,
+            help_group=resolved_help_group,
+            executable_flags=(
+                list(resolved_executable_flags) if resolved_executable_flags else None
+            ),
+        )
         return self
 
     def with_args(self, source: type | Callable[..., Any]) -> CommandGroup:

@@ -22,6 +22,7 @@ from interfacy.appearance.help_sort import (
 from interfacy.appearance.layout import InterfacyColors
 from interfacy.appearance.layouts import HelpLayout, StandardLayout
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
+from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
 from interfacy.logger import get_logger
 from interfacy.naming import (
     AbbreviationGenerator,
@@ -62,6 +63,7 @@ ValidateOutputT = TypeVar("ValidateOutputT")
 
 class ResolvedCommandSettings(TypedDict):
     abbreviation_scope: AbbreviationScope | None
+    executable_flags: list[ExecutableFlag] | None
     help_option_sort: HelpOptionSort
     help_subcommand_sort: HelpSubcommandSort
     model_expansion_max_depth: int | None
@@ -135,6 +137,7 @@ class InterfacyParser:
         help_subcommand_sort (list[HelpSubcommandSortRule] | None): Rules for command/subcommand
             row ordering in help output. When unset, layout defaults are used, then global
             defaults.
+        executable_flags (Sequence[ExecutableFlag] | None): Parser-root executable flags.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
         include_inherited_methods (bool): Include inherited methods for class commands.
@@ -170,6 +173,7 @@ class InterfacyParser:
         abbreviation_scope: AbbreviationScope = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        executable_flags: Sequence[ExecutableFlag] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -204,6 +208,10 @@ class InterfacyParser:
         self.help_option_sort_effective = default_help_option_sort_rules()
         self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
         self.help_subcommand_sort_effective = default_help_subcommand_sort_rules()
+        self.executable_flags = normalize_executable_flags(
+            executable_flags,
+            value_name="executable_flags",
+        )
 
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file
@@ -383,6 +391,7 @@ class InterfacyParser:
         self,
         *,
         abbreviation_scope: AbbreviationScope | None,
+        executable_flags: list[ExecutableFlag] | None,
         help_option_sort: list[HelpOptionSortRule] | None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None,
         model_expansion_max_depth: int | None,
@@ -392,6 +401,12 @@ class InterfacyParser:
             "abbreviation_scope": self._validate_optional(
                 abbreviation_scope,
                 validate_abbreviation_scope,
+            ),
+            "executable_flags": self._copy_optional_list(
+                normalize_executable_flags(
+                    executable_flags,
+                    value_name="executable_flags",
+                )
             ),
             "help_option_sort": self._validate_optional(
                 help_option_sort,
@@ -417,6 +432,7 @@ class InterfacyParser:
         expand_model_params: bool | None,
         model_expansion_max_depth: int | None,
         abbreviation_scope: AbbreviationScope | None,
+        executable_flags: list[ExecutableFlag] | None,
         help_option_sort: HelpOptionSort,
         help_subcommand_sort: HelpSubcommandSort,
         help_group: str | None,
@@ -426,6 +442,7 @@ class InterfacyParser:
         command.expand_model_params = expand_model_params
         command.model_expansion_max_depth = model_expansion_max_depth
         command.abbreviation_scope = abbreviation_scope
+        command.executable_flags = InterfacyParser._copy_optional_list(executable_flags) or []
         command.help_option_sort = InterfacyParser._copy_optional_list(help_option_sort)
         command.help_subcommand_sort = InterfacyParser._copy_optional_list(help_subcommand_sort)
         command.help_group = help_group
@@ -442,6 +459,7 @@ class InterfacyParser:
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: AbbreviationScope | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
@@ -460,6 +478,7 @@ class InterfacyParser:
             expand_model_params (bool | None): Override model expansion toggle.
             model_expansion_max_depth (int | None): Override model expansion depth.
             abbreviation_scope (AbbreviationScope | None): Override abbreviation scope.
+            executable_flags (list[ExecutableFlag] | None): Zero-argument executable flags.
             help_option_sort (list[HelpOptionSortRule] | None): Override option sort rules.
             help_subcommand_sort (list[HelpSubcommandSortRule] | None): Override subcommand sort.
             help_group (str | None): Optional help-only command group heading.
@@ -471,6 +490,7 @@ class InterfacyParser:
 
         resolved_settings = self._resolve_command_settings(
             abbreviation_scope=abbreviation_scope,
+            executable_flags=executable_flags,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
             model_expansion_max_depth=model_expansion_max_depth,
@@ -563,6 +583,7 @@ class InterfacyParser:
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: AbbreviationScope | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
@@ -583,6 +604,7 @@ class InterfacyParser:
             expand_model_params: Override model expansion toggle.
             model_expansion_max_depth: Override model expansion depth.
             abbreviation_scope: Override abbreviation scope.
+            executable_flags: Zero-argument executable flags for this command node.
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only command group heading.
@@ -603,6 +625,7 @@ class InterfacyParser:
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
                 abbreviation_scope=abbreviation_scope,
+                executable_flags=executable_flags,
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
                 help_group=help_group,
@@ -622,6 +645,7 @@ class InterfacyParser:
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: AbbreviationScope | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
@@ -639,6 +663,7 @@ class InterfacyParser:
             expand_model_params: Override model expansion toggle.
             model_expansion_max_depth: Override model expansion depth.
             abbreviation_scope: Override abbreviation scope.
+            executable_flags: Zero-argument executable flags for this group node.
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only command group heading.
@@ -662,6 +687,7 @@ class InterfacyParser:
 
         resolved_settings = self._resolve_command_settings(
             abbreviation_scope=abbreviation_scope,
+            executable_flags=executable_flags,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
             model_expansion_max_depth=model_expansion_max_depth,

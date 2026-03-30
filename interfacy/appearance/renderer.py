@@ -6,6 +6,7 @@ from dataclasses import replace
 from stdl.st import ansi_len, with_style
 
 from interfacy.appearance.layout import HelpLayout
+from interfacy.executable_flag import ExecutableFlag, executable_flag_to_argument
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 from interfacy.util import get_terminal_width
 
@@ -81,6 +82,7 @@ class SchemaHelpRenderer:
                     prog,
                     parser_description=schema.description,
                     parser_epilog=schema.epilog,
+                    parser_executable_flags=schema.executable_flags,
                 )
 
         return self._render_multi_command_help(schema, prog)
@@ -92,6 +94,7 @@ class SchemaHelpRenderer:
         *,
         parser_description: str | None = None,
         parser_epilog: str | None = None,
+        parser_executable_flags: list[ExecutableFlag] | None = None,
     ) -> str:
         """
         Render help text for one command schema.
@@ -101,23 +104,26 @@ class SchemaHelpRenderer:
             prog (str): Program name or invocation prefix.
             parser_description (str | None): Optional parser-level description override.
             parser_epilog (str | None): Optional parser-level epilog text.
+            parser_executable_flags (list[ExecutableFlag] | None): Parser-level executable
+                flags to merge into single-command help output.
         """
         layout = self.layout
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
-        options = [a for a in all_args if a.kind == ArgumentKind.OPTION]
-        options = layout.order_option_arguments_for_help(
-            options,
+        options = self._ordered_option_arguments(
+            [a for a in all_args if a.kind == ArgumentKind.OPTION],
+            command.executable_flags,
+            parser_executable_flags=parser_executable_flags,
             rules=command.help_option_sort_effective,
         )
         help_arg = self._get_help_argument()
 
         layout.prepare_default_field_width_for_arguments(
-            [*([help_arg] if help_arg is not None else []), *all_args]
+            [*([help_arg] if help_arg is not None else []), *positionals, *options]
         )
 
         sections: list[str] = []
-        usage = self._build_usage(command, prog)
+        usage = self._build_usage(command, prog, parser_executable_flags=parser_executable_flags)
         description = parser_description or command.description
         self._append_usage_and_description(sections=sections, usage=usage, description=description)
 
@@ -234,13 +240,22 @@ class SchemaHelpRenderer:
                 sections.append(schema.description)
 
         help_arg = self._get_help_argument()
-        if help_arg is not None:
-            layout.prepare_default_field_width_for_arguments([help_arg])
-            heading = self._style_section_heading("options")
-            help_line = self._normalize_help_only_option_line(
-                layout.format_argument(help_arg), help_arg
+        root_options = self._ordered_option_arguments(
+            [],
+            schema.executable_flags,
+            rules=schema.help_option_sort_effective,
+        )
+        root_options_with_help = [*([help_arg] if help_arg is not None else []), *root_options]
+        if root_options_with_help:
+            layout.prepare_default_field_width_for_arguments(root_options_with_help)
+            sections.append(
+                self._render_argument_section(
+                    "options",
+                    root_options_with_help,
+                    normalize_help_only=help_arg is not None and not root_options,
+                )
+                or ""
             )
-            sections.append(f"{heading}\n{self._indent(help_line)}")
 
         if schema.commands_help:
             sections.append(schema.commands_help)
@@ -252,12 +267,19 @@ class SchemaHelpRenderer:
 
         return "\n\n".join(sections) + "\n"
 
-    def _build_usage(self, command: Command, prog: str) -> str:
+    def _build_usage(
+        self,
+        command: Command,
+        prog: str,
+        *,
+        parser_executable_flags: list[ExecutableFlag] | None = None,
+    ) -> str:
         all_args = command.initializer + command.parameters
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
-        options = [a for a in all_args if a.kind == ArgumentKind.OPTION]
-        options = self.layout.order_option_arguments_for_help(
-            options,
+        options = self._ordered_option_arguments(
+            [a for a in all_args if a.kind == ArgumentKind.OPTION],
+            command.executable_flags,
+            parser_executable_flags=parser_executable_flags,
             rules=command.help_option_sort_effective,
         )
         compact_options_usage = self.layout.compact_options_usage
@@ -313,6 +335,23 @@ class SchemaHelpRenderer:
             return f"{usage_prefix}{wrapped}"
 
         return f"{usage_prefix}{usage_text}"
+
+    def _ordered_option_arguments(
+        self,
+        options: list[Argument],
+        executable_flags: list[ExecutableFlag],
+        *,
+        parser_executable_flags: list[ExecutableFlag] | None = None,
+        rules: list[object] | None = None,
+    ) -> list[Argument]:
+        flag_arguments = [
+            executable_flag_to_argument(flag)
+            for flag in [*(parser_executable_flags or []), *executable_flags]
+        ]
+        return self.layout.order_option_arguments_for_help(
+            [*options, *flag_arguments],
+            rules=rules,
+        )
 
     def _usage_token_for_subcommands(self, command: Command) -> str:
         token = self.layout.get_subcommand_usage_token()

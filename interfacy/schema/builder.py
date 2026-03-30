@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from dataclasses import field as dataclass_field
 from inspect import Parameter as InspectParameter
@@ -20,6 +20,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_subcommand_sort_rules,
 )
 from interfacy.exceptions import DuplicateCommandError, InvalidCommandError, ReservedFlagError
+from interfacy.executable_flag import ExecutableFlag, executable_flag_tokens
 from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
 from interfacy.pipe import PipeTargets
 from interfacy.schema.model_argument_mapper import ModelArgumentMapper
@@ -264,6 +265,7 @@ class ParserSchemaBuilder:
                     canonical_name=command.canonical_name,
                     description=command.raw_description,
                     aliases=command.aliases,
+                    executable_flags=command.executable_flags,
                     parent_settings=None,
                     include_inherited_methods=command.include_inherited_methods,
                     include_classmethods=command.include_classmethods,
@@ -280,6 +282,19 @@ class ParserSchemaBuilder:
         if len(commands) > 1:
             commands_help = self._get_help_for_multiple_commands(commands)
 
+        parser_executable_flags = list(getattr(self.parser, "executable_flags", []))
+        self._validate_executable_flags_against_tokens(parser_executable_flags, set())
+        single_cmd = next(iter(commands.values())) if len(commands) == 1 else None
+        if single_cmd is not None and single_cmd.is_leaf:
+            self._validate_executable_flags_against_tokens(
+                parser_executable_flags,
+                self._command_option_strings(single_cmd),
+            )
+            self._validate_executable_flags_against_tokens(
+                single_cmd.executable_flags,
+                executable_flag_tokens(parser_executable_flags),
+            )
+
         return ParserSchema(
             raw_description=self.parser.description,
             raw_epilog=self.parser.epilog,
@@ -290,6 +305,8 @@ class ParserSchemaBuilder:
             theme=self.parser.help_layout,
             commands_help=commands_help,
             metadata=dict(getattr(self.parser, "metadata", {})),
+            executable_flags=parser_executable_flags,
+            help_option_sort_effective=list(getattr(self.parser, "help_option_sort_effective", [])),
         )
 
     def _prepare_layout_for_params(self, params: list[Parameter]) -> None:
@@ -302,6 +319,32 @@ class ParserSchemaBuilder:
             layout.prepare_default_field_width_for_params(params)
         except (AttributeError, TypeError, ValueError):
             return
+
+    @staticmethod
+    def _argument_option_strings(arguments: Sequence[Argument]) -> set[str]:
+        option_strings: set[str] = set()
+        for argument in arguments:
+            if argument.kind is not ArgumentKind.OPTION:
+                continue
+            option_strings.update(flag for flag in argument.flags if flag.startswith("-"))
+        return option_strings
+
+    def _command_option_strings(self, command: Command) -> set[str]:
+        option_strings = self._argument_option_strings([*command.initializer, *command.parameters])
+        option_strings.update(executable_flag_tokens(command.executable_flags))
+        return option_strings
+
+    def _validate_executable_flags_against_tokens(
+        self,
+        executable_flags: Sequence[ExecutableFlag],
+        taken_tokens: set[str],
+    ) -> None:
+        executable_tokens = executable_flag_tokens(executable_flags)
+        if "--help" in executable_tokens:
+            raise ReservedFlagError("--help")
+        for token in executable_tokens:
+            if token in taken_tokens:
+                raise ReservedFlagError(token)
 
     def _get_help_for_class(
         self,
@@ -334,6 +377,7 @@ class ParserSchemaBuilder:
         canonical_name: str,
         description: str | None = None,
         aliases: tuple[str, ...] = (),
+        executable_flags: list[ExecutableFlag] | None = None,
         parent_settings: _CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
         include_classmethods: bool | None = None,
@@ -352,6 +396,7 @@ class ParserSchemaBuilder:
             canonical_name (str): Canonical command name.
             description (str | None): Optional description override.
             aliases (tuple[str, ...]): Alternate command names.
+            executable_flags (list[ExecutableFlag] | None): Zero-argument executable flags.
             parent_settings (_CommandBuildSettings | None): Parent effective settings.
             include_inherited_methods (bool | None): Per-command inherited-method override.
             include_classmethods (bool | None): Per-command classmethod override.
@@ -380,6 +425,7 @@ class ParserSchemaBuilder:
                 canonical_name=canonical_name,
                 description=description,
                 aliases=aliases,
+                executable_flags=executable_flags,
                 settings=settings,
                 include_inherited_methods=include_inherited_methods,
                 include_classmethods=include_classmethods,
@@ -397,6 +443,7 @@ class ParserSchemaBuilder:
                 canonical_name=canonical_name,
                 description=description,
                 aliases=aliases,
+                executable_flags=executable_flags,
                 settings=settings,
                 include_inherited_methods=include_inherited_methods,
                 include_classmethods=include_classmethods,
@@ -414,6 +461,7 @@ class ParserSchemaBuilder:
                 canonical_name=canonical_name,
                 description=description,
                 aliases=aliases,
+                executable_flags=executable_flags,
                 settings=settings,
                 include_inherited_methods=include_inherited_methods,
                 include_classmethods=include_classmethods,
@@ -435,6 +483,7 @@ class ParserSchemaBuilder:
         aliases: tuple[str, ...] = (),
         cli_name_override: str | None = None,
         pipe_config: PipeTargets | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
         settings: _CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
         include_classmethods: bool | None = None,
@@ -477,6 +526,11 @@ class ParserSchemaBuilder:
             canonical_name=canonical_name,
             fallback=function.name,
         )
+        resolved_executable_flags = list(executable_flags or [])
+        self._validate_executable_flags_against_tokens(
+            resolved_executable_flags,
+            self._argument_option_strings(parameters),
+        )
 
         command = Command(
             obj=function,
@@ -488,6 +542,7 @@ class ParserSchemaBuilder:
             parameters=parameters,
             pipe_targets=pipe_config,
             help_layout=self.parser.help_layout,
+            executable_flags=resolved_executable_flags,
         )
         self._attach_command_build_settings(
             command,
@@ -510,6 +565,7 @@ class ParserSchemaBuilder:
         canonical_name: str | None = None,
         description: str | None = None,
         aliases: tuple[str, ...] = (),
+        executable_flags: list[ExecutableFlag] | None = None,
         settings: _CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
         include_classmethods: bool | None = None,
@@ -581,6 +637,11 @@ class ParserSchemaBuilder:
 
         raw_description = description or (method.description if method.has_docstring else None)
         cli_name = self._resolve_cli_name(None, canonical_name, method.name)
+        resolved_executable_flags = list(executable_flags or [])
+        self._validate_executable_flags_against_tokens(
+            resolved_executable_flags,
+            self._argument_option_strings([*initializer, *parameters]),
+        )
 
         command = Command(
             obj=method,
@@ -593,6 +654,7 @@ class ParserSchemaBuilder:
             initializer=initializer,
             pipe_targets=method_pipe_config,
             help_layout=self.parser.help_layout,
+            executable_flags=resolved_executable_flags,
         )
         self._attach_command_build_settings(
             command,
@@ -615,6 +677,7 @@ class ParserSchemaBuilder:
         canonical_name: str | None = None,
         description: str | None = None,
         aliases: tuple[str, ...] = (),
+        executable_flags: list[ExecutableFlag] | None = None,
         settings: _CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
         include_classmethods: bool | None = None,
@@ -707,6 +770,11 @@ class ParserSchemaBuilder:
 
         raw_description = description or (cls.description if cls.has_docstring else None)
         cli_name = self._resolve_cli_name(None, canonical_name, cls.name)
+        resolved_executable_flags = list(executable_flags or [])
+        self._validate_executable_flags_against_tokens(
+            resolved_executable_flags,
+            self._argument_option_strings(initializer),
+        )
 
         command = Command(
             obj=cls,
@@ -724,6 +792,7 @@ class ParserSchemaBuilder:
             ),
             pipe_targets=class_pipe_config,
             help_layout=self.parser.help_layout,
+            executable_flags=resolved_executable_flags,
         )
         self._attach_command_build_settings(
             command,
@@ -1406,6 +1475,7 @@ class ParserSchemaBuilder:
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
@@ -1430,6 +1500,11 @@ class ParserSchemaBuilder:
         group_args_source = self._get_group_args_source(group)
         if group_args_source is not None:
             initializer = self._build_args_from_source(group_args_source, settings=settings)
+        resolved_executable_flags = list(executable_flags or [])
+        self._validate_executable_flags_against_tokens(
+            resolved_executable_flags,
+            self._argument_option_strings(initializer),
+        )
 
         subcommands: dict[str, Command] = {}
         translated_child_names: set[str] = set()
@@ -1454,6 +1529,7 @@ class ParserSchemaBuilder:
                 subgroup_entry.group,
                 current_path,
                 parent_settings=settings,
+                executable_flags=subgroup_entry.executable_flags,
                 help_group=subgroup_entry.help_group,
             )
 
@@ -1483,6 +1559,7 @@ class ParserSchemaBuilder:
             parameters=[],
             initializer=initializer,
             subcommands=subcommands or None,
+            executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
             help_layout=self.parser.help_layout,
             command_type="group",
@@ -1579,6 +1656,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=entry.abbreviation_scope,
                 help_option_sort=entry.help_option_sort,
                 help_subcommand_sort=entry.help_subcommand_sort,
+                executable_flags=entry.executable_flags,
                 help_group=entry.help_group,
             )
         if isinstance(entry.obj, type):
@@ -1593,6 +1671,7 @@ class ParserSchemaBuilder:
                 abbreviation_scope=entry.abbreviation_scope,
                 help_option_sort=entry.help_option_sort,
                 help_subcommand_sort=entry.help_subcommand_sort,
+                executable_flags=entry.executable_flags,
                 help_group=entry.help_group,
             )
         obj = inspect(entry.obj)
@@ -1610,6 +1689,7 @@ class ParserSchemaBuilder:
                 expand_model_params=entry.expand_model_params,
                 model_expansion_max_depth=entry.model_expansion_max_depth,
                 abbreviation_scope=entry.abbreviation_scope,
+                executable_flags=entry.executable_flags,
                 help_option_sort=entry.help_option_sort,
                 help_subcommand_sort=entry.help_subcommand_sort,
                 help_group=entry.help_group,
@@ -1627,6 +1707,7 @@ class ParserSchemaBuilder:
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
@@ -1660,6 +1741,11 @@ class ParserSchemaBuilder:
 
         cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
         raw_description = entry.description or (cls.description if cls.has_docstring else None)
+        resolved_executable_flags = list(executable_flags or [])
+        self._validate_executable_flags_against_tokens(
+            resolved_executable_flags,
+            set(),
+        )
 
         raw_epilog = None
         if subcommands:
@@ -1678,6 +1764,7 @@ class ParserSchemaBuilder:
             parameters=[],
             initializer=[],
             subcommands=subcommands or None,
+            executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
             help_layout=self.parser.help_layout,
             command_type="instance",
@@ -1711,6 +1798,7 @@ class ParserSchemaBuilder:
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
+        executable_flags: list[ExecutableFlag] | None = None,
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
@@ -1779,6 +1867,7 @@ class ParserSchemaBuilder:
                     description=None,
                     aliases=(),
                     is_instance=False,
+                    executable_flags=None,
                 )
                 nested_cli_name = self.parser.flag_strategy.command_translator.translate(attr_name)
                 subcommands[nested_cli_name] = self._build_from_class_recursive(
@@ -1788,6 +1877,11 @@ class ParserSchemaBuilder:
                 )
 
         raw_description = entry.description or (cls.description if cls.has_docstring else None)
+        resolved_executable_flags = list(executable_flags or [])
+        self._validate_executable_flags_against_tokens(
+            resolved_executable_flags,
+            self._argument_option_strings(initializer),
+        )
 
         raw_epilog = None
         if subcommands:
@@ -1806,6 +1900,7 @@ class ParserSchemaBuilder:
             parameters=[],
             initializer=initializer,
             subcommands=subcommands or None,
+            executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
             help_layout=self.parser.help_layout,
             command_type="class",

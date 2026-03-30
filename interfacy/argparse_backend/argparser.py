@@ -32,6 +32,11 @@ from interfacy.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
+from interfacy.executable_flag import (
+    ExecutableFlag,
+    executable_flag_to_argument,
+    execute_executable_flag,
+)
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
@@ -47,6 +52,35 @@ from interfacy.util import (
 logger = get_logger(__name__)
 
 SUBCOMMANDS_KEY = "_subcommands"
+
+
+class _ExecutableFlagTriggeredError(Exception):
+    def __init__(self, flag: ExecutableFlag) -> None:
+        self.flag = flag
+
+
+class _ExecutableFlagAction(argparse.Action):
+    def __init__(
+        self,
+        option_strings: Sequence[str],
+        dest: str,
+        **kwargs: object,
+    ) -> None:
+        executable_flag = kwargs.pop("executable_flag")
+        if not isinstance(executable_flag, ExecutableFlag):
+            raise ConfigurationError("Executable flag action requires an ExecutableFlag instance")
+        self.executable_flag = executable_flag
+        kwargs.setdefault("nargs", 0)
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(
+        self,
+        _parser: argparse.ArgumentParser,
+        _namespace: argparse.Namespace,
+        _values: object,
+        _option_string: str | None = None,
+    ) -> None:
+        raise _ExecutableFlagTriggeredError(self.executable_flag)
 
 
 class Argparser(InterfacyParser):
@@ -71,6 +105,7 @@ class Argparser(InterfacyParser):
         abbreviation_scope (Literal["top_level_options", "all_options"]): Scope for generation.
         help_option_sort (list[HelpOptionSortRule] | None): Help option row ordering rules.
         help_subcommand_sort (list[HelpSubcommandSortRule] | None): Help command row ordering rules.
+        executable_flags (Sequence[ExecutableFlag] | None): Parser-root executable flags.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
         include_inherited_methods (bool): Include inherited methods for class commands.
@@ -105,6 +140,7 @@ class Argparser(InterfacyParser):
         abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        executable_flags: Sequence[ExecutableFlag] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -130,6 +166,7 @@ class Argparser(InterfacyParser):
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            executable_flags=executable_flags,
             pipe_targets=pipe_targets,
             tab_completion=tab_completion,
             print_result=print_result,
@@ -509,6 +546,30 @@ class Argparser(InterfacyParser):
         ordered_options = self.help_layout.order_option_arguments_for_help(options, rules=rules)
         return [*positionals, *ordered_options]
 
+    def _ordered_option_entries_for_help(
+        self,
+        arguments: Sequence[Argument],
+        executable_flags: Sequence[ExecutableFlag],
+        *,
+        rules: list[HelpOptionSortRule] | None = None,
+    ) -> list[Argument | ExecutableFlag]:
+        options = [arg for arg in arguments if arg.kind == ArgumentKind.OPTION]
+        synthetic_arguments = [executable_flag_to_argument(flag) for flag in executable_flags]
+        executable_by_flags = {tuple(flag.flags): flag for flag in executable_flags}
+        ordered = self.help_layout.order_option_arguments_for_help(
+            [*options, *synthetic_arguments],
+            rules=rules,
+        )
+
+        entries: list[Argument | ExecutableFlag] = []
+        for argument in ordered:
+            executable_flag = executable_by_flags.get(tuple(argument.flags))
+            if executable_flag is not None:
+                entries.append(executable_flag)
+                continue
+            entries.append(argument)
+        return entries
+
     def _ordered_commands_for_help(
         self,
         commands: dict[str, Command],
@@ -517,19 +578,41 @@ class Argparser(InterfacyParser):
     ) -> list[Command]:
         return self.help_layout.order_commands_for_help(commands, rules=rules)
 
-    def _add_initializer_arguments(self, parser: ArgumentParser, command: Command) -> None:
-        for argument in self._ordered_arguments_for_help(
-            command.initializer,
-            rules=command.help_option_sort_effective,
-        ):
-            self._add_argument_from_schema(parser, argument)
+    @staticmethod
+    def _executable_flag_dest(flag: ExecutableFlag) -> str:
+        primary = next((token for token in flag.flags if token.startswith("--")), flag.flags[0])
+        sanitized = re.sub(r"[^0-9A-Za-z_]+", "_", primary.lstrip("-"))
+        return f"_interfacy_exec_{sanitized or 'flag'}"
 
-    def _add_parameter_arguments(self, parser: ArgumentParser, command: Command) -> None:
-        for argument in self._ordered_arguments_for_help(
-            command.parameters,
+    def _add_executable_flag(self, parser: ArgumentParser, flag: ExecutableFlag) -> None:
+        parser.add_argument(
+            *flag.flags,
+            action=_ExecutableFlagAction,
+            dest=self._executable_flag_dest(flag),
+            default=argparse.SUPPRESS,
+            executable_flag=flag,
+            help=self._escape_argparse_help_text(flag.help),
+        )
+
+    def _add_command_arguments(
+        self,
+        parser: ArgumentParser,
+        command: Command,
+        *,
+        extra_executable_flags: Sequence[ExecutableFlag] = (),
+    ) -> None:
+        all_arguments = [*command.initializer, *command.parameters]
+        for argument in [arg for arg in all_arguments if arg.kind == ArgumentKind.POSITIONAL]:
+            self._add_argument_from_schema(parser, argument)
+        for entry in self._ordered_option_entries_for_help(
+            all_arguments,
+            [*extra_executable_flags, *command.executable_flags],
             rules=command.help_option_sort_effective,
         ):
-            self._add_argument_from_schema(parser, argument)
+            if isinstance(entry, ExecutableFlag):
+                self._add_executable_flag(parser, entry)
+                continue
+            self._add_argument_from_schema(parser, entry)
 
     def _create_command_subparsers(
         self,
@@ -579,8 +662,13 @@ class Argparser(InterfacyParser):
         *,
         depth: int,
         include_aliases: bool,
+        executable_flags: Sequence[ExecutableFlag] = (),
     ) -> None:
-        self._add_initializer_arguments(parser, command)
+        self._add_command_arguments(
+            parser,
+            command,
+            extra_executable_flags=executable_flags,
+        )
         if self._should_set_epilog(command.epilog):
             parser.epilog = command.epilog
         subparsers = self._create_command_subparsers(
@@ -602,6 +690,7 @@ class Argparser(InterfacyParser):
         command: Command,
         *,
         depth: int = 0,
+        extra_executable_flags: Sequence[ExecutableFlag] = (),
     ) -> None:
         parser.set_schema_command(command)
 
@@ -614,6 +703,7 @@ class Argparser(InterfacyParser):
                 command,
                 depth=depth,
                 include_aliases=True,
+                executable_flags=extra_executable_flags,
             )
             return
 
@@ -623,13 +713,15 @@ class Argparser(InterfacyParser):
                 command,
                 depth=depth,
                 include_aliases=False,
+                executable_flags=extra_executable_flags,
             )
             return
 
-        if isinstance(command.obj, Method):
-            self._add_initializer_arguments(parser, command)
-
-        self._add_parameter_arguments(parser, command)
+        self._add_command_arguments(
+            parser,
+            command,
+            extra_executable_flags=extra_executable_flags,
+        )
 
     def _build_from_schema(self, schema: ParserSchema) -> ArgumentParser:
         parser = self._new_parser()
@@ -639,6 +731,8 @@ class Argparser(InterfacyParser):
         single_group = single_cmd if single_cmd and not single_cmd.is_leaf else None
 
         if schema.is_multi_command or single_group:
+            for executable_flag in schema.executable_flags:
+                self._add_executable_flag(parser, executable_flag)
             subparsers = parser.add_subparsers(
                 dest=self.COMMAND_KEY,
                 required=True,
@@ -666,7 +760,11 @@ class Argparser(InterfacyParser):
                 parser.epilog = schema.commands_help
         else:
             cmd = next(iter(schema.commands.values()))
-            self._apply_command_schema(parser, cmd)
+            self._apply_command_schema(
+                parser,
+                cmd,
+                extra_executable_flags=schema.executable_flags,
+            )
 
             if cmd.epilog and not parser.epilog:
                 parser.epilog = cmd.epilog
@@ -760,7 +858,11 @@ class Argparser(InterfacyParser):
         args = args if args is not None else self.get_args()
         parser = self.build_parser()
         self._parser = parser
-        parsed = parser.parse_args(args)
+        try:
+            parsed = parser.parse_args(args)
+        except _ExecutableFlagTriggeredError as exc:
+            exit_code = execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
+            raise SystemExit(exit_code) from None
         namespace = namespace_to_dict(parsed)
 
         if self.COMMAND_KEY in namespace:
@@ -876,6 +978,10 @@ class Argparser(InterfacyParser):
             return exc
         except KeyboardInterrupt as exc:
             return self._handle_interrupt(exc)
+        except Exception as exc:  # noqa: BLE001 - executable-flag handlers may raise user errors
+            self.log_exception(exc)
+            self.exit(ExitCode.ERR_RUNTIME)
+            return exc
         else:
             return resolved_args, namespace
 

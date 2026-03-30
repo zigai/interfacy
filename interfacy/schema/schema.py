@@ -11,6 +11,7 @@ from objinspect import Class, Function, Method
 
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout
+from interfacy.executable_flag import ExecutableFlag
 from interfacy.pipe import PipeTargets
 
 CommandType = Literal["function", "method", "class", "group", "instance"]
@@ -123,6 +124,7 @@ class Command:
         parameters (list[Argument]): Argument specs for command parameters.
         initializer (list[Argument]): Argument specs for class initialization.
         subcommands (dict[str, Command] | None): Nested subcommands, if any.
+        executable_flags (list[ExecutableFlag]): Zero-argument executable flags.
         raw_epilog (str | None): Raw epilog text for help output.
         command_type (CommandType): Command category.
         is_leaf (bool): Whether this command has no subcommands.
@@ -142,6 +144,7 @@ class Command:
     parameters: list[Argument] = field(default_factory=list)
     initializer: list[Argument] = field(default_factory=list)
     subcommands: dict[str, Command] | None = None
+    executable_flags: list[ExecutableFlag] = field(default_factory=list)
     raw_epilog: str | None = None
     command_type: CommandType = "function"
     is_leaf: bool = True
@@ -188,6 +191,8 @@ class ParserSchema:
         theme (HelpLayout): Help layout for formatting.
         commands_help (str | None): Pre-rendered command listing help.
         metadata (dict[str, Any]): Additional parser metadata.
+        executable_flags (list[ExecutableFlag]): Parser-root executable flags.
+        help_option_sort_effective (list[HelpOptionSortRule] | None): Effective root option sort.
     """
 
     raw_description: str | None
@@ -199,6 +204,8 @@ class ParserSchema:
     theme: HelpLayout
     commands_help: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    executable_flags: list[ExecutableFlag] = field(default_factory=list)
+    help_option_sort_effective: list[HelpOptionSortRule] | None = None
 
     @cached_property
     def description(self) -> str | None:
@@ -241,6 +248,7 @@ __all__ = [
     "BooleanBehavior",
     "Command",
     "CommandType",
+    "ExecutableFlag",
     "ParserSchema",
     "ValueShape",
 ]

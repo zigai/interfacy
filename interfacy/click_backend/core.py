@@ -40,6 +40,11 @@ from interfacy.exceptions import (
     ReservedFlagError,
     UnsupportedParameterTypeError,
 )
+from interfacy.executable_flag import (
+    ExecutableFlag,
+    executable_flag_to_argument,
+    execute_executable_flag,
+)
 from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
@@ -47,6 +52,11 @@ from interfacy.runner import SchemaRunner
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 
 logger = get_logger(__name__)
+
+
+class _ExecutableFlagTriggeredError(Exception):
+    def __init__(self, flag: ExecutableFlag) -> None:
+        self.flag = flag
 
 
 class ClickParser(InterfacyParser):
@@ -74,6 +84,7 @@ class ClickParser(InterfacyParser):
         abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        executable_flags: Sequence[ExecutableFlag] | None = None,
         pipe_targets: PipeTargets | dict[str, str] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
@@ -98,6 +109,7 @@ class ClickParser(InterfacyParser):
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            executable_flags=executable_flags,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,
             full_error_traceback=full_error_traceback,
@@ -296,6 +308,7 @@ class ClickParser(InterfacyParser):
         self,
         arguments: list[Argument],
         *,
+        executable_flags: Sequence[ExecutableFlag] = (),
         help_option_sort: list[HelpOptionSortRule] | None = None,
     ) -> tuple[list[click.Parameter], dict[str, str], dict[str, Argument], set[str]]:
         params: list[click.Parameter] = []
@@ -306,12 +319,30 @@ class ClickParser(InterfacyParser):
 
         positionals = [arg for arg in arguments if arg.kind == ArgumentKind.POSITIONAL]
         options = [arg for arg in arguments if arg.kind == ArgumentKind.OPTION]
-        ordered_arguments = [
-            *positionals,
-            *self.help_layout.order_option_arguments_for_help(options, rules=help_option_sort),
-        ]
+        executable_by_flags = {tuple(flag.flags): flag for flag in executable_flags}
+        ordered_options = self.help_layout.order_option_arguments_for_help(
+            [
+                *options,
+                *[executable_flag_to_argument(flag) for flag in executable_flags],
+            ],
+            rules=help_option_sort,
+        )
 
-        for argument in ordered_arguments:
+        for argument in positionals:
+            param, suppress = self._make_click_param(argument, used_names)
+            params.append(param)
+            if param.name is not None:
+                param_bindings[param.name] = argument.name
+            arg_specs[argument.name] = argument
+            if suppress:
+                suppress_defaults.add(argument.name)
+
+        for argument in ordered_options:
+            executable_flag = executable_by_flags.get(tuple(argument.flags))
+            if executable_flag is not None:
+                params.append(self._build_executable_click_param(executable_flag, used_names))
+                continue
+
             param, suppress = self._make_click_param(argument, used_names)
             params.append(param)
             if param.name is not None:
@@ -321,6 +352,32 @@ class ClickParser(InterfacyParser):
                 suppress_defaults.add(argument.name)
 
         return params, param_bindings, arg_specs, suppress_defaults
+
+    def _build_executable_click_param(
+        self,
+        flag: ExecutableFlag,
+        used_names: set[str],
+    ) -> click.Parameter:
+        primary = next((token for token in flag.flags if token.startswith("--")), flag.flags[0])
+        param_name = self._sanitize_param_name(primary.lstrip("-") or "flag", used_names)
+
+        def _callback(
+            _ctx: click.Context,
+            _param: click.Parameter,
+            value: bool,
+        ) -> None:
+            if value:
+                raise _ExecutableFlagTriggeredError(flag)
+            return None
+
+        return InterfacyClickOption(
+            [param_name, *flag.flags],
+            is_flag=True,
+            is_eager=True,
+            expose_value=False,
+            callback=_callback,
+            help=flag.help,
+        )
 
     def _attach_param_metadata(
         self,
@@ -338,7 +395,11 @@ class ClickParser(InterfacyParser):
         command.interfacy_epilog = schema.epilog
 
     def build_click_command(
-        self, command: Command, depth: int = 0
+        self,
+        command: Command,
+        depth: int = 0,
+        *,
+        extra_executable_flags: Sequence[ExecutableFlag] = (),
     ) -> InterfacyClickCommand | InterfacyClickGroup:
         """
         Build a Click command or group from one Interfacy command schema.
@@ -346,6 +407,8 @@ class ClickParser(InterfacyParser):
         Args:
             command (Command): Command schema to convert.
             depth (int): Nesting depth from the parser root.
+            extra_executable_flags (Sequence[ExecutableFlag]): Parser-level executable flags
+                merged into this command when the root collapses to a single leaf command.
         """
         is_group_like = (
             command.command_type in ("group", "instance")
@@ -355,6 +418,7 @@ class ClickParser(InterfacyParser):
         if not is_group_like:
             params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
                 command.parameters,
+                executable_flags=[*extra_executable_flags, *command.executable_flags],
                 help_option_sort=command.help_option_sort_effective,
             )
             click_command = InterfacyClickCommand(
@@ -369,6 +433,7 @@ class ClickParser(InterfacyParser):
 
         params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
             command.initializer,
+            executable_flags=[*extra_executable_flags, *command.executable_flags],
             help_option_sort=command.help_option_sort_effective,
         )
         group = InterfacyClickGroup(
@@ -409,18 +474,29 @@ class ClickParser(InterfacyParser):
         )
 
         if schema.is_multi_command or single_group:
-            root = InterfacyClickGroup(name="main", help=schema.description)
+            root_params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
+                [],
+                executable_flags=schema.executable_flags,
+                help_option_sort=schema.help_option_sort_effective,
+            )
+            root = InterfacyClickGroup(name="main", help=schema.description, params=root_params)
             root.context_settings.setdefault("allow_interspersed_args", False)
             root.interfacy_is_root = True
             root.interfacy_parser_schema = schema
             root.interfacy_epilog = self._combine_epilog(schema.commands_help, schema.epilog)
+            root.interfacy_param_bindings = param_bindings
+            root.interfacy_arg_specs = arg_specs
+            root.interfacy_suppress_defaults = suppress_defaults
 
             for cmd in self._ordered_commands_for_help(schema.commands):
                 root.add_command(self.build_click_command(cmd), name=cmd.cli_name)
             return root
 
         cmd = next(iter(schema.commands.values()))
-        click_command = self.build_click_command(cmd)
+        click_command = self.build_click_command(
+            cmd,
+            extra_executable_flags=schema.executable_flags,
+        )
         click_command.interfacy_epilog = self._combine_epilog(cmd.epilog, schema.epilog)
         return click_command
 
@@ -553,30 +629,33 @@ class ClickParser(InterfacyParser):
         """
         args = args if args is not None else self.get_args()
         root = self.build_parser()
+        try:
+            if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
+                ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
+                combined_args = self._remaining_args(ctx)
+                cmd_name, cmd, remaining = root.resolve_command(ctx, combined_args)
+                if not isinstance(cmd, (InterfacyClickCommand, InterfacyClickGroup)):
+                    raise ConfigurationError(f"Unexpected command type from click: {type(cmd)!r}")
+                resolved_cmd_name = cmd_name if cmd_name is not None else (cmd.name or "")
+                sub_ctx = cmd.make_context(
+                    resolved_cmd_name, remaining, parent=ctx, resilient_parsing=False
+                )
+                schema_cmd = cmd.interfacy_schema
+                top_cli_name = schema_cmd.cli_name if schema_cmd is not None else resolved_cmd_name
+                namespace = {
+                    self.COMMAND_KEY: top_cli_name,
+                    top_cli_name: self._build_namespace_for_ctx(sub_ctx, cmd, depth=0),
+                }
+                return self._normalize_parsed_args(namespace)
 
-        if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
             ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
-            combined_args = self._remaining_args(ctx)
-            cmd_name, cmd, remaining = root.resolve_command(ctx, combined_args)
-            if not isinstance(cmd, (InterfacyClickCommand, InterfacyClickGroup)):
-                raise ConfigurationError(f"Unexpected command type from click: {type(cmd)!r}")
-            resolved_cmd_name = cmd_name if cmd_name is not None else (cmd.name or "")
-            sub_ctx = cmd.make_context(
-                resolved_cmd_name, remaining, parent=ctx, resilient_parsing=False
-            )
-            schema_cmd = cmd.interfacy_schema
-            top_cli_name = schema_cmd.cli_name if schema_cmd is not None else resolved_cmd_name
-            namespace = {
-                self.COMMAND_KEY: top_cli_name,
-                top_cli_name: self._build_namespace_for_ctx(sub_ctx, cmd, depth=0),
-            }
+            if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
+                raise ConfigurationError(f"Unexpected root command type: {type(root)!r}")
+            namespace = self._build_namespace_for_ctx(ctx, root, depth=0)
             return self._normalize_parsed_args(namespace)
-
-        ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
-        if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
-            raise ConfigurationError(f"Unexpected root command type: {type(root)!r}")
-        namespace = self._build_namespace_for_ctx(ctx, root, depth=0)
-        return self._normalize_parsed_args(namespace)
+        except _ExecutableFlagTriggeredError as exc:
+            exit_code = execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
+            raise SystemExit(exit_code) from None
 
     def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
         if self.on_interrupt is not None:
@@ -655,6 +734,10 @@ class ClickParser(InterfacyParser):
             return False, self._handle_system_exit(exc)
         except KeyboardInterrupt as exc:
             return False, self._handle_interrupt(exc)
+        except Exception as exc:  # noqa: BLE001 - executable-flag handlers may raise user errors
+            self.log_exception(exc)
+            self.exit(ExitCode.ERR_RUNTIME)
+            return False, exc
         else:
             return True, (parsed_args, namespace)
 

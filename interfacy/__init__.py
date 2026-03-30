@@ -3,12 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from interfacy.argparse_backend.argparser import Argparser
+from interfacy.executable_flag import ExecutableFlag
 from interfacy.group import CommandGroup
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.click_backend import ClickParser as ClickParser
 
-__all__ = ["Argparser", "ClickParser", "CommandGroup"]
+__all__ = ["Argparser", "ClickParser", "CommandGroup", "ExecutableFlag"]
 
 
 def __getattr__(name: str) -> type[ClickParser]:

@@ -22,6 +22,11 @@
 ```
 
 ```{eval-rst}
+.. autoclass:: interfacy.ExecutableFlag
+   :exclude-members: __init__, __new__
+```
+
+```{eval-rst}
 .. autoclass:: interfacy.schema.schema.Argument
    :exclude-members: __init__, __new__
 ```
