@@ -86,8 +86,8 @@ if __name__ == "__main__":
 ```
 
 ```text
-$ python app.py --precision 3 add 1.25 2.75
-4.0
+$ python app.py --precision 3 add 1.2345 2.3445
+3.579
 ```
 
 ## Structured Parameters
