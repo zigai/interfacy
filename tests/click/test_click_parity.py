@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import click
 import pytest
 
+from interfacy import ClickParser, ExecutableFlag
+from interfacy.click_backend.commands import (
+    InterfacyClickArgument,
+    InterfacyClickCommand,
+    InterfacyClickGroup,
+    InterfacyClickOption,
+)
 from interfacy.group import CommandGroup
 from tests.conftest import (
     Math,
@@ -80,6 +88,101 @@ class TestClickBooleanFlags:
         parser.add_command(fn_bool_default_false)
         assert parser.run(args=[]) is False
         assert parser.run(args=["--value"]) is True
+
+    def test_parser_help_position_keeps_long_executable_flag_help_inline(self) -> None:
+        parser = ClickParser(
+            help_position=42,
+            executable_flags=[
+                ExecutableFlag(
+                    ("-d", "--disable-job-duration-limit"),
+                    lambda: None,
+                    help="Disable the per-job duration limit.",
+                )
+            ],
+            sys_exit_enabled=False,
+            print_result=False,
+        )
+
+        def serve() -> None:
+            """Run the service."""
+
+        parser.add_command(serve)
+        command = parser.build_parser()
+        help_text = command.get_help(click.Context(command))
+
+        assert "Usage:" in help_text
+        assert re.search(
+            r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
+            help_text,
+            re.MULTILINE,
+        )
+
+    def test_default_click_help_keeps_long_executable_flag_wrapped(self) -> None:
+        parser = ClickParser(
+            executable_flags=[
+                ExecutableFlag(
+                    ("-d", "--disable-job-duration-limit"),
+                    lambda: None,
+                    help="Disable the per-job duration limit.",
+                )
+            ],
+            sys_exit_enabled=False,
+            print_result=False,
+        )
+
+        def serve() -> None:
+            """Run the service."""
+
+        parser.add_command(serve)
+        command = parser.build_parser()
+        help_text = command.get_help(click.Context(command))
+
+        assert re.search(
+            r"^\s*-d, --disable-job-duration-limit\s*$",
+            help_text,
+            re.MULTILINE,
+        )
+        assert "Disable the per-job duration limit." in help_text
+
+
+def test_interfacy_click_command_help_position_aligns_positionals_and_options() -> None:
+    command = InterfacyClickCommand(
+        name="deploy",
+        help="Deploy an application build.",
+        params=[
+            InterfacyClickArgument(("environment",), help="Target environment."),
+            InterfacyClickOption(["region", "--region"], help="Cloud region."),
+        ],
+    )
+    command.interfacy_help_position = 38
+    command.interfacy_help_position_explicit = True
+
+    help_text = command.get_help(click.Context(command))
+
+    assert "Positionals:" in help_text
+    assert re.search(r"^\s*environment\s+Target environment\.$", help_text, re.MULTILINE)
+    assert re.search(r"^\s*--region\s+Cloud region\.$", help_text, re.MULTILINE)
+
+
+def test_interfacy_click_group_help_position_aligns_command_rows() -> None:
+    group = InterfacyClickGroup(name="main", help="Maintenance tools.")
+    group.add_command(click.Command("status", help="Show current status."))
+    group.add_command(
+        click.Command(
+            "disable-job-duration-limit",
+            help="Disable the per-job duration limit.",
+        )
+    )
+    group.interfacy_help_position = 42
+    group.interfacy_help_position_explicit = True
+
+    help_text = group.get_help(click.Context(group))
+
+    assert re.search(
+        r"^\s*disable-job-duration-limit\s+Disable the per-job duration limit\.$",
+        help_text,
+        re.MULTILINE,
+    )
 
 
 class TestClickTupleParsing:

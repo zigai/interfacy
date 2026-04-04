@@ -9,7 +9,7 @@ from typing import Literal
 import pytest
 from stdl.st import TextStyle
 
-from interfacy import CommandGroup
+from interfacy import CommandGroup, ExecutableFlag
 from interfacy.appearance.colors import NoColor
 from interfacy.appearance.layouts import (
     Aligned,
@@ -200,6 +200,53 @@ def test_nested_manual_parser_uses_leaf_metavar_for_append_action() -> None:
 def test_argument_parser_defaults_to_standard_layout() -> None:
     parser = ArgumentParser(prog="manual")
     assert isinstance(parser._interfacy_help_layout, StandardLayout)
+
+
+def test_manual_argument_parser_help_position_keeps_long_option_description_inline() -> None:
+    parser = ArgumentParser(prog="manual", help_position=42)
+    parser.add_argument(
+        "-d",
+        "--disable-job-duration-limit",
+        action="store_true",
+        help="Disable the per-job duration limit.",
+    )
+
+    help_text = parser.format_help()
+
+    assert re.search(
+        r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
+        help_text,
+        re.MULTILINE,
+    )
+
+
+def test_argparser_help_position_kwarg_overrides_layout_help_position() -> None:
+    parser = Argparser(
+        help_layout=StandardLayout(help_position=24),
+        help_position=42,
+        executable_flags=[
+            ExecutableFlag(
+                ("-d", "--disable-job-duration-limit"),
+                lambda: None,
+                help="Disable the per-job duration limit.",
+            )
+        ],
+        sys_exit_enabled=False,
+        print_result=False,
+    )
+
+    def serve() -> None:
+        """Run the service."""
+
+    parser.add_command(serve)
+    help_text = parser.build_parser().format_help()
+
+    assert parser.help_layout.help_position == 42
+    assert re.search(
+        r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
+        help_text,
+        re.MULTILINE,
+    )
 
 
 def test_manual_modern_layout_renders_template_details_without_attached_schema() -> None:
