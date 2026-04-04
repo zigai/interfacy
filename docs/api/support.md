@@ -67,6 +67,9 @@
 
 ## Backend Types
 
+The low-level `ArgumentParser` also accepts `help_position` so manual argparse
+setups can use the same help-description column control as `Argparser`.
+
 ```{eval-rst}
 .. autoclass:: interfacy.argparse_backend.argument_parser.ArgumentParser
    :exclude-members: __init__, __new__
