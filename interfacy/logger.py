@@ -6,7 +6,7 @@ from pathlib import Path
 from stdl.st import colored, terminal_link
 
 _LOGGER_PREFIX = "interfacy"
-ENABLED = True
+ENABLED = False
 
 
 LEVEL_COLORS = {
@@ -18,10 +18,20 @@ LEVEL_COLORS = {
 }
 
 
-def _get_level() -> int:
-    level_name = os.getenv("INTERFACY_LOG") or "NOTSET"
-    level_name = "INFO" if level_name == "1" else level_name
-    return _nameToLevel.get(level_name, logging.NOTSET)
+def _get_level() -> int | None:
+    level_name = os.getenv("INTERFACY_LOG")
+    if level_name is None:
+        return None
+
+    normalized = level_name.strip()
+    if not normalized:
+        return None
+
+    normalized = "INFO" if normalized == "1" else normalized
+    if normalized.isdigit():
+        return int(normalized)
+
+    return _nameToLevel.get(normalized.upper(), logging.INFO)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -80,16 +90,19 @@ class _ClickableFormatter(logging.Formatter):
 
 def _setup_logger(logger: logging.Logger) -> None:
     level = _get_level()
-    logger.setLevel(level)
+    logger.disabled = False
 
-    if ENABLED:
+    if ENABLED or level is not None:
+        effective_level = logging.INFO if level is None else level
+        logger.setLevel(effective_level)
         handler: logging.Handler = logging.StreamHandler()
-        handler.setLevel(level)
+        handler.setLevel(effective_level)
         formatter = _ClickableFormatter(
             fmt="%(colored_levelname)s | %(name_location)s | %(message)s",
         )
         handler.setFormatter(formatter)
     else:
+        logger.setLevel(logging.NOTSET)
         handler = logging.NullHandler()
 
     logger.addHandler(handler)
