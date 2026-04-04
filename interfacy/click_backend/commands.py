@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import click
+from click.formatting import iter_rows, measure_table, term_len, wrap_text
 
 from interfacy.appearance.renderer import (
     SchemaHelpRenderer,
@@ -25,6 +26,60 @@ def _uses_template_layout(layout: object) -> bool:
     return bool(
         getattr(layout, "format_option", None) or getattr(layout, "format_positional", None)
     )
+
+
+class InterfacyClickHelpFormatter(click.HelpFormatter):
+    """Click formatter that can pin help descriptions to an absolute column."""
+
+    def __init__(
+        self,
+        *,
+        help_position: int | None = None,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.interfacy_help_position = help_position
+
+    def write_dl(
+        self,
+        rows: Sequence[tuple[str, str]],
+        col_max: int = 30,
+        col_spacing: int = 2,
+    ) -> None:
+        target = self.interfacy_help_position
+        if target is None:
+            super().write_dl(rows, col_max=col_max, col_spacing=col_spacing)
+            return
+
+        rows = list(rows)
+        widths = measure_table(rows)
+        if len(widths) != 2:
+            msg = "Expected two columns for definition list"
+            raise TypeError(msg)
+
+        first_col = max(col_spacing, target - self.current_indent)
+
+        for first, second in iter_rows(rows, len(widths)):
+            self.write(f"{'':>{self.current_indent}}{first}")
+            if not second:
+                self.write("\n")
+                continue
+            if term_len(first) <= first_col - col_spacing:
+                self.write(" " * (first_col - term_len(first)))
+            else:
+                self.write("\n")
+                self.write(" " * (first_col + self.current_indent))
+
+            text_width = max(self.width - first_col - 2, 10)
+            wrapped_text = wrap_text(second, text_width, preserve_paragraphs=True)
+            lines = wrapped_text.splitlines()
+
+            if lines:
+                self.write(f"{lines[0]}\n")
+                for line in lines[1:]:
+                    self.write(f"{'':>{first_col + self.current_indent}}{line}\n")
+            else:
+                self.write("\n")
 
 
 class InterfacyClickOption(click.Option):
@@ -107,6 +162,44 @@ class _HelpMixin:
     interfacy_param_bindings: dict[str, str]
     interfacy_arg_specs: dict[str, Argument]
     interfacy_suppress_defaults: set[str]
+    interfacy_help_position: int | None = None
+    interfacy_help_position_explicit: bool = False
+
+    def _resolve_fallback_help_position(self) -> int | None:
+        help_position = self.interfacy_help_position
+        if not self.interfacy_help_position_explicit or not isinstance(help_position, int):
+            return None
+        return help_position
+
+    def _render_click_help(self, ctx: click.Context) -> str:
+        formatter = InterfacyClickHelpFormatter(
+            width=ctx.terminal_width,
+            max_width=ctx.max_content_width,
+            help_position=self._resolve_fallback_help_position(),
+        )
+        self.format_help(ctx, formatter)
+        return formatter.getvalue().rstrip("\n")
+
+    def _positionals_help_rows(self, ctx: click.Context) -> list[tuple[str, str]]:
+        rows: list[tuple[str, str]] = []
+        for param in self.params:
+            if not isinstance(param, InterfacyClickArgument):
+                continue
+            help_record = param.get_help_record(ctx)
+            if help_record is None:
+                name = param.name or ""
+                rows.append((name, param.help or ""))
+                continue
+            rows.append(help_record)
+        return rows
+
+    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        if isinstance(formatter, InterfacyClickHelpFormatter):
+            positional_rows = self._positionals_help_rows(ctx)
+            if positional_rows:
+                with formatter.section("Positionals"):
+                    formatter.write_dl(positional_rows)
+        return super().format_options(ctx, formatter)
 
     def _augment_help(self, _ctx: click.Context, original_help: str) -> str:
         if "Options:" in original_help:
@@ -173,6 +266,11 @@ class InterfacyClickCommand(_HelpMixin, click.Command):
         ):
             renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)
+        if self._resolve_fallback_help_position() is not None:
+            help_text = self._render_click_help(ctx)
+            if self.interfacy_epilog:
+                return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
+            return help_text
         original_help = super().get_help(ctx)
         return self._augment_help(ctx, original_help)
 
@@ -242,6 +340,11 @@ class InterfacyClickGroup(_HelpMixin, click.Group):
         ):
             renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)
+        if self._resolve_fallback_help_position() is not None:
+            help_text = self._render_click_help(ctx)
+            if self.interfacy_epilog:
+                return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
+            return help_text
         original_help = super().get_help(ctx)
         return self._augment_help(ctx, original_help)
 

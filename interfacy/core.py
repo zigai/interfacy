@@ -1,6 +1,7 @@
 import sys
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Sequence
+from copy import deepcopy
 from enum import IntEnum, auto
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypedDict, TypeVar
 
@@ -137,6 +138,7 @@ class InterfacyParser:
         help_subcommand_sort (list[HelpSubcommandSortRule] | None): Rules for command/subcommand
             row ordering in help output. When unset, layout defaults are used, then global
             defaults.
+        help_position (int | None): Absolute column where help descriptions begin.
         executable_flags (Sequence[ExecutableFlag] | None): Parser-root executable flags.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
@@ -173,6 +175,7 @@ class InterfacyParser:
         abbreviation_scope: AbbreviationScope = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_position: int | None = None,
         executable_flags: Sequence[ExecutableFlag] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
@@ -212,6 +215,11 @@ class InterfacyParser:
             executable_flags,
             value_name="executable_flags",
         )
+        self.help_position = help_position
+        self._help_layout_explicit = help_layout is not None
+        self._help_position_explicit = help_position is not None or (
+            help_layout is not None and getattr(help_layout, "help_position", None) is not None
+        )
 
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file
@@ -232,7 +240,9 @@ class InterfacyParser:
             else build_default_type_parser(from_file=allow_args_from_file)
         )
         self.flag_strategy = flag_strategy or DefaultFlagStrategy()
-        self.help_layout = help_layout or StandardLayout()
+        self.help_layout = deepcopy(help_layout) if help_layout is not None else StandardLayout()
+        if help_position is not None:
+            self.help_layout.help_position = help_position
         if help_colors is not None:
             self.help_layout.style = help_colors
         self._refresh_help_option_sort_rules()

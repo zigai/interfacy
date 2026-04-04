@@ -3,6 +3,7 @@ import re
 import sys
 from argparse import Namespace
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from objinspect.typing import type_name
@@ -239,6 +240,7 @@ class ArgumentParser(argparse.ArgumentParser):
         nest_path (list[str] | None): Explicit nesting path components.
         exit_on_error (bool): Whether to exit on parse errors.
         help_layout (Any | None): Layout configuration for help rendering.
+        help_position (int | None): Absolute column where help descriptions begin.
         color (bool | None): Force colorized help output when supported.
     """
 
@@ -262,6 +264,7 @@ class ArgumentParser(argparse.ArgumentParser):
         exit_on_error: bool = True,
         *,
         help_layout: "HelpLayout | None" = None,
+        help_position: int | None = None,
         color: bool | None = None,
     ) -> None:
         if parents is None:
@@ -299,7 +302,11 @@ class ArgumentParser(argparse.ArgumentParser):
                 raise
             base_init_kwargs.pop("color")
             super().__init__(**base_init_kwargs)
-        self._interfacy_help_layout = help_layout or StandardLayout()
+        self._interfacy_help_layout = (
+            deepcopy(help_layout) if help_layout is not None else StandardLayout()
+        )
+        if help_position is not None:
+            self._interfacy_help_layout.help_position = help_position
         self._schema_command: Command | None = None
         self._schema: ParserSchema | None = None
         self.add_help = add_help

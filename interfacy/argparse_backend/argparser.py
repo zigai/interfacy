@@ -105,6 +105,7 @@ class Argparser(InterfacyParser):
         abbreviation_scope (Literal["top_level_options", "all_options"]): Scope for generation.
         help_option_sort (list[HelpOptionSortRule] | None): Help option row ordering rules.
         help_subcommand_sort (list[HelpSubcommandSortRule] | None): Help command row ordering rules.
+        help_position (int | None): Absolute column where help descriptions begin.
         executable_flags (Sequence[ExecutableFlag] | None): Parser-root executable flags.
         pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
         print_result_func (Callable): Function used to print results.
@@ -140,6 +141,7 @@ class Argparser(InterfacyParser):
         abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_position: int | None = None,
         executable_flags: Sequence[ExecutableFlag] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
@@ -166,6 +168,7 @@ class Argparser(InterfacyParser):
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_position=help_position,
             executable_flags=executable_flags,
             pipe_targets=pipe_targets,
             tab_completion=tab_completion,

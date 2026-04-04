@@ -84,6 +84,7 @@ class ClickParser(InterfacyParser):
         abbreviation_scope: Literal["top_level_options", "all_options"] = "top_level_options",
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_position: int | None = None,
         executable_flags: Sequence[ExecutableFlag] | None = None,
         pipe_targets: PipeTargets | dict[str, str] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
@@ -109,6 +110,7 @@ class ClickParser(InterfacyParser):
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_position=help_position,
             executable_flags=executable_flags,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,
@@ -393,6 +395,8 @@ class ClickParser(InterfacyParser):
         command.interfacy_schema = schema
         command.interfacy_aliases = schema.aliases
         command.interfacy_epilog = schema.epilog
+        command.interfacy_help_position = self.help_layout.help_position
+        command.interfacy_help_position_explicit = self._help_position_explicit
 
     def build_click_command(
         self,
@@ -487,6 +491,8 @@ class ClickParser(InterfacyParser):
             root.interfacy_param_bindings = param_bindings
             root.interfacy_arg_specs = arg_specs
             root.interfacy_suppress_defaults = suppress_defaults
+            root.interfacy_help_position = self.help_layout.help_position
+            root.interfacy_help_position_explicit = self._help_position_explicit
 
             for cmd in self._ordered_commands_for_help(schema.commands):
                 root.add_command(self.build_click_command(cmd), name=cmd.cli_name)
