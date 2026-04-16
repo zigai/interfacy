@@ -73,7 +73,7 @@ def make_command_stub(
         canonical_name=canonical,
         cli_name=canonical,
         aliases=tuple(aliases),
-        raw_description=obj.description if hasattr(obj, "description") else None,
+        raw_description=obj.description,
         help_layout=layout,
     )
 
@@ -93,6 +93,8 @@ class FakeParser:
     reserved_flags: Sequence[str] = ("help",)
     command_key: str | None = "command"
     metadata: dict[str, Any] | None = None
+    include_inherited_methods: bool = False
+    include_classmethods: bool = False
     expand_model_params: bool = True
     model_expansion_max_depth: int = 3
     abbreviation_scope: str = "top_level_options"

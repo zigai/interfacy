@@ -8,7 +8,7 @@ from interfacy.appearance.layout import InterfacyColors
 
 
 def _marker(text: str, style: TextStyle) -> str:
-    color = getattr(style, "color", "none")
+    color = style.color
     return f"<{color}>{text}</{color}>"
 
 

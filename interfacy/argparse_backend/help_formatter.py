@@ -54,7 +54,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         """
         layout = self._get_help_layout()
         if layout is not None and heading not in (None, argparse.SUPPRESS):
-            title_map = getattr(layout, "section_title_map", None)
+            title_map = layout.section_title_map
             heading_text = str(heading).strip()
             heading_key = heading_text.rstrip(":").strip().lower()
             if isinstance(title_map, dict):
@@ -65,7 +65,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 )
                 if mapped:
                     heading = mapped
-            heading_style = getattr(layout, "section_heading_style", None)
+            heading_style = layout.section_heading_style
             if heading_style is not None:
                 heading = with_style(str(heading), heading_style)
         return super().start_section(heading)
@@ -92,7 +92,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if base_flag and not no_flag:
             no_flag = f"--no-{base_flag[2:]}"
 
-        default_val = getattr(action, "default", False)
+        default_val = action.default
         primary_long = no_flag if bool(default_val) and no_flag else (base_flag or longs[0])
 
         normalized: list[str] = []
@@ -249,10 +249,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
         layout = self._get_help_layout()
         if layout is not None:
-            custom_prefix = getattr(layout, "usage_prefix", None)
+            custom_prefix = layout.usage_prefix
             if custom_prefix is not None:
                 prefix = custom_prefix
-                usage_style = getattr(layout, "usage_style", None)
+                usage_style = layout.usage_style
                 if usage_style is not None:
                     prefix = with_style(prefix, usage_style)
 
@@ -335,7 +335,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
         usage_text_style = None
         if layout is not None:
-            custom_prefix = getattr(layout, "usage_prefix", None)
+            custom_prefix = layout.usage_prefix
             if isinstance(usage, str) and custom_prefix is not None:
                 usage = re.sub(
                     r"^(?:\x1b\[[0-9;]*m)*\s*usage:\s*",
@@ -343,7 +343,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     usage,
                     flags=re.IGNORECASE,
                 )
-            usage_text_style = getattr(layout, "usage_text_style", None)
+            usage_text_style = layout.usage_text_style
         if usage_text_style is not None and isinstance(usage, str):
             usage = with_style(usage, usage_text_style)
 

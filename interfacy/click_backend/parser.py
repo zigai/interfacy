@@ -56,7 +56,7 @@ class InterfacyOptionParser(_BaseOptionParser):
         option: _OptionLike,
         state: _ParsingStateLike,
     ) -> object:
-        if getattr(option, "nargs", 1) != -1:
+        if option.nargs != -1:
             return super()._get_value_from_state(option_name, option, state)
 
         collected: list[str] = []

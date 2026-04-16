@@ -442,19 +442,18 @@ def get_annotation_choices(annotation: object, *, for_display: bool = False) -> 
 
 def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[object] | None:
     """Return choices for an objinspect Parameter, falling back to inferred Enum types."""
-    choices = get_annotation_choices(getattr(param, "type", None), for_display=for_display)
+    choices = get_annotation_choices(param.type, for_display=for_display)
     if choices:
         return choices
 
     inferred = None
-    if hasattr(param, "get_infered_type"):
-        try:
-            inferred = param.get_infered_type()
-        except (AttributeError, KeyError, NameError, TypeError, ValueError):
-            inferred = None
+    try:
+        inferred = param.get_infered_type()
+    except (AttributeError, KeyError, NameError, TypeError, ValueError):
+        inferred = None
 
-    if inferred is None and getattr(param, "has_default", False):
-        default = getattr(param, "default", None)
+    if inferred is None and param.has_default:
+        default = param.default
         if isinstance(default, Enum):
             inferred = type(default)
 

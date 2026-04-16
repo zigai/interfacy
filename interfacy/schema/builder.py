@@ -126,9 +126,8 @@ class ParserSchemaBuilder:
 
         layout = self.parser.help_layout
         if layout is not None:
-            layout_default = getattr(layout, "help_option_sort_default", None)
             layout_rules = resolve_help_option_sort_rules(
-                layout_default,
+                layout.help_option_sort_default,
                 value_name=f"{layout.__class__.__name__}.help_option_sort_default",
             )
             if layout_rules:
@@ -148,9 +147,8 @@ class ParserSchemaBuilder:
 
         layout = self.parser.help_layout
         if layout is not None:
-            layout_default = getattr(layout, "help_subcommand_sort_default", None)
             layout_rules = resolve_help_subcommand_sort_rules(
-                layout_default,
+                layout.help_subcommand_sort_default,
                 value_name=f"{layout.__class__.__name__}.help_subcommand_sort_default",
             )
             if layout_rules:
@@ -160,19 +158,19 @@ class ParserSchemaBuilder:
 
     def _base_build_settings(self) -> _CommandBuildSettings:
         help_option_sort = self._resolve_help_option_sort_value(
-            getattr(self.parser, "help_option_sort", None),
+            self.parser.help_option_sort,
             value_name="help_option_sort",
         )
         help_subcommand_sort = self._resolve_help_subcommand_sort_value(
-            getattr(self.parser, "help_subcommand_sort", None),
+            self.parser.help_subcommand_sort,
             value_name="help_subcommand_sort",
         )
         return _CommandBuildSettings(
-            include_inherited_methods=getattr(self.parser, "include_inherited_methods", False),
-            include_classmethods=getattr(self.parser, "include_classmethods", False),
-            expand_model_params=getattr(self.parser, "expand_model_params", True),
-            model_expansion_max_depth=getattr(self.parser, "model_expansion_max_depth", 3),
-            abbreviation_scope=getattr(self.parser, "abbreviation_scope", "top_level_options"),
+            include_inherited_methods=self.parser.include_inherited_methods,
+            include_classmethods=self.parser.include_classmethods,
+            expand_model_params=self.parser.expand_model_params,
+            model_expansion_max_depth=self.parser.model_expansion_max_depth,
+            abbreviation_scope=self.parser.abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
         )
@@ -858,7 +856,7 @@ class ParserSchemaBuilder:
             has_default=param.has_default,
             default=param.default if param.has_default else None,
             is_required=param.is_required,
-            is_optional=getattr(param, "is_optional", False),
+            is_optional=param.is_optional,
             kind=param.kind,
             description=param.description,
         )

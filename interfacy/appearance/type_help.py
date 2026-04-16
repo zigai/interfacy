@@ -71,9 +71,9 @@ class TypeHelpFormatter:
 
     def _resolve_type_token_styles(self) -> dict[str, TextStyle]:
         def pick(name: str) -> TextStyle:
-            if self.theme is not None and hasattr(self.theme, name):
-                return getattr(self.theme, name)
-            return self.style
+            if self.theme is None:
+                return self.style
+            return getattr(self.theme, name)
 
         return {
             "name": self.style,

@@ -165,20 +165,23 @@ class HelpLayout:
     )
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
+    subcommand_usage_token: str | None = None
 
     # "bold":  remove backticks in docstring and make text bold
     # "strip": remove backticks in docstring and leave plain text
     doc_inline_code_mode: Literal["bold", "strip"] = "bold"
+    _default_field_width_base: int | None = field(default=None, init=False, repr=False)
+    _pos_flag_width_base: int | None = field(default=None, init=False, repr=False)
 
     def _get_default_field_width_base(self) -> int:
-        base = getattr(self, "_default_field_width_base", None)
+        base = self._default_field_width_base
         if base is None:
             base = self.default_field_width
             self._default_field_width_base = base
         return base
 
     def _get_pos_flag_width_base(self) -> int:
-        base = getattr(self, "_pos_flag_width_base", None)
+        base = self._pos_flag_width_base
         if base is None:
             base = self.pos_flag_width
             self._pos_flag_width_base = base
@@ -194,7 +197,7 @@ class HelpLayout:
         except (OSError, AttributeError):
             term_width = 80
 
-        ratio = max(1, getattr(self, "default_field_width_term_ratio", 5))
+        ratio = max(1, self.default_field_width_term_ratio)
         term_cap = max(base_width, term_width // ratio)
         if self.default_field_width_max is not None:
             term_cap = min(term_cap, self.default_field_width_max)
@@ -212,9 +215,9 @@ class HelpLayout:
         except (OSError, AttributeError):
             term_width = 80
 
-        ratio = max(1, getattr(self, "default_field_width_term_ratio", 5))
+        ratio = max(1, self.default_field_width_term_ratio)
         term_cap = max(base_width, term_width // ratio)
-        soft_ratio = max(1, getattr(self, "default_field_width_soft_ratio", 8))
+        soft_ratio = max(1, self.default_field_width_soft_ratio)
         soft_cap = max(base_width, term_width // soft_ratio)
         effective_cap = min(term_cap, soft_cap)
         if self.default_field_width_max is not None:
@@ -323,7 +326,7 @@ class HelpLayout:
 
     def get_subcommand_usage_token(self) -> str:
         """Return the subcommand placeholder token used in usage lines."""
-        legacy_placeholder = getattr(self, "subcommand_usage_token", None)
+        legacy_placeholder = self.subcommand_usage_token
         if isinstance(legacy_placeholder, str):
             return legacy_placeholder
         return self.subcommand_usage_placeholder

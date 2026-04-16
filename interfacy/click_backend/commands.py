@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import click
 from click.formatting import iter_rows, measure_table, term_len, wrap_text
 
+from interfacy.appearance.layout import HelpLayout
 from interfacy.appearance.renderer import (
     SchemaHelpRenderer,
     command_has_grouped_subcommands,
@@ -17,15 +18,13 @@ if TYPE_CHECKING:
     from interfacy.schema.schema import Argument, Command, ParserSchema
 
 
-def _uses_template_layout(layout: object) -> bool:
-    layout_mode = getattr(layout, "layout_mode", None)
+def _uses_template_layout(layout: HelpLayout) -> bool:
+    layout_mode = layout.layout_mode
     if layout_mode == "template":
         return True
     if layout_mode == "adaptive":
         return False
-    return bool(
-        getattr(layout, "format_option", None) or getattr(layout, "format_positional", None)
-    )
+    return bool(layout.format_option or layout.format_positional)
 
 
 class InterfacyClickHelpFormatter(click.HelpFormatter):

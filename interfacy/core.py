@@ -218,7 +218,7 @@ class InterfacyParser:
         self.help_position = help_position
         self._help_layout_explicit = help_layout is not None
         self._help_position_explicit = help_position is not None or (
-            help_layout is not None and getattr(help_layout, "help_position", None) is not None
+            help_layout is not None and help_layout.help_position is not None
         )
 
         self.autorun = run
@@ -287,7 +287,8 @@ class InterfacyParser:
             help_layout=help_layout,
             user_value=self.help_option_sort,
             user_validator=validate_help_option_sort,
-            layout_default_attr="help_option_sort_default",
+            layout_default_value=help_layout.help_option_sort_default,
+            layout_default_name="help_option_sort_default",
             layout_resolver=resolve_help_option_sort_rules,
             default_rules=DEFAULT_HELP_OPTION_SORT_RULES,
         )
@@ -298,7 +299,8 @@ class InterfacyParser:
         help_layout: HelpLayout,
         user_value: object,
         user_validator: Callable[[object], list[SortRuleT] | None],
-        layout_default_attr: str,
+        layout_default_value: object,
+        layout_default_name: str,
         layout_resolver: Callable[..., list[SortRuleT] | None],
         default_rules: Sequence[SortRuleT],
     ) -> list[SortRuleT]:
@@ -307,8 +309,8 @@ class InterfacyParser:
             return list(user_rules)
 
         layout_rules = layout_resolver(
-            getattr(help_layout, layout_default_attr, None),
-            value_name=f"{help_layout.__class__.__name__}.{layout_default_attr}",
+            layout_default_value,
+            value_name=f"{help_layout.__class__.__name__}.{layout_default_name}",
         )
         if layout_rules:
             return list(layout_rules)
@@ -332,7 +334,8 @@ class InterfacyParser:
             help_layout=help_layout,
             user_value=self.help_subcommand_sort,
             user_validator=validate_help_subcommand_sort,
-            layout_default_attr="help_subcommand_sort_default",
+            layout_default_value=help_layout.help_subcommand_sort_default,
+            layout_default_name="help_subcommand_sort_default",
             layout_resolver=resolve_help_subcommand_sort_rules,
             default_rules=DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
         )
