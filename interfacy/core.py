@@ -1,6 +1,6 @@
 import sys
 from abc import abstractmethod
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
 from enum import IntEnum, auto
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypedDict, TypeVar
@@ -22,7 +22,12 @@ from interfacy.appearance.help_sort import (
 )
 from interfacy.appearance.layout import InterfacyColors
 from interfacy.appearance.layouts import HelpLayout, StandardLayout
-from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InvalidCommandError
+from interfacy.exceptions import (
+    ConfigurationError,
+    DuplicateCommandError,
+    DuplicatePluginError,
+    InvalidCommandError,
+)
 from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
 from interfacy.logger import get_logger
 from interfacy.naming import (
@@ -33,6 +38,14 @@ from interfacy.naming import (
     FlagStrategy,
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
+from interfacy.plugins import (
+    AbortRecovery,
+    ArgumentRef,
+    InterfacyPlugin,
+    ParseFailure,
+    ParseFailureKind,
+    ProvideArgumentValues,
+)
 from interfacy.schema.builder import ParserSchemaBuilder
 from interfacy.type_parsers import build_default_type_parser
 from interfacy.util import (
@@ -43,11 +56,12 @@ from interfacy.util import (
 
 if TYPE_CHECKING:
     from interfacy.group import CommandGroup
-    from interfacy.schema.schema import Command, ParserSchema
+    from interfacy.schema.schema import Argument, Command, ParserSchema
 
 
 COMMAND_KEY: Final[str] = "command"
 PIPE_UNSET: Final[object] = object()
+MAX_PARSE_RECOVERY_ATTEMPTS: Final[int] = 3
 AbbreviationScope = Literal["top_level_options", "all_options"]
 HelpOptionSort = list[HelpOptionSortRule] | None
 HelpSubcommandSort = list[HelpSubcommandSortRule] | None
@@ -186,6 +200,7 @@ class InterfacyParser:
         reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
+        plugins: Sequence[InterfacyPlugin] | None = None,
     ) -> None:
         self.description = description
         self.epilog = epilog
@@ -234,6 +249,7 @@ class InterfacyParser:
         self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator(
             max_generated_len=self.abbreviation_max_generated_len
         )
+        self._type_parser_explicit = type_parser is not None
         self.type_parser = (
             type_parser
             if type_parser is not None
@@ -253,6 +269,11 @@ class InterfacyParser:
         self.help_layout.name_registry = self.name_registry
 
         self.commands: dict[str, Command] = {}
+        self.plugins: list[InterfacyPlugin] = []
+        self._plugin_names: set[str] = set()
+        if plugins:
+            for plugin in plugins:
+                self.add_plugin(plugin)
 
     def _snapshot_backend_registration_state(self) -> object | None:
         """Capture backend-specific mutable registration state."""
@@ -260,6 +281,558 @@ class InterfacyParser:
 
     def _restore_backend_registration_state(self, snapshot: object | None) -> None:
         """Restore backend-specific mutable registration state."""
+
+    def _invalidate_backend_build_cache(self) -> None:
+        """Clear backend-specific cached parser state after runtime config changes."""
+
+    def _invalidate_build_cache(self) -> None:
+        """Clear any cached parser/schema state after configuration changes."""
+        self._invalidate_backend_build_cache()
+
+    def add_plugin(self, plugin: InterfacyPlugin) -> InterfacyPlugin:
+        """Register a plugin on this parser and run its configure hook immediately."""
+        plugin_name = plugin.plugin_name
+        if plugin_name in self._plugin_names:
+            raise DuplicatePluginError(plugin_name)
+
+        self._plugin_names.add(plugin_name)
+        try:
+            plugin.configure(self)
+        except Exception:
+            self._plugin_names.remove(plugin_name)
+            raise
+        self.plugins.append(plugin)
+        self._invalidate_build_cache()
+        return plugin
+
+    def _validate_apply_setup_request(
+        self,
+        *,
+        flag_strategy: FlagStrategy | None,
+    ) -> None:
+        if flag_strategy is not None and self.commands:
+            raise ConfigurationError(
+                "flag_strategy cannot be changed after commands have been registered"
+            )
+
+    def _apply_layout_setup(
+        self,
+        *,
+        help_layout: HelpLayout | None,
+        help_colors: InterfacyColors | None,
+        help_position: int | None,
+    ) -> None:
+        if help_layout is not None:
+            self.help_layout = deepcopy(help_layout)
+            self._help_layout_explicit = True
+
+        if help_position is not None:
+            self.help_position = help_position
+            self.help_layout.help_position = help_position
+            self._help_position_explicit = True
+
+        if help_colors is not None:
+            self.help_layout.style = help_colors
+
+    def _apply_type_parser_setup(
+        self,
+        *,
+        type_parser: StrToTypeParser | None,
+        allow_args_from_file: bool | None,
+    ) -> None:
+        if type_parser is not None:
+            self.type_parser = type_parser
+            self._type_parser_explicit = True
+            return
+
+        if allow_args_from_file is not None and not self._type_parser_explicit:
+            self.type_parser = build_default_type_parser(from_file=allow_args_from_file)
+
+    def _apply_runtime_setup(
+        self,
+        *,
+        print_result: bool | None,
+        tab_completion: bool | None,
+        full_error_traceback: bool | None,
+        allow_args_from_file: bool | None,
+        include_inherited_methods: bool | None,
+        include_classmethods: bool | None,
+        silent_interrupt: bool | None,
+        expand_model_params: bool | None,
+        model_expansion_max_depth: int | None,
+    ) -> None:
+        optional_updates = (
+            ("display_result", print_result),
+            ("enable_tab_completion", tab_completion),
+            ("full_error_traceback", full_error_traceback),
+            ("allow_args_from_file", allow_args_from_file),
+            ("include_inherited_methods", include_inherited_methods),
+            ("include_classmethods", include_classmethods),
+            ("silent_interrupt", silent_interrupt),
+            ("expand_model_params", expand_model_params),
+        )
+        self._apply_optional_attr_updates(optional_updates)
+
+        if model_expansion_max_depth is not None:
+            self.model_expansion_max_depth = validate_model_expansion_max_depth(
+                model_expansion_max_depth
+            )
+
+    def _apply_optional_attr_updates(
+        self,
+        updates: Sequence[tuple[str, object | None]],
+    ) -> None:
+        for attr_name, value in updates:
+            if value is not None:
+                setattr(self, attr_name, value)
+
+    def _apply_help_and_abbreviation_setup(
+        self,
+        *,
+        abbreviation_max_generated_len: int | None,
+        abbreviation_scope: AbbreviationScope | None,
+        help_option_sort: list[HelpOptionSortRule] | None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None,
+    ) -> None:
+        if abbreviation_max_generated_len is not None:
+            self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
+                abbreviation_max_generated_len
+            )
+        if abbreviation_scope is not None:
+            self.abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
+        if help_option_sort is not None:
+            self.help_option_sort = validate_help_option_sort(help_option_sort)
+        if help_subcommand_sort is not None:
+            self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
+
+    def _apply_naming_setup(
+        self,
+        *,
+        flag_strategy: FlagStrategy | None,
+        abbreviation_gen: AbbreviationGenerator | None,
+        abbreviation_max_generated_len: int | None,
+    ) -> None:
+        if flag_strategy is not None:
+            self.flag_strategy = flag_strategy
+            self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
+
+        if abbreviation_gen is not None:
+            self.abbreviation_gen = abbreviation_gen
+        elif abbreviation_max_generated_len is not None:
+            self.abbreviation_gen = DefaultAbbreviationGenerator(
+                max_generated_len=self.abbreviation_max_generated_len
+            )
+
+    def _finalize_setup_changes(self) -> None:
+        self.help_layout.flag_generator = self.flag_strategy
+        self.help_layout.name_registry = self.name_registry
+        self._refresh_help_option_sort_rules()
+        self._refresh_help_subcommand_sort_rules()
+        self.help_colors = self.help_layout.style
+        self._invalidate_build_cache()
+
+    def apply_setup(
+        self,
+        *,
+        help_layout: HelpLayout | None = None,
+        help_colors: InterfacyColors | None = None,
+        type_parser: StrToTypeParser | None = None,
+        print_result: bool | None = None,
+        tab_completion: bool | None = None,
+        full_error_traceback: bool | None = None,
+        allow_args_from_file: bool | None = None,
+        flag_strategy: FlagStrategy | None = None,
+        abbreviation_gen: AbbreviationGenerator | None = None,
+        abbreviation_max_generated_len: int | None = None,
+        abbreviation_scope: AbbreviationScope | None = None,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_position: int | None = None,
+        include_inherited_methods: bool | None = None,
+        include_classmethods: bool | None = None,
+        silent_interrupt: bool | None = None,
+        expand_model_params: bool | None = None,
+        model_expansion_max_depth: int | None = None,
+        plugins: Sequence[InterfacyPlugin] | None = None,
+    ) -> None:
+        """Apply parser-level setup after construction."""
+        self._validate_apply_setup_request(flag_strategy=flag_strategy)
+        self._apply_layout_setup(
+            help_layout=help_layout,
+            help_colors=help_colors,
+            help_position=help_position,
+        )
+        self._apply_type_parser_setup(
+            type_parser=type_parser,
+            allow_args_from_file=allow_args_from_file,
+        )
+        self._apply_runtime_setup(
+            print_result=print_result,
+            tab_completion=tab_completion,
+            full_error_traceback=full_error_traceback,
+            allow_args_from_file=allow_args_from_file,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
+            silent_interrupt=silent_interrupt,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=model_expansion_max_depth,
+        )
+        self._apply_help_and_abbreviation_setup(
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+        )
+        self._apply_naming_setup(
+            flag_strategy=flag_strategy,
+            abbreviation_gen=abbreviation_gen,
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+        )
+        self._finalize_setup_changes()
+
+        if plugins:
+            for plugin in plugins:
+                self.add_plugin(plugin)
+
+    def _transform_schema_with_plugins(self, schema: "ParserSchema") -> "ParserSchema":
+        for plugin in self.plugins:
+            schema = plugin.transform_schema(self, schema)
+        return schema
+
+    def _recover_parse_failure(
+        self,
+        failure: ParseFailure,
+    ) -> AbortRecovery | ProvideArgumentValues | None:
+        for plugin in self.plugins:
+            action = plugin.recover_parse_failure(self, failure)
+            if action is not None:
+                return action
+        return None
+
+    def _single_command_without_root_selection(self, schema: "ParserSchema") -> "Command | None":
+        if len(schema.commands) != 1:
+            return None
+        command = next(iter(schema.commands.values()))
+        if command.command_type == "group":
+            return None
+        return command
+
+    def _match_command_name(
+        self,
+        commands: Mapping[str, "Command"],
+        cli_name: str,
+    ) -> "Command | None":
+        for command in commands.values():
+            if command.cli_name == cli_name or cli_name in command.aliases:
+                return command
+        return None
+
+    def _bucket_for_command_path(
+        self,
+        schema: "ParserSchema",
+        namespace: dict[str, Any],
+        command_path: tuple[str, ...],
+        *,
+        create: bool = False,
+    ) -> dict[str, Any] | None:
+        root_command = self._single_command_without_root_selection(schema)
+        if root_command is not None and not command_path:
+            return namespace
+
+        if not command_path:
+            return namespace
+
+        current: dict[str, Any] = namespace
+        for segment in command_path:
+            value = current.get(segment)
+            if not isinstance(value, dict):
+                if not create:
+                    return None
+                value = {}
+                current[segment] = value
+            current = value
+        return current
+
+    def _build_missing_arguments_failure(
+        self,
+        *,
+        backend: str,
+        message: str,
+        command_path: tuple[str, ...],
+        command_depth: int,
+        arguments: Sequence["Argument"],
+        missing_names: Sequence[str],
+        raw_exception: BaseException | None,
+    ) -> ParseFailure | None:
+        refs: list[ArgumentRef] = []
+        remaining = list(missing_names)
+        for argument in arguments:
+            if not argument.required:
+                continue
+            if self._argument_matches_missing_tokens(argument, remaining):
+                refs.append(
+                    ArgumentRef(command_path=command_path, name=argument.name, argument=argument)
+                )
+
+        if not refs:
+            return None
+
+        return ParseFailure(
+            backend=backend,
+            kind=ParseFailureKind.MISSING_ARGUMENTS,
+            message=message,
+            command_path=command_path,
+            command_depth=command_depth,
+            missing_arguments=tuple(refs),
+            raw_exception=raw_exception,
+        )
+
+    @staticmethod
+    def _normalize_missing_token(token: str) -> str:
+        return token.strip().lstrip("-").replace("-", "_").replace(".", "_").upper()
+
+    def _argument_matches_missing_tokens(
+        self,
+        argument: "Argument",
+        missing_names: list[str],
+    ) -> bool:
+        possible_tokens = {self._normalize_missing_token(argument.name)}
+        possible_tokens.add(self._normalize_missing_token(argument.display_name))
+        if argument.metavar:
+            possible_tokens.add(self._normalize_missing_token(argument.metavar))
+        for flag in argument.flags:
+            possible_tokens.add(self._normalize_missing_token(flag))
+
+        for raw_name in list(missing_names):
+            split_names = [part for part in raw_name.split("/") if part]
+            normalized = {self._normalize_missing_token(name) for name in split_names}
+            if normalized & possible_tokens:
+                missing_names.remove(raw_name)
+                return True
+        return False
+
+    def _find_first_missing_from_namespace(
+        self,
+        schema: "ParserSchema",
+        namespace: dict[str, Any],
+        *,
+        backend: str,
+        message: str,
+        raw_exception: BaseException | None,
+    ) -> ParseFailure | None:
+        root_command = self._single_command_without_root_selection(schema)
+        if root_command is not None:
+            return self._find_missing_for_command(
+                root_command,
+                namespace,
+                bucket_path=(),
+                depth=0,
+                backend=backend,
+                message=message,
+                raw_exception=raw_exception,
+            )
+
+        command_name = namespace.get(self.COMMAND_KEY)
+        if not isinstance(command_name, str):
+            return ParseFailure(
+                backend=backend,
+                kind=ParseFailureKind.MISSING_SUBCOMMAND,
+                message=message,
+                command_path=(),
+                command_depth=0,
+                available_subcommands=tuple(schema.commands.keys()),
+                raw_exception=raw_exception,
+            )
+
+        command = self._match_command_name(schema.commands, command_name)
+        if command is None:
+            return None
+
+        bucket = (
+            self._bucket_for_command_path(
+                schema, namespace, (command.canonical_name,), create=False
+            )
+            or {}
+        )
+        return self._find_missing_for_command(
+            command,
+            bucket,
+            bucket_path=(command.canonical_name,),
+            depth=0,
+            backend=backend,
+            message=message,
+            raw_exception=raw_exception,
+        )
+
+    def _find_missing_for_command(
+        self,
+        command: "Command",
+        bucket: dict[str, Any],
+        *,
+        bucket_path: tuple[str, ...],
+        depth: int,
+        backend: str,
+        message: str,
+        raw_exception: BaseException | None,
+    ) -> ParseFailure | None:
+        missing_args = [
+            arg
+            for arg in [*command.initializer, *command.parameters]
+            if self._argument_value_is_missing(arg, bucket)
+        ]
+        if missing_args:
+            return ParseFailure(
+                backend=backend,
+                kind=ParseFailureKind.MISSING_ARGUMENTS,
+                message=message,
+                command_path=bucket_path,
+                command_depth=depth,
+                missing_arguments=tuple(
+                    ArgumentRef(command_path=bucket_path, name=argument.name, argument=argument)
+                    for argument in missing_args
+                ),
+                raw_exception=raw_exception,
+            )
+
+        if not command.subcommands:
+            return None
+
+        dest_key = self.COMMAND_KEY if depth == 0 else f"{self.COMMAND_KEY}_{depth}"
+        selected = bucket.get(dest_key)
+        if not isinstance(selected, str):
+            return ParseFailure(
+                backend=backend,
+                kind=ParseFailureKind.MISSING_SUBCOMMAND,
+                message=message,
+                command_path=bucket_path,
+                command_depth=depth,
+                available_subcommands=tuple(command.subcommands.keys()),
+                raw_exception=raw_exception,
+            )
+
+        subcommand = self._match_command_name(command.subcommands, selected)
+        if subcommand is None:
+            return None
+
+        next_bucket_path = (*bucket_path, subcommand.cli_name)
+        next_bucket = bucket.get(subcommand.cli_name)
+        if not isinstance(next_bucket, dict):
+            next_bucket = {}
+        return self._find_missing_for_command(
+            subcommand,
+            next_bucket,
+            bucket_path=next_bucket_path,
+            depth=depth + 1,
+            backend=backend,
+            message=message,
+            raw_exception=raw_exception,
+        )
+
+    @staticmethod
+    def _argument_value_is_missing(
+        argument: "Argument",
+        bucket: Mapping[str, Any],
+    ) -> bool:
+        if not argument.required:
+            return False
+
+        if argument.name not in bucket:
+            return True
+
+        value = bucket[argument.name]
+        if value is None:
+            return True
+
+        if (
+            argument.value_shape.name == "LIST"
+            and isinstance(value, Sequence)
+            and not isinstance(value, (str, bytes, bytearray))
+        ):
+            return len(value) == 0
+
+        if (
+            argument.value_shape.name == "TUPLE"
+            and isinstance(argument.nargs, int)
+            and isinstance(value, Sequence)
+            and not isinstance(value, (str, bytes, bytearray))
+        ):
+            return len(value) < argument.nargs
+
+        return False
+
+    def _apply_recovery_action(
+        self,
+        schema: "ParserSchema",
+        namespace: dict[str, Any],
+        action: ProvideArgumentValues,
+    ) -> None:
+        for command_path, subcommand_name in action.subcommands.items():
+            if command_path:
+                bucket = self._bucket_for_command_path(schema, namespace, command_path, create=True)
+                assert bucket is not None
+                depth = max(len(command_path) - 1, 0)
+                root_command = self._single_command_without_root_selection(schema)
+                if root_command is not None and not command_path:
+                    depth = 0
+                if root_command is not None and command_path:
+                    depth = len(command_path)
+                dest_key = self.COMMAND_KEY if depth == 0 else f"{self.COMMAND_KEY}_{depth}"
+                bucket[dest_key] = subcommand_name
+                bucket.setdefault(subcommand_name, {})
+                continue
+
+            namespace[self.COMMAND_KEY] = subcommand_name
+            namespace.setdefault(subcommand_name, {})
+
+        for argument_ref, value in action.values.items():
+            bucket = self._bucket_for_command_path(
+                schema, namespace, argument_ref.command_path, create=True
+            )
+            if bucket is None:
+                raise ConfigurationError(
+                    f"Could not resolve recovery command path: {argument_ref.command_path!r}"
+                )
+            bucket[argument_ref.name] = value
+
+    def _recover_namespace_from_partial_parse(
+        self,
+        schema: "ParserSchema",
+        namespace: dict[str, Any],
+        *,
+        backend: str,
+        message: str,
+        raw_exception: BaseException | None,
+    ) -> dict[str, Any] | None:
+        attempts = 0
+        failure = self._find_first_missing_from_namespace(
+            schema,
+            namespace,
+            backend=backend,
+            message=message,
+            raw_exception=raw_exception,
+        )
+        while failure is not None and attempts < MAX_PARSE_RECOVERY_ATTEMPTS:
+            action = self._recover_parse_failure(failure)
+            if action is None:
+                return None
+            if isinstance(action, AbortRecovery):
+                if action.message:
+                    console.error(action.message)
+                raise SystemExit(action.exit_code)
+
+            self._apply_recovery_action(schema, namespace, action)
+            attempts += 1
+            failure = self._find_first_missing_from_namespace(
+                schema,
+                namespace,
+                backend=backend,
+                message=message,
+                raw_exception=raw_exception,
+            )
+
+        if failure is not None:
+            return None
+        return namespace
 
     def _snapshot_registration_state(self) -> dict[str, object]:
         """Capture mutable registration state so inline run() registrations can be temporary."""
@@ -269,6 +842,8 @@ class InterfacyParser:
             "pipe_buffer": self._pipe_buffer,
             "name_registry": self.name_registry.snapshot(),
             "backend": self._snapshot_backend_registration_state(),
+            "plugins": list(self.plugins),
+            "plugin_names": set(self._plugin_names),
         }
 
     def _restore_registration_state(self, snapshot: dict[str, object]) -> None:
@@ -277,6 +852,8 @@ class InterfacyParser:
         self._pipe_target_overrides = dict(snapshot["pipe_target_overrides"])
         self._pipe_buffer = snapshot["pipe_buffer"]
         self.name_registry.restore(snapshot["name_registry"])
+        self.plugins = list(snapshot["plugins"])
+        self._plugin_names = set(snapshot["plugin_names"])
         self._restore_backend_registration_state(snapshot.get("backend"))
 
     def _resolve_help_option_sort_from_layout(

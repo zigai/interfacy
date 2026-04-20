@@ -274,3 +274,44 @@ def test_main_config_print_result_for_function_target(
     assert excinfo.value.code == ExitCode.SUCCESS
     captured = capsys.readouterr()
     assert "hi" in captured.out
+
+
+def test_main_configure_interfacy_hook_can_register_plugins(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
+        "\n".join(
+            [
+                "from interfacy.plugins import InterfacyPlugin, ParseFailureKind, ProvideArgumentValues",
+                "",
+                "class FillNamePlugin(InterfacyPlugin):",
+                "    name = 'fill_name'",
+                "",
+                "    def recover_parse_failure(self, parser, failure):",
+                "        if failure.kind is not ParseFailureKind.MISSING_ARGUMENTS:",
+                "            return None",
+                "        ref = failure.missing_arguments[0]",
+                "        return ProvideArgumentValues(values={ref: 'Ada'})",
+                "",
+                "def echo(*, name: str) -> str:",
+                "    return name",
+                "",
+                "def configure_interfacy(parser):",
+                "    parser.apply_setup(print_result=True)",
+                "    parser.add_plugin(FillNamePlugin())",
+                "",
+            ]
+        ),
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:echo"])
+
+    assert excinfo.value.code == ExitCode.SUCCESS
+    captured = capsys.readouterr()
+    assert "Ada" in captured.out

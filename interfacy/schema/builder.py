@@ -19,7 +19,11 @@ from interfacy.appearance.help_sort import (
     resolve_help_option_sort_rules,
     resolve_help_subcommand_sort_rules,
 )
-from interfacy.exceptions import DuplicateCommandError, InvalidCommandError, ReservedFlagError
+from interfacy.exceptions import (
+    DuplicateCommandError,
+    InvalidCommandError,
+    ReservedFlagError,
+)
 from interfacy.executable_flag import ExecutableFlag, executable_flag_tokens
 from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
 from interfacy.pipe import PipeTargets
@@ -46,6 +50,7 @@ from interfacy.util import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
+    from interfacy.appearance.layout import HelpLayout
     from interfacy.core import InterfacyParser
     from interfacy.group import CommandEntry, CommandGroup
 
@@ -276,13 +281,26 @@ class ParserSchemaBuilder:
                 )
                 commands[canonical_name] = rebuilt
 
-        commands_help = None
-        if len(commands) > 1:
-            commands_help = self._get_help_for_multiple_commands(commands)
-
         parser_executable_flags = list(getattr(self.parser, "executable_flags", []))
+        schema = ParserSchema(
+            raw_description=self.parser.description,
+            raw_epilog=self.parser.epilog,
+            commands=commands,
+            command_key=self.parser.COMMAND_KEY,
+            allow_args_from_file=self.parser.allow_args_from_file,
+            pipe_targets=self.parser.pipe_targets_default,
+            theme=self.parser.help_layout,
+            metadata=dict(getattr(self.parser, "metadata", {})),
+            executable_flags=parser_executable_flags,
+            help_option_sort_effective=list(getattr(self.parser, "help_option_sort_effective", [])),
+        )
+        transform_schema = getattr(self.parser, "_transform_schema_with_plugins", None)
+        if callable(transform_schema):
+            schema = transform_schema(schema)
+
+        self._finalize_schema(schema)
         self._validate_executable_flags_against_tokens(parser_executable_flags, set())
-        single_cmd = next(iter(commands.values())) if len(commands) == 1 else None
+        single_cmd = next(iter(schema.commands.values())) if len(schema.commands) == 1 else None
         if single_cmd is not None and single_cmd.is_leaf:
             self._validate_executable_flags_against_tokens(
                 parser_executable_flags,
@@ -292,20 +310,84 @@ class ParserSchemaBuilder:
                 single_cmd.executable_flags,
                 executable_flag_tokens(parser_executable_flags),
             )
+        return schema
 
-        return ParserSchema(
-            raw_description=self.parser.description,
-            raw_epilog=self.parser.epilog,
-            commands=commands,
-            command_key=self.parser.COMMAND_KEY,
-            allow_args_from_file=self.parser.allow_args_from_file,
-            pipe_targets=self.parser.pipe_targets_default,
-            theme=self.parser.help_layout,
-            commands_help=commands_help,
-            metadata=dict(getattr(self.parser, "metadata", {})),
-            executable_flags=parser_executable_flags,
-            help_option_sort_effective=list(getattr(self.parser, "help_option_sort_effective", [])),
+    @staticmethod
+    def _invalidate_cached_help_values(target: object) -> None:
+        if hasattr(target, "__dict__"):
+            target.__dict__.pop("description", None)
+            target.__dict__.pop("epilog", None)
+
+    def _finalize_schema(self, schema: ParserSchema) -> None:
+        root_option_rules = list(
+            schema.help_option_sort_effective
+            or getattr(self.parser, "help_option_sort_effective", DEFAULT_HELP_OPTION_SORT_RULES)
         )
+        root_subcommand_rules = list(
+            getattr(
+                self.parser, "help_subcommand_sort_effective", DEFAULT_HELP_SUBCOMMAND_SORT_RULES
+            )
+        )
+        for command in schema.commands.values():
+            self._finalize_command(
+                command,
+                default_layout=schema.theme,
+                parent_option_rules=root_option_rules,
+                parent_subcommand_rules=root_subcommand_rules,
+            )
+
+        schema.commands_help = (
+            self._get_help_for_multiple_commands(schema.commands)
+            if len(schema.commands) > 1
+            else None
+        )
+        self._invalidate_cached_help_values(schema)
+
+    def _finalize_command(
+        self,
+        command: Command,
+        *,
+        default_layout: HelpLayout | None,
+        parent_option_rules: list[HelpOptionSortRule],
+        parent_subcommand_rules: list[HelpSubcommandSortRule],
+    ) -> None:
+        if command.help_layout is None:
+            command.help_layout = default_layout
+        command.is_leaf = not bool(command.subcommands)
+        if command.command_type == "group" and not command.subcommands:
+            command.is_leaf = False
+        command.help_option_sort_effective = list(
+            command.help_option_sort
+            if command.help_option_sort is not None
+            else parent_option_rules
+        )
+        command.help_subcommand_sort_effective = list(
+            command.help_subcommand_sort
+            if command.help_subcommand_sort is not None
+            else parent_subcommand_rules
+        )
+
+        if (
+            command.subcommands
+            and command.metadata.get("_interfacy_derived_epilog")
+            and command.command_type != "class"
+        ):
+            command.raw_epilog = self._build_group_epilog(
+                command.subcommands,
+                rules=command.help_subcommand_sort_effective,
+            )
+
+        self._invalidate_cached_help_values(command)
+        if not command.subcommands:
+            return
+
+        for subcommand in command.subcommands.values():
+            self._finalize_command(
+                subcommand,
+                default_layout=command.help_layout or default_layout,
+                parent_option_rules=command.help_option_sort_effective,
+                parent_subcommand_rules=command.help_subcommand_sort_effective,
+            )
 
     def _prepare_layout_for_params(self, params: list[Parameter]) -> None:
         if not params:
@@ -791,6 +873,7 @@ class ParserSchemaBuilder:
             pipe_targets=class_pipe_config,
             help_layout=self.parser.help_layout,
             executable_flags=resolved_executable_flags,
+            metadata={"_interfacy_derived_epilog": True},
         )
         self._attach_command_build_settings(
             command,
@@ -1563,6 +1646,7 @@ class ParserSchemaBuilder:
             command_type="group",
             is_leaf=False,
             parent_path=parent_path,
+            metadata={"_interfacy_derived_epilog": bool(raw_epilog)},
         )
         self._attach_command_build_settings(
             command,
@@ -1770,6 +1854,7 @@ class ParserSchemaBuilder:
             is_instance=True,
             parent_path=parent_path,
             stored_instance=instance,
+            metadata={"_interfacy_derived_epilog": bool(raw_epilog)},
         )
         self._attach_command_build_settings(
             command,
@@ -1904,6 +1989,7 @@ class ParserSchemaBuilder:
             command_type="class",
             is_leaf=False,
             parent_path=parent_path,
+            metadata={"_interfacy_derived_epilog": bool(raw_epilog)},
         )
         self._attach_command_build_settings(
             command,

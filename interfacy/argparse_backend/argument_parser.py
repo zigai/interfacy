@@ -32,6 +32,10 @@ NargsPattern = Literal["?", "*", "+"]
 SUBCOMMANDS_KEY = "_subcommands"
 
 
+class _ArgparseParseError(Exception):
+    """Internal recoverable argparse parse error."""
+
+
 def _uses_template_layout(layout: "HelpLayout | None") -> bool:
     if layout is None:
         return False
@@ -309,6 +313,7 @@ class ArgumentParser(argparse.ArgumentParser):
             self._interfacy_help_layout.help_position = help_position
         self._schema_command: Command | None = None
         self._schema: ParserSchema | None = None
+        self._interfacy_raise_parse_errors = False
         self.add_help = add_help
         if add_help:
             if "-" in self.prefix_chars:
@@ -773,6 +778,9 @@ class ArgumentParser(argparse.ArgumentParser):
         By default, argparse prints only a short usage line on errors. For CLIs built
         around subcommands, a missing subcommand is much more useful when the full help is displayed.
         """
+        if self._interfacy_raise_parse_errors:
+            raise _ArgparseParseError(message)
+
         marker = "the following arguments are required:"
         if marker in message:
             subparser_actions = [
@@ -813,5 +821,6 @@ __all__ = [
     "ArgumentParser",
     "NargsPattern",
     "NestedSubParsersAction",
+    "_ArgparseParseError",
     "namespace_to_dict",
 ]

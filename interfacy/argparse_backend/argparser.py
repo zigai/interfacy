@@ -19,6 +19,7 @@ from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.argparse_backend.argument_parser import (
     ArgumentParser,
     NestedSubParsersAction,
+    _ArgparseParseError,
     namespace_to_dict,
 )
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
@@ -41,6 +42,7 @@ from interfacy.logger import get_logger
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
 from interfacy.pipe import PipeTargets
+from interfacy.plugins import InterfacyPlugin
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 from interfacy.util import (
     extract_optional_union_list,
@@ -152,6 +154,7 @@ class Argparser(InterfacyParser):
         reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
+        plugins: Sequence[InterfacyPlugin] | None = None,
         formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
     ) -> None:
         super().__init__(
@@ -183,6 +186,7 @@ class Argparser(InterfacyParser):
             reraise_interrupt=reraise_interrupt,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
+            plugins=plugins,
         )
         self.formatter_class = formatter_class
         self._parser: ArgumentParser | None = None
@@ -477,8 +481,36 @@ class Argparser(InterfacyParser):
 
         return kwargs
 
-    def _add_argument_from_schema(self, parser: ArgumentParser, argument: Argument) -> None:
-        kwargs = self._argument_kwargs(argument)
+    def _argument_kwargs_for_relaxed_parse(self, arg: Argument) -> dict[str, Any]:
+        kwargs = self._argument_kwargs(arg)
+        if arg.kind == ArgumentKind.OPTION:
+            kwargs["required"] = False
+            return kwargs
+
+        if arg.value_shape == ValueShape.LIST:
+            kwargs["nargs"] = "*"
+            return kwargs
+
+        if arg.value_shape == ValueShape.TUPLE and isinstance(arg.nargs, int):
+            kwargs["nargs"] = "*"
+            return kwargs
+
+        if arg.required:
+            kwargs["nargs"] = "?"
+        return kwargs
+
+    def _add_argument_from_schema(
+        self,
+        parser: ArgumentParser,
+        argument: Argument,
+        *,
+        relaxed_parse: bool = False,
+    ) -> None:
+        kwargs = (
+            self._argument_kwargs_for_relaxed_parse(argument)
+            if relaxed_parse
+            else self._argument_kwargs(argument)
+        )
         add_flags = argument.flags
         if kwargs.get("action") is argparse.BooleanOptionalAction:
             add_flags = self._normalize_boolean_optional_flags(argument.flags)
@@ -603,10 +635,11 @@ class Argparser(InterfacyParser):
         command: Command,
         *,
         extra_executable_flags: Sequence[ExecutableFlag] = (),
+        relaxed_parse: bool = False,
     ) -> None:
         all_arguments = [*command.initializer, *command.parameters]
         for argument in [arg for arg in all_arguments if arg.kind == ArgumentKind.POSITIONAL]:
-            self._add_argument_from_schema(parser, argument)
+            self._add_argument_from_schema(parser, argument, relaxed_parse=relaxed_parse)
         for entry in self._ordered_option_entries_for_help(
             all_arguments,
             [*extra_executable_flags, *command.executable_flags],
@@ -615,7 +648,7 @@ class Argparser(InterfacyParser):
             if isinstance(entry, ExecutableFlag):
                 self._add_executable_flag(parser, entry)
                 continue
-            self._add_argument_from_schema(parser, entry)
+            self._add_argument_from_schema(parser, entry, relaxed_parse=relaxed_parse)
 
     def _create_command_subparsers(
         self,
@@ -623,10 +656,11 @@ class Argparser(InterfacyParser):
         *,
         depth: int,
         has_custom_epilog: bool,
+        relaxed_parse: bool = False,
     ) -> NestedSubParsersAction:
         return parser.add_subparsers(
             dest=self._command_dest(depth),
-            required=True,
+            required=not relaxed_parse,
             title=self._subparsers_title(),
             help=(
                 argparse.SUPPRESS
@@ -642,6 +676,7 @@ class Argparser(InterfacyParser):
         *,
         depth: int,
         include_aliases: bool,
+        relaxed_parse: bool = False,
     ) -> None:
         if not command.subcommands:
             return
@@ -656,7 +691,12 @@ class Argparser(InterfacyParser):
             if include_aliases:
                 parser_kwargs["aliases"] = list(sub_cmd.aliases) if sub_cmd.aliases else []
             subparser = subparsers.add_parser(sub_cmd.cli_name, **parser_kwargs)
-            self._apply_command_schema(subparser, sub_cmd, depth=depth + 1)
+            self._apply_command_schema(
+                subparser,
+                sub_cmd,
+                depth=depth + 1,
+                relaxed_parse=relaxed_parse,
+            )
 
     def _apply_schema_for_subcommands(
         self,
@@ -666,11 +706,13 @@ class Argparser(InterfacyParser):
         depth: int,
         include_aliases: bool,
         executable_flags: Sequence[ExecutableFlag] = (),
+        relaxed_parse: bool = False,
     ) -> None:
         self._add_command_arguments(
             parser,
             command,
             extra_executable_flags=executable_flags,
+            relaxed_parse=relaxed_parse,
         )
         if self._should_set_epilog(command.epilog):
             parser.epilog = command.epilog
@@ -678,12 +720,14 @@ class Argparser(InterfacyParser):
             parser,
             depth=depth,
             has_custom_epilog=bool(command.epilog),
+            relaxed_parse=relaxed_parse,
         )
         self._add_subcommands(
             subparsers,
             command,
             depth=depth,
             include_aliases=include_aliases,
+            relaxed_parse=relaxed_parse,
         )
         self._set_subparsers_metavar(subparsers)
 
@@ -694,6 +738,7 @@ class Argparser(InterfacyParser):
         *,
         depth: int = 0,
         extra_executable_flags: Sequence[ExecutableFlag] = (),
+        relaxed_parse: bool = False,
     ) -> None:
         parser.set_schema_command(command)
 
@@ -707,6 +752,7 @@ class Argparser(InterfacyParser):
                 depth=depth,
                 include_aliases=True,
                 executable_flags=extra_executable_flags,
+                relaxed_parse=relaxed_parse,
             )
             return
 
@@ -717,6 +763,7 @@ class Argparser(InterfacyParser):
                 depth=depth,
                 include_aliases=False,
                 executable_flags=extra_executable_flags,
+                relaxed_parse=relaxed_parse,
             )
             return
 
@@ -724,21 +771,31 @@ class Argparser(InterfacyParser):
             parser,
             command,
             extra_executable_flags=extra_executable_flags,
+            relaxed_parse=relaxed_parse,
         )
 
-    def _build_from_schema(self, schema: ParserSchema) -> ArgumentParser:
+    def _build_from_schema(
+        self,
+        schema: ParserSchema,
+        *,
+        relaxed_parse: bool = False,
+    ) -> ArgumentParser:
         parser = self._new_parser()
         parser.set_schema(schema)
 
         single_cmd = next(iter(schema.commands.values())) if len(schema.commands) == 1 else None
-        single_group = single_cmd if single_cmd and not single_cmd.is_leaf else None
+        single_group = (
+            single_cmd
+            if single_cmd and not single_cmd.is_leaf and single_cmd.command_type == "group"
+            else None
+        )
 
         if schema.is_multi_command or single_group:
             for executable_flag in schema.executable_flags:
                 self._add_executable_flag(parser, executable_flag)
             subparsers = parser.add_subparsers(
                 dest=self.COMMAND_KEY,
-                required=True,
+                required=not relaxed_parse,
                 title=self._subparsers_title(),
                 help=(
                     argparse.SUPPRESS
@@ -753,7 +810,7 @@ class Argparser(InterfacyParser):
                     help=self._escape_argparse_help_text(cmd.description),
                     aliases=list(cmd.aliases),
                 )
-                self._apply_command_schema(subparser, cmd)
+                self._apply_command_schema(subparser, cmd, relaxed_parse=relaxed_parse)
             self._set_subparsers_metavar(subparsers)
 
             if schema.commands_help and not (
@@ -763,10 +820,12 @@ class Argparser(InterfacyParser):
                 parser.epilog = schema.commands_help
         else:
             cmd = next(iter(schema.commands.values()))
+            parser.set_schema(None)
             self._apply_command_schema(
                 parser,
                 cmd,
                 extra_executable_flags=schema.executable_flags,
+                relaxed_parse=relaxed_parse,
             )
 
             if cmd.epilog and not parser.epilog:
@@ -825,9 +884,56 @@ class Argparser(InterfacyParser):
         self._parser = snapshot.get("parser")
         self._last_schema = snapshot.get("last_schema")
 
+    def _invalidate_backend_build_cache(self) -> None:
+        self._parser = None
+        self._last_schema = None
+
     def get_last_schema(self) -> ParserSchema | None:
         """Return the most recently built parser schema for this backend."""
         return self._last_schema
+
+    def _normalize_parsed_namespace(self, namespace: dict[str, Any]) -> dict[str, Any]:
+        if self.COMMAND_KEY in namespace:
+            cli_name = namespace[self.COMMAND_KEY]
+            canonical = self.name_registry.canonical_for(cli_name) or cli_name
+            namespace[self.COMMAND_KEY] = canonical
+
+            if canonical in namespace:
+                pass
+            elif cli_name in namespace:
+                namespace[canonical] = namespace.pop(cli_name)
+            else:
+                namespace[canonical] = {}
+
+        self._normalize_subcommand_buckets(namespace)
+        self._prune_none_buckets(namespace)
+        return self._convert_tuple_args(namespace)
+
+    def _prune_none_buckets(self, namespace: dict[str, Any]) -> None:
+        namespace.pop(None, None)
+        for value in namespace.values():
+            if isinstance(value, dict):
+                self._prune_none_buckets(value)
+
+    def _parse_partial_namespace_for_recovery(
+        self,
+        schema: ParserSchema,
+        args: list[str],
+    ) -> dict[str, Any] | None:
+        parser = self._build_from_schema(schema, relaxed_parse=True)
+        parser._interfacy_raise_parse_errors = True
+        try:
+            parsed, unknown = parser.parse_known_args(args)
+        except (_ArgparseParseError, argparse.ArgumentError, ValueError):
+            return None
+        except _ExecutableFlagTriggeredError:
+            return None
+
+        if unknown:
+            return None
+
+        namespace = namespace_to_dict(parsed)
+        return self._normalize_parsed_namespace(namespace)
 
     def _normalize_subcommand_buckets(self, namespace: dict[str, Any]) -> bool:
         removable = True
@@ -861,28 +967,37 @@ class Argparser(InterfacyParser):
         args = args if args is not None else self.get_args()
         parser = self.build_parser()
         self._parser = parser
+        parser._interfacy_raise_parse_errors = bool(self.plugins)
         try:
             parsed = parser.parse_args(args)
+        except _ArgparseParseError as exc:
+            if not self.plugins or self._last_schema is None:
+                parser._interfacy_raise_parse_errors = False
+                parser.error(str(exc))
+                raise AssertionError("unreachable") from exc
+
+            namespace = self._parse_partial_namespace_for_recovery(self._last_schema, args)
+            if namespace is not None:
+                recovered = self._recover_namespace_from_partial_parse(
+                    self._last_schema,
+                    namespace,
+                    backend="argparse",
+                    message=str(exc),
+                    raw_exception=exc,
+                )
+                if recovered is not None:
+                    return recovered
+
+            parser._interfacy_raise_parse_errors = False
+            parser.error(str(exc))
+            raise AssertionError("unreachable") from exc
         except _ExecutableFlagTriggeredError as exc:
             exit_code = execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
             raise SystemExit(exit_code) from None
-        namespace = namespace_to_dict(parsed)
+        finally:
+            parser._interfacy_raise_parse_errors = False
 
-        if self.COMMAND_KEY in namespace:
-            cli_name = namespace[self.COMMAND_KEY]
-            canonical = self.name_registry.canonical_for(cli_name) or cli_name
-            namespace[self.COMMAND_KEY] = canonical
-
-            if canonical in namespace:
-                pass
-            elif cli_name in namespace:
-                namespace[canonical] = namespace.pop(cli_name)
-            else:
-                namespace[canonical] = {}
-
-        self._normalize_subcommand_buckets(namespace)
-        namespace = self._convert_tuple_args(namespace)
-        return namespace
+        return self._normalize_parsed_namespace(namespace_to_dict(parsed))
 
     def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""

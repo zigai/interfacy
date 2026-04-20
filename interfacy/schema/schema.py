@@ -105,6 +105,7 @@ class Argument:
     parent_is_optional: bool = False
     model_default: Any = MODEL_DEFAULT_UNSET
     is_help_action: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -160,6 +161,7 @@ class Command:
     help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
     help_option_sort_effective: list[HelpOptionSortRule] | None = None
     help_subcommand_sort_effective: list[HelpSubcommandSortRule] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @cached_property
     def description(self) -> str | None:

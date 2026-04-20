@@ -34,6 +34,14 @@ class DuplicateCommandError(InterfacyError):
         super().__init__(f"Duplicate command '{command}'")
 
 
+class DuplicatePluginError(InterfacyError):
+    """Raise when a plugin name is registered more than once."""
+
+    def __init__(self, plugin: str) -> None:
+        self.plugin = plugin
+        super().__init__(f"Duplicate plugin '{plugin}'")
+
+
 class ConfigurationError(InterfacyError):
     """Raise for invalid configuration values."""
 
@@ -92,6 +100,7 @@ __all__ = [
     "CliError",
     "ConfigurationError",
     "DuplicateCommandError",
+    "DuplicatePluginError",
     "InterfacyError",
     "InterfacyInterrupted",
     "InterfacyInterruptedError",

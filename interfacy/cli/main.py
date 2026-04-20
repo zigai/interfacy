@@ -80,6 +80,18 @@ def resolve_target(target: str) -> object:
     return _resolve_symbol(module, symbol_ref)
 
 
+def resolve_target_with_module(target: str) -> tuple[ModuleType, object]:
+    """
+    Resolve a module or file target to both the loaded module and target object.
+
+    Args:
+        target (str): Target spec "module:object" or "path.py:object".
+    """
+    module_ref, symbol_ref = _split_target(target)
+    module = load_module(module_ref)
+    return module, _resolve_symbol(module, symbol_ref)
+
+
 def _is_supported_entrypoint_target(target: object) -> bool:
     from interfacy.group import CommandGroup
 
@@ -209,6 +221,19 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
     return kwargs
 
 
+def configure_runner_from_module(
+    parser: InterfacyParser,
+    module: ModuleType,
+) -> None:
+    """Apply an optional module-level setup hook to a parser instance."""
+    hook = getattr(module, "configure_interfacy", None)
+    if hook is None:
+        return
+    if not callable(hook):
+        raise TypeError("configure_interfacy must be callable")
+    hook(parser)
+
+
 def main(argv: Sequence[str] | None = None) -> ExitCode:
     """
     Run the Interfacy CLI entrypoint.
@@ -230,7 +255,7 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
         return ExitCode.ERR_INVALID_ARGS
 
     try:
-        target = resolve_target(args.target)
+        module, target = resolve_target_with_module(args.target)
     except (AttributeError, FileNotFoundError, ImportError, OSError, ValueError) as exc:
         parser.error(str(exc))
         return ExitCode.ERR_INVALID_ARGS
@@ -244,5 +269,11 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
 
     target_args = [arg for arg in args.ARGS if arg != "--"]
 
-    Argparser(**build_runner_kwargs(settings)).run(target, args=target_args)
+    runner = Argparser(**build_runner_kwargs(settings))
+    try:
+        configure_runner_from_module(runner, module)
+    except (AttributeError, TypeError, ValueError) as exc:
+        parser.error(str(exc))
+        return ExitCode.ERR_INVALID_ARGS
+    runner.run(target, args=target_args)
     return ExitCode.SUCCESS
