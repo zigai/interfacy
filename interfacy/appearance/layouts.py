@@ -25,7 +25,7 @@ class InterfacyLayout(HelpLayout):
 
     column_gap: str = "    "
     format_option: str | None = "{flag_col}{column_gap}{description}{extra}"
-    format_positional: str | None = "{flag_col}{column_gap}{description}"
+    format_positional: str | None = "{flag_col}{column_gap}{description}{extra}"
     include_metavar_in_flag_display: bool = False
     layout_mode: Literal["auto", "adaptive", "template"] = "template"
     required_indicator: str = "(" + colored("*", color="red") + ")"
@@ -705,6 +705,19 @@ class StandardLayout(HelpLayout):
         return f"[default: {normalized_default}]" in normalized_description
 
     @classmethod
+    def _description_mentions_same_choices(
+        cls,
+        description: str,
+        choices_text: str,
+    ) -> bool:
+        if not description or not choices_text:
+            return False
+
+        normalized_description = cls._normalize_whitespace(description).lower()
+        normalized_choices = cls._normalize_whitespace(choices_text).lower()
+        return f"[choices: {normalized_choices}]" in normalized_description
+
+    @classmethod
     def _with_default_sentence(cls, description: str, has_default: bool, default: object) -> str:
         if not has_default:
             return description
@@ -720,6 +733,24 @@ class StandardLayout(HelpLayout):
         if not description:
             return default_block
         return f"{description.rstrip()} {default_block}"
+
+    @classmethod
+    def _with_choices_block(
+        cls,
+        description: str,
+        choices: Sequence[object] | None,
+    ) -> str:
+        if not choices:
+            return description
+
+        choices_text = ", ".join(str(choice) for choice in choices)
+        if cls._description_mentions_same_choices(description, choices_text):
+            return description
+
+        choices_block = f"[choices: {choices_text}]"
+        if not description:
+            return choices_block
+        return f"{description.rstrip()} {choices_block}"
 
     def get_help_for_parameter(
         self,
@@ -747,7 +778,9 @@ class StandardLayout(HelpLayout):
                     long_flag=primary_flag,
                 )
             )
-        return self._with_default_sentence(description, has_default, default_value)
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = get_param_choices(param, for_display=True) if param.is_typed else None
+        return self._with_choices_block(description, choices)
 
     def format_argument(
         self,
@@ -769,7 +802,13 @@ class StandardLayout(HelpLayout):
                     long_flag=self._get_primary_boolean_flag_from_argument(arg),
                 )
             )
-        return self._with_default_sentence(description, has_default, default_value)
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = (
+            [self._format_argument_choice_for_help(arg, choice) for choice in arg.choices]
+            if arg.choices
+            else None
+        )
+        return self._with_choices_block(description, choices)
 
 
 @dataclass(kw_only=True)
@@ -818,11 +857,39 @@ class ArgparseLayout(HelpLayout):
         )
 
     @classmethod
-    def _with_default_sentence(cls, description: str, has_default: bool, default: object) -> str:
-        if not has_default:
+    def _description_mentions_same_choices(
+        cls,
+        description: str,
+        choices_text: str,
+    ) -> bool:
+        if not description or not choices_text:
+            return False
+
+        normalized_description = cls._normalize_whitespace(description).lower()
+        normalized_choices = cls._normalize_whitespace(choices_text).lower()
+        return (
+            f"choices: {normalized_choices}" in normalized_description
+            or f"possible values: {normalized_choices}" in normalized_description
+        )
+
+    @classmethod
+    def _append_sentence(cls, description: str, sentence: str) -> str:
+        if not sentence:
             return description
 
         description = cls._collapse_duplicate_terminal_period(description)
+
+        separator = ""
+        if description:
+            separator = " " if description.rstrip().endswith((".", "?", "!", ":", ";")) else ". "
+
+        terminal = "" if sentence.endswith((".", "?", "!", ":", ";")) else "."
+        return f"{description}{separator}{sentence}{terminal}"
+
+    @classmethod
+    def _with_default_sentence(cls, description: str, has_default: bool, default: object) -> str:
+        if not has_default:
+            return description
 
         default_text = format_default_for_help(default)
         if default_text in {"", '""'}:
@@ -831,12 +898,22 @@ class ArgparseLayout(HelpLayout):
         if cls._description_mentions_same_default(description, default_text):
             return description
 
-        separator = ""
-        if description:
-            separator = " " if description.rstrip().endswith((".", "?", "!", ":", ";")) else ". "
+        return cls._append_sentence(description, f"Defaults to {default_text}")
 
-        terminal = "" if default_text.endswith((".", "?", "!", ":", ";")) else "."
-        return f"{description}{separator}Defaults to {default_text}{terminal}"
+    @classmethod
+    def _with_choices_sentence(
+        cls,
+        description: str,
+        choices: Sequence[object] | None,
+    ) -> str:
+        if not choices:
+            return description
+
+        choices_text = ", ".join(str(choice) for choice in choices)
+        if cls._description_mentions_same_choices(description, choices_text):
+            return description
+
+        return cls._append_sentence(description, f"Choices: {choices_text}")
 
     def get_help_for_parameter(
         self,
@@ -864,7 +941,9 @@ class ArgparseLayout(HelpLayout):
                     long_flag=primary_flag,
                 )
             )
-        return self._with_default_sentence(description, has_default, default_value)
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = get_param_choices(param, for_display=True) if param.is_typed else None
+        return self._with_choices_sentence(description, choices)
 
     def format_argument(
         self,
@@ -886,7 +965,13 @@ class ArgparseLayout(HelpLayout):
                     long_flag=self._get_primary_boolean_flag_from_argument(arg),
                 )
             )
-        return self._with_default_sentence(description, has_default, default_value)
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = (
+            [self._format_argument_choice_for_help(arg, choice) for choice in arg.choices]
+            if arg.choices
+            else None
+        )
+        return self._with_choices_sentence(description, choices)
 
 
 # Backward compatibility alias.
