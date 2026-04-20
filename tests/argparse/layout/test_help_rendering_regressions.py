@@ -22,6 +22,7 @@ from interfacy.appearance.layouts import (
 )
 from interfacy.argparse_backend import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
+from interfacy.naming import DefaultFlagStrategy
 from interfacy.schema.schema import Command, ParserSchema
 
 
@@ -618,6 +619,93 @@ def test_argparse_layout_group_usage_includes_subcommand_choices() -> None:
     help_text = ops_parser.format_help()
 
     assert "{cache-prune}" in help_text
+
+
+@pytest.mark.parametrize(
+    ("layout", "expected_positional_choices", "expected_flag_choices"),
+    [
+        (
+            StandardLayout(),
+            "[choices: alpha, beta]",
+            "[choices: csv, txt]",
+        ),
+        (
+            ArgparseLayout(),
+            "Choices: alpha, beta.",
+            "Choices: csv, txt.",
+        ),
+        (
+            InterfacyLayout(),
+            "[choices: alpha, beta]",
+            "[choices: csv, txt, default=csv]",
+        ),
+        (
+            Modern(),
+            "choices: alpha, beta",
+            "choices: csv, txt",
+        ),
+        (
+            Aligned(),
+            "[choices: alpha, beta]",
+            "[choices: csv, txt]",
+        ),
+        (
+            AlignedTyped(),
+            "[choices: alpha, beta]",
+            "[choices: csv, txt]",
+        ),
+        (
+            ClapLayout(),
+            "[possible values: alpha, beta]",
+            "[possible values: csv, txt]",
+        ),
+    ],
+)
+def test_all_layouts_render_literal_choices_for_positional_and_optional_flag(
+    layout,
+    expected_positional_choices: str,
+    expected_flag_choices: str,
+) -> None:
+    def demo(subject: Literal["alpha", "beta"], *, output: Literal["csv", "txt"] = "csv") -> None:
+        """Demo command."""
+
+    parser = Argparser(help_layout=layout, sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+
+    help_text = parser.build_parser().format_help()
+    assert expected_positional_choices in help_text
+    assert expected_flag_choices in help_text
+
+
+@pytest.mark.parametrize(
+    ("layout", "expected_required_flag_choices"),
+    [
+        (StandardLayout(), "[choices: left, right]"),
+        (ArgparseLayout(), "Choices: left, right."),
+        (InterfacyLayout(), "[choices: left, right]"),
+        (Modern(), "choices: left, right"),
+        (Aligned(), "[choices: left, right]"),
+        (AlignedTyped(), "[choices: left, right]"),
+        (ClapLayout(), "[possible values: left, right]"),
+    ],
+)
+def test_all_layouts_render_literal_choices_for_required_flags(
+    layout,
+    expected_required_flag_choices: str,
+) -> None:
+    def demo(*, axis: Literal["left", "right"], output: Literal["csv", "txt"] = "csv") -> None:
+        """Demo command."""
+
+    parser = Argparser(
+        help_layout=layout,
+        sys_exit_enabled=False,
+        print_result=False,
+        flag_strategy=DefaultFlagStrategy(style="keyword_only"),
+    )
+    parser.add_command(demo)
+
+    help_text = parser.build_parser().format_help()
+    assert expected_required_flag_choices in help_text
 
 
 def test_clap_layout_wraps_long_possible_values() -> None:
