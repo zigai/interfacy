@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from inspect import Parameter as StdParameter
 from re import Match
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from objinspect import Class, Function, Method, Parameter
 from stdl.st import (
@@ -74,6 +74,8 @@ class HelpLayout:
         enable_required_indicator (bool): Toggle required indicator display.
         required_indicator_pos (Literal["left", "right"]): Required indicator placement.
         min_ljust (int): Minimum left-justify width for command listings.
+        command_indent (int): Leading spaces before command rows.
+        command_group_spacing (int): Blank lines between grouped command sections.
         command_skips (list[str]): Method names to skip in listings.
         flag_generator (FlagStrategy): Flag strategy used for display.
         name_registry (CommandNameRegistry | None): Registry for canonical names.
@@ -123,6 +125,8 @@ class HelpLayout:
 
     required_indicator_pos: Literal["left", "right"] = "right"
     min_ljust: int = 19
+    command_indent: int = 3
+    command_group_spacing: int = 1
     command_skips: list[str] = field(default_factory=lambda: ["__init__"])
     flag_generator: FlagStrategy | None = None
     name_registry: CommandNameRegistry | None = None
@@ -271,7 +275,7 @@ class HelpLayout:
             return base == "bool"
         return False
 
-    def _format_bool_default_for_help(self, value: object) -> str:
+    def _format_bool_default_for_help(self, value: Any) -> str:
         """Render boolean defaults, treating argparse.SUPPRESS as missing."""
         if value is argparse.SUPPRESS:
             return ""
@@ -460,8 +464,9 @@ class HelpLayout:
 
     def _format_command_row(self, command_name: str, description: str, ljust: int) -> str:
         name_styled = self._format_command_name_for_help(command_name)
-        pad = max(0, ljust - len(command_name) - 3)
-        name_column = f"   {name_styled}{' ' * pad}"
+        indent = " " * self.command_indent
+        pad = max(0, ljust - len(command_name) - self.command_indent)
+        name_column = f"{indent}{name_styled}{' ' * pad}"
         return f"{name_column} {with_style(description, self.style.description)}"
 
     def _command_display_name(self, command: "Command") -> str:
@@ -537,7 +542,7 @@ class HelpLayout:
         lines: list[str] = []
         for idx, group in enumerate(grouped_command_order):
             if idx > 0:
-                lines.append("")
+                lines.extend("" for _ in range(self.command_group_spacing))
             lines.append(self._format_command_group_heading(group))
             lines.extend(
                 self._render_help_row_for_command(command, ljust)
@@ -546,7 +551,7 @@ class HelpLayout:
 
         if ordered_ungrouped_commands:
             if grouped_command_order:
-                lines.append("")
+                lines.extend("" for _ in range(self.command_group_spacing))
             lines.extend(
                 self._render_help_row_for_command(command, ljust)
                 for command in ordered_ungrouped_commands
@@ -634,7 +639,7 @@ class HelpLayout:
         if "{default_padded}" in template:
             styled_default = values.get("default", "")
             if styled_default and ansi_len(styled_default) > self.default_field_width:
-                overflow_mode = getattr(self, "default_overflow_mode", "newline")
+                overflow_mode = self.default_overflow_mode
                 if overflow_mode == "inline":
                     values["default"] = styled_default
                     values["default_padded"] = styled_default
@@ -1181,7 +1186,7 @@ class HelpLayout:
     def _build_extra(self, param: Parameter) -> str:
         return HelpLayout._get_param_extra_help(self, param)
 
-    def _format_choice_for_help(self, value: object) -> str:
+    def _format_choice_for_help(self, value: Any) -> str:
         if isinstance(value, Enum):
             raw = value.value
             if isinstance(raw, str):
@@ -1189,7 +1194,7 @@ class HelpLayout:
             return value.name
         return str(value)
 
-    def _format_argument_choice_for_help(self, arg: "Argument", value: object) -> str:
+    def _format_argument_choice_for_help(self, arg: "Argument", value: Any) -> str:
         enum_type = arg.type
         if isinstance(value, str) and isinstance(enum_type, type) and issubclass(enum_type, Enum):
             enum_member = enum_type.__members__.get(value)
@@ -1198,11 +1203,11 @@ class HelpLayout:
         return self._format_choice_for_help(value)
 
     @staticmethod
-    def _enum_matches(value: object, member_name: str) -> bool:
+    def _enum_matches(value: Any, member_name: str) -> bool:
         member = getattr(type(value), member_name, None)
         return value == member
 
-    def _type_for_argument_help(self, arg: "Argument") -> object | None:
+    def _type_for_argument_help(self, arg: "Argument") -> Any | None:
         if arg.type is None:
             return None
 

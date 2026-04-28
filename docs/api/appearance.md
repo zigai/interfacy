@@ -14,6 +14,10 @@ methods are documented once on `HelpLayout` instead of repeated on every preset.
 Base layout configuration object used by the appearance system. Its constructor
 parameters define the available formatting knobs.
 
+Grouped command listings can be tuned with ``command_indent`` for the global
+command-row indentation and ``command_group_spacing`` for the number of blank
+lines inserted between help-group sections.
+
 ```{eval-rst}
 .. automethod:: interfacy.appearance.layout.HelpLayout.format_argument
 ```
