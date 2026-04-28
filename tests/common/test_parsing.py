@@ -78,6 +78,172 @@ class TestMathClassParsing:
         }
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_class_initializer_options_can_follow_subcommand(self, parser: InterfacyParser):
+        """Verify class initializer options are accepted after method arguments."""
+        parser.add_command(Math)
+        args = parser.parse_args(["pow", "2", "-e", "2", "--rounding", "3"])
+
+        assert args == {
+            "command": "pow",
+            "rounding": 3,
+            "pow": {
+                "base": 2,
+                "exponent": 2,
+            },
+        }
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_subcommand_option_takes_precedence_over_initializer_option(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify options after a subcommand stay on the nearest command that accepts them."""
+
+        class ModeTool:
+            def __init__(self, mode: str = "parent") -> None:
+                self.mode = mode
+
+            def run(self, mode: str = "child") -> tuple[str, str]:
+                return self.mode, mode
+
+        parser.add_command(ModeTool)
+        args = parser.parse_args(["run", "--mode", "leaf"])
+
+        assert args == {
+            "command": "run",
+            "mode": "parent",
+            "run": {"mode": "leaf"},
+        }
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_initializer_option_after_subcommand_supports_equals_form(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify late initializer options support --option=value syntax."""
+        parser.add_command(Math)
+        args = parser.parse_args(["pow", "2", "--rounding=3"])
+
+        assert args == {
+            "command": "pow",
+            "rounding": 3,
+            "pow": {
+                "base": 2,
+                "exponent": 2,
+            },
+        }
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_initializer_negative_boolean_option_can_follow_subcommand(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify late initializer options include generated negative boolean aliases."""
+
+        class ToggleTool:
+            def __init__(self, enabled: bool = True) -> None:
+                self.enabled = enabled
+
+            def run(self) -> bool:
+                return self.enabled
+
+        parser.add_command(ToggleTool)
+        args = parser.parse_args(["run", "--no-enabled"])
+
+        assert args == {
+            "command": "run",
+            "enabled": False,
+            "run": {},
+        }
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_late_initializer_list_option_stops_before_subcommand_option(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify variable-length initializer options do not consume child options."""
+
+        class TagsTool:
+            def __init__(self, tags: list[str] | None = None) -> None:
+                self.tags = tags
+
+            def run(self, count: int = 1) -> tuple[list[str] | None, int]:
+                return self.tags, count
+
+        parser.add_command(TagsTool)
+        args = parser.parse_args(["run", "--tags", "a", "b", "--count", "2"])
+
+        assert args == {
+            "command": "run",
+            "tags": ["a", "b"],
+            "run": {"count": 2},
+        }
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_required_late_initializer_list_option_is_applied(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify required late list initializer options are applied after parsing."""
+
+        class TagsTool:
+            def __init__(self, *, tags: list[str]) -> None:
+                self.tags = tags
+
+            def run(self) -> list[str]:
+                return self.tags
+
+        parser.add_command(TagsTool)
+        args = parser.parse_args(["run", "--tags", "a"])
+
+        assert args == {
+            "command": "run",
+            "tags": ["a"],
+            "run": {},
+        }
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
+    def test_typed_late_initializer_list_option_parse_error_uses_argparse(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify late list conversion errors use argparse parse handling."""
+
+        class TagsTool:
+            def __init__(self, *, tags: list[int] | None = None) -> None:
+                self.tags = tags
+
+            def run(self) -> list[int] | None:
+                return self.tags
+
+        parser.add_command(TagsTool)
+
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(["run", "--tags", "bad"])
+
+        assert excinfo.value.code == 2
+
+    @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
+    def test_typed_late_initializer_list_option_parse_error_uses_click(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify late list conversion errors use Click parse handling."""
+        click = pytest.importorskip("click")
+
+        class TagsTool:
+            def __init__(self, *, tags: list[int] | None = None) -> None:
+                self.tags = tags
+
+            def run(self) -> list[int] | None:
+                return self.tags
+
+        parser.add_command(TagsTool)
+
+        with pytest.raises(click.BadParameter):
+            parser.parse_args(["run", "--tags", "bad"])
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_instance(self, parser: InterfacyParser):
         """Verify parsing of commands derived from instance methods."""
         math = Math(rounding=2)
@@ -124,6 +290,28 @@ class TestMultipleCommands:
             "math": {
                 "command": "pow",
                 "rounding": 6,
+                "pow": {
+                    "base": 2,
+                    "exponent": 2,
+                },
+            },
+        }
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_nested_class_initializer_options_can_follow_subcommand(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Verify nested class initializer options are accepted after method arguments."""
+        parser.add_command(pow)
+        parser.add_command(Math)
+
+        args = parser.parse_args(["math", "pow", "2", "-e", "2", "--rounding", "3"])
+        assert args == {
+            "command": "math",
+            "math": {
+                "command": "pow",
+                "rounding": 3,
                 "pow": {
                     "base": 2,
                     "exponent": 2,

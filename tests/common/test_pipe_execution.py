@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from interfacy.core import InterfacyParser
@@ -49,6 +51,32 @@ class TestPipeExecution:
         mocker.patch("interfacy.core.read_piped", return_value="foo\nbar")
 
         assert parser.run(args=[]) == ("foo", "bar")
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_required_pipe_target_errors_without_cli_or_stdin(
+        self,
+        parser: InterfacyParser,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Required pipe targets remain required when stdin is absent."""
+        parser.add_command(fn_single_arg, pipe_targets="msg")
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+
+        result = parser.run(args=[])
+
+        assert isinstance(result, PipeInputError)
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_required_pipe_targets_accept_cli_without_stdin(
+        self,
+        parser: InterfacyParser,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """CLI values satisfy required pipe targets when no stdin is present."""
+        parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+
+        assert parser.run(args=["foo", "bar"]) == ("foo", "bar")
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_custom_delimiter(self, parser: InterfacyParser, mocker):

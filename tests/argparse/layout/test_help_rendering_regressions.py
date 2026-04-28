@@ -411,6 +411,24 @@ def test_interfacy_layout_usage_lists_concrete_subcommand_choices() -> None:
     assert "{add,mul}" in help_text
 
 
+def test_standard_layout_class_root_help_renders_one_commands_section() -> None:
+    class Calculator:
+        def add(self, a: float, b: float) -> float:
+            return a + b
+
+        def mul(self, a: float, b: float) -> float:
+            return a * b
+
+    parser = Argparser(help_layout=StandardLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(Calculator)
+
+    help_text = parser.build_parser().format_help()
+
+    assert len(re.findall(r"^commands:$", help_text, re.MULTILINE)) == 1
+    assert len(re.findall(r"^\s+add(?:\s|$)", help_text, re.MULTILINE)) == 1
+    assert len(re.findall(r"^\s+mul(?:\s|$)", help_text, re.MULTILINE)) == 1
+
+
 def test_interfacy_layout_usage_subcommand_choices_exclude_aliases() -> None:
     ops = CommandGroup("ops")
     ops.add_command(lambda: None, name="cache_prune", aliases=("prune",))

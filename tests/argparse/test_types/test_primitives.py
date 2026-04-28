@@ -12,6 +12,25 @@ from tests.conftest import (
 
 
 class TestPrimitives:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_bad_int_error_uses_user_facing_type_name(
+        self, parser: InterfacyParser, capsys: pytest.CaptureFixture[str]
+    ):
+        """Invalid typed values should show argparse-style type names."""
+
+        def greet(name: str, times: int = 1) -> str:
+            return name * times
+
+        parser.add_command(greet)
+
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(["Ada", "--times", "bad"])
+
+        assert excinfo.value.code == 2
+        captured = capsys.readouterr()
+        assert "argument -t/--times: invalid int value: 'bad'" in captured.err
+        assert "parser[int]" not in captured.err
+
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_str_required(self, parser: InterfacyParser):
         """Verify that a required string argument is correctly parsed from positional or flag input."""

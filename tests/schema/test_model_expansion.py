@@ -105,6 +105,31 @@ def test_argparse_reconstructs_nested_dataclass() -> None:
     assert result == "Hello Alice, age 30 from Austin 78701"
 
 
+def test_partial_optional_nested_dataclass_reports_missing_required_flag(capsys) -> None:
+    parser = Argparser(sys_exit_enabled=False)
+
+    result = parser.run(
+        greet_with_address,
+        args=[
+            "--user.name",
+            "Alice",
+            "--user.age",
+            "30",
+            "--user.address.city",
+            "Austin",
+        ],
+    )
+
+    assert isinstance(result, SystemExit)
+    assert result.code == 2
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    assert "--user.address.zip" in combined
+    assert "required when --user.address.city is provided" in combined
+    assert "TypeError" not in combined
+    assert "Address.__init__" not in combined
+
+
 def test_optional_model_none_when_no_flags() -> None:
     parser = Argparser(sys_exit_enabled=False)
     result = parser.run(maybe_user, args=[])

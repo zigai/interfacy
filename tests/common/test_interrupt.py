@@ -12,6 +12,7 @@ def slow_task(seconds: int = 10) -> str:
     """A slow task that can be interrupted."""
     for _ in range(seconds):
         time.sleep(0.1)
+
     return "Done"
 
 

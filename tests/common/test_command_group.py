@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from interfacy import CommandGroup
@@ -198,6 +200,22 @@ class TestGroupWithFunctions:
         assert parser.run(args=["cli", "greet", "Ada"]) == "Hello, Ada!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_group_function_command_accepts_pipe_targets(
+        self,
+        parser: InterfacyParser,
+        mocker,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Grouped function commands can receive stdin through per-command pipe config."""
+        cli = CommandGroup("cli")
+        cli.add_command(greet, pipe_targets="name")
+        parser.add_command(cli)
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+        mocker.patch("interfacy.core.read_piped", return_value="Ada")
+
+        assert parser.run(args=["cli", "greet"]) == "Hello, Ada!"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_single_group_with_multiple_functions(self, parser: InterfacyParser):
         """Verify single group with multiple functions works."""
         cli = CommandGroup("cli")
@@ -258,6 +276,30 @@ class TestGroupWithClasses:
         parser.add_command(workspace)
         result = parser.run(args=["workspace", "container", "--format", "json", "run", "nginx"])
         assert result == "Running nginx with format json"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_class_pipe_targets_apply_to_initializer(
+        self,
+        parser: InterfacyParser,
+        mocker,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Grouped class pipe targets can satisfy initializer parameters."""
+
+        class PrefixTool:
+            def __init__(self, prefix: str) -> None:
+                self.prefix = prefix
+
+            def run(self, value: str = "x") -> str:
+                return f"{self.prefix}{value}"
+
+        workspace = CommandGroup("workspace")
+        workspace.add_command(PrefixTool, name="tool", pipe_targets="prefix")
+        parser.add_command(workspace)
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+        mocker.patch("interfacy.core.read_piped", return_value="pre-")
+
+        assert parser.run(args=["workspace", "tool", "run"]) == "pre-x"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_class_multiple_methods(self, parser: InterfacyParser):

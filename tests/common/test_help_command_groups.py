@@ -3,7 +3,7 @@ import re
 import pytest
 
 from interfacy import CommandGroup
-from interfacy.appearance.layouts import ArgparseLayout
+from interfacy.appearance.layouts import ArgparseLayout, StandardLayout
 from interfacy.argparse_backend import Argparser
 from interfacy.exceptions import ConfigurationError
 
@@ -22,6 +22,14 @@ def cmd_clone() -> None:
 
 def cmd_init() -> None:
     """Initialize a repository."""
+
+
+def cmd_push() -> None:
+    """Push changes."""
+
+
+def cmd_pull() -> None:
+    """Pull changes."""
 
 
 @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
@@ -51,6 +59,48 @@ def test_root_help_groups_commands_before_ungrouped(parser, capsys) -> None:
     assert "start a working area:" not in combined
     assert heading_idx < clone_idx
     assert init_idx < status_idx
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_help_group_command_indent_is_configurable(parser, capsys) -> None:
+    parser.apply_setup(help_layout=StandardLayout(command_indent=5))
+    parser.add_command(cmd_clone, name="clone", help_group="setup")
+    parser.add_command(cmd_status, name="status")
+
+    result = parser.run(args=["--help"])
+    assert isinstance(result, SystemExit)
+    assert result.code == 0
+
+    captured = capsys.readouterr()
+    combined = _strip_ansi(captured.out + captured.err)
+    lines = combined.splitlines()
+
+    assert any(line.startswith("     clone") for line in lines)
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_help_group_spacing_is_configurable(parser, capsys) -> None:
+    parser.apply_setup(help_layout=StandardLayout(command_group_spacing=0))
+    parser.add_command(cmd_clone, name="clone", help_group="setup")
+    parser.add_command(cmd_push, name="push", help_group="sync")
+    parser.add_command(cmd_pull, name="pull")
+
+    result = parser.run(args=["--help"])
+    assert isinstance(result, SystemExit)
+    assert result.code == 0
+
+    captured = capsys.readouterr()
+    combined = _strip_ansi(captured.out + captured.err)
+    lines = combined.splitlines()
+    clone_idx = next(idx for idx, line in enumerate(lines) if line.strip().startswith("clone"))
+    sync_idx = lines.index("sync")
+    push_idx = next(idx for idx, line in enumerate(lines) if line.strip().startswith("push"))
+    pull_idx = next(idx for idx, line in enumerate(lines) if line.strip().startswith("pull"))
+
+    assert lines[clone_idx + 1] == "sync"
+    assert lines[push_idx + 1].lstrip().startswith("pull")
+    assert sync_idx == clone_idx + 1
+    assert pull_idx == push_idx + 1
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])

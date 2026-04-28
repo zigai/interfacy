@@ -173,6 +173,7 @@ def test_interfacy_click_group_help_position_aligns_command_rows() -> None:
             help="Disable the per-job duration limit.",
         )
     )
+
     group.interfacy_help_position = 42
     group.interfacy_help_position_explicit = True
 
