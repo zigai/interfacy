@@ -15,7 +15,7 @@ from objinspect.typing import get_literal_choices, is_union_type, type_args, typ
 from setproctitle import setproctitle
 from stdl.st import TextStyle
 
-from interfacy import console
+from interfacy.console import display_result
 from interfacy.exceptions import ConfigurationError
 
 
@@ -35,7 +35,7 @@ _DEFAULT_PROCESS_TITLE = "interfacy"
 
 
 def validate_help_group(
-    value: object,
+    value: Any,
     *,
     value_name: str = "help_group",
     allow_none: bool = True,
@@ -194,7 +194,7 @@ def get_fixed_tuple_info(t: type) -> tuple[int, tuple[type, ...]] | None:
     return len(args), tuple(args)
 
 
-def extract_optional_union_list(t: object) -> tuple[object, object | None] | None:
+def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
     """
     If the annotation represents `list[T] | None` or `Optional[list[T]]`, return the list annotation together with its element type.
     Otherwise `None`.
@@ -262,7 +262,7 @@ def _strip_qualified_names(name: str) -> str:
     return "".join(parts)
 
 
-def resolve_type_alias(annotation: object) -> object:
+def resolve_type_alias(annotation: Any) -> Any:
     """Resolve PEP 695 type aliases to their underlying value when possible."""
     type_alias_type = getattr(typing, "TypeAliasType", None)
     if type_alias_type is None:
@@ -276,14 +276,14 @@ def resolve_type_alias(annotation: object) -> object:
     return annotation
 
 
-def _resolve_type_alias_value(annotation: object) -> object:
+def _resolve_type_alias_value(annotation: Any) -> Any:
     try:
         return annotation.__value__
     except (AttributeError, NameError, RecursionError, TypeError):
         return _MISSING
 
 
-def _resolve_owner_localns(owner_cls: type | object | None) -> dict[str, Any] | None:
+def _resolve_owner_localns(owner_cls: type | Any | None) -> dict[str, Any] | None:
     if owner_cls is None:
         return None
 
@@ -294,7 +294,7 @@ def _resolve_owner_localns(owner_cls: type | object | None) -> dict[str, Any] | 
 
 
 def _resolve_callable_hints(
-    fn: Callable[..., Any], *, owner_cls: type | object | None = None
+    fn: Callable[..., Any], *, owner_cls: type | Any | None = None
 ) -> dict[str, Any] | None:
     globalns = getattr(fn, "__globals__", None)
     localns = _resolve_owner_localns(owner_cls)
@@ -322,7 +322,7 @@ def _apply_hints(params: list[Parameter], hints: dict[str, Any]) -> None:
 
 
 def _resolve_and_apply_hints(
-    fn: Callable[..., Any], params: list[Parameter], *, owner_cls: type | object | None = None
+    fn: Callable[..., Any], params: list[Parameter], *, owner_cls: type | Any | None = None
 ) -> None:
     hints = _resolve_callable_hints(fn, owner_cls=owner_cls)
     if hints:
@@ -389,7 +389,7 @@ def _parse_literal_choices_from_string(annotation: str) -> list[Any] | None:
     return [value for value in parsed if value is not None] or None
 
 
-def _literal_choices_from_annotation(annotation: object) -> list[object] | None:
+def _literal_choices_from_annotation(annotation: Any) -> list[Any] | None:
     if type_origin(annotation) is not Literal:
         return None
 
@@ -403,9 +403,7 @@ def _literal_choices_from_annotation(annotation: object) -> list[object] | None:
     return [value for value in raw if value is not None] or None
 
 
-def _objinspect_choices_from_annotation(
-    annotation: object, *, for_display: bool
-) -> list[object] | None:
+def _objinspect_choices_from_annotation(annotation: Any, *, for_display: bool) -> list[Any] | None:
     try:
         raw = objinspect_get_choices(annotation)
     except (AttributeError, KeyError, NameError, TypeError, ValueError):
@@ -416,7 +414,7 @@ def _objinspect_choices_from_annotation(
     return _normalize_enum_choices(list(raw), for_display=for_display)
 
 
-def get_annotation_choices(annotation: object, *, for_display: bool = False) -> list[object] | None:
+def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> list[Any] | None:
     """
     Return a normalized list of choices for a type annotation.
 
@@ -440,7 +438,7 @@ def get_annotation_choices(annotation: object, *, for_display: bool = False) -> 
     return _objinspect_choices_from_annotation(resolved, for_display=for_display)
 
 
-def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[object] | None:
+def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[Any] | None:
     """Return choices for an objinspect Parameter, falling back to inferred Enum types."""
     choices = get_annotation_choices(param.type, for_display=for_display)
     if choices:
@@ -463,7 +461,7 @@ def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[ob
     return get_annotation_choices(inferred, for_display=for_display)
 
 
-def format_default_for_help(value: object) -> str:
+def format_default_for_help(value: Any) -> str:
     """
     Format a default value for display in help text.
 
@@ -509,7 +507,7 @@ def strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
-def show_result(result: object, handler: Callable[[object], object | None] = print) -> None:
+def show_result(result: Any, handler: Callable[[Any], Any | None] = print) -> None:
     """
     Display a result value using the shared console helpers.
 
@@ -517,7 +515,7 @@ def show_result(result: object, handler: Callable[[object], object | None] = pri
         result (Any): Result value to display.
         handler (Callable[[Any], Any]): Output handler for non-dict results.
     """
-    console.display_result(result, handler=handler)
+    display_result(result, handler=handler)
 
 
 def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
@@ -534,7 +532,7 @@ def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
 
 
 def format_type_for_help(
-    annotation: object,
+    annotation: Any,
     style: TextStyle,
     theme: TypeStyleTheme | None = None,
 ) -> str:
@@ -547,9 +545,11 @@ def format_type_for_help(
     - token-level styling when a theme provides dedicated type token styles
     - falling back gracefully if coloring fails
     """
-    from interfacy.appearance.type_help import format_type_for_help as _format_type_for_help
+    from interfacy.appearance.type_help import (
+        format_type_for_help as type_help_format_type_for_help,
+    )
 
-    return _format_type_for_help(annotation, style, theme=theme)
+    return type_help_format_type_for_help(annotation, style, theme=theme)
 
 
 __all__ = [
@@ -565,6 +565,7 @@ __all__ = [
     "is_list_or_list_alias",
     "resolve_objinspect_annotations",
     "resolve_type_alias",
+    "set_process_title_from_argv",
     "show_result",
     "simplified_type_name",
     "strip_ansi",

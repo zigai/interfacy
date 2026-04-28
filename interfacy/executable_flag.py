@@ -16,7 +16,7 @@ class ExecutableFlag:
     """Zero-argument executable CLI flag that short-circuits normal command execution."""
 
     flags: tuple[str, ...] | Sequence[str] | str
-    handler: Callable[[], object | None]
+    handler: Callable[[], Any | None]
     help: str = ""
     display_result: bool = True
     exit_code: int = 0

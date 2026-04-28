@@ -1,3 +1,5 @@
+from typing import Any
+
 try:
     from interfacy.click_backend.core import ClickParser
 except ImportError as exc:
@@ -10,7 +12,7 @@ except ImportError as exc:
     class ClickParser:  # type: ignore[no-redef]
         """Raise a deferred ImportError when click support is requested without click installed."""
 
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
             raise ImportError(
                 "Click is required to use ClickParser. Install it with "
                 "\"pip install 'interfacy[click]'\" or \"uv add 'interfacy[click]'\"."

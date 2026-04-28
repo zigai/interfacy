@@ -51,7 +51,7 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
-class _ClickableFormatter(logging.Formatter):
+class ClickableFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """
         Format a log record with a clickable path and padded name column.
@@ -97,7 +97,7 @@ def _setup_logger(logger: logging.Logger) -> None:
         logger.setLevel(effective_level)
         handler: logging.Handler = logging.StreamHandler()
         handler.setLevel(effective_level)
-        formatter = _ClickableFormatter(
+        formatter = ClickableFormatter(
             fmt="%(colored_levelname)s | %(name_location)s | %(message)s",
         )
         handler.setFormatter(formatter)

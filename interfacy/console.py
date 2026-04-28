@@ -47,14 +47,14 @@ def log_interrupt(*, silent: bool) -> None:
     error(message)
 
 
-def display_result(value: object, handler: Callable[[Any], Any] = print) -> None:
+def display_result(value: Any, handler: Callable[[Any], Any] = print) -> None:
     if isinstance(value, list):
         for entry in value:
             handler(entry)
     elif isinstance(value, dict):
-        from pprint import pprint
+        from pprint import pformat
 
-        pprint(value)
+        handler(pformat(value))
     else:
         handler(value)
 

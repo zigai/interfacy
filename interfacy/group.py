@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from inspect import isroutine
 from typing import Any, Literal
@@ -13,6 +13,7 @@ from interfacy.appearance.help_sort import (
 )
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
+from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.util import validate_help_group
 
 AbbreviationScope = Literal["top_level_options", "all_options"]
@@ -30,7 +31,7 @@ def validate_abbreviation_scope(value: AbbreviationScope | None) -> Abbreviation
 
 
 def validate_help_option_sort(
-    value: object,
+    value: Any,
 ) -> list[HelpOptionSortRule] | None:
     if value is None:
         return None
@@ -38,7 +39,7 @@ def validate_help_option_sort(
 
 
 def validate_help_subcommand_sort(
-    value: object,
+    value: Any,
 ) -> list[HelpSubcommandSortRule] | None:
     if value is None:
         return None
@@ -57,11 +58,12 @@ def validate_model_expansion_max_depth(value: int | None) -> int | None:
 class CommandEntry:
     """Internal representation of a command added to a group."""
 
-    obj: Callable[..., Any] | type | object
+    obj: Callable[..., Any] | type | Any
     name: str
     description: str | None
     aliases: tuple[str, ...]
     is_instance: bool
+    pipe_targets: PipeTargets | None = None
     include_inherited_methods: bool | None = None
     include_classmethods: bool | None = None
     expand_model_params: bool | None = None
@@ -111,7 +113,7 @@ class CommandGroup:
             raise DuplicateCommandError(name)
 
     @staticmethod
-    def _is_instance_command(command: Callable[..., Any] | type | object) -> bool:
+    def _is_instance_command(command: Callable[..., Any] | type | Any) -> bool:
         if isinstance(command, type):
             return False
         if not callable(command):
@@ -129,10 +131,11 @@ class CommandGroup:
 
     def add_command(
         self,
-        command: Callable[..., Any] | type | object,
+        command: Callable[..., Any] | type | Any,
         name: str | None = None,
         description: str | None = None,
         aliases: tuple[str, ...] | list[str] | None = None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
         include_inherited_methods: bool | None = None,
         include_classmethods: bool | None = None,
         expand_model_params: bool | None = None,
@@ -151,6 +154,7 @@ class CommandGroup:
             name: Override the command name (defaults to function/class name).
             description: Override the description.
             aliases: Alternative names for this command.
+            pipe_targets: Configure stdin piping for this command.
             include_inherited_methods: Override inherited-method inclusion.
             include_classmethods: Override classmethod inclusion.
             expand_model_params: Override model expansion toggle.
@@ -171,6 +175,9 @@ class CommandGroup:
         resolved_executable_flags = normalize_executable_flags(
             executable_flags,
             value_name="executable_flags",
+        )
+        resolved_pipe_targets = (
+            build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
         )
 
         is_instance = self._is_instance_command(command)
@@ -197,6 +204,7 @@ class CommandGroup:
             name=cmd_name,
             description=description,
             aliases=tuple(aliases) if aliases else (),
+            pipe_targets=resolved_pipe_targets,
             is_instance=is_instance,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,

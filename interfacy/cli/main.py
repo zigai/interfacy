@@ -59,8 +59,8 @@ def load_module(module_ref: str) -> ModuleType:
     return import_module(module_ref)
 
 
-def _resolve_symbol(module: ModuleType, symbol_ref: str) -> object:
-    current: object = module
+def _resolve_symbol(module: ModuleType, symbol_ref: str) -> Any:
+    current: Any = module
     for part in symbol_ref.split("."):
         if not hasattr(current, part):
             raise AttributeError(f"Symbol '{symbol_ref}' not found in module '{module.__name__}'.")
@@ -68,7 +68,7 @@ def _resolve_symbol(module: ModuleType, symbol_ref: str) -> object:
     return current
 
 
-def resolve_target(target: str) -> object:
+def resolve_target(target: str) -> Any:
     """
     Resolve a module or file target to a Python object.
 
@@ -80,7 +80,7 @@ def resolve_target(target: str) -> object:
     return _resolve_symbol(module, symbol_ref)
 
 
-def resolve_target_with_module(target: str) -> tuple[ModuleType, object]:
+def resolve_target_with_module(target: str) -> tuple[ModuleType, Any]:
     """
     Resolve a module or file target to both the loaded module and target object.
 
@@ -92,7 +92,7 @@ def resolve_target_with_module(target: str) -> tuple[ModuleType, object]:
     return module, _resolve_symbol(module, symbol_ref)
 
 
-def _is_supported_entrypoint_target(target: object) -> bool:
+def _is_supported_entrypoint_target(target: Any) -> bool:
     from interfacy.group import CommandGroup
 
     if isinstance(target, (InterfacyParser, CommandGroup)):

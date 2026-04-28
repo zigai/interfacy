@@ -50,9 +50,7 @@ class ChoiceParamType(click.ParamType):
             except (TypeError, ValueError, click.BadParameter):
                 self._parsed_choices = None
 
-    def convert(
-        self, value: str, param: click.Parameter | None, ctx: click.Context | None
-    ) -> object:
+    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> Any:
         """
         Convert and validate one CLI value against configured choices.
 

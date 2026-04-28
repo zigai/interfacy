@@ -15,7 +15,7 @@ from interfacy.executable_flag import ExecutableFlag
 from interfacy.pipe import PipeTargets
 
 CommandType = Literal["function", "method", "class", "group", "instance"]
-MODEL_DEFAULT_UNSET: object = object()
+MODEL_DEFAULT_UNSET: Any = object()
 
 
 class ArgumentKind(str, Enum):
@@ -151,7 +151,7 @@ class Command:
     is_leaf: bool = True
     is_instance: bool = False
     parent_path: tuple[str, ...] = ()
-    stored_instance: object | None = None
+    stored_instance: Any | None = None
     include_inherited_methods: bool | None = None
     include_classmethods: bool | None = None
     expand_model_params: bool | None = None

@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from objinspect import Parameter
 from stdl.st import kebab_case, snake_case
@@ -59,14 +59,14 @@ class FlagAllocationState:
     consumed_required_list_positional: bool = False
 
 
-class _FlagParamView:
+class FlagParamView:
     """Proxy parameter that overrides selected attributes without losing the original shape."""
 
-    def __init__(self, param: Parameter, **overrides: object) -> None:
+    def __init__(self, param: Parameter, **overrides: Any) -> None:
         self._param = param
         self._overrides = overrides
 
-    def __getattr__(self, name: str) -> object:
+    def __getattr__(self, name: str) -> Any:
         if name in self._overrides:
             return self._overrides[name]
         return getattr(self._param, name)
@@ -102,7 +102,7 @@ def get_arg_flags_for_parameter(
         if not allocation_state.consumed_required_list_positional:
             allocation_state.consumed_required_list_positional = True
             return (name,)
-        param = _FlagParamView(param, is_required=False)
+        param = FlagParamView(param, is_required=False)
 
     return strategy.get_arg_flags(name, param, taken_flags, abbrev_gen)
 

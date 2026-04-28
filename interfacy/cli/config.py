@@ -179,7 +179,7 @@ def load_config(path: Path | None = None) -> InterfacyConfig:
     return InterfacyConfig()
 
 
-def _import_symbol(value: str) -> object:
+def _import_symbol(value: str) -> Any:
     if ":" not in value:
         raise ConfigurationError(
             f"Invalid import path '{value}'. Use the format 'package.module:Symbol'."
@@ -194,7 +194,7 @@ def _import_symbol(value: str) -> object:
         ) from exc
 
 
-def _resolve_symbol_value(value: str) -> object:
+def _resolve_symbol_value(value: str) -> Any:
     symbol = _import_symbol(value)
     return symbol() if isinstance(symbol, type) else symbol
 
@@ -230,7 +230,7 @@ def _component_registry(
 
 
 def _resolve_named_component(
-    value: object,
+    value: Any,
     *,
     value_name: str,
     component_type: type[_ResolverResultT],
@@ -261,7 +261,7 @@ def _resolve_named_component(
     return resolved_type()
 
 
-def _resolve_flag_strategy(value: object, config: dict[str, Any]) -> FlagStrategy | None:
+def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy | None:
     if value is None:
         return None
     if isinstance(value, DefaultFlagStrategy):
@@ -280,7 +280,7 @@ def _resolve_flag_strategy(value: object, config: dict[str, Any]) -> FlagStrateg
     raise ConfigurationError(f"Unknown flag_strategy value: {value}")
 
 
-def _resolve_abbreviation_max_generated_len(value: object) -> int | None:
+def _resolve_abbreviation_max_generated_len(value: Any) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -289,7 +289,7 @@ def _resolve_abbreviation_max_generated_len(value: object) -> int | None:
 
 
 def _resolve_abbreviation_gen(
-    value: object,
+    value: Any,
     config: dict[str, Any],
 ) -> AbbreviationGenerator | None:
     max_generated_len = _resolve_abbreviation_max_generated_len(
@@ -318,7 +318,7 @@ def _resolve_abbreviation_gen(
     raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
 
 
-def _resolve_abbreviation_scope(value: object) -> str | None:
+def _resolve_abbreviation_scope(value: Any) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -333,10 +333,10 @@ def _resolve_abbreviation_scope(value: object) -> str | None:
 
 def _resolve_default_for_field(
     field_name: str,
-    value: object,
+    value: Any,
     config_data: dict[str, Any],
-) -> object:
-    resolved: object = _UNSET
+) -> Any:
+    resolved: Any = _UNSET
 
     if field_name == "help_layout":
         resolved = _resolve_named_component(

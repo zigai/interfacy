@@ -10,7 +10,7 @@ from objinspect.method import split_args_kwargs
 from interfacy.exceptions import ConfigurationError, InvalidCommandError
 from interfacy.logger import get_logger
 from interfacy.naming import reverse_translations
-from interfacy.pipe import apply_pipe_values
+from interfacy.pipe import apply_pipe_values, validate_required_pipe_targets
 from interfacy.schema.model_argument_mapper import ModelArgumentMapper
 from interfacy.schema.schema import Argument, Command
 
@@ -46,7 +46,7 @@ class SchemaRunner:
         self._instance_chain: list[Any] = []
         self.model_argument_mapper = ModelArgumentMapper()
 
-    def run(self) -> object:
+    def run(self) -> Any:
         """Execute commands based on the parsed namespace."""
         commands = self.builder.commands
         if len(commands) == 0:
@@ -59,13 +59,13 @@ class SchemaRunner:
             return self.run_command(command, self.namespace)
         return self.run_multiple(commands)
 
-    def _run_awaitable(self, awaitable: object) -> object:
+    def _run_awaitable(self, awaitable: Any) -> Any:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(cast(Any, awaitable))
 
-        result: object | None = None
+        result: Any | None = None
         error: BaseException | None = None
 
         def _runner() -> None:
@@ -83,7 +83,7 @@ class SchemaRunner:
             raise error
         return result
 
-    def _resolve_result(self, value: object) -> object:
+    def _resolve_result(self, value: Any) -> Any:
         if not inspect.isawaitable(value):
             return value
         return self._run_awaitable(value)
@@ -100,10 +100,14 @@ class SchemaRunner:
             return args
 
         payload = self.builder.read_piped_input()
-        if payload is None or payload == "":
-            return args
-
         parameters = self.builder.get_parameters_for(command, subcommand=subcommand)
+        if payload is None:
+            return validate_required_pipe_targets(
+                config=config,
+                arguments=args,
+                parameters=parameters,
+            )
+
         return apply_pipe_values(
             payload,
             config=config,
@@ -112,7 +116,7 @@ class SchemaRunner:
             type_parser=self.builder.type_parser,
         )
 
-    def run_command(self, command: Command, args: dict[str, Any]) -> object:
+    def run_command(self, command: Command, args: dict[str, Any]) -> Any:
         """
         Dispatch a command to its underlying callable.
 
@@ -135,7 +139,7 @@ class SchemaRunner:
             return self.run_class(command, args)
         raise InvalidCommandError(command.canonical_name)
 
-    def run_function(self, func: Function | Method, args: dict[str, Any]) -> object:
+    def run_function(self, func: Function | Method, args: dict[str, Any]) -> Any:
         """
         Invoke a function or method with parsed arguments.
 
@@ -157,7 +161,7 @@ class SchemaRunner:
         logger.info("Result: %s", result)
         return result
 
-    def run_method(self, method: Method, args: dict[str, Any]) -> object:
+    def run_method(self, method: Method, args: dict[str, Any]) -> Any:
         """
         Invoke a method, instantiating its class if needed.
 
@@ -193,7 +197,7 @@ class SchemaRunner:
         result = instance.call_method(method.name, *method_args, **method_kwargs)
         return self._resolve_result(result)
 
-    def run_class(self, command: Command, args: dict[str, Any]) -> object:
+    def run_class(self, command: Command, args: dict[str, Any]) -> Any:
         """
         Execute a class subcommand, instantiating as necessary.
 
@@ -249,7 +253,7 @@ class SchemaRunner:
     def run_multiple(
         self,
         commands: dict[str, Command],  # noqa: ARG002 - uniform runner API
-    ) -> object:
+    ) -> Any:
         """
         Execute one of multiple registered commands.
 
@@ -269,8 +273,8 @@ class SchemaRunner:
         command: Command,
         args: dict[str, Any],
         depth: int,
-        parent_instance: object | None = None,
-    ) -> object:
+        parent_instance: Any | None = None,
+    ) -> Any:
         """
         Execute a command with chain instantiation support.
 
@@ -296,8 +300,8 @@ class SchemaRunner:
         self,
         command: Command,
         args: dict[str, Any],
-        parent_instance: object | None,
-    ) -> tuple[object | None, dict[str, Any]]:
+        parent_instance: Any | None,
+    ) -> tuple[Any | None, dict[str, Any]]:
         current_instance = parent_instance
         normalized_args = args
 
@@ -319,7 +323,7 @@ class SchemaRunner:
         self,
         command: Command,
         args: dict[str, Any],
-    ) -> object | None:
+    ) -> Any | None:
         if command.command_type != "class" or command.obj is None:
             return None
 
@@ -329,6 +333,10 @@ class SchemaRunner:
 
         cls.is_initialized = False
         cls.instance = None
+        if command.initializer:
+            args = self._apply_pipe(command, args, subcommand="__init__")
+            args = self._reconstruct_expanded_models(args, command.initializer)
+
         init_args = self._extract_init_args(args, command.initializer)
         if init_args:
             assert cls.init_method
@@ -340,8 +348,8 @@ class SchemaRunner:
 
     def _attach_parent_instance(
         self,
-        current_instance: object | None,
-        parent_instance: object | None,
+        current_instance: Any | None,
+        parent_instance: Any | None,
     ) -> None:
         if current_instance is None or parent_instance is None:
             return
@@ -433,8 +441,8 @@ class SchemaRunner:
         self,
         command: Command,
         args: dict[str, Any],
-        instance: object | None,
-    ) -> object:
+        instance: Any | None,
+    ) -> Any:
         """Execute a leaf command (function or method)."""
         obj = command.obj
 

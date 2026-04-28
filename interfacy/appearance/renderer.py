@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import replace
+from typing import Any
 
 from stdl.st import ansi_len, with_style
 
@@ -60,7 +61,7 @@ class SchemaHelpRenderer:
         self,
         layout: HelpLayout,
         terminal_width: int | None = None,
-        help_argument: Argument | None | object = _DEFAULT_HELP_ARGUMENT,
+        help_argument: Argument | None | Any = _DEFAULT_HELP_ARGUMENT,
     ) -> None:
         self.layout = layout
         self.terminal_width = terminal_width or get_terminal_width()
@@ -342,7 +343,7 @@ class SchemaHelpRenderer:
         executable_flags: list[ExecutableFlag],
         *,
         parser_executable_flags: list[ExecutableFlag] | None = None,
-        rules: list[object] | None = None,
+        rules: list[Any] | None = None,
     ) -> list[Argument]:
         flag_arguments = [
             executable_flag_to_argument(flag)

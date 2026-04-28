@@ -3,7 +3,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from inspect import Parameter as StdParameter
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from objinspect import Parameter
 from stdl.st import TextStyle, ansi_len, colored, with_style
@@ -453,8 +453,8 @@ class ClapLayout(HelpLayout):
         is_bool: bool,
         is_required: bool,
         has_default: bool,
-        default_value: object,
-        choices: Sequence[object] | None,
+        default_value: Any,
+        choices: Sequence[Any] | None,
     ) -> str:
         parts: list[str] = []
 
@@ -718,7 +718,7 @@ class StandardLayout(HelpLayout):
         return f"[choices: {normalized_choices}]" in normalized_description
 
     @classmethod
-    def _with_default_sentence(cls, description: str, has_default: bool, default: object) -> str:
+    def _with_default_sentence(cls, description: str, has_default: bool, default: Any) -> str:
         if not has_default:
             return description
 
@@ -738,7 +738,7 @@ class StandardLayout(HelpLayout):
     def _with_choices_block(
         cls,
         description: str,
-        choices: Sequence[object] | None,
+        choices: Sequence[Any] | None,
     ) -> str:
         if not choices:
             return description
@@ -887,7 +887,7 @@ class ArgparseLayout(HelpLayout):
         return f"{description}{separator}{sentence}{terminal}"
 
     @classmethod
-    def _with_default_sentence(cls, description: str, has_default: bool, default: object) -> str:
+    def _with_default_sentence(cls, description: str, has_default: bool, default: Any) -> str:
         if not has_default:
             return description
 
@@ -904,7 +904,7 @@ class ArgparseLayout(HelpLayout):
     def _with_choices_sentence(
         cls,
         description: str,
-        choices: Sequence[object] | None,
+        choices: Sequence[Any] | None,
     ) -> str:
         if not choices:
             return description

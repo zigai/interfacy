@@ -1,5 +1,5 @@
 from types import NoneType
-from typing import Protocol
+from typing import Any, Protocol
 
 from objinspect.typing import is_union_type, type_args, type_origin
 from stdl.st import TextStyle, with_style
@@ -16,7 +16,7 @@ class TypeStyleTheme(Protocol):
 
 
 def format_type_for_help(
-    annotation: object,
+    annotation: Any,
     style: TextStyle,
     theme: TypeStyleTheme | None = None,
 ) -> str:
@@ -59,7 +59,7 @@ class TypeHelpFormatter:
         self.theme = theme
         self.token_styles = self._resolve_type_token_styles()
 
-    def format(self, annotation: object) -> str:
+    def format(self, annotation: Any) -> str:
         type_text = self._stringify(annotation)
         rendered: list[str] = []
         for kind, value in self._tokenize(type_text):
@@ -85,7 +85,7 @@ class TypeHelpFormatter:
             "other": self.style,
         }
 
-    def _stringify(self, annotation: object) -> str:
+    def _stringify(self, annotation: Any) -> str:
         if isinstance(annotation, str):
             return simplified_type_name(annotation)
 
@@ -100,7 +100,7 @@ class TypeHelpFormatter:
 
         return simplified_type_name(self._stringify_fallback_type_name(resolved))
 
-    def _stringify_optional_union_type(self, annotation: object) -> str | None:
+    def _stringify_optional_union_type(self, annotation: Any) -> str | None:
         try:
             if not is_union_type(annotation):
                 return None
@@ -121,13 +121,13 @@ class TypeHelpFormatter:
         return f"{base_name}?"
 
     @staticmethod
-    def _safe_stringify(value: object) -> str:
+    def _safe_stringify(value: Any) -> str:
         try:
             return str(value)
         except (RecursionError, TypeError, ValueError):
             return object.__repr__(value)
 
-    def _stringify_generic_type(self, annotation: object) -> str | None:
+    def _stringify_generic_type(self, annotation: Any) -> str | None:
         try:
             origin = type_origin(annotation)
             args = type_args(annotation)
@@ -139,7 +139,7 @@ class TypeHelpFormatter:
 
         return simplified_type_name(self._safe_stringify(annotation))
 
-    def _stringify_fallback_type_name(self, annotation: object) -> str:
+    def _stringify_fallback_type_name(self, annotation: Any) -> str:
         if isinstance(annotation, type):
             return annotation.__name__
 

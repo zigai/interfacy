@@ -57,12 +57,12 @@ def parse_priority(value: str | None) -> PipePriority:
     raise ConfigurationError(f"Invalid pipe priority '{value}'. Valid values: {','.join(choices)}")
 
 
-def targets_to_list(value: str | Sequence[object]) -> list[str]:
+def targets_to_list(value: str | Sequence[Any]) -> list[str]:
     """
     Normalize pipe target input into a list of unique names.
 
     Args:
-        value (str | Sequence[object]): String or sequence to normalize.
+        value (str | Sequence[Any]): String or sequence to normalize.
 
     Raises:
         ConfigurationError: If the value cannot be interpreted as target names or contains invalid/duplicate entries.
@@ -94,7 +94,7 @@ def targets_to_list(value: str | Sequence[object]) -> list[str]:
 def _replace_pipe_targets(
     config: PipeTargets,
     *,
-    delimiter: str | None | object,
+    delimiter: str | None | Any,
     allow_partial: bool | None,
     priority: str | PipePriority | None,
 ) -> PipeTargets:
@@ -111,11 +111,11 @@ def _replace_pipe_targets(
 def _resolve_pipe_target_inputs(
     targets: TargetsInput,
     *,
-    delimiter: str | None | object,
+    delimiter: str | None | Any,
     allow_partial: bool | None,
     priority: str | PipePriority | None,
-) -> tuple[object, bool, str | None, bool | None, str | PipePriority | None]:
-    names_value: object = targets
+) -> tuple[Any, bool, str | None, bool | None, str | PipePriority | None]:
+    names_value: Any = targets
     delimiter_explicit = delimiter is not DELIMITER_UNSET
     final_delimiter: str | None = (
         None if delimiter is DELIMITER_UNSET else cast(str | None, delimiter)
@@ -152,7 +152,7 @@ def _resolve_pipe_target_inputs(
 def build_pipe_targets_config(
     targets: TargetsInput,
     *,
-    delimiter: str | None | object = DELIMITER_UNSET,
+    delimiter: str | None | Any = DELIMITER_UNSET,
     allow_partial: bool | None = None,
     priority: str | PipePriority | None = None,
 ) -> PipeTargets:
@@ -234,7 +234,7 @@ def _split_list_values(chunk: str, delimiter: str | None) -> list[str]:
     return values
 
 
-def is_cli_supplied(value: object, parameter: Parameter) -> bool:
+def is_cli_supplied(value: Any, parameter: Parameter) -> bool:
     """
     Check if a value was explicitly provided via CLI.
 
@@ -249,7 +249,7 @@ def is_cli_supplied(value: object, parameter: Parameter) -> bool:
     return not (parameter.has_default and value == parameter.default)
 
 
-def _is_empty_collection_from_argparse(value: object, param_type: object) -> bool:
+def _is_empty_collection_from_argparse(value: Any, param_type: Any) -> bool:
     """Check if value is an empty collection from argparse nargs='*'."""
     if value not in ([], (), set()):
         return False
@@ -302,7 +302,7 @@ def parse_value(
     raw: str,
     delimiter: str | None,
     type_parser: StrToTypeParser,
-) -> object:
+) -> Any:
     """
     Parse a raw string into a typed value for a parameter.
 
@@ -339,6 +339,9 @@ def get_chunks(
     Raises:
         PipeInputError: If chunk counts do not match required targets.
     """
+    if data == "":
+        return [None] * len(config.targets)
+
     chunks: list[str | None] = cast(list[str | None], split_data(data, config))
     expected = len(config.targets)
 
@@ -356,6 +359,33 @@ def get_chunks(
         )
 
     return chunks
+
+
+def validate_required_pipe_targets(
+    *,
+    config: PipeTargets,
+    arguments: dict[str, Any],
+    parameters: dict[str, Parameter],
+) -> dict[str, Any]:
+    """Validate that required pipe targets were supplied by CLI or stdin."""
+    updated = dict(arguments)
+    for param_name in config.targets:
+        parameter = parameters.get(param_name)
+        if parameter is None:
+            raise ConfigurationError(f"Pipe target references unknown parameter '{param_name}'")
+
+        if not parameter.is_required:
+            continue
+
+        if is_cli_supplied(updated.get(param_name), parameter):
+            continue
+
+        raise PipeInputError(
+            param_name,
+            "no piped value was provided and the argument was not supplied on the CLI",
+        )
+
+    return updated
 
 
 def apply_pipe_values(
@@ -395,21 +425,11 @@ def apply_pipe_values(
 
         updated[param_name] = parsed
 
-    for param_name in config.targets:
-        parameter = parameters.get(param_name)
-        if parameter is None:
-            continue
-
-        if not parameter.is_required:
-            continue
-
-        if updated.get(param_name) is None:
-            raise PipeInputError(
-                param_name,
-                "no piped value was provided and the argument was not supplied on the CLI",
-            )
-
-    return updated
+    return validate_required_pipe_targets(
+        config=config,
+        arguments=updated,
+        parameters=parameters,
+    )
 
 
 __all__ = [
@@ -417,4 +437,5 @@ __all__ = [
     "PipeTargets",
     "apply_pipe_values",
     "build_pipe_targets_config",
+    "validate_required_pipe_targets",
 ]

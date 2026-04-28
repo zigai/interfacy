@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
 from interfacy.exceptions import ConfigurationError
 
@@ -14,7 +14,7 @@ def normalize_sort_rule_name(value: str) -> str:
 
 
 def resolve_sort_rules(
-    value: object,
+    value: Any,
     *,
     value_name: str,
     allowed_values: Sequence[T],
@@ -85,7 +85,7 @@ DEFAULT_HELP_OPTION_SORT_RULES: tuple[HelpOptionSortRule, ...] = (
 
 
 def resolve_help_option_sort_rules(
-    value: object,
+    value: Any,
     *,
     value_name: str = "help_option_sort",
     allow_none: bool = True,
@@ -124,7 +124,7 @@ DEFAULT_HELP_SUBCOMMAND_SORT_RULES: tuple[HelpSubcommandSortRule, ...] = ("inser
 
 
 def resolve_help_subcommand_sort_rules(
-    value: object,
+    value: Any,
     *,
     value_name: str = "help_subcommand_sort",
     allow_none: bool = True,
