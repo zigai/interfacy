@@ -4,8 +4,8 @@
 _require-uv:
   @uv --version > /dev/null || (echo "Please install uv: https://docs.astral.sh/uv/" && exit 1)
 
-_require-hatch:
-  @hatch --version > /dev/null || (echo "Please install hatch: uv tool install hatch" && exit 1)
+_require-hatch: _require-uv
+  @command -v hatch > /dev/null || uv tool list | grep -q '^hatch ' || uv tool install hatch
 
 # check code style and potential issues
 lint: _require-uv
@@ -21,7 +21,7 @@ fix: _require-uv
 
 # run tests across all supported Python versions
 test: _require-hatch
-  hatch run test:test
+  @if command -v hatch > /dev/null; then hatch run test:test; else uv tool run hatch run test:test; fi
 
 
 # build the package

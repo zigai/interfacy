@@ -8,9 +8,9 @@ license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "stdl>=0.7.0",
-    "objinspect>=0.4.2",
-    "strto>=0.2.7",
+    "stdl>=0.7.1",
+    "objinspect>=0.4.3",
+    "strto>=0.2.9",
     "tomlkit>=0.12",
     "tomli>=2.0; python_version < '3.11'",
     "setproctitle>=1.3.7",
@@ -60,8 +60,8 @@ dev = [
     "mypy>=1.19.1",
     "click>=8.3.1",
     "argcomplete",
-    "rattle-lint>=1.0.5",
-    "rattle-blank-lines>=0.2.4",
+    "rattle-lint>=1.0.6",
+    "rattle-blank-lines>=0.2.6",
 ]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
@@ -154,6 +154,7 @@ ignore = [
     "CPY",
     "DJ",
     "ANN003",
+    "ANN401",
     "FIX",
     "D100",
     "D101",
