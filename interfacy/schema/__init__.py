@@ -1,4 +1,4 @@
-from .schema import (
+from interfacy.schema.schema import (
     Argument,
     ArgumentKind,
     BooleanBehavior,

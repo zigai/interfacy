@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
 from types import NoneType
 from typing import Any
 
@@ -14,10 +14,21 @@ from interfacy.util import resolve_type_alias
 OBJINSPECT_CLASS_ERRORS = (AttributeError, TypeError, ValueError)
 
 
+class ExpandedModelValidationError(ValueError):
+    """Raised when expanded model flags are incomplete for reconstruction."""
+
+
+@dataclass(frozen=True)
+class ModelField:
+    name: str
+    annotation: Any
+    required: bool
+
+
 class ModelArgumentMapper:
     """Shared model flattening/reconstruction helpers for schema builder and runner."""
 
-    def unwrap_optional(self, annotation: object) -> tuple[object, bool]:
+    def unwrap_optional(self, annotation: Any) -> tuple[Any, bool]:
         """
         Strip `None` from a simple optional union annotation.
 
@@ -34,7 +45,7 @@ class ModelArgumentMapper:
         return inner, True
 
     @staticmethod
-    def is_pydantic_model(typ: object) -> bool:
+    def is_pydantic_model(typ: Any) -> bool:
         """
         Return whether a type looks like a Pydantic model.
 
@@ -45,7 +56,7 @@ class ModelArgumentMapper:
             hasattr(typ, "model_fields") or hasattr(typ, "__fields__")
         )
 
-    def is_plain_class_model(self, annotation: object) -> bool:
+    def is_plain_class_model(self, annotation: Any) -> bool:
         """
         Return whether a regular class should be treated as a model type.
 
@@ -79,7 +90,7 @@ class ModelArgumentMapper:
         ]
         return len(params) > 0
 
-    def is_model_type(self, annotation: object) -> bool:
+    def is_model_type(self, annotation: Any) -> bool:
         """
         Return whether an annotation is supported for model expansion.
 
@@ -96,7 +107,7 @@ class ModelArgumentMapper:
             return True
         return self.is_plain_class_model(annotation)
 
-    def should_expand_model(self, param_type: object, *, expand_model_params: bool = True) -> bool:
+    def should_expand_model(self, param_type: Any, *, expand_model_params: bool = True) -> bool:
         """
         Return whether a parameter type should be flattened into CLI arguments.
 
@@ -156,12 +167,13 @@ class ModelArgumentMapper:
 
         model_default = group[0].model_default
         has_model_default = model_default is not MODEL_DEFAULT_UNSET
-        values, provided = self._collect_model_values(args, group)
+        values, provided, provided_paths = self._collect_model_values(args, group)
         args[root_name] = self._build_reconstructed_model_value(
             model_type,
             group,
             values,
             provided,
+            provided_paths,
             model_default,
             has_model_default,
         )
@@ -175,9 +187,10 @@ class ModelArgumentMapper:
         group: list[Argument],
         values: dict[str, Any],
         provided: bool,
-        model_default: object,
+        provided_paths: set[tuple[str, ...]],
+        model_default: Any,
         has_model_default: bool,
-    ) -> object:
+    ) -> Any:
         if not provided:
             if has_model_default:
                 return model_default
@@ -188,8 +201,10 @@ class ModelArgumentMapper:
         if has_model_default and model_default is not None:
             base_values = self._model_instance_to_values(model_type, model_default)
             merged = self._deep_merge(base_values, values)
+            self._validate_required_model_values(model_type, group, merged, provided_paths)
             return self._build_model_instance(model_type, merged)
 
+        self._validate_required_model_values(model_type, group, values, provided_paths)
         return self._build_model_instance(model_type, values)
 
     def _deep_merge(self, base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
@@ -201,7 +216,7 @@ class ModelArgumentMapper:
                 merged[key] = value
         return merged
 
-    def _model_instance_to_values(self, model_type: type, instance: object) -> dict[str, Any]:
+    def _model_instance_to_values(self, model_type: type, instance: Any) -> dict[str, Any]:
         if instance is None:
             return {}
         if is_dataclass(model_type):
@@ -216,7 +231,7 @@ class ModelArgumentMapper:
         return {}
 
     @staticmethod
-    def _dump_model_instance(instance: object) -> dict[str, Any] | None:
+    def _dump_model_instance(instance: Any) -> dict[str, Any] | None:
         if hasattr(instance, "model_dump"):
             dumped = instance.model_dump()
             if isinstance(dumped, dict):
@@ -227,7 +242,7 @@ class ModelArgumentMapper:
                 return dumped
         return None
 
-    def _values_from_instance_dict(self, instance: object) -> dict[str, Any]:
+    def _values_from_instance_dict(self, instance: Any) -> dict[str, Any]:
         values: dict[str, Any] = {}
         for key, value in vars(instance).items():
             if self.is_model_type(type(value)):
@@ -236,7 +251,7 @@ class ModelArgumentMapper:
                 values[key] = value
         return values
 
-    def _values_from_plain_class(self, model_type: type, instance: object) -> dict[str, Any]:
+    def _values_from_plain_class(self, model_type: type, instance: Any) -> dict[str, Any]:
         values: dict[str, Any] = {}
         for key in self._plain_class_param_annotations(model_type):
             if not hasattr(instance, key):
@@ -248,14 +263,17 @@ class ModelArgumentMapper:
     def _collect_model_values(
         args: dict[str, Any],
         expanded_args: list[Argument],
-    ) -> tuple[dict[str, Any], bool]:
+    ) -> tuple[dict[str, Any], bool, set[tuple[str, ...]]]:
         values: dict[str, Any] = {}
         provided = False
+        provided_paths: set[tuple[str, ...]] = set()
 
         for arg in expanded_args:
             if arg.name not in args:
                 continue
             provided = True
+            if arg.expansion_path:
+                provided_paths.add(arg.expansion_path)
             path = arg.expansion_path[1:] if arg.expansion_path else ()
             if not path:
                 continue
@@ -264,9 +282,187 @@ class ModelArgumentMapper:
                 current = current.setdefault(part, {})
             current[path[-1]] = args[arg.name]
 
-        return values, provided
+        return values, provided, provided_paths
 
-    def _build_model_instance(self, model_type: type, values: dict[str, Any]) -> object:
+    def _validate_required_model_values(
+        self,
+        model_type: type,
+        group: list[Argument],
+        values: dict[str, Any],
+        provided_paths: set[tuple[str, ...]],
+    ) -> None:
+        missing = self._missing_required_flags_for_model(
+            model_type,
+            values,
+            path=(group[0].is_expanded_from or "",),
+            group=group,
+        )
+        if not missing:
+            return
+
+        trigger = self._provided_context_flag(provided_paths, group)
+        missing_text = ", ".join(missing)
+        if trigger is None:
+            message = f"the following arguments are required: {missing_text}"
+        else:
+            message = (
+                f"the following arguments are required when {trigger} is provided: {missing_text}"
+            )
+        raise ExpandedModelValidationError(message)
+
+    def _missing_required_flags_for_model(
+        self,
+        model_type: type,
+        values: dict[str, Any],
+        *,
+        path: tuple[str, ...],
+        group: list[Argument],
+    ) -> list[str]:
+        missing: list[str] = []
+        for field in self._model_fields(model_type):
+            field_path = (*path, field.name)
+            if field.name not in values:
+                if field.required:
+                    missing.extend(self._required_leaf_flags(field.annotation, field_path, group))
+                continue
+
+            value = values[field.name]
+            inner, _ = self.unwrap_optional(field.annotation)
+            if isinstance(value, dict) and self.is_model_type(inner):
+                missing.extend(
+                    self._missing_required_flags_for_model(
+                        inner,
+                        value,
+                        path=field_path,
+                        group=group,
+                    )
+                )
+
+        return self._dedupe_preserving_order(missing)
+
+    def _required_leaf_flags(
+        self,
+        annotation: Any,
+        path: tuple[str, ...],
+        group: list[Argument],
+    ) -> list[str]:
+        flag = self._flag_for_path(group, path)
+        if flag is not None:
+            return [flag]
+
+        inner, _ = self.unwrap_optional(annotation)
+        if not self.is_model_type(inner):
+            return []
+
+        flags: list[str] = []
+        for field in self._model_fields(inner):
+            if field.required:
+                flags.extend(
+                    self._required_leaf_flags(field.annotation, (*path, field.name), group)
+                )
+        return self._dedupe_preserving_order(flags)
+
+    @staticmethod
+    def _flag_for_path(group: list[Argument], path: tuple[str, ...]) -> str | None:
+        for arg in group:
+            if arg.expansion_path == path and arg.flags:
+                return arg.flags[0]
+        return None
+
+    def _provided_context_flag(
+        self,
+        provided_paths: set[tuple[str, ...]],
+        group: list[Argument],
+    ) -> str | None:
+        best: tuple[int, str] | None = None
+        for arg in group:
+            if arg.expansion_path not in provided_paths or not arg.flags:
+                continue
+            candidate = (len(arg.expansion_path), arg.flags[0])
+            if best is None or candidate[0] > best[0]:
+                best = candidate
+        return best[1] if best is not None else None
+
+    @staticmethod
+    def _dedupe_preserving_order(values: list[str]) -> list[str]:
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for value in values:
+            if value in seen:
+                continue
+            seen.add(value)
+            deduped.append(value)
+        return deduped
+
+    def _model_fields(self, model_type: type) -> list[ModelField]:
+        if is_dataclass(model_type):
+            return [
+                ModelField(
+                    name=field.name,
+                    annotation=field.type,
+                    required=field.default is MISSING and field.default_factory is MISSING,  # type: ignore[comparison-overlap]
+                )
+                for field in fields(model_type)
+            ]
+        if hasattr(model_type, "model_fields"):
+            return self._pydantic_v2_model_fields(model_type)
+        if hasattr(model_type, "__fields__"):
+            return self._pydantic_v1_model_fields(model_type)
+        if self.is_plain_class_model(model_type):
+            return self._plain_class_model_fields(model_type)
+        return []
+
+    @staticmethod
+    def _pydantic_v2_model_fields(model_type: type) -> list[ModelField]:
+        result: list[ModelField] = []
+        for name, info in (getattr(model_type, "model_fields", {}) or {}).items():
+            annotation = getattr(info, "annotation", None)
+            is_required = getattr(info, "is_required", None)
+            required = bool(is_required()) if callable(is_required) else False
+            result.append(ModelField(name=name, annotation=annotation, required=required))
+        return result
+
+    @staticmethod
+    def _pydantic_v1_model_fields(model_type: type) -> list[ModelField]:
+        result: list[ModelField] = []
+        for name, info in (getattr(model_type, "__fields__", {}) or {}).items():
+            annotation = getattr(info, "outer_type_", None) or getattr(info, "type_", None)
+            required = bool(getattr(info, "required", False))
+            result.append(ModelField(name=name, annotation=annotation, required=required))
+        return result
+
+    def _plain_class_model_fields(self, model_type: type) -> list[ModelField]:
+        try:
+            cls_info = Class(
+                model_type,
+                init=True,
+                public=True,
+                inherited=True,
+                static_methods=True,
+                protected=False,
+                private=False,
+                classmethod=True,
+            )
+        except OBJINSPECT_CLASS_ERRORS:
+            return []
+        init_method = cls_info.init_method
+        if init_method is None:
+            return []
+
+        result: list[ModelField] = []
+        for param in init_method.params:
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            result.append(
+                ModelField(
+                    name=param.name,
+                    annotation=param.type if param.is_typed else None,
+                    required=not param.has_default,
+                )
+            )
+        return result
+
+    def _build_model_instance(self, model_type: type, values: dict[str, Any]) -> Any:
         if is_dataclass(model_type):
             kwargs: dict[str, Any] = {}
             for field in fields(model_type):
@@ -306,7 +502,7 @@ class ModelArgumentMapper:
             kwargs[name] = self._coerce_model_value(annotation, values[name])
         return kwargs
 
-    def _coerce_model_value(self, annotation: object, value: object) -> object:
+    def _coerce_model_value(self, annotation: Any, value: Any) -> Any:
         if value is None:
             return None
 
@@ -342,4 +538,4 @@ class ModelArgumentMapper:
         return annotations
 
 
-__all__ = ["ModelArgumentMapper"]
+__all__ = ["ExpandedModelValidationError", "ModelArgumentMapper"]
