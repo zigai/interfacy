@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import click
 from click.formatting import iter_rows, measure_table, term_len, wrap_text
@@ -34,7 +34,7 @@ class InterfacyClickHelpFormatter(click.HelpFormatter):
         self,
         *,
         help_position: int | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.interfacy_help_position = help_position
@@ -53,8 +53,7 @@ class InterfacyClickHelpFormatter(click.HelpFormatter):
         rows = list(rows)
         widths = measure_table(rows)
         if len(widths) != 2:
-            msg = "Expected two columns for definition list"
-            raise TypeError(msg)
+            raise TypeError("Expected two columns for definition list")
 
         first_col = max(col_spacing, target - self.current_indent)
 
@@ -103,13 +102,13 @@ class InterfacyClickOption(click.Option):
 class InterfacyListOption(InterfacyClickOption):
     """Accept repeated values for list-like options while preserving None defaults."""
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs["nargs"] = 1
         super().__init__(*args, **kwargs)
         self.nargs = -1
         self._interfacy_none_default = kwargs.get("default", None) is None
 
-    def type_cast_value(self, ctx: click.Context, value: object) -> object:
+    def type_cast_value(self, ctx: click.Context, value: Any) -> Any:
         """
         Cast a list option value while preserving explicit None defaults.
 
@@ -130,7 +129,7 @@ class InterfacyClickArgument(click.Argument):
         param_decls: Sequence[str],
         required: bool | None = None,
         help: str | None = None,  # noqa: A002 - preserve click-style keyword
-        **attrs: object,
+        **attrs: Any,
     ) -> None:
         self.help = help
         super().__init__(param_decls, required=required, **attrs)
@@ -151,7 +150,7 @@ class InterfacyClickArgument(click.Argument):
         return None
 
 
-class _HelpMixin:
+class HelpMixin:
     interfacy_schema: Command | None = None
     interfacy_parser_schema: ParserSchema | None = None
     interfacy_aliases: tuple[str, ...] = ()
@@ -225,7 +224,7 @@ class _HelpMixin:
         return merged
 
 
-class InterfacyClickCommand(_HelpMixin, click.Command):
+class InterfacyClickCommand(HelpMixin, click.Command):
     """Render command help with Interfacy schema-aware formatting."""
 
     def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:
@@ -274,7 +273,7 @@ class InterfacyClickCommand(_HelpMixin, click.Command):
         return self._augment_help(ctx, original_help)
 
 
-class InterfacyClickGroup(_HelpMixin, click.Group):
+class InterfacyClickGroup(HelpMixin, click.Group):
     """Resolve group aliases and render group help with schema metadata."""
 
     def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:

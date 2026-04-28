@@ -5,7 +5,7 @@ import re
 import signal
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from types import FrameType
 from typing import Any, ClassVar, Literal
 
@@ -13,18 +13,18 @@ from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import type_args
 from strto import StrToTypeParser
 
-from interfacy import console
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.argparse_backend.argument_parser import (
+    ArgparseParseError,
     ArgumentParser,
     NestedSubParsersAction,
-    _ArgparseParseError,
     namespace_to_dict,
 )
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
-from interfacy.core import ExitCode, InterfacyParser
+from interfacy.console import warn
+from interfacy.core import ExitCode, InterfacyParser, InterspersedOptionValueError
 from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
@@ -56,17 +56,17 @@ logger = get_logger(__name__)
 SUBCOMMANDS_KEY = "_subcommands"
 
 
-class _ExecutableFlagTriggeredError(Exception):
+class ExecutableFlagTriggeredError(Exception):
     def __init__(self, flag: ExecutableFlag) -> None:
         self.flag = flag
 
 
-class _ExecutableFlagAction(argparse.Action):
+class ExecutableFlagAction(argparse.Action):
     def __init__(
         self,
         option_strings: Sequence[str],
         dest: str,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> None:
         executable_flag = kwargs.pop("executable_flag")
         if not isinstance(executable_flag, ExecutableFlag):
@@ -79,10 +79,10 @@ class _ExecutableFlagAction(argparse.Action):
         self,
         _parser: argparse.ArgumentParser,
         _namespace: argparse.Namespace,
-        _values: object,
+        _values: Any,
         _option_string: str | None = None,
     ) -> None:
-        raise _ExecutableFlagTriggeredError(self.executable_flag)
+        raise ExecutableFlagTriggeredError(self.executable_flag)
 
 
 class Argparser(InterfacyParser):
@@ -320,7 +320,7 @@ class Argparser(InterfacyParser):
 
         return parser
 
-    def parser_from_multiple_commands(self, *args: object, **_kwargs: object) -> ArgumentParser:
+    def parser_from_multiple_commands(self, *args: Any, **_kwargs: Any) -> ArgumentParser:
         """
         Create an ArgumentParser from multiple commands.
 
@@ -375,7 +375,7 @@ class Argparser(InterfacyParser):
         return self._escape_argparse_help_text(help_text)
 
     @staticmethod
-    def _resolve_list_annotation(annotation: object | None) -> tuple[object | None, object | None]:
+    def _resolve_list_annotation(annotation: Any | None) -> tuple[Any | None, Any | None]:
         optional_union_list = extract_optional_union_list(annotation)
         if optional_union_list:
             return optional_union_list
@@ -385,7 +385,7 @@ class Argparser(InterfacyParser):
         return None, None
 
     def _apply_typed_argument_params(
-        self, extra: dict[str, Any], param: Parameter, annotation: object
+        self, extra: dict[str, Any], param: Parameter, annotation: Any
     ) -> None:
         list_annotation, element_type = self._resolve_list_annotation(annotation)
         if list_annotation is not None:
@@ -622,7 +622,7 @@ class Argparser(InterfacyParser):
     def _add_executable_flag(self, parser: ArgumentParser, flag: ExecutableFlag) -> None:
         parser.add_argument(
             *flag.flags,
-            action=_ExecutableFlagAction,
+            action=ExecutableFlagAction,
             dest=self._executable_flag_dest(flag),
             default=argparse.SUPPRESS,
             executable_flag=flag,
@@ -828,7 +828,7 @@ class Argparser(InterfacyParser):
                 relaxed_parse=relaxed_parse,
             )
 
-            if cmd.epilog and not parser.epilog:
+            if self._should_set_epilog(cmd.epilog) and not parser.epilog:
                 parser.epilog = cmd.epilog
 
         if schema.description:
@@ -851,7 +851,7 @@ class Argparser(InterfacyParser):
             import argcomplete
 
         except ImportError:
-            console.warn(
+            warn(
                 "argcomplete not installed. Tab completion not available."
                 " Install with 'pip install argcomplete'"
             )
@@ -872,13 +872,13 @@ class Argparser(InterfacyParser):
             self.install_tab_completion(parser)
         return parser
 
-    def _snapshot_backend_registration_state(self) -> object | None:
+    def _snapshot_backend_registration_state(self) -> Any | None:
         return {
             "parser": self._parser,
             "last_schema": self._last_schema,
         }
 
-    def _restore_backend_registration_state(self, snapshot: object | None) -> None:
+    def _restore_backend_registration_state(self, snapshot: Any | None) -> None:
         if not isinstance(snapshot, dict):
             return
         self._parser = snapshot.get("parser")
@@ -924,9 +924,9 @@ class Argparser(InterfacyParser):
         parser._interfacy_raise_parse_errors = True
         try:
             parsed, unknown = parser.parse_known_args(args)
-        except (_ArgparseParseError, argparse.ArgumentError, ValueError):
+        except (ArgparseParseError, argparse.ArgumentError, ValueError):
             return None
-        except _ExecutableFlagTriggeredError:
+        except ExecutableFlagTriggeredError:
             return None
 
         if unknown:
@@ -957,6 +957,60 @@ class Argparser(InterfacyParser):
             namespace.pop(SUBCOMMANDS_KEY, None)
         return removable
 
+    @staticmethod
+    def _interspersed_option_label(argument: Argument) -> str:
+        return "/".join(flag for flag in argument.flags if flag.startswith("-")) or (
+            argument.display_name
+        )
+
+    @classmethod
+    def _interspersed_option_error(cls, exc: InterspersedOptionValueError) -> str:
+        return f"argument {cls._interspersed_option_label(exc.argument)}: {exc}"
+
+    def _iter_argparse_actions(
+        self,
+        parser: argparse.ArgumentParser,
+        seen_parsers: set[int] | None = None,
+    ) -> Iterable[argparse.Action]:
+        seen_parsers = set() if seen_parsers is None else seen_parsers
+        parser_id = id(parser)
+        if parser_id in seen_parsers:
+            return
+        seen_parsers.add(parser_id)
+
+        for action in parser._actions:
+            yield action
+            if isinstance(action, argparse._SubParsersAction):
+                for subparser in action.choices.values():
+                    yield from self._iter_argparse_actions(subparser, seen_parsers)
+
+    def _relax_interspersed_required_options(
+        self,
+        parser: argparse.ArgumentParser,
+    ) -> list[tuple[argparse.Action, bool]]:
+        required_flags = {
+            flag
+            for _command_path, argument, _raw_values in self._interspersed_ancestor_option_values
+            if argument.required
+            for flag in argument.flags
+            if flag.startswith("-")
+        }
+        if not required_flags:
+            return []
+
+        relaxed: list[tuple[argparse.Action, bool]] = []
+        for action in self._iter_argparse_actions(parser):
+            option_strings = set(getattr(action, "option_strings", ()))
+            if getattr(action, "required", False) and option_strings & required_flags:
+                relaxed.append((action, action.required))
+                action.required = False
+        return relaxed
+
+    @staticmethod
+    def _restore_required_options(relaxed: list[tuple[argparse.Action, bool]]) -> None:
+        for action, required in relaxed:
+            action.required = required
+
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
         """
         Parse CLI args into a nested dict keyed by command name.
@@ -966,11 +1020,15 @@ class Argparser(InterfacyParser):
         """
         args = args if args is not None else self.get_args()
         parser = self.build_parser()
+        relaxed_required_actions: list[tuple[argparse.Action, bool]] = []
+        if self._last_schema is not None:
+            args = self._normalize_interspersed_ancestor_options(self._last_schema, args)
+            relaxed_required_actions = self._relax_interspersed_required_options(parser)
         self._parser = parser
         parser._interfacy_raise_parse_errors = bool(self.plugins)
         try:
             parsed = parser.parse_args(args)
-        except _ArgparseParseError as exc:
+        except ArgparseParseError as exc:
             if not self.plugins or self._last_schema is None:
                 parser._interfacy_raise_parse_errors = False
                 parser.error(str(exc))
@@ -991,13 +1049,24 @@ class Argparser(InterfacyParser):
             parser._interfacy_raise_parse_errors = False
             parser.error(str(exc))
             raise AssertionError("unreachable") from exc
-        except _ExecutableFlagTriggeredError as exc:
+        except ExecutableFlagTriggeredError as exc:
             exit_code = execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
             raise SystemExit(exit_code) from None
         finally:
+            self._restore_required_options(relaxed_required_actions)
             parser._interfacy_raise_parse_errors = False
 
-        return self._normalize_parsed_namespace(namespace_to_dict(parsed))
+        namespace = self._normalize_parsed_namespace(namespace_to_dict(parsed))
+        if self._last_schema is not None:
+            try:
+                namespace = self._apply_interspersed_ancestor_option_values(
+                    self._last_schema,
+                    namespace,
+                )
+            except InterspersedOptionValueError as exc:
+                parser.error(self._interspersed_option_error(exc))
+                raise AssertionError("unreachable") from exc
+        return namespace
 
     def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""
@@ -1069,7 +1138,7 @@ class Argparser(InterfacyParser):
 
     def _parse_run_input(
         self,
-        commands: Sequence[Callable[..., Any] | type | object],
+        commands: Sequence[Callable[..., Any] | type | Any],
         args: list[str] | None,
     ) -> tuple[list[str], dict[str, Any]] | BaseException:
         try:
@@ -1103,7 +1172,7 @@ class Argparser(InterfacyParser):
         else:
             return resolved_args, namespace
 
-    def _run_runner(self, namespace: dict[str, Any], args: list[str]) -> object | BaseException:
+    def _run_runner(self, namespace: dict[str, Any], args: list[str]) -> Any | BaseException:
         if self._parser is None:
             raise RuntimeError("Parser not initialized")
         try:
@@ -1131,14 +1200,14 @@ class Argparser(InterfacyParser):
 
     def run(
         self,
-        *commands: Callable[..., Any] | type | object,
+        *commands: Callable[..., Any] | type | Any,
         args: list[str] | None = None,
-    ) -> object:
+    ) -> Any:
         """
         Register commands, parse args, and execute the selected command.
 
         Args:
-            *commands (Callable[..., Any] | type | object): Commands to register.
+            *commands (Callable[..., Any] | type | Any): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
         registration_snapshot = self._snapshot_registration_state() if commands else None

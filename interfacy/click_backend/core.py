@@ -5,7 +5,7 @@ import signal
 import sys
 import time
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from types import FrameType
 from typing import Any, ClassVar, Literal
 
@@ -31,7 +31,7 @@ from interfacy.click_backend.commands import (
     InterfacyListOption,
 )
 from interfacy.click_backend.types import ChoiceParamType, ClickFuncParamType
-from interfacy.core import ExitCode, InterfacyParser
+from interfacy.core import ExitCode, InterfacyParser, InterspersedOptionValueError
 from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
@@ -50,12 +50,13 @@ from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.pipe import PipeTargets
 from interfacy.plugins import InterfacyPlugin
 from interfacy.runner import SchemaRunner
+from interfacy.schema.model_argument_mapper import ExpandedModelValidationError
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 
 logger = get_logger(__name__)
 
 
-class _ExecutableFlagTriggeredError(Exception):
+class ExecutableFlagTriggeredError(Exception):
     def __init__(self, flag: ExecutableFlag) -> None:
         self.flag = flag
 
@@ -209,7 +210,7 @@ class ClickParser(InterfacyParser):
         self,
         argument: Argument,
         param_type: click.ParamType | None,
-        default: object,
+        default: Any,
         *,
         suppress: bool,
         relaxed_parse: bool = False,
@@ -245,7 +246,7 @@ class ClickParser(InterfacyParser):
         self,
         argument: Argument,
         param_name: str,
-        default: object,
+        default: Any,
         *,
         suppress: bool,
         relaxed_parse: bool = False,
@@ -267,7 +268,7 @@ class ClickParser(InterfacyParser):
         argument: Argument,
         param_name: str,
         param_type: click.ParamType | None,
-        default: object,
+        default: Any,
         *,
         suppress: bool,
         relaxed_parse: bool = False,
@@ -394,7 +395,7 @@ class ClickParser(InterfacyParser):
             value: bool,
         ) -> None:
             if value:
-                raise _ExecutableFlagTriggeredError(flag)
+                raise ExecutableFlagTriggeredError(flag)
             return None
 
         return InterfacyClickOption(
@@ -572,13 +573,13 @@ class ClickParser(InterfacyParser):
             self.install_tab_completion(root)
         return root
 
-    def _snapshot_backend_registration_state(self) -> object | None:
+    def _snapshot_backend_registration_state(self) -> Any | None:
         return {
             "last_schema": self._last_schema,
             "root_command": self._root_command,
         }
 
-    def _restore_backend_registration_state(self, snapshot: object | None) -> None:
+    def _restore_backend_registration_state(self, snapshot: Any | None) -> None:
         if not isinstance(snapshot, dict):
             return
         self._last_schema = snapshot.get("last_schema")
@@ -622,6 +623,11 @@ class ClickParser(InterfacyParser):
 
         if isinstance(command, click.Group) and command.commands:
             combined_args = self._remaining_args(ctx)
+            combined_args = self._restore_consumed_pipe_subcommand(
+                command,
+                namespace,
+                combined_args,
+            )
             if relaxed_parse and not combined_args:
                 return namespace
             cmd_name, sub_cmd, remaining = command.resolve_command(ctx, combined_args)
@@ -647,6 +653,35 @@ class ClickParser(InterfacyParser):
             )
 
         return namespace
+
+    @staticmethod
+    def _click_group_has_command(command: click.Group, name: str) -> bool:
+        if name in command.commands:
+            return True
+        return any(
+            name in getattr(subcommand, "interfacy_aliases", ())
+            for subcommand in command.commands.values()
+        )
+
+    def _restore_consumed_pipe_subcommand(
+        self,
+        command: click.Group,
+        namespace: dict[str, Any],
+        combined_args: list[str],
+    ) -> list[str]:
+        if combined_args and self._click_group_has_command(command, combined_args[0]):
+            return combined_args
+
+        arg_specs = getattr(command, "interfacy_arg_specs", {})
+        for name, value in list(namespace.items()):
+            argument = arg_specs.get(name)
+            if argument is None or not argument.accepts_stdin:
+                continue
+            if isinstance(value, str) and self._click_group_has_command(command, value):
+                namespace.pop(name, None)
+                return [value, *combined_args]
+
+        return combined_args
 
     def _convert_tuple_value(self, argument: Argument, value: Sequence[Any]) -> tuple[Any, ...]:
         if argument.tuple_element_parsers:
@@ -707,7 +742,7 @@ class ClickParser(InterfacyParser):
             return self._parse_root_command_namespace_for_recovery(root, args)
         except (click.UsageError, click.BadParameter, click.BadOptionUsage, click.NoSuchOption):
             return None
-        except _ExecutableFlagTriggeredError:
+        except ExecutableFlagTriggeredError:
             return None
 
     def _parse_root_group_namespace_for_recovery(
@@ -761,6 +796,112 @@ class ClickParser(InterfacyParser):
         )
         return self._normalize_parsed_args(namespace)
 
+    def _finish_parsed_namespace(self, namespace: dict[str, Any]) -> dict[str, Any]:
+        namespace = self._normalize_parsed_args(namespace)
+        if self._last_schema is not None:
+            namespace = self._apply_interspersed_ancestor_option_values(
+                self._last_schema,
+                namespace,
+            )
+        return namespace
+
+    def _parse_root_group_namespace(
+        self,
+        root: InterfacyClickGroup,
+        args: list[str],
+    ) -> dict[str, Any]:
+        ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
+        combined_args = self._remaining_args(ctx)
+        cmd_name, cmd, remaining = root.resolve_command(ctx, combined_args)
+        if not isinstance(cmd, (InterfacyClickCommand, InterfacyClickGroup)):
+            raise ConfigurationError(f"Unexpected command type from click: {type(cmd)!r}")
+        resolved_cmd_name = cmd_name if cmd_name is not None else (cmd.name or "")
+        sub_ctx = cmd.make_context(
+            resolved_cmd_name,
+            remaining,
+            parent=ctx,
+            resilient_parsing=False,
+        )
+        schema_cmd = cmd.interfacy_schema
+        top_cli_name = schema_cmd.cli_name if schema_cmd is not None else resolved_cmd_name
+        return {
+            self.COMMAND_KEY: top_cli_name,
+            top_cli_name: self._build_namespace_for_ctx(sub_ctx, cmd, depth=0),
+        }
+
+    def _parse_root_command_namespace(
+        self,
+        root: click.Command,
+        args: list[str],
+    ) -> dict[str, Any]:
+        ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
+        if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
+            raise ConfigurationError(f"Unexpected root command type: {type(root)!r}")
+        return self._build_namespace_for_ctx(ctx, root, depth=0)
+
+    @staticmethod
+    def _interspersed_option_label(argument: Argument) -> str:
+        return "/".join(flag for flag in argument.flags if flag.startswith("-")) or (
+            argument.display_name
+        )
+
+    @classmethod
+    def _click_bad_parameter_for_interspersed(
+        cls,
+        exc: InterspersedOptionValueError,
+    ) -> click.BadParameter:
+        return click.BadParameter(
+            str(exc),
+            param_hint=list(exc.argument.flags) or [cls._interspersed_option_label(exc.argument)],
+        )
+
+    def _iter_click_commands(
+        self,
+        command: click.Command,
+        seen_commands: set[int] | None = None,
+    ) -> Iterable[click.Command]:
+        seen_commands = set() if seen_commands is None else seen_commands
+        command_id = id(command)
+        if command_id in seen_commands:
+            return
+        seen_commands.add(command_id)
+        yield command
+
+        if isinstance(command, click.Group):
+            for subcommand in command.commands.values():
+                yield from self._iter_click_commands(subcommand, seen_commands)
+
+    def _relax_interspersed_required_options(
+        self,
+        root: click.Command,
+    ) -> list[tuple[click.Parameter, bool]]:
+        required_flags = {
+            flag
+            for _command_path, argument, _raw_values in self._interspersed_ancestor_option_values
+            if argument.required
+            for flag in argument.flags
+            if flag.startswith("-")
+        }
+        if not required_flags:
+            return []
+
+        relaxed: list[tuple[click.Parameter, bool]] = []
+        for command in self._iter_click_commands(root):
+            for param in command.params:
+                option_strings = {
+                    *getattr(param, "opts", ()),
+                    *getattr(param, "secondary_opts", ()),
+                }
+                if getattr(param, "required", False) and option_strings & required_flags:
+                    relaxed.append((param, param.required))
+                    param.required = False
+        return relaxed
+
+    @staticmethod
+    def _restore_required_options(relaxed: list[tuple[click.Parameter, bool]]) -> None:
+        for param, required in relaxed:
+            param.required = required
+
     def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
         """
         Parse CLI args into a nested dict keyed by command name.
@@ -770,31 +911,19 @@ class ClickParser(InterfacyParser):
         """
         args = args if args is not None else self.get_args()
         root = self.build_parser()
+        relaxed_required_params: list[tuple[click.Parameter, bool]] = []
+        if self._last_schema is not None:
+            args = self._normalize_interspersed_ancestor_options(self._last_schema, args)
+            relaxed_required_params = self._relax_interspersed_required_options(root)
         try:
             if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
-                ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
-                combined_args = self._remaining_args(ctx)
-                cmd_name, cmd, remaining = root.resolve_command(ctx, combined_args)
-                if not isinstance(cmd, (InterfacyClickCommand, InterfacyClickGroup)):
-                    raise ConfigurationError(f"Unexpected command type from click: {type(cmd)!r}")
-                resolved_cmd_name = cmd_name if cmd_name is not None else (cmd.name or "")
-                sub_ctx = cmd.make_context(
-                    resolved_cmd_name, remaining, parent=ctx, resilient_parsing=False
-                )
-                schema_cmd = cmd.interfacy_schema
-                top_cli_name = schema_cmd.cli_name if schema_cmd is not None else resolved_cmd_name
-                namespace = {
-                    self.COMMAND_KEY: top_cli_name,
-                    top_cli_name: self._build_namespace_for_ctx(sub_ctx, cmd, depth=0),
-                }
-                return self._normalize_parsed_args(namespace)
-
-            ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
-            if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
-                raise ConfigurationError(f"Unexpected root command type: {type(root)!r}")
-            namespace = self._build_namespace_for_ctx(ctx, root, depth=0)
-            return self._normalize_parsed_args(namespace)
-        except _ExecutableFlagTriggeredError as exc:
+                namespace = self._parse_root_group_namespace(root, args)
+            else:
+                namespace = self._parse_root_command_namespace(root, args)
+            return self._finish_parsed_namespace(namespace)
+        except InterspersedOptionValueError as exc:
+            raise self._click_bad_parameter_for_interspersed(exc) from exc
+        except ExecutableFlagTriggeredError as exc:
             exit_code = execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
             raise SystemExit(exit_code) from None
         except click.UsageError as exc:
@@ -813,6 +942,8 @@ class ClickParser(InterfacyParser):
                 if recovered is not None:
                     return recovered
             raise
+        finally:
+            self._restore_required_options(relaxed_required_params)
 
     def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
         if self.on_interrupt is not None:
@@ -868,9 +999,9 @@ class ClickParser(InterfacyParser):
 
     def _register_commands_and_parse(
         self,
-        commands: tuple[Callable[..., object], ...],
+        commands: tuple[Callable[..., Any], ...],
         args: list[str] | None,
-    ) -> tuple[bool, tuple[list[str], dict[str, Any]] | object]:
+    ) -> tuple[bool, tuple[list[str], dict[str, Any]] | Any]:
         try:
             self.reset_piped_input()
             for cmd in commands:
@@ -902,7 +1033,7 @@ class ClickParser(InterfacyParser):
         self,
         namespace: dict[str, Any],
         args: list[str],
-    ) -> tuple[bool, object]:
+    ) -> tuple[bool, Any]:
         try:
             runner = SchemaRunner(
                 namespace=namespace,
@@ -916,10 +1047,14 @@ class ClickParser(InterfacyParser):
             return False, exc
         except (click.exceptions.Exit, SystemExit) as exc:
             return False, self._handle_system_exit(exc)
-        except click.UsageError as exc:
-            self.log_exception(exc)
-            self.exit(ExitCode.ERR_PARSING)
-            return False, exc
+        except (ExpandedModelValidationError, click.UsageError) as exc:
+            if isinstance(exc, ExpandedModelValidationError):
+                payload = self._handle_click_usage_error(click.UsageError(str(exc)))
+            else:
+                self.log_exception(exc)
+                self.exit(ExitCode.ERR_PARSING)
+                payload = exc
+            return False, payload
         except KeyboardInterrupt as exc:
             return False, self._handle_interrupt(exc)
         except Exception as exc:  # noqa: BLE001 - runtime boundary fallback
@@ -927,7 +1062,7 @@ class ClickParser(InterfacyParser):
             self.exit(ExitCode.ERR_RUNTIME)
             return False, exc
 
-    def run(self, *commands: Callable[..., object], args: list[str] | None = None) -> object:
+    def run(self, *commands: Callable[..., Any], args: list[str] | None = None) -> Any:
         """
         Register commands, parse args, and execute the selected command.
 
@@ -967,7 +1102,7 @@ class ClickParser(InterfacyParser):
             if registration_snapshot is not None:
                 self._restore_registration_state(registration_snapshot)
 
-    def parser_from_function(self, *args: object, **kwargs: object) -> object:
+    def parser_from_function(self, *args: Any, **kwargs: Any) -> Any:
         """
         Reject direct function-parser construction for the Click backend.
 
@@ -980,7 +1115,7 @@ class ClickParser(InterfacyParser):
         """
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
-    def parser_from_class(self, *args: object, **kwargs: object) -> object:
+    def parser_from_class(self, *args: Any, **kwargs: Any) -> Any:
         """
         Reject direct class-parser construction for the Click backend.
 
@@ -993,7 +1128,7 @@ class ClickParser(InterfacyParser):
         """
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
-    def parser_from_multiple_commands(self, *args: object, **kwargs: object) -> object:
+    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> Any:
         """
         Reject direct multi-command parser construction for the Click backend.
 
@@ -1006,7 +1141,7 @@ class ClickParser(InterfacyParser):
         """
         raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
 
-    def install_tab_completion(self, *_args: object, **_kwargs: object) -> None:
+    def install_tab_completion(self, *_args: Any, **_kwargs: Any) -> None:
         """
         Keep tab-completion installation as a no-op for ClickParser.
 
