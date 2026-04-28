@@ -6,15 +6,15 @@ from typing import Any, Protocol, cast
 import click.parser as click_parser
 
 
-class _OptionLike(Protocol):
+class OptionLike(Protocol):
     nargs: int
 
 
-class _ParsingStateLike(Protocol):
+class ParsingStateLike(Protocol):
     rargs: list[str]
 
 
-def _click_parser_symbol(name: str) -> object:
+def _click_parser_symbol(name: str) -> Any:
     """Load a click.parser symbol by name without direct private-member access."""
     try:
         return vars(click_parser)[name]
@@ -23,8 +23,8 @@ def _click_parser_symbol(name: str) -> object:
 
 
 _BaseOptionParser: type[Any] = cast(type[Any], _click_parser_symbol("_OptionParser"))
-_normalize_opt: Callable[[str, object], str] = cast(
-    Callable[[str, object], str], _click_parser_symbol("_normalize_opt")
+_normalize_opt: Callable[[str, Any], str] = cast(
+    Callable[[str, Any], str], _click_parser_symbol("_normalize_opt")
 )
 
 
@@ -53,9 +53,9 @@ class InterfacyOptionParser(_BaseOptionParser):
     def _get_value_from_state(
         self,
         option_name: str,
-        option: _OptionLike,
-        state: _ParsingStateLike,
-    ) -> object:
+        option: OptionLike,
+        state: ParsingStateLike,
+    ) -> Any:
         if option.nargs != -1:
             return super()._get_value_from_state(option_name, option, state)
 

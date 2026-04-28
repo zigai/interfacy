@@ -1,6 +1,8 @@
 from typing import TYPE_CHECKING, Any
 
 from interfacy.runner import COMMAND_KEY_BASE, SchemaRunner
+from interfacy.schema.model_argument_mapper import ExpandedModelValidationError
+from interfacy.schema.schema import Argument
 
 if TYPE_CHECKING:
     from interfacy.argparse_backend.argparser import Argparser
@@ -27,6 +29,16 @@ class ArgparseRunner(SchemaRunner):
     ) -> None:
         self._parser = parser
         super().__init__(namespace=namespace, builder=builder, args=args)
+
+    def _reconstruct_expanded_models(
+        self,
+        args: dict[str, Any],
+        arguments: list[Argument],
+    ) -> dict[str, Any]:
+        try:
+            return super()._reconstruct_expanded_models(args, arguments)
+        except ExpandedModelValidationError as exc:
+            self._parser.error(str(exc))
 
 
 __all__ = [

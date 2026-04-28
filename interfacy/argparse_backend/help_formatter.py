@@ -259,7 +259,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if usage is not None:
             usage = usage % {"prog": self._prog}
         elif usage is None and not actions:
-            usage = "{prog}".format(**{"prog": self._prog})
+            usage = f"{self._prog}"
         elif usage is None:
             bool_actions = [a for a in actions if isinstance(a, argparse.BooleanOptionalAction)]
             original_option_strings: dict[argparse.Action, list[str]] = {}
@@ -267,7 +267,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 original_option_strings[bool_action] = list(bool_action.option_strings)
                 bool_action.option_strings = self._primary_boolean_usage_option_strings(bool_action)
 
-            prog = "{prog}".format(**{"prog": self._prog})
+            prog = f"{self._prog}"
             optionals: list[argparse.Action] = []
             positionals: list[argparse.Action] = []
             for usage_action in actions:
