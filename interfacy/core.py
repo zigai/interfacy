@@ -1872,47 +1872,41 @@ class InterfacyParser:
         raise NotImplementedError
 
     @abstractmethod
-    def parser_from_function(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Build a parser from a function or method.
-
-        Args:
-            *args (Any): Positional arguments forwarded to the implementation.
-            **kwargs (Any): Keyword arguments forwarded to the implementation.
-        """
+    def parser_from_function(
+        self,
+        function: Function,
+        parser: Any | None = None,
+        taken_flags: list[str] | None = None,
+    ) -> Any:
+        """Build a parser from a function or method command."""
         ...
 
     @abstractmethod
-    def parser_from_class(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Build a parser from a class command.
-
-        Args:
-            *args (Any): Positional arguments forwarded to the implementation.
-            **kwargs (Any): Keyword arguments forwarded to the implementation.
-        """
+    def parser_from_class(
+        self,
+        cls: Class,
+        parser: Any | None = None,
+        subparser: Any | None = None,
+    ) -> Any:
+        """Build a parser from a class command."""
         ...
 
     @abstractmethod
-    def parser_from_multiple_commands(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Build a parser from multiple commands.
-
-        Args:
-            *args (Any): Positional arguments forwarded to the implementation.
-            **kwargs (Any): Keyword arguments forwarded to the implementation.
-        """
+    def parser_from_multiple_commands(
+        self,
+        *commands: Callable[..., Any] | type | Any,
+    ) -> Any:
+        """Build a parser from multiple commands."""
         ...
 
     @abstractmethod
-    def install_tab_completion(self, *args: Any, **kwargs: Any) -> None:
-        """
-        Install tab completion for a parser instance.
+    def install_tab_completion(self, parser: Any) -> None:
+        """Install tab completion for a parser instance."""
+        ...
 
-        Args:
-            *args (Any): Positional arguments forwarded to the implementation.
-            **kwargs (Any): Keyword arguments forwarded to the implementation.
-        """
+    @abstractmethod
+    def build_parser(self) -> Any:
+        """Build and return the backend-native parser object."""
         ...
 
     def log(self, message: str) -> None:
