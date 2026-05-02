@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from interfacy import Argparser
+from interfacy.argparse_backend import Argparser
 from interfacy.core import ExitCode
 
 

@@ -4,7 +4,7 @@ from interfacy.naming import DefaultFlagStrategy
 
 pytest.importorskip("click")
 
-from interfacy import ClickParser
+from interfacy.click_backend import ClickParser
 
 
 @pytest.fixture

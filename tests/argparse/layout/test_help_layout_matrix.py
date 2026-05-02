@@ -9,7 +9,7 @@ from typing import Literal
 
 import pytest
 
-from interfacy import Argparser, CommandGroup
+from interfacy import CommandGroup
 from interfacy.appearance import (
     Aligned,
     AlignedTyped,
@@ -20,6 +20,7 @@ from interfacy.appearance import (
     Modern,
     StandardLayout,
 )
+from interfacy.argparse_backend import Argparser
 
 
 class Strategy(Enum):

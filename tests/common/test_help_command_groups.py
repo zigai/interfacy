@@ -107,7 +107,7 @@ def test_help_group_spacing_is_configurable(parser, capsys) -> None:
 def test_nested_help_groups_render_with_adaptive_layout(backend: str, capsys) -> None:
     if backend == "click":
         pytest.importorskip("click")
-        from interfacy import ClickParser
+        from interfacy.click_backend import ClickParser
 
         parser = ClickParser(
             help_layout=ArgparseLayout(),

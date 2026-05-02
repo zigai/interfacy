@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from interfacy import Argparser
+from interfacy.argparse_backend import Argparser
 from interfacy.exceptions import DuplicatePluginError
 from interfacy.plugins import (
     InterfacyPlugin,

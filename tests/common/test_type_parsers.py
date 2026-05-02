@@ -2,7 +2,8 @@ import datetime
 
 from strto import StrToTypeParser
 
-from interfacy import Argparser, ClickParser
+from interfacy.argparse_backend import Argparser
+from interfacy.click_backend import ClickParser
 from interfacy.type_parsers import build_default_type_parser
 
 

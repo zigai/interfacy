@@ -427,7 +427,7 @@ def argparse_kw_only():
 @pytest.fixture
 def click_req_pos():
     pytest.importorskip("click")
-    from interfacy import ClickParser
+    from interfacy.click_backend import ClickParser
 
     return ClickParser(
         flag_strategy=DefaultFlagStrategy(style="required_positional"),
@@ -441,7 +441,7 @@ def click_req_pos():
 @pytest.fixture
 def click_kw_only():
     pytest.importorskip("click")
-    from interfacy import ClickParser
+    from interfacy.click_backend import ClickParser
 
     return ClickParser(
         flag_strategy=DefaultFlagStrategy(style="keyword_only"),

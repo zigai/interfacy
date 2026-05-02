@@ -6,7 +6,8 @@ from dataclasses import dataclass
 import click
 import pytest
 
-from interfacy import ClickParser, ExecutableFlag
+from interfacy import ExecutableFlag
+from interfacy.click_backend import ClickParser
 from interfacy.click_backend.commands import (
     InterfacyClickArgument,
     InterfacyClickCommand,

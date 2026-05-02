@@ -91,7 +91,7 @@ def test_click_help_subcommand_sort_alphabetical_top_level() -> None:
     pytest.importorskip("click")
     from click import Context
 
-    from interfacy import ClickParser
+    from interfacy.click_backend import ClickParser
 
     parser = ClickParser(
         help_subcommand_sort=["alphabetical"],
@@ -110,7 +110,7 @@ def test_click_help_subcommand_sort_nested_name_length_asc() -> None:
     pytest.importorskip("click")
     from click import Context
 
-    from interfacy import ClickParser
+    from interfacy.click_backend import ClickParser
 
     parser = ClickParser(
         help_subcommand_sort=["name_length_asc"],
@@ -127,7 +127,7 @@ def test_click_help_subcommand_sort_per_command_override() -> None:
     pytest.importorskip("click")
     from click import Context
 
-    from interfacy import ClickParser
+    from interfacy.click_backend import ClickParser
 
     parser = ClickParser(
         help_subcommand_sort=["insert_order"],
