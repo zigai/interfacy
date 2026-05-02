@@ -12,10 +12,10 @@ from typing import Any
 
 from interfacy.appearance.layout import HelpLayout
 from interfacy.appearance.layouts import StandardLayout
-from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
 from interfacy.core import ExitCode, InterfacyParser
+from interfacy.interfacy import Interfacy
 
 
 def _split_target(target: str) -> tuple[str, str]:
@@ -98,10 +98,10 @@ def _is_supported_entrypoint_target(target: Any) -> bool:
     if isinstance(target, (InterfacyParser, CommandGroup)):
         return False
 
-    # Accept anything Argparser can treat as a command target
+    # Accept anything Interfacy can treat as a command target
     # (functions, classes, class instances, bound methods), while
     # still excluding Interfacy-specific orchestration objects above.
-    probe = Argparser(sys_exit_enabled=False, print_result=False)
+    probe = Interfacy(sys_exit_enabled=False, print_result=False)
     try:
         probe.add_command(target)
     except Exception:  # noqa: BLE001 - type gate for user-provided target objects
@@ -188,7 +188,7 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
 
 def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
     """
-    Build keyword arguments for Argparser based on settings.
+    Build keyword arguments for Interfacy based on settings.
 
     Args:
         settings (dict[str, Any]): Resolved configuration settings.
@@ -221,10 +221,7 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
     return kwargs
 
 
-def configure_runner_from_module(
-    parser: InterfacyParser,
-    module: ModuleType,
-) -> None:
+def configure_runner_from_module(parser: Interfacy, module: ModuleType) -> None:
     """Apply an optional module-level setup hook to a parser instance."""
     hook = getattr(module, "configure_interfacy", None)
     if hook is None:
@@ -269,7 +266,7 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
 
     target_args = [arg for arg in args.ARGS if arg != "--"]
 
-    runner = Argparser(**build_runner_kwargs(settings))
+    runner = Interfacy(**build_runner_kwargs(settings))
     try:
         configure_runner_from_module(runner, module)
     except (AttributeError, TypeError, ValueError) as exc:
