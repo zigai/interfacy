@@ -1,30 +1,19 @@
 # Parsers
 
-The parser classes are the main programmatic entry points for Interfacy. Use
-`Argparser` for the standard argparse-backed flow, or `ClickParser` when you
-want Click integration.
+`Interfacy` is the programmatic entry point. It defaults to the argparse
+backend. Pass `backend="click"` when you want Click integration.
 
-## Argparser
+## Interfacy
 
-`Argparser` and `ClickParser` both accept a parser-level `help_position`
-keyword argument. Use it to push the help-description column further right
-without having to build a custom `HelpLayout` first.
+```python
+from interfacy import Interfacy
 
-```{eval-rst}
-.. autoclass:: interfacy.Argparser
-   :members:
-   :exclude-members: __init__
-   :show-inheritance:
+Interfacy(print_result=True).run(main)
+Interfacy(backend="click", print_result=True).run(main)
 ```
 
-## ClickParser
-
-For Click-backed parsers, `help_position` preserves the native Click-style help
-layout while changing the column where option and command descriptions begin.
-
 ```{eval-rst}
-.. autoclass:: interfacy.ClickParser
+.. autoclass:: interfacy.Interfacy
    :members:
    :exclude-members: __init__
-   :show-inheritance:
 ```

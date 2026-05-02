@@ -41,17 +41,17 @@ pip install git+https://github.com/zigai/interfacy.git
 uv add "git+https://github.com/zigai/interfacy.git"
 ```
 
-## First CLI
+## Quick Start
 
 ```python
-from interfacy import Argparser
+from interfacy import Interfacy
 
 def greet(name: str, times: int = 1) -> str:
     """Return a greeting."""
     return " ".join([f"Hello, {name}!" for _ in range(times)])
 
 if __name__ == "__main__":
-    Argparser(print_result=True).run(greet)
+    Interfacy(print_result=True).run(greet)
 ```
 
 ```text
@@ -69,7 +69,7 @@ By default, required non-boolean parameters become positional arguments and opti
 Classes become command namespaces. `__init__` parameters live at the command level and public methods become subcommands.
 
 ```python
-from interfacy import Argparser
+from interfacy import Interfacy
 
 class Calculator:
     def __init__(self, precision: int = 2) -> None:
@@ -82,7 +82,7 @@ class Calculator:
         return round(a * b, self.precision)
 
 if __name__ == "__main__":
-    Argparser(print_result=True).run(Calculator)
+    Interfacy(print_result=True).run(Calculator)
 ```
 
 ```text
@@ -96,7 +96,7 @@ Dataclasses, Pydantic models, and plain classes with typed `__init__` parameters
 
 ```python
 from dataclasses import dataclass
-from interfacy import Argparser
+from interfacy import Interfacy
 
 @dataclass
 class Address:
@@ -113,7 +113,7 @@ def greet(user: User) -> str:
     return f"Hello {user.name}, age {user.age}"
 
 if __name__ == "__main__":
-    Argparser(print_result=True).run(greet)
+    Interfacy(print_result=True).run(greet)
 ```
 
 ```text
@@ -126,7 +126,7 @@ Hello Ada, age 32
 Use `CommandGroup` when your command tree is not naturally rooted in one callable:
 
 ```python
-from interfacy import Argparser, CommandGroup
+from interfacy import CommandGroup, Interfacy
 
 def clone(url: str) -> str:
     return f"clone:{url}"
@@ -140,7 +140,22 @@ ops.add_command(clone)
 ops.add_command(Releases)
 
 if __name__ == "__main__":
-    Argparser(print_result=True).run(ops)
+    Interfacy(print_result=True).run(ops)
+```
+
+## Backend Selection
+
+`Interfacy` uses the argparse backend by default. To use the Click backend,
+install the optional dependency and pass `backend="click"`:
+
+```bash
+pip install "interfacy[click]"
+```
+
+```python
+from interfacy import Interfacy
+
+Interfacy(backend="click", print_result=True).run(greet)
 ```
 
 ## Interfacy CLI Entrypoint
