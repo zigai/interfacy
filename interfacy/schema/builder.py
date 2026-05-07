@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import MISSING, dataclass, fields, is_dataclass
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from inspect import Parameter as InspectParameter
 from inspect import _ParameterKind
@@ -69,15 +69,6 @@ class ParamSpec:
 
 
 @dataclass
-class ModelFieldSpec:
-    name: str
-    annotation: Any
-    required: bool
-    default: Any
-    description: str | None = None
-
-
-@dataclass
 class ArgumentBuildState:
     parser_func: Callable[[str], Any] | None
     value_shape: ValueShape
@@ -101,7 +92,192 @@ class CommandBuildSettings:
     help_subcommand_sort: list[HelpSubcommandSortRule]
 
 
-OBJINSPECT_CLASS_ERRORS = (AttributeError, TypeError, ValueError)
+@dataclass
+class SchemaBuildContext:
+    """Builder-owned Interface for parser state needed during schema construction."""
+
+    source: InterfacyParser
+    description: str | None
+    epilog: str | None
+    commands: dict[str, Command]
+    command_key: str | None
+    reserved_flags: list[str]
+    method_skips: list[str]
+    allow_args_from_file: bool
+    pipe_targets_default: PipeTargets | None
+    metadata: dict[str, Any]
+    executable_flags: list[ExecutableFlag]
+    help_layout: HelpLayout
+    type_parser: Any
+    flag_strategy: Any
+    abbreviation_gen: Any
+    include_inherited_methods: bool
+    include_classmethods: bool
+    expand_model_params: bool
+    model_expansion_max_depth: int
+    abbreviation_scope: str
+    help_option_sort: Any
+    help_subcommand_sort: Any
+    help_option_sort_effective: list[HelpOptionSortRule]
+    help_subcommand_sort_effective: list[HelpSubcommandSortRule]
+
+    @classmethod
+    def from_parser(cls, parser: InterfacyParser) -> SchemaBuildContext:
+        return cls(
+            source=parser,
+            description=parser.description,
+            epilog=parser.epilog,
+            commands=parser.commands,
+            command_key=parser.COMMAND_KEY,
+            reserved_flags=list(parser.RESERVED_FLAGS),
+            method_skips=list(parser.method_skips),
+            allow_args_from_file=parser.allow_args_from_file,
+            pipe_targets_default=parser.pipe_targets_default,
+            metadata=dict(getattr(parser, "metadata", {})),
+            executable_flags=list(getattr(parser, "executable_flags", [])),
+            help_layout=parser.help_layout,
+            type_parser=parser.type_parser,
+            flag_strategy=parser.flag_strategy,
+            abbreviation_gen=parser.abbreviation_gen,
+            include_inherited_methods=parser.include_inherited_methods,
+            include_classmethods=parser.include_classmethods,
+            expand_model_params=parser.expand_model_params,
+            model_expansion_max_depth=parser.model_expansion_max_depth,
+            abbreviation_scope=parser.abbreviation_scope,
+            help_option_sort=parser.help_option_sort,
+            help_subcommand_sort=parser.help_subcommand_sort,
+            help_option_sort_effective=list(
+                getattr(parser, "help_option_sort_effective", DEFAULT_HELP_OPTION_SORT_RULES)
+            ),
+            help_subcommand_sort_effective=list(
+                getattr(
+                    parser, "help_subcommand_sort_effective", DEFAULT_HELP_SUBCOMMAND_SORT_RULES
+                )
+            ),
+        )
+
+    def resolve_pipe_targets_by_names(
+        self,
+        *,
+        canonical_name: str | None,
+        obj_name: str | None,
+        aliases: Iterable[str] | None,
+        subcommand: str | None,
+        include_default: bool,
+    ) -> PipeTargets | None:
+        return self.source.resolve_pipe_targets_by_names(
+            canonical_name=canonical_name,
+            obj_name=obj_name,
+            aliases=aliases,
+            subcommand=subcommand,
+            include_default=include_default,
+        )
+
+    def transform_schema_with_plugins(self, schema: ParserSchema) -> ParserSchema:
+        transform_schema = getattr(self.source, "_transform_schema_with_plugins", None)
+        if callable(transform_schema):
+            return transform_schema(schema)
+        return schema
+
+
+@dataclass
+class CommandSchemaConstructor:
+    """Build command schemas for callable, method, and class command shapes."""
+
+    builder: ParserSchemaBuilder
+
+    def build_command_spec_for(
+        self,
+        obj: Class | Function | Method,
+        *,
+        canonical_name: str,
+        description: str | None = None,
+        aliases: tuple[str, ...] = (),
+        executable_flags: list[ExecutableFlag] | None = None,
+        parent_settings: CommandBuildSettings | None = None,
+        include_inherited_methods: bool | None = None,
+        include_classmethods: bool | None = None,
+        expand_model_params: bool | None = None,
+        model_expansion_max_depth: int | None = None,
+        abbreviation_scope: str | None = None,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_group: str | None = None,
+    ) -> Command:
+        settings = self.builder._merge_build_settings(
+            parent_settings,
+            include_inherited_methods=include_inherited_methods,
+            include_classmethods=include_classmethods,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=model_expansion_max_depth,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+        )
+        resolve_objinspect_annotations(obj)
+        if isinstance(obj, Function):
+            return self.function_spec(
+                obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+                executable_flags=executable_flags,
+                settings=settings,
+                include_inherited_methods=include_inherited_methods,
+                include_classmethods=include_classmethods,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
+            )
+        if isinstance(obj, Method):
+            return self.method_command(
+                obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+                executable_flags=executable_flags,
+                settings=settings,
+                include_inherited_methods=include_inherited_methods,
+                include_classmethods=include_classmethods,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
+            )
+        if isinstance(obj, Class):
+            return self.class_command(
+                obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+                executable_flags=executable_flags,
+                settings=settings,
+                include_inherited_methods=include_inherited_methods,
+                include_classmethods=include_classmethods,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
+            )
+        raise InvalidCommandError(obj)
+
+    def function_spec(self, function: Function | Method, **kwargs: Any) -> Command:
+        return self.builder._function_spec(**{"function": function, **kwargs})
+
+    def method_command(self, method: Method, **kwargs: Any) -> Command:
+        return self.builder._method_command(**{"method": method, **kwargs})
+
+    def class_command(self, cls: Class, **kwargs: Any) -> Command:
+        return self.builder._class_command(**{"cls": cls, **kwargs})
+
+
 _ABBREVIATION_SCOPE_ALL_OPTIONS = "all_options"
 
 
@@ -118,6 +294,12 @@ class ParserSchemaBuilder:
     model_argument_mapper: ModelArgumentMapper = dataclass_field(
         default_factory=ModelArgumentMapper
     )
+    context: SchemaBuildContext = dataclass_field(init=False)
+    command_constructor: CommandSchemaConstructor = dataclass_field(init=False)
+
+    def __post_init__(self) -> None:
+        self.context = SchemaBuildContext.from_parser(self.parser)
+        self.command_constructor = CommandSchemaConstructor(self)
 
     def _resolve_help_option_sort_value(
         self,
@@ -129,7 +311,7 @@ class ParserSchemaBuilder:
         if rules:
             return list(rules)
 
-        layout = self.parser.help_layout
+        layout = self.context.help_layout
         if layout is not None:
             layout_rules = resolve_help_option_sort_rules(
                 layout.help_option_sort_default,
@@ -150,7 +332,7 @@ class ParserSchemaBuilder:
         if rules:
             return list(rules)
 
-        layout = self.parser.help_layout
+        layout = self.context.help_layout
         if layout is not None:
             layout_rules = resolve_help_subcommand_sort_rules(
                 layout.help_subcommand_sort_default,
@@ -163,19 +345,19 @@ class ParserSchemaBuilder:
 
     def _base_build_settings(self) -> CommandBuildSettings:
         help_option_sort = self._resolve_help_option_sort_value(
-            self.parser.help_option_sort,
+            self.context.help_option_sort,
             value_name="help_option_sort",
         )
         help_subcommand_sort = self._resolve_help_subcommand_sort_value(
-            self.parser.help_subcommand_sort,
+            self.context.help_subcommand_sort,
             value_name="help_subcommand_sort",
         )
         return CommandBuildSettings(
-            include_inherited_methods=self.parser.include_inherited_methods,
-            include_classmethods=self.parser.include_classmethods,
-            expand_model_params=self.parser.expand_model_params,
-            model_expansion_max_depth=self.parser.model_expansion_max_depth,
-            abbreviation_scope=self.parser.abbreviation_scope,
+            include_inherited_methods=self.context.include_inherited_methods,
+            include_classmethods=self.context.include_classmethods,
+            expand_model_params=self.context.expand_model_params,
+            model_expansion_max_depth=self.context.model_expansion_max_depth,
+            abbreviation_scope=self.context.abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
         )
@@ -257,7 +439,7 @@ class ParserSchemaBuilder:
     def build(self) -> ParserSchema:
         """Build a ParserSchema for all registered commands."""
         commands: dict[str, Command] = {}
-        for canonical_name, command in self.parser.commands.items():
+        for canonical_name, command in self.context.commands.items():
             if command.command_type in ("group", "instance") or (
                 not command.is_leaf and command.obj is None
             ):
@@ -281,22 +463,22 @@ class ParserSchemaBuilder:
                 )
                 commands[canonical_name] = rebuilt
 
-        parser_executable_flags = list(getattr(self.parser, "executable_flags", []))
+        parser_executable_flags = list(getattr(self.context, "executable_flags", []))
         schema = ParserSchema(
-            raw_description=self.parser.description,
-            raw_epilog=self.parser.epilog,
+            raw_description=self.context.description,
+            raw_epilog=self.context.epilog,
             commands=commands,
-            command_key=self.parser.COMMAND_KEY,
-            allow_args_from_file=self.parser.allow_args_from_file,
-            pipe_targets=self.parser.pipe_targets_default,
-            theme=self.parser.help_layout,
-            metadata=dict(getattr(self.parser, "metadata", {})),
+            command_key=self.context.command_key,
+            allow_args_from_file=self.context.allow_args_from_file,
+            pipe_targets=self.context.pipe_targets_default,
+            theme=self.context.help_layout,
+            metadata=dict(getattr(self.context, "metadata", {})),
             executable_flags=parser_executable_flags,
-            help_option_sort_effective=list(getattr(self.parser, "help_option_sort_effective", [])),
+            help_option_sort_effective=list(
+                getattr(self.context, "help_option_sort_effective", [])
+            ),
         )
-        transform_schema = getattr(self.parser, "_transform_schema_with_plugins", None)
-        if callable(transform_schema):
-            schema = transform_schema(schema)
+        schema = self.context.transform_schema_with_plugins(schema)
 
         self._finalize_schema(schema)
         self._validate_executable_flags_against_tokens(parser_executable_flags, set())
@@ -321,11 +503,11 @@ class ParserSchemaBuilder:
     def _finalize_schema(self, schema: ParserSchema) -> None:
         root_option_rules = list(
             schema.help_option_sort_effective
-            or getattr(self.parser, "help_option_sort_effective", DEFAULT_HELP_OPTION_SORT_RULES)
+            or getattr(self.context, "help_option_sort_effective", DEFAULT_HELP_OPTION_SORT_RULES)
         )
         root_subcommand_rules = list(
             getattr(
-                self.parser, "help_subcommand_sort_effective", DEFAULT_HELP_SUBCOMMAND_SORT_RULES
+                self.context, "help_subcommand_sort_effective", DEFAULT_HELP_SUBCOMMAND_SORT_RULES
             )
         )
         for command in schema.commands.values():
@@ -392,7 +574,7 @@ class ParserSchemaBuilder:
     def _prepare_layout_for_params(self, params: list[Parameter]) -> None:
         if not params:
             return
-        layout = self.parser.help_layout
+        layout = self.context.help_layout
         if layout is None:
             return
         try:
@@ -433,9 +615,9 @@ class ParserSchemaBuilder:
         rules: list[HelpSubcommandSortRule],
     ) -> str:
         try:
-            return self.parser.help_layout.get_help_for_class(cls, rules=rules)
+            return self.context.help_layout.get_help_for_class(cls, rules=rules)
         except TypeError:
-            return self.parser.help_layout.get_help_for_class(cls)
+            return self.context.help_layout.get_help_for_class(cls)
 
     def _get_help_for_multiple_commands(
         self,
@@ -444,11 +626,11 @@ class ParserSchemaBuilder:
         rules: list[HelpSubcommandSortRule] | None = None,
     ) -> str:
         if rules is None:
-            return self.parser.help_layout.get_help_for_multiple_commands(commands)
+            return self.context.help_layout.get_help_for_multiple_commands(commands)
         try:
-            return self.parser.help_layout.get_help_for_multiple_commands(commands, rules=rules)
+            return self.context.help_layout.get_help_for_multiple_commands(commands, rules=rules)
         except TypeError:
-            return self.parser.help_layout.get_help_for_multiple_commands(commands)
+            return self.context.help_layout.get_help_for_multiple_commands(commands)
 
     def build_command_spec_for(
         self,
@@ -488,8 +670,13 @@ class ParserSchemaBuilder:
                 subcommand rules.
             help_group (str | None): Optional help-only command group heading.
         """
-        settings = self._merge_build_settings(
-            parent_settings,
+        return self.command_constructor.build_command_spec_for(
+            obj,
+            canonical_name=canonical_name,
+            description=description,
+            aliases=aliases,
+            executable_flags=executable_flags,
+            parent_settings=parent_settings,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
@@ -497,62 +684,8 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+            help_group=help_group,
         )
-        resolve_objinspect_annotations(obj)
-        if isinstance(obj, Function):
-            return self._function_spec(
-                obj,
-                canonical_name=canonical_name,
-                description=description,
-                aliases=aliases,
-                executable_flags=executable_flags,
-                settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_classmethods=include_classmethods,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_group=help_group,
-            )
-
-        if isinstance(obj, Method):
-            return self._method_command(
-                obj,
-                canonical_name=canonical_name,
-                description=description,
-                aliases=aliases,
-                executable_flags=executable_flags,
-                settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_classmethods=include_classmethods,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_group=help_group,
-            )
-
-        if isinstance(obj, Class):
-            return self._class_command(
-                obj,
-                canonical_name=canonical_name,
-                description=description,
-                aliases=aliases,
-                executable_flags=executable_flags,
-                settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_classmethods=include_classmethods,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_group=help_group,
-            )
-        raise InvalidCommandError(obj)
 
     def _function_spec(
         self,
@@ -575,10 +708,10 @@ class ParserSchemaBuilder:
         help_group: str | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
-        taken_flags = [*self.parser.RESERVED_FLAGS]
+        taken_flags = [*self.context.reserved_flags]
         flag_state = FlagAllocationState()
         if pipe_config is None and canonical_name is not None:
-            pipe_config = self.parser.resolve_pipe_targets_by_names(
+            pipe_config = self.context.resolve_pipe_targets_by_names(
                 canonical_name=canonical_name,
                 obj_name=function.name,
                 aliases=aliases,
@@ -621,7 +754,7 @@ class ParserSchemaBuilder:
             help_group=help_group,
             parameters=parameters,
             pipe_targets=pipe_config,
-            help_layout=self.parser.help_layout,
+            help_layout=self.context.help_layout,
             executable_flags=resolved_executable_flags,
         )
         self._attach_command_build_settings(
@@ -678,7 +811,7 @@ class ParserSchemaBuilder:
         help_group: str | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
-        taken_flags = [*self.parser.RESERVED_FLAGS]
+        taken_flags = [*self.context.reserved_flags]
         init_flag_state = FlagAllocationState()
         method_flag_state = FlagAllocationState()
 
@@ -686,7 +819,7 @@ class ParserSchemaBuilder:
         is_initialized = hasattr(method.func, "__self__")
         init_pipe_config: PipeTargets | None = None
         if canonical_name is not None:
-            init_pipe_config = self.parser.resolve_pipe_targets_by_names(
+            init_pipe_config = self.context.resolve_pipe_targets_by_names(
                 canonical_name=canonical_name,
                 obj_name=method.name,
                 aliases=aliases,
@@ -715,7 +848,7 @@ class ParserSchemaBuilder:
 
         method_pipe_config = None
         if canonical_name is not None:
-            method_pipe_config = self.parser.resolve_pipe_targets_by_names(
+            method_pipe_config = self.context.resolve_pipe_targets_by_names(
                 canonical_name=canonical_name,
                 obj_name=method.name,
                 aliases=aliases,
@@ -754,7 +887,7 @@ class ParserSchemaBuilder:
             parameters=parameters,
             initializer=initializer,
             pipe_targets=method_pipe_config,
-            help_layout=self.parser.help_layout,
+            help_layout=self.context.help_layout,
             executable_flags=resolved_executable_flags,
         )
         self._attach_command_build_settings(
@@ -790,8 +923,8 @@ class ParserSchemaBuilder:
         help_group: str | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
-        taken_flags = [*self.parser.RESERVED_FLAGS]
-        command_key = self.parser.COMMAND_KEY
+        taken_flags = [*self.context.reserved_flags]
+        command_key = self.context.command_key
         if command_key:
             taken_flags.append(command_key)
         init_flag_state = FlagAllocationState()
@@ -800,7 +933,7 @@ class ParserSchemaBuilder:
         class_pipe_config = None
         init_pipe_config = None
         if canonical_name is not None:
-            class_pipe_config = self.parser.resolve_pipe_targets_by_names(
+            class_pipe_config = self.context.resolve_pipe_targets_by_names(
                 canonical_name=canonical_name,
                 obj_name=cls.name,
                 aliases=aliases,
@@ -808,7 +941,7 @@ class ParserSchemaBuilder:
                 include_default=False,
             )
             init_pipe_config = (
-                self.parser.resolve_pipe_targets_by_names(
+                self.context.resolve_pipe_targets_by_names(
                     canonical_name=canonical_name,
                     obj_name=cls.name,
                     aliases=aliases,
@@ -835,21 +968,21 @@ class ParserSchemaBuilder:
 
         subcommands: dict[str, Command] = {}
         for method in cls.methods:
-            if method.name in self.parser.method_skips:
+            if method.name in self.context.method_skips:
                 continue
 
-            method_cli_name = self.parser.flag_strategy.command_translator.translate(method.name)
+            method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
             sub_pipe_config = None
             if canonical_name is not None:
                 sub_pipe_config = (
-                    self.parser.resolve_pipe_targets_by_names(
+                    self.context.resolve_pipe_targets_by_names(
                         canonical_name=canonical_name,
                         obj_name=cls.name,
                         aliases=aliases,
                         subcommand=method_cli_name,
                         include_default=False,
                     )
-                    or self.parser.resolve_pipe_targets_by_names(
+                    or self.context.resolve_pipe_targets_by_names(
                         canonical_name=canonical_name,
                         obj_name=cls.name,
                         aliases=aliases,
@@ -892,7 +1025,7 @@ class ParserSchemaBuilder:
                 rules=resolved_settings.help_subcommand_sort,
             ),
             pipe_targets=class_pipe_config,
-            help_layout=self.parser.help_layout,
+            help_layout=self.context.help_layout,
             executable_flags=resolved_executable_flags,
             command_type="class",
             is_leaf=False,
@@ -941,16 +1074,16 @@ class ParserSchemaBuilder:
                     settings=resolved_settings,
                 )
 
-        translated_name = self.parser.flag_strategy.argument_translator.translate(param.name)
+        translated_name = self.context.flag_strategy.argument_translator.translate(param.name)
         if translated_name in taken_flags:
             raise ReservedFlagError(translated_name)
 
         flags = get_arg_flags_for_parameter(
-            self.parser.flag_strategy,
+            self.context.flag_strategy,
             translated_name,
             param,
             taken_flags,
-            self.parser.abbreviation_gen,
+            self.context.abbreviation_gen,
             allocation_state=flag_allocation_state,
         )
         taken_flags.append(translated_name)
@@ -982,7 +1115,7 @@ class ParserSchemaBuilder:
 
     @property
     def _nested_separator(self) -> str:
-        return getattr(self.parser.flag_strategy, "nested_separator", ".")
+        return getattr(self.context.flag_strategy, "nested_separator", ".")
 
     def _should_expand_model(
         self,
@@ -995,151 +1128,6 @@ class ParserSchemaBuilder:
             expand_model_params=settings.expand_model_params,
         )
 
-    def _get_model_fields(self, model_type: type) -> list[ModelFieldSpec]:
-        if is_dataclass(model_type):
-            return self._get_dataclass_model_fields(model_type)
-        if hasattr(model_type, "model_fields"):
-            return self._get_pydantic_v2_model_fields(model_type)
-        if hasattr(model_type, "__fields__"):
-            return self._get_pydantic_v1_model_fields(model_type)
-        if self.model_argument_mapper.is_plain_class_model(model_type):
-            return self._get_plain_class_model_fields(model_type)
-        return []
-
-    def _get_dataclass_model_fields(self, model_type: type) -> list[ModelFieldSpec]:
-        arg_docs = self._parse_docstring_args(model_type.__doc__)
-        result: list[ModelFieldSpec] = []
-        for field_info in fields(model_type):
-            required = field_info.default is MISSING and field_info.default_factory is MISSING
-            default = None
-            if field_info.default is not MISSING:
-                default = field_info.default
-            elif field_info.default_factory is not MISSING:
-                default = field_info.default_factory
-
-            description = None
-            if isinstance(field_info.metadata, Mapping):
-                description = field_info.metadata.get("description") or field_info.metadata.get(
-                    "help"
-                )
-            if description is None:
-                description = arg_docs.get(field_info.name)
-
-            result.append(
-                ModelFieldSpec(
-                    name=field_info.name,
-                    annotation=field_info.type,
-                    required=required,
-                    default=default,
-                    description=description,
-                )
-            )
-        return result
-
-    def _get_pydantic_v2_model_fields(self, model_type: type) -> list[ModelFieldSpec]:
-        result: list[ModelFieldSpec] = []
-        field_map = getattr(model_type, "model_fields", {}) or {}
-        for name, info in field_map.items():
-            annotation = getattr(info, "annotation", None)
-            if annotation is None and hasattr(model_type, "__annotations__"):
-                annotation = model_type.__annotations__.get(name)
-
-            required = False
-            if hasattr(info, "is_required"):
-                try:
-                    required = bool(info.is_required())
-                except TypeError:
-                    required = bool(info.is_required)
-
-            default = getattr(info, "default", None)
-            if required:
-                default = None
-
-            result.append(
-                ModelFieldSpec(
-                    name=name,
-                    annotation=annotation,
-                    required=required,
-                    default=default,
-                    description=getattr(info, "description", None),
-                )
-            )
-        return result
-
-    def _get_pydantic_v1_model_fields(self, model_type: type) -> list[ModelFieldSpec]:
-        result: list[ModelFieldSpec] = []
-        field_map = getattr(model_type, "__fields__", {}) or {}
-        for name, info in field_map.items():
-            annotation = getattr(info, "outer_type_", None) or getattr(info, "type_", None)
-            required = bool(getattr(info, "required", False))
-            default = getattr(info, "default", None)
-            if required:
-                default = None
-
-            description = None
-            if hasattr(info, "field_info"):
-                description = getattr(info.field_info, "description", None)
-
-            result.append(
-                ModelFieldSpec(
-                    name=name,
-                    annotation=annotation,
-                    required=required,
-                    default=default,
-                    description=description,
-                )
-            )
-        return result
-
-    def _get_plain_class_model_fields(self, model_type: type) -> list[ModelFieldSpec]:
-        class_docs = self._parse_docstring_args(model_type.__doc__)
-        try:
-            cls_info = Class(
-                model_type,
-                init=True,
-                public=True,
-                inherited=True,
-                static_methods=True,
-                protected=False,
-                private=False,
-                classmethod=True,
-            )
-        except OBJINSPECT_CLASS_ERRORS:
-            return []
-
-        init_method = cls_info.init_method
-        if init_method is None:
-            return []
-
-        result: list[ModelFieldSpec] = []
-        for param in init_method.params:
-            if param.kind in (InspectParameter.VAR_POSITIONAL, InspectParameter.VAR_KEYWORD):
-                continue
-            annotation = param.type if param.is_typed else None
-            result.append(
-                ModelFieldSpec(
-                    name=param.name,
-                    annotation=annotation,
-                    required=param.is_required,
-                    default=param.default if param.has_default else None,
-                    description=param.description or class_docs.get(param.name),
-                )
-            )
-        return result
-
-    def _parse_docstring_args(self, docstring: str | None) -> dict[str, str]:
-        if not docstring:
-            return {}
-
-        import docstring_parser
-
-        parsed = docstring_parser.parse(docstring)
-        return {
-            param.arg_name: (param.description or "").strip()
-            for param in parsed.params
-            if param.arg_name
-        }
-
     def _expand_model_parameter(
         self,
         *,
@@ -1149,7 +1137,7 @@ class ParserSchemaBuilder:
         taken_flags: list[str],
         settings: CommandBuildSettings,
     ) -> list[Argument]:
-        translated_name = self.parser.flag_strategy.argument_translator.translate(param.name)
+        translated_name = self.context.flag_strategy.argument_translator.translate(param.name)
         if translated_name in taken_flags:
             raise ReservedFlagError(translated_name)
         taken_flags.append(translated_name)
@@ -1187,7 +1175,7 @@ class ParserSchemaBuilder:
     ) -> list[Argument]:
         nested_separator = self._nested_separator
         arguments: list[Argument] = []
-        for field in self._get_model_fields(model_type):
+        for field in self.model_argument_mapper.model_fields_for_expansion(model_type):
             annotation = resolve_type_alias(field.annotation)
             if isinstance(annotation, str):
                 simple_name = simplified_type_name(annotation)
@@ -1218,7 +1206,7 @@ class ParserSchemaBuilder:
                 continue
 
             translated_path = tuple(
-                self.parser.flag_strategy.argument_translator.translate(part) for part in new_path
+                self.context.flag_strategy.argument_translator.translate(part) for part in new_path
             )
             display_name = nested_separator.join(translated_path)
             if display_name in taken_flags:
@@ -1293,7 +1281,7 @@ class ParserSchemaBuilder:
         if is_bool and field_default is True:
             abbrev_name = f"no-{display_name}"
 
-        short = self.parser.abbreviation_gen.generate(abbrev_name, taken_flags)
+        short = self.context.abbreviation_gen.generate(abbrev_name, taken_flags)
         if short and short not in (display_name, abbrev_name):
             return (f"-{short}", long_flag)
 
@@ -1404,7 +1392,7 @@ class ParserSchemaBuilder:
         if spec.is_typed:
             state.parsed_type = spec.type
             if spec.type is not str:
-                state.parser_func = self.parser.type_parser.get_parse_func(spec.type)
+                state.parser_func = self.context.type_parser.get_parse_func(spec.type)
 
     def _configure_typed_argument_state(
         self,
@@ -1450,7 +1438,7 @@ class ParserSchemaBuilder:
         if element_type is not None:
             state.parsed_type = element_type
             if element_type is not str:
-                state.parser_func = self.parser.type_parser.get_parse_func(element_type)
+                state.parser_func = self.context.type_parser.get_parse_func(element_type)
         else:
             state.parsed_type = None
             state.parser_func = None
@@ -1475,10 +1463,10 @@ class ParserSchemaBuilder:
 
         if all_same_type:
             state.parsed_type = first_type
-            state.parser_func = self.parser.type_parser.get_parse_func(first_type)
+            state.parser_func = self.context.type_parser.get_parse_func(first_type)
         else:
             state.tuple_element_parsers = tuple(
-                self.parser.type_parser.get_parse_func(t) for t in element_types
+                self.context.type_parser.get_parse_func(t) for t in element_types
             )
             state.parsed_type = str
             state.parser_func = None
@@ -1516,10 +1504,10 @@ class ParserSchemaBuilder:
         state: ArgumentBuildState,
     ) -> None:
         if spec.type is not str:
-            state.parser_func = self.parser.type_parser.get_parse_func(spec.type)
+            state.parser_func = self.context.type_parser.get_parse_func(spec.type)
 
     def _metavar_for_spec(self, spec: ParamSpec) -> str | None:
-        if self.parser.help_layout.clear_metavar and not spec.is_required:
+        if self.context.help_layout.clear_metavar and not spec.is_required:
             return "\b"
         return None
 
@@ -1595,7 +1583,7 @@ class ParserSchemaBuilder:
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
         )
-        cli_name = canonical_name or self.parser.flag_strategy.command_translator.translate(
+        cli_name = canonical_name or self.context.flag_strategy.command_translator.translate(
             group.name
         )
         current_path = (*parent_path, cli_name)
@@ -1614,9 +1602,9 @@ class ParserSchemaBuilder:
         translated_child_names: set[str] = set()
 
         def register_translated_child(name: str, aliases: tuple[str, ...] = ()) -> None:
-            cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            cli_name = self.context.flag_strategy.command_translator.translate(name)
             translated_aliases = tuple(
-                self.parser.flag_strategy.command_translator.translate(alias) for alias in aliases
+                self.context.flag_strategy.command_translator.translate(alias) for alias in aliases
             )
             candidates = (cli_name, *translated_aliases)
             if len(set(candidates)) != len(candidates):
@@ -1627,7 +1615,7 @@ class ParserSchemaBuilder:
             translated_child_names.update(candidates)
 
         for name, subgroup_entry in group.subgroup_entries.items():
-            sub_cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            sub_cli_name = self.context.flag_strategy.command_translator.translate(name)
             register_translated_child(name)
             subcommands[sub_cli_name] = self.build_from_group(
                 subgroup_entry.group,
@@ -1638,7 +1626,7 @@ class ParserSchemaBuilder:
             )
 
         for name, entry in group.commands.items():
-            sub_cli_name = self.parser.flag_strategy.command_translator.translate(name)
+            sub_cli_name = self.context.flag_strategy.command_translator.translate(name)
             register_translated_child(name, entry.aliases)
             subcommands[sub_cli_name] = self._build_command_entry(
                 entry,
@@ -1665,7 +1653,7 @@ class ParserSchemaBuilder:
             subcommands=subcommands or None,
             executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
-            help_layout=self.parser.help_layout,
+            help_layout=self.context.help_layout,
             command_type="group",
             is_leaf=False,
             parent_path=parent_path,
@@ -1700,7 +1688,7 @@ class ParserSchemaBuilder:
         """Build argument list from a class __init__ or callable signature."""
         obj = inspect(source, init=True)
         resolve_objinspect_annotations(obj)
-        taken_flags = [*self.parser.RESERVED_FLAGS]
+        taken_flags = [*self.context.reserved_flags]
         flag_state = FlagAllocationState()
 
         if isinstance(obj, Class) and obj.init_method:
@@ -1782,7 +1770,7 @@ class ParserSchemaBuilder:
         obj = inspect(entry.obj)
         resolve_objinspect_annotations(obj)
         if isinstance(obj, (Function, Method)):
-            cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
+            cli_name = self.context.flag_strategy.command_translator.translate(entry.name)
             return self._function_spec(
                 obj,
                 canonical_name=cli_name,
@@ -1833,9 +1821,9 @@ class ParserSchemaBuilder:
 
         subcommands: dict[str, Command] = {}
         for method in cls.methods:
-            if method.name.startswith("_") or method.name in self.parser.method_skips:
+            if method.name.startswith("_") or method.name in self.context.method_skips:
                 continue
-            method_cli_name = self.parser.flag_strategy.command_translator.translate(method.name)
+            method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
             subcommands[method_cli_name] = self._function_spec(
                 method,
                 canonical_name=None,
@@ -1846,7 +1834,7 @@ class ParserSchemaBuilder:
                 settings=settings,
             )
 
-        cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
+        cli_name = self.context.flag_strategy.command_translator.translate(entry.name)
         raw_description = entry.description or (cls.description if cls.has_docstring else None)
         resolved_executable_flags = list(executable_flags or [])
         self._validate_executable_flags_against_tokens(
@@ -1874,7 +1862,7 @@ class ParserSchemaBuilder:
             executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
             pipe_targets=entry.pipe_targets,
-            help_layout=self.parser.help_layout,
+            help_layout=self.context.help_layout,
             command_type="instance",
             is_leaf=False,
             is_instance=True,
@@ -1924,11 +1912,11 @@ class ParserSchemaBuilder:
             classmethod=settings.include_classmethods,
         )
         assert isinstance(cls, Class)
-        cli_name = self.parser.flag_strategy.command_translator.translate(entry.name)
+        cli_name = self.context.flag_strategy.command_translator.translate(entry.name)
         current_path = (*parent_path, cli_name)
 
-        taken_flags = [*self.parser.RESERVED_FLAGS]
-        command_key = self.parser.COMMAND_KEY
+        taken_flags = [*self.context.reserved_flags]
+        command_key = self.context.command_key
         if command_key:
             taken_flags.append(command_key)
         init_flag_state = FlagAllocationState()
@@ -1957,9 +1945,9 @@ class ParserSchemaBuilder:
         subcommands: dict[str, Command] = {}
 
         for method in cls.methods:
-            if method.name.startswith("_") or method.name in self.parser.method_skips:
+            if method.name.startswith("_") or method.name in self.context.method_skips:
                 continue
-            method_cli_name = self.parser.flag_strategy.command_translator.translate(method.name)
+            method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
             method_pipe_config = self._pipe_config_for_params(entry.pipe_targets, method.params)
             subcommands[method_cli_name] = self._function_spec(
                 method,
@@ -1987,7 +1975,7 @@ class ParserSchemaBuilder:
                     pipe_targets=None,
                     executable_flags=None,
                 )
-                nested_cli_name = self.parser.flag_strategy.command_translator.translate(attr_name)
+                nested_cli_name = self.context.flag_strategy.command_translator.translate(attr_name)
                 subcommands[nested_cli_name] = self._build_from_class_recursive(
                     nested_entry,
                     current_path,
@@ -2021,7 +2009,7 @@ class ParserSchemaBuilder:
             executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
             pipe_targets=init_pipe_config,
-            help_layout=self.parser.help_layout,
+            help_layout=self.context.help_layout,
             command_type="class",
             is_leaf=False,
             parent_path=parent_path,

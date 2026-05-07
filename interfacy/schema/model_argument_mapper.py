@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
 from types import NoneType
 from typing import Any
@@ -23,6 +24,8 @@ class ModelField:
     name: str
     annotation: Any
     required: bool
+    default: Any = None
+    description: str | None = None
 
 
 class ModelArgumentMapper:
@@ -122,6 +125,160 @@ class ModelArgumentMapper:
         if is_dataclass(param_type) or self.is_pydantic_model(param_type):
             return True
         return self.is_plain_class_model(param_type)
+
+    def model_fields_for_expansion(self, model_type: type) -> list[ModelField]:
+        """
+        Return model fields with CLI expansion metadata.
+
+        This is the builder-facing Interface for model field discovery. It keeps
+        dataclass, Pydantic, and plain-class differences local to the model
+        parameter Module.
+        """
+        if is_dataclass(model_type):
+            return self._dataclass_model_fields_for_expansion(model_type)
+        if hasattr(model_type, "model_fields"):
+            return self._pydantic_v2_model_fields_for_expansion(model_type)
+        if hasattr(model_type, "__fields__"):
+            return self._pydantic_v1_model_fields_for_expansion(model_type)
+        if self.is_plain_class_model(model_type):
+            return self._plain_class_model_fields_for_expansion(model_type)
+        return []
+
+    def _dataclass_model_fields_for_expansion(self, model_type: type) -> list[ModelField]:
+        arg_docs = self._parse_docstring_args(model_type.__doc__)
+        result: list[ModelField] = []
+        for field_info in fields(model_type):
+            required = field_info.default is MISSING and field_info.default_factory is MISSING
+            default = None
+            if field_info.default is not MISSING:
+                default = field_info.default
+            elif field_info.default_factory is not MISSING:
+                default = field_info.default_factory
+
+            description = None
+            if isinstance(field_info.metadata, Mapping):
+                description = field_info.metadata.get("description") or field_info.metadata.get(
+                    "help"
+                )
+            if description is None:
+                description = arg_docs.get(field_info.name)
+
+            result.append(
+                ModelField(
+                    name=field_info.name,
+                    annotation=field_info.type,
+                    required=required,
+                    default=default,
+                    description=description,
+                )
+            )
+        return result
+
+    @staticmethod
+    def _pydantic_v2_model_fields_for_expansion(model_type: type) -> list[ModelField]:
+        result: list[ModelField] = []
+        field_map = getattr(model_type, "model_fields", {}) or {}
+        for name, info in field_map.items():
+            annotation = getattr(info, "annotation", None)
+            if annotation is None and hasattr(model_type, "__annotations__"):
+                annotation = model_type.__annotations__.get(name)
+
+            required = False
+            if hasattr(info, "is_required"):
+                try:
+                    required = bool(info.is_required())
+                except TypeError:
+                    required = bool(info.is_required)
+
+            default = getattr(info, "default", None)
+            if required:
+                default = None
+
+            result.append(
+                ModelField(
+                    name=name,
+                    annotation=annotation,
+                    required=required,
+                    default=default,
+                    description=getattr(info, "description", None),
+                )
+            )
+        return result
+
+    @staticmethod
+    def _pydantic_v1_model_fields_for_expansion(model_type: type) -> list[ModelField]:
+        result: list[ModelField] = []
+        field_map = getattr(model_type, "__fields__", {}) or {}
+        for name, info in field_map.items():
+            annotation = getattr(info, "outer_type_", None) or getattr(info, "type_", None)
+            required = bool(getattr(info, "required", False))
+            default = getattr(info, "default", None)
+            if required:
+                default = None
+
+            description = None
+            if hasattr(info, "field_info"):
+                description = getattr(info.field_info, "description", None)
+
+            result.append(
+                ModelField(
+                    name=name,
+                    annotation=annotation,
+                    required=required,
+                    default=default,
+                    description=description,
+                )
+            )
+        return result
+
+    def _plain_class_model_fields_for_expansion(self, model_type: type) -> list[ModelField]:
+        class_docs = self._parse_docstring_args(model_type.__doc__)
+        try:
+            cls_info = Class(
+                model_type,
+                init=True,
+                public=True,
+                inherited=True,
+                static_methods=True,
+                protected=False,
+                private=False,
+                classmethod=True,
+            )
+        except OBJINSPECT_CLASS_ERRORS:
+            return []
+
+        init_method = cls_info.init_method
+        if init_method is None:
+            return []
+
+        result: list[ModelField] = []
+        for param in init_method.params:
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            result.append(
+                ModelField(
+                    name=param.name,
+                    annotation=param.type if param.is_typed else None,
+                    required=param.is_required,
+                    default=param.default if param.has_default else None,
+                    description=param.description or class_docs.get(param.name),
+                )
+            )
+        return result
+
+    @staticmethod
+    def _parse_docstring_args(docstring: str | None) -> dict[str, str]:
+        if not docstring:
+            return {}
+
+        import docstring_parser
+
+        parsed = docstring_parser.parse(docstring)
+        return {
+            param.arg_name: (param.description or "").strip()
+            for param in parsed.params
+            if param.arg_name
+        }
 
     def reconstruct_expanded_models(
         self,
