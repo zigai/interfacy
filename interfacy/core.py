@@ -1940,4 +1940,4 @@ class InterfacyParser:
         return None
 
 
-__all__ = ["ExitCode", "InterfacyParser", "InterspersedOptionValueError"]
+__all__ = ["AbbreviationScope", "ExitCode", "InterfacyParser", "InterspersedOptionValueError"]
