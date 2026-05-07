@@ -45,6 +45,7 @@ def load_module_from_path(path: Path) -> ModuleType:
     if module_dir not in sys.path:
         sys.path.insert(0, module_dir)
     spec.loader.exec_module(module)
+    module.__dict__["__interfacy_target_display__"] = str(path)
     return module
 
 
@@ -63,7 +64,8 @@ def _resolve_symbol(module: ModuleType, symbol_ref: str) -> Any:
     current: Any = module
     for part in symbol_ref.split("."):
         if not hasattr(current, part):
-            raise AttributeError(f"Symbol '{symbol_ref}' not found in module '{module.__name__}'.")
+            display = getattr(module, "__interfacy_target_display__", module.__name__)
+            raise AttributeError(f"Symbol '{symbol_ref}' not found in module '{display}'.")
         current = getattr(current, part)
     return current
 
@@ -231,6 +233,17 @@ def configure_runner_from_module(parser: Interfacy, module: ModuleType) -> None:
     hook(parser)
 
 
+def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
+    if "--version" in args:
+        print(f"interfacy {version('interfacy')}")
+        return ExitCode.SUCCESS
+    if "--config-paths" in args:
+        for path in get_default_config_paths():
+            print(path)
+        return ExitCode.SUCCESS
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> ExitCode:
     """
     Run the Interfacy CLI entrypoint.
@@ -238,17 +251,17 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
     Args:
         argv (Sequence[str] | None): Argument list to parse. Defaults to sys.argv.
     """
+    raw_args = list(argv) if argv is not None else sys.argv[1:]
+    early_result = _handle_config_independent_flag(raw_args)
+    if early_result is not None:
+        return early_result
+
     settings = resolve_entrypoint_settings()
     parser = build_parser(settings)
-    args = parser.parse_args(argv)
-
-    if args.config_paths:
-        for path in get_default_config_paths():
-            print(path)
-        return ExitCode.SUCCESS
+    args = parser.parse_args(raw_args)
 
     if not args.target:
-        parser.print_help()
+        parser.error("the following arguments are required: TARGET")
         return ExitCode.ERR_INVALID_ARGS
 
     try:

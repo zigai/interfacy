@@ -100,6 +100,23 @@ def test_main_invalid_target_attribute_missing(
     assert excinfo.value.code == 2
     captured = capsys.readouterr()
     assert "Symbol 'missing' not found" in captured.err
+    assert "interfacy_entry_" not in captured.err
+
+
+def test_main_file_target_missing_symbol_mentions_file_path(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(module_path, "def exists():\n    return 'ok'\n")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:missing"])
+
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert f"module '{module_path}'" in captured.err
+    assert "interfacy_entry_" not in captured.err
 
 
 def test_main_config_paths_output(
@@ -121,6 +138,30 @@ def test_main_config_paths_output(
         str(env_path),
         str(tmp_path / "home" / ".config" / "interfacy" / "config.toml"),
     ]
+
+
+def test_main_special_flags_bypass_invalid_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = tmp_path / "bad.toml"
+    config_path.write_text("[help]\nlayout = 'no-such-layout'\n", encoding="utf-8")
+    monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
+
+    assert main(["--config-paths"]) == ExitCode.SUCCESS
+    assert str(config_path) in capsys.readouterr().out
+
+    assert main(["--version"]) == ExitCode.SUCCESS
+    assert "interfacy" in capsys.readouterr().out
+
+
+def test_main_missing_target_is_argparse_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main([])
+
+    assert excinfo.value.code == 2
+    assert "TARGET" in capsys.readouterr().err
 
 
 def test_main_passthrough_double_dash(
