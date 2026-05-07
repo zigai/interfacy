@@ -39,6 +39,8 @@ from interfacy.schema.schema import (
 )
 from interfacy.util import (
     extract_optional_union_list,
+    extract_optional_union_tuple,
+    extract_union_list,
     get_fixed_tuple_info,
     get_param_choices,
     inverted_bool_flag_name,
@@ -710,16 +712,19 @@ class ParserSchemaBuilder:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.context.reserved_flags]
         flag_state = FlagAllocationState()
+        effective_pipe_config = pipe_config
         if pipe_config is None and canonical_name is not None:
-            pipe_config = self.context.resolve_pipe_targets_by_names(
+            effective_pipe_config = self.context.resolve_pipe_targets_by_names(
                 canonical_name=canonical_name,
                 obj_name=function.name,
                 aliases=aliases,
                 subcommand=None,
-                include_default=False,
+                include_default=True,
             )
 
-        pipe_param_names = pipe_config.targeted_parameters() if pipe_config else set()
+        pipe_param_names = (
+            effective_pipe_config.targeted_parameters() if effective_pipe_config else set()
+        )
 
         self._prepare_layout_for_params(function.params)
         parameters = [
@@ -1123,6 +1128,11 @@ class ParserSchemaBuilder:
         *,
         settings: CommandBuildSettings,
     ) -> bool:
+        registered_parsers = getattr(self.context.type_parser, "parsers", {})
+        if param_type in registered_parsers and self.model_argument_mapper.is_plain_class_model(
+            param_type
+        ):
+            return False
         return self.model_argument_mapper.should_expand_model(
             param_type,
             expand_model_params=settings.expand_model_params,
@@ -1353,7 +1363,11 @@ class ParserSchemaBuilder:
             help=resolved_help_text,
             type=state.parsed_type,
             parser=state.parser_func,
-            metavar=self._metavar_for_spec(spec),
+            metavar=(
+                None
+                if is_expanded_from is not None and spec.is_typed and spec.type is not bool
+                else self._metavar_for_spec(spec)
+            ),
             nargs=state.nargs,
             boolean_behavior=state.boolean_behavior,
             choices=state.choices,
@@ -1418,12 +1432,15 @@ class ParserSchemaBuilder:
         state: ArgumentBuildState,
     ) -> bool:
         optional_union_list = extract_optional_union_list(spec.type)
+        union_list = extract_union_list(spec.type)
         list_annotation: Any | None = None
         element_type: Any | None = None
 
         if optional_union_list:
             list_annotation, element_type = optional_union_list
             state.is_optional_union_list = True
+        elif union_list:
+            list_annotation, element_type = union_list
         elif is_list_or_list_alias(spec.type):
             list_annotation = spec.type
             element_args = type_args(spec.type)
@@ -1448,10 +1465,11 @@ class ParserSchemaBuilder:
         return True
 
     def _configure_fixed_tuple_state(self, spec: ParamSpec, state: ArgumentBuildState) -> bool:
-        if not is_fixed_tuple(spec.type):
+        tuple_type = extract_optional_union_tuple(spec.type) or spec.type
+        if not is_fixed_tuple(tuple_type):
             return False
 
-        tuple_info = get_fixed_tuple_info(spec.type)
+        tuple_info = get_fixed_tuple_info(tuple_type)
         if tuple_info is None:
             return True
 

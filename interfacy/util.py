@@ -1,4 +1,6 @@
 import ast
+import functools
+import operator
 import os
 import re
 import sys
@@ -212,6 +214,43 @@ def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
             element_type = element_args[0] if element_args else None
             return arg, element_type
     return None
+
+
+def extract_optional_union_tuple(t: Any) -> Any | None:
+    """Return the tuple annotation from `tuple[...] | None`, otherwise None."""
+    if not is_union_type(t):
+        return None
+
+    union_args = type_args(t)
+    if len(union_args) != 2 or not any(arg is NoneType for arg in union_args):
+        return None
+
+    for arg in union_args:
+        if is_fixed_tuple(arg):
+            return arg
+    return None
+
+
+def extract_union_list(t: Any) -> tuple[Any, Any | None] | None:
+    """Return a shared list shape from `list[T] | list[U]`, otherwise None."""
+    if not is_union_type(t):
+        return None
+
+    union_args = type_args(t)
+    list_args = [arg for arg in union_args if is_list_or_list_alias(arg)]
+    if len(list_args) != len(union_args) or not list_args:
+        return None
+
+    element_types = []
+    for arg in list_args:
+        args = type_args(arg)
+        if not args:
+            return arg, None
+        element_types.append(args[0])
+
+    if len(element_types) == 1:
+        return list_args[0], element_types[0]
+    return list_args[0], functools.reduce(operator.or_, element_types)
 
 
 def _consume_quoted_segment(text: str, start: int) -> int:

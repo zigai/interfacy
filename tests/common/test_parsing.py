@@ -500,3 +500,49 @@ class TestListNargsKwOnly:
         # strings: list[str], ints: list[int]
         # kw_only -> --strings a b --ints 1 2
         assert parser.run(args=["--strings", "a", "b", "--ints", "1", "2"]) == (2, 2)
+
+
+class TestStressRegressionParsing:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_optional_fixed_tuple_keeps_tuple_shape(self, parser: InterfacyParser):
+        def command(pair: tuple[int, str] | None = None):
+            return pair
+
+        parser.add_command(command)
+
+        assert parser.run(args=["--pair", "1", "a"]) == (1, "a")
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_union_of_lists_keeps_list_shape(self, parser: InterfacyParser):
+        def command(values: list[int] | list[str]):
+            return values
+
+        parser.add_command(command)
+
+        assert parser.run(args=["1", "2"]) == [1, 2]
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_translated_positional_name_binds_to_original_parameter(
+        self,
+        parser: InterfacyParser,
+    ):
+        namespace: dict[str, object] = {}
+        exec("def command(XMLHttpRequestID: str):\n    return XMLHttpRequestID\n", namespace)
+        command = namespace["command"]
+
+        parser.add_command(command)
+
+        assert parser.run(args=["ABC"]) == "ABC"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_translated_unicode_option_name_binds_to_original_parameter(
+        self,
+        parser: InterfacyParser,
+    ):
+        namespace: dict[str, object] = {}
+        exec('def command(déjàVu: str = "seen"):\n    return déjàVu\n', namespace)
+        command = namespace["command"]
+
+        parser.add_command(command)
+
+        assert parser.run(args=["--dé-jà-vu", "D"]) == "D"
