@@ -1,9 +1,11 @@
 """Tests for KeyboardInterrupt (Ctrl+C) signal handling."""
 
+import threading
 import time
 
 import pytest
 
+from interfacy import Interfacy
 from interfacy.argparse_backend import Argparser
 from interfacy.core import ExitCode
 
@@ -143,3 +145,42 @@ class TestInterruptDuringParsing:
 
         result = parser.run(InterruptingCommand, args=["action"])
         assert isinstance(result, KeyboardInterrupt) or len(callback_called) > 0
+
+
+def test_run_from_non_main_thread_does_not_install_signal_handler():
+    def command() -> str:
+        return "ok"
+
+    for backend in ("argparse", "click"):
+        results = []
+
+        def worker(
+            *, active_backend: str = backend, active_results: list[object] = results
+        ) -> None:
+            active_results.append(
+                Interfacy(backend=active_backend, sys_exit_enabled=False).run(command, args=[])
+            )
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+        thread.join()
+
+        assert results == ["ok"]
+
+
+def test_click_backend_honors_interrupt_callback():
+    calls = []
+
+    def command() -> None:
+        raise KeyboardInterrupt()
+
+    parser = Interfacy(
+        backend="click",
+        sys_exit_enabled=False,
+        on_interrupt=lambda exc: calls.append(type(exc).__name__),
+    )
+
+    result = parser.run(command, args=[])
+
+    assert isinstance(result, KeyboardInterrupt)
+    assert calls == ["KeyboardInterrupt"]

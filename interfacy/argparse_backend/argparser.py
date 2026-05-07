@@ -4,6 +4,7 @@ import argparse
 import re
 import signal
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
 from types import FrameType
@@ -1123,7 +1124,10 @@ class Argparser(InterfacyParser):
 
     def _install_sigint_handler(
         self,
-    ) -> tuple[Any, Callable[[int, FrameType | None], None]]:
+    ) -> tuple[Any, Callable[[int, FrameType | None], None] | None]:
+        if threading.current_thread() is not threading.main_thread():
+            return None, None
+
         original_handler = signal.getsignal(signal.SIGINT)
 
         def sigint_handler(_signum: int, _frame: FrameType | None) -> None:
@@ -1217,17 +1221,20 @@ class Argparser(InterfacyParser):
             try:
                 parse_result = self._parse_run_input(commands, args)
             finally:
-                signal.signal(signal.SIGINT, original_handler)
+                if sigint_handler is not None:
+                    signal.signal(signal.SIGINT, original_handler)
 
             if isinstance(parse_result, BaseException):
                 return parse_result
             resolved_args, namespace = parse_result
 
-            signal.signal(signal.SIGINT, sigint_handler)
+            if sigint_handler is not None:
+                signal.signal(signal.SIGINT, sigint_handler)
             try:
                 result = self._run_runner(namespace, resolved_args)
             finally:
-                signal.signal(signal.SIGINT, original_handler)
+                if sigint_handler is not None:
+                    signal.signal(signal.SIGINT, original_handler)
 
             if isinstance(result, BaseException):
                 return result

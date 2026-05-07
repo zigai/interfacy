@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import signal
 import sys
+import threading
 import time
 import warnings
 from collections.abc import Callable, Iterable, Sequence
@@ -92,6 +93,9 @@ class ClickParser(InterfacyParser):
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
         include_classmethods: bool = False,
+        on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
+        silent_interrupt: bool = True,
+        reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         plugins: Sequence[InterfacyPlugin] | None = None,
@@ -117,6 +121,9 @@ class ClickParser(InterfacyParser):
             executable_flags=executable_flags,
             include_inherited_methods=include_inherited_methods,
             include_classmethods=include_classmethods,
+            on_interrupt=on_interrupt,
+            silent_interrupt=silent_interrupt,
+            reraise_interrupt=reraise_interrupt,
             full_error_traceback=full_error_traceback,
             sys_exit_enabled=sys_exit_enabled,
             expand_model_params=expand_model_params,
@@ -1072,23 +1079,28 @@ class ClickParser(InterfacyParser):
         """
         registration_snapshot = self._snapshot_registration_state() if commands else None
         self._set_runtime_process_title()
-        original_handler = signal.getsignal(signal.SIGINT)
-        signal.signal(signal.SIGINT, self._sigint_handler)
+        can_handle_sigint = threading.current_thread() is threading.main_thread()
+        original_handler = signal.getsignal(signal.SIGINT) if can_handle_sigint else None
+        if can_handle_sigint:
+            signal.signal(signal.SIGINT, self._sigint_handler)
         try:
             try:
                 parse_ok, parse_payload = self._register_commands_and_parse(commands, args)
             finally:
-                signal.signal(signal.SIGINT, original_handler)
+                if can_handle_sigint:
+                    signal.signal(signal.SIGINT, original_handler)
 
             if not parse_ok:
                 return parse_payload
 
             parsed_args, namespace = parse_payload
-            signal.signal(signal.SIGINT, self._sigint_handler)
+            if can_handle_sigint:
+                signal.signal(signal.SIGINT, self._sigint_handler)
             try:
                 run_ok, run_payload = self._execute_schema_runner(namespace, parsed_args)
             finally:
-                signal.signal(signal.SIGINT, original_handler)
+                if can_handle_sigint:
+                    signal.signal(signal.SIGINT, original_handler)
             if not run_ok:
                 return run_payload
 
