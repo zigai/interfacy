@@ -4,7 +4,7 @@ import inspect
 from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
 from types import NoneType
-from typing import Any
+from typing import Any, get_type_hints
 
 from objinspect import Class
 from objinspect.typing import is_union_type, type_args
@@ -146,6 +146,7 @@ class ModelArgumentMapper:
 
     def _dataclass_model_fields_for_expansion(self, model_type: type) -> list[ModelField]:
         arg_docs = self._parse_docstring_args(model_type.__doc__)
+        resolved_hints = self._resolved_type_hints(model_type)
         result: list[ModelField] = []
         for field_info in fields(model_type):
             required = field_info.default is MISSING and field_info.default_factory is MISSING
@@ -166,7 +167,7 @@ class ModelArgumentMapper:
             result.append(
                 ModelField(
                     name=field_info.name,
-                    annotation=field_info.type,
+                    annotation=resolved_hints.get(field_info.name, field_info.type),
                     required=required,
                     default=default,
                     description=description,
@@ -553,10 +554,11 @@ class ModelArgumentMapper:
 
     def _model_fields(self, model_type: type) -> list[ModelField]:
         if is_dataclass(model_type):
+            resolved_hints = self._resolved_type_hints(model_type)
             return [
                 ModelField(
                     name=field.name,
-                    annotation=field.type,
+                    annotation=resolved_hints.get(field.name, field.type),
                     required=field.default is MISSING and field.default_factory is MISSING,  # type: ignore[comparison-overlap]
                 )
                 for field in fields(model_type)
@@ -621,10 +623,12 @@ class ModelArgumentMapper:
 
     def _build_model_instance(self, model_type: type, values: dict[str, Any]) -> Any:
         if is_dataclass(model_type):
+            resolved_hints = self._resolved_type_hints(model_type)
             kwargs: dict[str, Any] = {}
             for field in fields(model_type):
                 if field.name in values:
-                    kwargs[field.name] = self._coerce_model_value(field.type, values[field.name])
+                    annotation = resolved_hints.get(field.name, field.type)
+                    kwargs[field.name] = self._coerce_model_value(annotation, values[field.name])
             return model_type(**kwargs)
 
         if hasattr(model_type, "model_fields"):
@@ -693,6 +697,13 @@ class ModelArgumentMapper:
                 continue
             annotations[param.name] = param.type if param.is_typed else None
         return annotations
+
+    @staticmethod
+    def _resolved_type_hints(model_type: type) -> dict[str, Any]:
+        try:
+            return get_type_hints(model_type)
+        except (AttributeError, NameError, TypeError):
+            return {}
 
 
 __all__ = ["ExpandedModelValidationError", "ModelArgumentMapper"]

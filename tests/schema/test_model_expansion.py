@@ -1,11 +1,14 @@
 from dataclasses import dataclass, field
+from typing import Literal
 
 import pytest
 from objinspect import Function
 
 from interfacy.appearance.layouts import InterfacyLayout
 from interfacy.argparse_backend.argparser import Argparser
+from interfacy.interfacy import Interfacy
 from interfacy.schema.builder import ParserSchemaBuilder
+from interfacy.type_parsers import build_default_type_parser
 from tests.schema.conftest import (
     Address,
     FakeParser,
@@ -36,6 +39,19 @@ class UserWithMetadataDescription:
 
 def greet_metadata(user: UserWithMetadataDescription) -> str:
     return f"Hello {user.name}"
+
+
+@dataclass
+class FutureInner:
+    count: "int"
+    mode: "Literal['fast', 'slow']" = "fast"
+
+
+@dataclass
+class FutureConfig:
+    name: "str"
+    inner: "FutureInner"
+    tags: "list[int]" = field(default_factory=list)
 
 
 def maybe_user(user: User | None = None) -> User | None:
@@ -374,3 +390,47 @@ def test_pydantic_v2_model_expansion() -> None:
     assert "user.name" in names
     assert "user.age" in names
     assert "Display name." in help_text["user.name"]
+
+
+def test_dataclass_expansion_resolves_postponed_string_annotations() -> None:
+    def command(config: FutureConfig) -> FutureConfig:
+        return config
+
+    for backend in ("argparse", "click"):
+        parser = Interfacy(backend=backend, sys_exit_enabled=False)
+        result = parser.run(
+            command,
+            args=[
+                "--config.name",
+                "n",
+                "--config.inner.count",
+                "3",
+                "--config.tags",
+                "1",
+                "2",
+            ],
+        )
+
+        assert result == FutureConfig(name="n", inner=FutureInner(count=3), tags=[1, 2])
+
+
+def test_registered_parser_for_plain_class_prevents_model_expansion() -> None:
+    class Custom:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+    def parse_custom(raw: str) -> Custom:
+        return Custom(raw.removeprefix("x:"))
+
+    def command(value: Custom) -> Custom:
+        return value
+
+    type_parser = build_default_type_parser()
+    type_parser.add(Custom, parse_custom)
+
+    for backend in ("argparse", "click"):
+        parser = Interfacy(backend=backend, sys_exit_enabled=False, type_parser=type_parser)
+        result = parser.run(command, args=["x:ok"])
+
+        assert isinstance(result, Custom)
+        assert result.value == "ok"
