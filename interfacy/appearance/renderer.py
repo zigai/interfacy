@@ -418,6 +418,21 @@ class SchemaHelpRenderer:
 
         for part in parts:
             part_len = ansi_len(part)
+            available_width = max(10, text_width - len(indent))
+            if part_len > available_width:
+                if current_line:
+                    lines.append(" ".join(current_line))
+                    current_line = []
+                chunks = [
+                    part[index : index + available_width]
+                    for index in range(0, len(part), available_width)
+                ]
+                lines.extend(chunks[:-1])
+                current_line = [chunks[-1]] if chunks else []
+                current_len = (
+                    len(indent) + ansi_len(current_line[0]) if current_line else len(indent)
+                )
+                continue
             if current_line and current_len + 1 + part_len > text_width:
                 lines.append(" ".join(current_line))
                 current_line = [part]

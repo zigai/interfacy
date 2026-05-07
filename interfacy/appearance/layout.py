@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -717,7 +718,35 @@ class HelpLayout:
             values.get("default", ""),
             is_help_option=is_help_option,
         )
-        return rendered.rstrip()
+        return self._wrap_overwide_rendered_line(rendered.rstrip())
+
+    def _wrap_overwide_rendered_line(self, rendered: str) -> str:
+        width = self._terminal_width()
+        wrapped_lines: list[str] = []
+        for line in rendered.splitlines() or [rendered]:
+            if ansi_len(line) <= width:
+                wrapped_lines.append(line)
+                continue
+            leading = len(line) - len(line.lstrip(" "))
+            if (
+                width >= 50
+                and leading < width - 10
+                and all(ansi_len(word) <= width - leading for word in line.split())
+            ):
+                wrapped_lines.append(line)
+                continue
+            indent = " " * (leading if leading < width - 10 else 2)
+            wrapped_lines.extend(
+                textwrap.wrap(
+                    line.strip(),
+                    width=max(10, width),
+                    initial_indent=indent,
+                    subsequent_indent=f"{indent}  ",
+                    break_long_words=True,
+                    break_on_hyphens=False,
+                )
+            )
+        return "\n".join(wrapped_lines)
 
     def _format_templated_help_line(
         self,

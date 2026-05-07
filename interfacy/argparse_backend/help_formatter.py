@@ -174,17 +174,44 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             or not isinstance(help_layout.help_position, int)
             or not action.option_strings
         ):
-            return super()._format_action(action)
+            return self._wrap_overwide_action_lines(super()._format_action(action))
 
         previous_max_help_position = self._max_help_position
         previous_action_max_length = self._action_max_length
         self._max_help_position = help_layout.help_position
         self._action_max_length = max(self._action_max_length, help_layout.help_position - 2)
         try:
-            return super()._format_action(action)
+            return self._wrap_overwide_action_lines(super()._format_action(action))
         finally:
             self._max_help_position = previous_max_help_position
             self._action_max_length = previous_action_max_length
+
+    def _wrap_overwide_action_lines(self, rendered: str) -> str:
+        lines: list[str] = []
+        for line in rendered.splitlines():
+            if ansi_len(line) <= self._width:
+                lines.append(line)
+                continue
+            leading = len(line) - len(line.lstrip(" "))
+            if (
+                self._width >= 50
+                and leading < self._width - 10
+                and all(ansi_len(word) <= self._width - leading for word in line.split())
+            ):
+                lines.append(line)
+                continue
+            indent_width = leading if leading < self._width - 10 else 2
+            lines.extend(
+                textwrap.wrap(
+                    line.strip(),
+                    width=max(10, self._width),
+                    initial_indent=" " * indent_width,
+                    subsequent_indent=" " * indent_width,
+                    break_long_words=True,
+                    break_on_hyphens=False,
+                )
+            )
+        return "\n".join(lines) + ("\n" if rendered.endswith("\n") else "")
 
     def _fill_text(self, text: str, width: int, indent: str) -> str:
         """
@@ -296,6 +323,19 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     line: list[str] = []
                     line_len = ansi_len(prefix) - 1 if prefix is not None else len(indent) - 1
                     for part in parts:
+                        available = max(10, text_width - len(indent))
+                        if len(part) > available:
+                            if line:
+                                lines.append(indent + " ".join(line))
+                                line = []
+                            chunks = [
+                                part[index : index + available]
+                                for index in range(0, len(part), available)
+                            ]
+                            lines.extend(f"{indent}{chunk}" for chunk in chunks[:-1])
+                            line = [chunks[-1]] if chunks else []
+                            line_len = len(indent) + (len(line[0]) if line else 0)
+                            continue
                         if line_len + 1 + len(part) > text_width and line:
                             lines.append(indent + " ".join(line))
                             line = []
