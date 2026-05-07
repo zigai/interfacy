@@ -137,3 +137,20 @@ class TestSyncExecution:
         assert result == "math:8"
         _assert_not_awaitable(result)
         _assert_no_unawaited_runtime_warning(caught)
+
+    def test_task_returned_inside_running_loop_is_returned_to_caller(self) -> None:
+        from interfacy import Interfacy
+
+        async def main() -> str:
+            async def later() -> str:
+                return "ok"
+
+            def command():
+                return asyncio.create_task(later())
+
+            parser = Interfacy(sys_exit_enabled=False)
+            task = parser.run(command, args=[])
+            assert isinstance(task, asyncio.Task)
+            return await task
+
+        assert asyncio.run(main()) == "ok"

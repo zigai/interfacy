@@ -170,6 +170,19 @@ class TestPipeExecution:
 
         assert parser.run(args=[]) == {"key": 123}
 
+    @pytest.mark.parametrize("backend", ["argparse", "click"])
+    def test_global_pipe_targets_relax_required_positional_before_parse(
+        self,
+        backend: str,
+        mocker,
+    ):
+        from interfacy import Interfacy
+
+        parser = Interfacy(backend=backend, sys_exit_enabled=False, pipe_targets="msg")
+        mocker.patch("interfacy.core.read_piped", return_value="hello")
+
+        assert parser.run(fn_single_arg, args=[]) == "hello"
+
 
 # --- Piped List Tests ---
 

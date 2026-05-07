@@ -60,6 +60,12 @@ class SchemaRunner:
         return self.run_multiple(commands)
 
     def _run_awaitable(self, awaitable: Any) -> Any:
+        if isinstance(awaitable, asyncio.Future):
+            loop = awaitable.get_loop()
+            if loop.is_running():
+                return awaitable
+            return loop.run_until_complete(awaitable)
+
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -147,7 +153,8 @@ class SchemaRunner:
             func (Function | Method): Callable to execute.
             args (dict): Parsed argument mapping.
         """
-        positional_args, keyword_args = self._build_call_args(func, args)
+        cli_args = reverse_translations(args, self.builder.flag_strategy.argument_translator)
+        positional_args, keyword_args = self._build_call_args(func, cli_args)
 
         logger.info(
             "Calling function '%s' with args: %s, kwargs: %s",
@@ -205,6 +212,7 @@ class SchemaRunner:
             command (Command): Command schema for the class.
             args (dict): Parsed argument mapping containing subcommand data.
         """
+        args = dict(args)
         cls = command.obj
         if not isinstance(cls, Class):
             raise TypeError(f"Expected {Class}, got {type(cls)}")

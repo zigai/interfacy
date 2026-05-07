@@ -32,6 +32,9 @@ class NameMapping:
             return key
         translated_key = self.translation_fn(key)
         self.translations[translated_key] = key
+        normalized_key = translated_key.replace("-", "_")
+        if normalized_key != translated_key:
+            self.translations[normalized_key] = key
         return translated_key
 
     def reverse(self, translated: str) -> str:

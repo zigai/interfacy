@@ -1,6 +1,7 @@
 import pytest
 
 from interfacy.core import InterfacyParser
+from interfacy.runner import SchemaRunner
 from tests.conftest import (
     Color,
     Math,
@@ -274,3 +275,23 @@ class TestListNargsKwOnly:
         # strings: list[str], ints: list[int]
         # kw_only -> --strings a b --ints 1 2
         assert parser.run(args=["--strings", "a", "b", "--ints", "1", "2"]) == (2, 2)
+
+
+def test_class_runner_does_not_mutate_parsed_namespace() -> None:
+    from interfacy import Interfacy
+
+    class Counter:
+        def __init__(self, value: int = 1) -> None:
+            self.value = value
+
+        def show(self) -> int:
+            return self.value
+
+    parser = Interfacy(sys_exit_enabled=False)
+    parser.add_command(Counter)
+    namespace = parser.parse_args(["show"])
+    before = dict(namespace)
+
+    assert SchemaRunner(namespace, parser._parser, ["show"]).run() == 1
+    assert namespace == before
+    assert SchemaRunner(namespace, parser._parser, ["show"]).run() == 1
