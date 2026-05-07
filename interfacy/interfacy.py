@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Literal, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
 
 from objinspect import Class, Function
 from strto import StrToTypeParser
@@ -326,7 +326,7 @@ class Interfacy(InterfacyParser):
         *,
         command: str | None = None,
         subcommand: str | None = None,
-        **normalization_kwargs: object,
+        **normalization_kwargs: Any,
     ) -> PipeTargets:
         return self._parser.pipe_to(
             targets,
@@ -347,7 +347,7 @@ class Interfacy(InterfacyParser):
     def parse_args(self, args: list[str] | None = None) -> dict[str, object]:
         return self._parser.parse_args(args)
 
-    def run(self, *commands: CommandTarget, args: list[str] | None = None) -> object:
+    def run(self, *commands: CommandTarget, args: list[str] | None = None) -> Any:
         return self._parser.run(*commands, args=args)
 
     def parser_from_function(
