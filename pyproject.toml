@@ -1,7 +1,7 @@
 
 [project]
 name = "interfacy"
-version = "0.5.1"
+version = "0.5.2"
 description = "Framework for building CLIs from Python callables"
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
@@ -52,7 +52,7 @@ interfacy = "interfacy.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.2",
+    "pytest>=9.0.3",
     "pytest-mock",
     "ruff==0.15.8",
     "pre-commit>=4.5.1",
