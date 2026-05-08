@@ -166,6 +166,17 @@ class Interfacy(InterfacyParser):
     def add_plugin(self, plugin: InterfacyPlugin) -> InterfacyPlugin:
         return self._parser.add_plugin(plugin)
 
+    def add_type_parser(
+        self,
+        typ: type[Any],
+        parser: Callable[[str], Any],
+    ) -> None:
+        self._parser.add_type_parser(typ, parser)
+
+    @property
+    def type_parser(self) -> StrToTypeParser:
+        return self._parser.type_parser
+
     def apply_setup(
         self,
         *,

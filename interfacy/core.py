@@ -323,6 +323,22 @@ class InterfacyParser:
         self._invalidate_build_cache()
         return plugin
 
+    def add_type_parser(
+        self,
+        typ: type[Any],
+        parser: Callable[[str], Any],
+    ) -> None:
+        """
+        Add a parser for a custom CLI parameter type.
+
+        Args:
+            typ: Type annotation to parse.
+            parser: Callable that converts a raw CLI string into ``typ``.
+        """
+        self.type_parser.add(typ, parser)
+        self._type_parser_explicit = True
+        self._invalidate_build_cache()
+
     def _validate_apply_setup_request(
         self,
         *,
