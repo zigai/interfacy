@@ -46,12 +46,12 @@ uv add "git+https://github.com/zigai/interfacy.git"
 ```python
 from interfacy import Interfacy
 
-def greet(name: str, times: int = 1) -> str:
-    """Return a greeting."""
-    return " ".join([f"Hello, {name}!" for _ in range(times)])
+def greet(name: str, times: int = 1) -> None:
+    """Print a greeting."""
+    print(" ".join([f"Hello, {name}!" for _ in range(times)]))
 
 if __name__ == "__main__":
-    Interfacy(print_result=True).run(greet)
+    Interfacy().run(greet)
 ```
 
 ```text
