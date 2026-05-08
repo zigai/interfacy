@@ -143,21 +143,6 @@ if __name__ == "__main__":
     Interfacy(print_result=True).run(ops)
 ```
 
-## Backend Selection
-
-`Interfacy` uses the argparse backend by default. To use the Click backend,
-install the optional dependency and pass `backend="click"`:
-
-```bash
-pip install "interfacy[click]"
-```
-
-```python
-from interfacy import Interfacy
-
-Interfacy(backend="click", print_result=True).run(greet)
-```
-
 ## Interfacy CLI Entrypoint
 
 Interfacy also ships a CLI that can run an existing function, class, or class instance directly from a module or Python file:
@@ -173,7 +158,7 @@ The entrypoint supports configuration via TOML, loaded from `~/.config/interfacy
 ```text
 usage: interfacy [--help] [--version] [--config-paths] [TARGET] ...
 
-Interfacy is a CLI framework for building command-line interfaces from Python callables.
+Interfacy is a framework for building CLIs from Python callables.
 
 positional arguments:
   TARGET                      Python file or module with a function/class/instance symbol (e.g. main.py:main, pkg.cli:App, pkg.cli:service).
@@ -187,6 +172,20 @@ options:
 Use 'interfacy TARGET --help' to display the help text for the target.
 ```
 
+## Backend Selection
+
+`Interfacy` uses the argparse backend by default. To use the Click backend,
+install the optional dependency and pass `backend="click"`:
+
+```bash
+pip install "interfacy[click]"
+```
+
+```python
+from interfacy import Interfacy
+
+Interfacy(backend="click", print_result=True).run(greet)
+```
 ## License
 
 [MIT License](https://github.com/zigai/interfacy/blob/main/LICENSE)

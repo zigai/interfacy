@@ -150,9 +150,7 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
     Args:
         settings (dict[str, Any]): Resolved configuration settings.
     """
-    description = (
-        "Interfacy is a CLI framework for building command-line interfaces from Python callables."
-    )
+    description = "Interfacy is a framework for building CLIs from Python callables."
     epilog = "Use 'interfacy TARGET --help' to display the help text for the target.\n\n"
 
     parser = ArgumentParser(
