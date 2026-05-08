@@ -2,7 +2,7 @@
 [project]
 name = "interfacy"
 version = "0.5.1"
-description = "CLI framework for building command-line interfaces from Python callables"
+description = "Framework for building CLIs from Python callables"
 authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -88,6 +88,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["interfacy"]
+
+[tool.hatch.build.targets.sdist.force-include]
+"interfacy/.agents" = "interfacy/.agents"
 
 [tool.hatch.envs.test]
 features = ["test"]
