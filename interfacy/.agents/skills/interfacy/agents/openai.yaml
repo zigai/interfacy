@@ -1,0 +1,6 @@
+interface:
+  display_name: "Interfacy"
+  short_description: "Build typed Python CLIs with Interfacy"
+  default_prompt: "Use $interfacy to build or refactor a typed Python CLI with Interfacy."
+policy:
+  allow_implicit_invocation: true
