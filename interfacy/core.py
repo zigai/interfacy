@@ -63,6 +63,7 @@ COMMAND_KEY: Final[str] = "command"
 PIPE_UNSET: Final[Any] = object()
 MAX_PARSE_RECOVERY_ATTEMPTS: Final[int] = 3
 AbbreviationScope = Literal["top_level_options", "all_options"]
+BooleanNegativePrefix = str | None
 HelpOptionSort = list[HelpOptionSortRule] | None
 HelpSubcommandSort = list[HelpSubcommandSortRule] | None
 ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
@@ -113,6 +114,16 @@ def validate_help_subcommand_sort(value: Any) -> HelpSubcommandSort:
 def validate_model_expansion_max_depth(value: int) -> int:
     if value < 1:
         raise ConfigurationError("model_expansion_max_depth must be >= 1")
+    return value
+
+
+def validate_bool_negative_prefix(value: BooleanNegativePrefix) -> BooleanNegativePrefix:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigurationError("bool_negative_prefix must be a string or None")
+    if not value:
+        raise ConfigurationError("bool_negative_prefix must not be empty")
     return value
 
 
@@ -178,6 +189,7 @@ class InterfacyParser:
         reraise_interrupt (bool): Re-raise KeyboardInterrupt after handling.
         expand_model_params (bool): Expand model parameters into nested flags.
         model_expansion_max_depth (int): Max depth for model expansion.
+        bool_negative_prefix (str | None): Prefix for generated negative boolean flags.
     """
 
     RESERVED_FLAGS: ClassVar[list[str]] = []
@@ -215,6 +227,7 @@ class InterfacyParser:
         reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
+        bool_negative_prefix: BooleanNegativePrefix = "no-",
         plugins: Sequence[InterfacyPlugin] | None = None,
     ) -> None:
         self.description = description
@@ -236,6 +249,7 @@ class InterfacyParser:
         self.model_expansion_max_depth = validate_model_expansion_max_depth(
             model_expansion_max_depth
         )
+        self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
         self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
             abbreviation_max_generated_len
         )
@@ -394,6 +408,7 @@ class InterfacyParser:
         silent_interrupt: bool | None,
         expand_model_params: bool | None,
         model_expansion_max_depth: int | None,
+        bool_negative_prefix: BooleanNegativePrefix | None,
     ) -> None:
         optional_updates = (
             ("display_result", print_result),
@@ -411,6 +426,8 @@ class InterfacyParser:
             self.model_expansion_max_depth = validate_model_expansion_max_depth(
                 model_expansion_max_depth
             )
+        if bool_negative_prefix is not None:
+            self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
 
     def _apply_optional_attr_updates(
         self,
@@ -487,6 +504,7 @@ class InterfacyParser:
         silent_interrupt: bool | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
+        bool_negative_prefix: BooleanNegativePrefix | None = None,
         plugins: Sequence[InterfacyPlugin] | None = None,
     ) -> None:
         """Apply parser-level setup after construction."""
@@ -510,6 +528,7 @@ class InterfacyParser:
             silent_interrupt=silent_interrupt,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
+            bool_negative_prefix=bool_negative_prefix,
         )
         self._apply_help_and_abbreviation_setup(
             abbreviation_max_generated_len=abbreviation_max_generated_len,

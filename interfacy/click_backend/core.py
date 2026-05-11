@@ -32,7 +32,12 @@ from interfacy.click_backend.commands import (
     InterfacyListOption,
 )
 from interfacy.click_backend.types import ChoiceParamType, ClickFuncParamType
-from interfacy.core import ExitCode, InterfacyParser, InterspersedOptionValueError
+from interfacy.core import (
+    BooleanNegativePrefix,
+    ExitCode,
+    InterfacyParser,
+    InterspersedOptionValueError,
+)
 from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
@@ -98,6 +103,7 @@ class ClickParser(InterfacyParser):
         reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
+        bool_negative_prefix: BooleanNegativePrefix = "no-",
         plugins: Sequence[InterfacyPlugin] | None = None,
     ) -> None:
         super().__init__(
@@ -128,6 +134,7 @@ class ClickParser(InterfacyParser):
             sys_exit_enabled=sys_exit_enabled,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
+            bool_negative_prefix=bool_negative_prefix,
             plugins=plugins,
         )
         self._last_schema: ParserSchema | None = None

@@ -317,6 +317,49 @@ def test_main_config_print_result_for_function_target(
     assert "hi" in captured.out
 
 
+def test_main_config_boolean_negative_prefix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
+        "\n".join(
+            [
+                "def enabled(value: bool = True) -> bool:",
+                "    return value",
+                "",
+            ]
+        ),
+    )
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[flags]",
+                'bool_negative_prefix = "without-"',
+                "",
+                "[behavior]",
+                'backend = "argparse"',
+                "print_result = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:enabled", "--without-value"])
+
+    assert excinfo.value.code == ExitCode.SUCCESS
+    captured = capsys.readouterr()
+    assert "False" in captured.out
+
+
 def test_main_configure_interfacy_hook_can_register_plugins(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

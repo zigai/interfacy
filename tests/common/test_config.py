@@ -28,6 +28,7 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
                 'translation_mode = "snake"',
                 'help_option_sort = ["bool_last", "alphabetical"]',
                 'help_subcommand_sort = ["name_length_desc"]',
+                'bool_negative_prefix = "without-"',
                 "",
                 "[abbreviations]",
                 'generator = "default"',
@@ -35,7 +36,10 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
                 'scope = "all_options"',
                 "",
                 "[behavior]",
+                'backend = "argparse"',
                 "print_result = true",
+                "expand_model_params = false",
+                "model_expansion_max_depth = 2",
             ]
         )
         + "\n",
@@ -61,6 +65,10 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
             "include_inherited_methods": None,
             "include_classmethods": None,
             "silent_interrupt": None,
+            "expand_model_params": None,
+            "model_expansion_max_depth": None,
+            "bool_negative_prefix": None,
+            "backend": None,
         },
     )
 
@@ -76,6 +84,10 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
     assert overrides["help_option_sort"] == ["bool_last", "alphabetical"]
     assert overrides["help_subcommand_sort"] == ["name_length_desc"]
     assert overrides["print_result"] is True
+    assert overrides["backend"] == "argparse"
+    assert overrides["expand_model_params"] is False
+    assert overrides["model_expansion_max_depth"] == 2
+    assert overrides["bool_negative_prefix"] == "without-"
 
 
 def test_apply_config_defaults_respects_overrides(tmp_path: Path) -> None:
@@ -102,6 +114,10 @@ def test_apply_config_defaults_respects_overrides(tmp_path: Path) -> None:
             "include_inherited_methods": None,
             "include_classmethods": None,
             "silent_interrupt": None,
+            "expand_model_params": None,
+            "model_expansion_max_depth": None,
+            "bool_negative_prefix": None,
+            "backend": None,
         },
     )
 
@@ -141,6 +157,10 @@ def test_load_config_rejects_string_help_option_sort(tmp_path: Path) -> None:
                 "include_inherited_methods": None,
                 "include_classmethods": None,
                 "silent_interrupt": None,
+                "expand_model_params": None,
+                "model_expansion_max_depth": None,
+                "bool_negative_prefix": None,
+                "backend": None,
             },
         )
 
@@ -178,6 +198,10 @@ def test_load_config_rejects_string_help_subcommand_sort(tmp_path: Path) -> None
                 "include_inherited_methods": None,
                 "include_classmethods": None,
                 "silent_interrupt": None,
+                "expand_model_params": None,
+                "model_expansion_max_depth": None,
+                "bool_negative_prefix": None,
+                "backend": None,
             },
         )
 

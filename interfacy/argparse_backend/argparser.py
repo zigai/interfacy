@@ -25,7 +25,12 @@ from interfacy.argparse_backend.argument_parser import (
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
 from interfacy.console import warn
-from interfacy.core import ExitCode, InterfacyParser, InterspersedOptionValueError
+from interfacy.core import (
+    BooleanNegativePrefix,
+    ExitCode,
+    InterfacyParser,
+    InterspersedOptionValueError,
+)
 from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
@@ -84,6 +89,38 @@ class ExecutableFlagAction(argparse.Action):
         _option_string: str | None = None,
     ) -> None:
         raise ExecutableFlagTriggeredError(self.executable_flag)
+
+
+class InterfacyBooleanOptionalAction(argparse.Action):
+    """Boolean optional action with a configurable negative option string."""
+
+    def __init__(
+        self,
+        option_strings: Sequence[str],
+        dest: str,
+        default: Any = None,
+        **kwargs: Any,
+    ) -> None:
+        negative_option = kwargs.pop("interfacy_negative_option", None)
+        if negative_option is not None:
+            option_strings = [*option_strings, negative_option]
+        self.interfacy_negative_option = negative_option
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            nargs=0,
+            default=default,
+            **kwargs,
+        )
+
+    def __call__(
+        self,
+        _parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        _values: Any,
+        option_string: str | None = None,
+    ) -> None:
+        setattr(namespace, self.dest, option_string != self.interfacy_negative_option)
 
 
 class Argparser(InterfacyParser):
@@ -155,6 +192,7 @@ class Argparser(InterfacyParser):
         reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
+        bool_negative_prefix: BooleanNegativePrefix = "no-",
         plugins: Sequence[InterfacyPlugin] | None = None,
         formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
     ) -> None:
@@ -187,6 +225,7 @@ class Argparser(InterfacyParser):
             reraise_interrupt=reraise_interrupt,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
+            bool_negative_prefix=bool_negative_prefix,
             plugins=plugins,
         )
         self.formatter_class = formatter_class
@@ -466,7 +505,7 @@ class Argparser(InterfacyParser):
             kwargs["nargs"] = arg.nargs
 
         if is_boolean_flag:
-            kwargs["action"] = argparse.BooleanOptionalAction
+            kwargs.update(self._boolean_action_kwargs(arg))
             if arg.boolean_behavior is not None:
                 kwargs["default"] = arg.boolean_behavior.default
         else:
@@ -499,6 +538,19 @@ class Argparser(InterfacyParser):
         if arg.required:
             kwargs["nargs"] = "?"
         return kwargs
+
+    @staticmethod
+    def _boolean_action_kwargs(arg: Argument) -> dict[str, Any]:
+        if (
+            arg.boolean_behavior is not None
+            and arg.boolean_behavior.negative_form is not None
+            and not arg.boolean_behavior.negative_form.startswith("--no-")
+        ):
+            return {
+                "action": InterfacyBooleanOptionalAction,
+                "interfacy_negative_option": arg.boolean_behavior.negative_form,
+            }
+        return {"action": argparse.BooleanOptionalAction}
 
     def _add_argument_from_schema(
         self,

@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field, fields
 from functools import cache
 from importlib import import_module
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any, Literal, TypeVar, cast
 
 from stdl.fs import toml_load
 
@@ -17,6 +17,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_subcommand_sort_rules,
 )
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
+from interfacy.core import validate_model_expansion_max_depth
 from interfacy.exceptions import ConfigurationError
 from interfacy.naming.abbreviations import (
     AbbreviationGenerator,
@@ -33,6 +34,7 @@ from interfacy.naming.flag_strategy import (
 _ComponentT = TypeVar("_ComponentT")
 _ResolverResultT = TypeVar("_ResolverResultT")
 _UNSET = object()
+Backend = Literal["argparse", "click"]
 
 _ABBREVIATION_SCOPE_LOOKUP: dict[str, str] = {
     "topleveloptions": "top_level_options",
@@ -58,6 +60,7 @@ def _normalize_name(value: str) -> str:
 class InterfacyConfig:
     """Configuration values loaded for the Interfacy CLI entrypoint."""
 
+    backend: Backend | None = field(default=None, metadata={"section": "behavior"})
     help_layout: str | None = field(
         default=None,
         metadata={"section": "appearance", "aliases": ("layout",)},
@@ -122,6 +125,18 @@ class InterfacyConfig:
     silent_interrupt: bool | None = field(
         default=None,
         metadata={"section": "behavior", "passthrough": True},
+    )
+    expand_model_params: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    model_expansion_max_depth: int | None = field(
+        default=None,
+        metadata={"section": "behavior"},
+    )
+    bool_negative_prefix: str | None = field(
+        default=None,
+        metadata={"section": "flags"},
     )
 
 
@@ -331,6 +346,66 @@ def _resolve_abbreviation_scope(value: Any) -> str | None:
     return resolved
 
 
+def _resolve_backend(value: Any) -> Backend | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigurationError("backend must be a string")
+    normalized = _normalize_name(value)
+    if normalized not in {"argparse", "click"}:
+        raise ConfigurationError("backend must be one of: argparse, click")
+    return cast(Backend, normalized)
+
+
+def _resolve_model_expansion_max_depth(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigurationError("model_expansion_max_depth must be an integer >= 1")
+    return validate_model_expansion_max_depth(value)
+
+
+def _resolve_bool_negative_prefix(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigurationError("bool_negative_prefix must be a string")
+    if not value:
+        raise ConfigurationError("bool_negative_prefix must not be empty")
+    return value
+
+
+def _resolve_help_option_sort(value: Any, _config_data: dict[str, Any]) -> Any:
+    return resolve_help_option_sort_rules(value, value_name="help_option_sort")
+
+
+def _resolve_help_subcommand_sort(value: Any, _config_data: dict[str, Any]) -> Any:
+    return resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
+
+
+def _resolve_flag_strategy_field(value: Any, config_data: dict[str, Any]) -> Any:
+    return _resolve_flag_strategy(value, config_data)
+
+
+def _resolve_abbreviation_gen_field(value: Any, config_data: dict[str, Any]) -> Any:
+    return _resolve_abbreviation_gen(value, config_data)
+
+
+_FIELD_RESOLVERS = {
+    "flag_strategy": _resolve_flag_strategy_field,
+    "abbreviation_gen": _resolve_abbreviation_gen_field,
+    "abbreviation_max_generated_len": lambda value, _config: (
+        _resolve_abbreviation_max_generated_len(value)
+    ),
+    "abbreviation_scope": lambda value, _config: _resolve_abbreviation_scope(value),
+    "help_option_sort": _resolve_help_option_sort,
+    "help_subcommand_sort": _resolve_help_subcommand_sort,
+    "backend": lambda value, _config: _resolve_backend(value),
+    "model_expansion_max_depth": lambda value, _config: _resolve_model_expansion_max_depth(value),
+    "bool_negative_prefix": lambda value, _config: _resolve_bool_negative_prefix(value),
+}
+
+
 def _resolve_default_for_field(
     field_name: str,
     value: Any,
@@ -358,18 +433,8 @@ def _resolve_default_for_field(
             ),
             aliases=_HELP_COLORS_ALIASES,
         )
-    elif field_name == "flag_strategy":
-        resolved = _resolve_flag_strategy(value, config_data)
-    elif field_name == "abbreviation_gen":
-        resolved = _resolve_abbreviation_gen(value, config_data)
-    elif field_name == "abbreviation_max_generated_len":
-        resolved = _resolve_abbreviation_max_generated_len(value)
-    elif field_name == "abbreviation_scope":
-        resolved = _resolve_abbreviation_scope(value)
-    elif field_name == "help_option_sort":
-        resolved = resolve_help_option_sort_rules(value, value_name="help_option_sort")
-    elif field_name == "help_subcommand_sort":
-        resolved = resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
+    elif field_name in _FIELD_RESOLVERS:
+        resolved = _FIELD_RESOLVERS[field_name](value, config_data)
 
     return resolved
 

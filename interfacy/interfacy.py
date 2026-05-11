@@ -12,7 +12,7 @@ from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser, NestedSubParsersAction
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
-from interfacy.core import AbbreviationScope, ExitCode, InterfacyParser
+from interfacy.core import AbbreviationScope, BooleanNegativePrefix, ExitCode, InterfacyParser
 from interfacy.exceptions import ConfigurationError
 from interfacy.executable_flag import ExecutableFlag
 from interfacy.group import CommandGroup
@@ -76,6 +76,7 @@ class Interfacy(InterfacyParser):
         reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
+        bool_negative_prefix: BooleanNegativePrefix = "no-",
         plugins: Sequence[InterfacyPlugin] | None = None,
         formatter_class: type[argparse.HelpFormatter] | None = None,
     ) -> None:
@@ -111,6 +112,7 @@ class Interfacy(InterfacyParser):
                 reraise_interrupt=reraise_interrupt,
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
+                bool_negative_prefix=bool_negative_prefix,
                 plugins=plugins,
                 formatter_class=formatter,
             )
@@ -157,6 +159,7 @@ class Interfacy(InterfacyParser):
                 reraise_interrupt=reraise_interrupt,
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
+                bool_negative_prefix=bool_negative_prefix,
                 plugins=plugins,
             )
             return
@@ -199,6 +202,7 @@ class Interfacy(InterfacyParser):
         silent_interrupt: bool | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
+        bool_negative_prefix: BooleanNegativePrefix | None = None,
         plugins: Sequence[InterfacyPlugin] | None = None,
     ) -> None:
         self._parser.apply_setup(
@@ -221,6 +225,7 @@ class Interfacy(InterfacyParser):
             silent_interrupt=silent_interrupt,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
+            bool_negative_prefix=bool_negative_prefix,
             plugins=plugins,
         )
 

@@ -118,6 +118,7 @@ def resolve_entrypoint_settings() -> dict[str, Any]:
         {
             "help_layout": None,
             "help_colors": None,
+            "backend": None,
             "flag_strategy": None,
             "abbreviation_gen": None,
             "abbreviation_max_generated_len": None,
@@ -131,6 +132,9 @@ def resolve_entrypoint_settings() -> dict[str, Any]:
             "include_inherited_methods": None,
             "include_classmethods": None,
             "silent_interrupt": None,
+            "expand_model_params": None,
+            "model_expansion_max_depth": None,
+            "bool_negative_prefix": None,
         },
     )
 
@@ -214,6 +218,10 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
         "include_inherited_methods",
         "include_classmethods",
         "silent_interrupt",
+        "expand_model_params",
+        "model_expansion_max_depth",
+        "bool_negative_prefix",
+        "backend",
     ):
         value = settings.get(key)
         if value is not None:

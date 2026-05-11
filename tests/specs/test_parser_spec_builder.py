@@ -123,6 +123,23 @@ def test_boolean_argument_annotated_with_boolean_behavior(parser: Argparser):
     assert argument.default is True
 
 
+def test_boolean_negative_prefix_can_be_configured() -> None:
+    parser = Argparser(
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        sys_exit_enabled=False,
+        help_layout=None,
+        bool_negative_prefix="without-",
+    )
+    parser.add_command(fn_bool_default_true)
+
+    schema = parser.build_parser_schema()
+    argument = schema.commands["fn-bool-default-true"].parameters[0]
+
+    assert argument.boolean_behavior is not None
+    assert argument.boolean_behavior.negative_form == "--without-value"
+    assert parser.run(args=["--without-value"]) is False
+
+
 def test_list_argument_uses_list_shape(parser: Argparser):
     """Verify that list type arguments use the LIST value shape."""
     parser.add_command(fn_list_int)
