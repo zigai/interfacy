@@ -396,7 +396,8 @@ def test_argparse_layout_root_commands_rows_do_not_include_choices_header_line(
         not in help_text
     )
     assert "dense-parameters" in help_text
-    assert "Exercise choices, defaults, tuples, and long descriptions." in help_text
+    assert "Exercise choices, defaults, tuples, and long" in help_text
+    assert "descriptions." in help_text
 
 
 def test_argparse_layout_command_descriptions_align_with_option_help_column(
@@ -413,8 +414,8 @@ def test_argparse_layout_command_descriptions_align_with_option_help_column(
     path_line = next(line for line in lines if line.strip().startswith("path-ops"))
 
     help_idx = help_line.index("Show this help message and exit")
-    dense_idx = dense_line.index("Exercise choices, defaults, tuples, and long descriptions.")
-    path_idx = path_line.index("Mix positionals, varargs, and keyword-only options.")
+    dense_idx = dense_line.index("Exercise choices, defaults, tuples, and long")
+    path_idx = path_line.index("Mix positionals, varargs, and")
 
     assert dense_idx == help_idx
     assert path_idx == help_idx

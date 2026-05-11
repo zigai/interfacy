@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import os
 import re
 from dataclasses import dataclass
 from typing import Literal
@@ -279,7 +280,8 @@ def test_manual_modern_layout_renders_template_details_without_attached_schema()
 
     assert "↳ choices: staging, production" in help_text
     assert "↳ default: us-east-1 | type: str" in help_text
-    assert "↳ default: rolling | choices: rolling, blue-green, canary" in help_text
+    assert "↳ default: rolling | choices: rolling, blue-green," in help_text
+    assert "canary" in help_text
     assert "--no-color" in help_text
     assert "↳ default: true" in help_text
 
@@ -841,8 +843,8 @@ def test_clap_layout_wrapped_description_continuation_aligns() -> None:
     lines = help_text.splitlines()
     first = next(line for line in lines if "--crf <CRF>" in line)
     first_idx = first.index("Constant")
-    second = next(line for line in lines if "dolor sit amet, consectetur adipiscing elit." in line)
-    second_idx = second.index("dolor")
+    second = next(line for line in lines if "ipsum dolor sit amet" in line)
+    second_idx = second.index("ipsum")
     assert first_idx == second_idx
 
 
@@ -871,6 +873,117 @@ def test_clap_layout_group_defaults_align_in_same_column() -> None:
     region_line = next(line for line in help_text.splitlines() if "--region <REGION>" in line)
     retries_line = next(line for line in help_text.splitlines() if "--retries <RETRIES>" in line)
     assert region_line.index("[default:") == retries_line.index("[default:")
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [
+        StandardLayout(),
+        ArgparseLayout(),
+        InterfacyLayout(),
+        Modern(),
+        Aligned(),
+        AlignedTyped(),
+        ClapLayout(),
+    ],
+)
+def test_layout_class_initializer_uses_class_arg_descriptions(layout) -> None:
+    class Project:
+        """Project command suite.
+
+        Args:
+            workspace: Workspace directory.
+            retries: Number of retries.
+        """
+
+        def __init__(self, workspace: str, *, retries: int = 2) -> None:
+            self.workspace = workspace
+            self.retries = retries
+
+        def sync(self) -> None:
+            """Sync the project."""
+            return None
+
+    parser = Argparser(help_layout=layout, sys_exit_enabled=False, print_result=False)
+    parser.add_command(Project)
+
+    help_text = parser.build_parser().format_help()
+
+    assert "Workspace directory." in help_text
+    assert "Number of retries" in help_text
+
+
+@pytest.mark.parametrize(
+    "layout_cls",
+    [
+        InterfacyLayout,
+        Aligned,
+        AlignedTyped,
+        Modern,
+        StandardLayout,
+        ArgparseLayout,
+        ClapLayout,
+    ],
+)
+def test_layout_command_descriptions_wrap_to_terminal_width(layout_cls, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((80, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((80, 24)),
+    )
+
+    def sync() -> None:
+        """Synchronize X bookmarks and likes into the archive and return a sync summary string."""
+
+    def export() -> None:
+        """Export archived records to a JSON or JSONL file and return an export summary string."""
+
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(sync)
+    parser.add_command(export)
+
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    command_lines = [
+        line
+        for line in help_text.splitlines()
+        if "Synchronize X bookmarks" in line or "return a sync summary string" in line
+    ]
+    assert len(command_lines) >= 2
+    assert all(len(line) <= 80 for line in help_text.splitlines())
+
+
+def test_aligned_layout_wraps_default_rows_after_metadata(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((100, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((100, 24)),
+    )
+
+    def cache(
+        *,
+        cache_dir: str = "get_default_cache_dir()",
+    ) -> None:
+        """List cache entries.
+
+        Args:
+            cache_dir: Directory containing the whispers cache. Defaults to the value of the
+                WHISPERS_CACHE_DIR environment variable if set.
+        """
+
+    parser = Argparser(help_layout=Aligned(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(cache)
+
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    assert all(len(line) <= 100 for line in help_text.splitlines())
+    assert "WHISPERS_CACHE_DIR" in help_text
 
 
 def test_clap_layout_defaults_align_when_option_label_exceeds_base_width() -> None:
