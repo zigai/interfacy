@@ -122,6 +122,7 @@ class SchemaBuildContext:
     help_subcommand_sort: Any
     help_option_sort_effective: list[HelpOptionSortRule]
     help_subcommand_sort_effective: list[HelpSubcommandSortRule]
+    bool_negative_prefix: str | None
 
     @classmethod
     def from_parser(cls, parser: InterfacyParser) -> SchemaBuildContext:
@@ -156,6 +157,7 @@ class SchemaBuildContext:
                     parser, "help_subcommand_sort_effective", DEFAULT_HELP_SUBCOMMAND_SORT_RULES
                 )
             ),
+            bool_negative_prefix=getattr(parser, "bool_negative_prefix", "no-"),
         )
 
     def resolve_pipe_targets_by_names(
@@ -836,6 +838,7 @@ class ParserSchemaBuilder:
         init_params: list[Parameter] = []
         if (init := Class(method.cls).init_method) and not is_initialized:
             init_params = init.params
+            class_arg_docs = ModelArgumentMapper._parse_docstring_args(method.cls.__doc__)
             self._prepare_layout_for_params([*init_params, *method.params])
             initializer = [
                 arg
@@ -846,6 +849,7 @@ class ParserSchemaBuilder:
                     init_pipe_names,
                     settings=resolved_settings,
                     flag_allocation_state=init_flag_state,
+                    description_override=class_arg_docs.get(param.name),
                 )
             ]
         else:
@@ -957,17 +961,20 @@ class ParserSchemaBuilder:
             )
 
         if cls.has_init and not cls.is_initialized:
-            self._prepare_layout_for_params(cls.get_method("__init__").params)
+            init_params = cls.get_method("__init__").params
+            class_arg_docs = ModelArgumentMapper._parse_docstring_args(cls.cls.__doc__)
+            self._prepare_layout_for_params(init_params)
             init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
             initializer = [
                 arg
-                for param in cls.get_method("__init__").params
+                for param in init_params
                 for arg in self._argument_from_parameter(
                     param,
                     taken_flags,
                     init_pipe_names,
                     settings=resolved_settings,
                     flag_allocation_state=init_flag_state,
+                    description_override=class_arg_docs.get(param.name),
                 )
             ]
 
@@ -1058,6 +1065,7 @@ class ParserSchemaBuilder:
         *,
         settings: CommandBuildSettings | None = None,
         flag_allocation_state: FlagAllocationState | None = None,
+        description_override: str | None = None,
     ) -> list[Argument]:
         resolved_settings = settings or self._base_build_settings()
         annotation = resolve_type_alias(param.type)
@@ -1102,7 +1110,7 @@ class ParserSchemaBuilder:
             is_required=param.is_required,
             is_optional=param.is_optional,
             kind=param.kind,
-            description=param.description,
+            description=param.description or description_override,
         )
 
         return [
@@ -1506,7 +1514,9 @@ class ParserSchemaBuilder:
         if supports_negative:
             long_flags = [flag for flag in flags if flag.startswith("--")]
             long_name = long_flags[0][2:] if long_flags else translated_name
-            negative_form = f"--{inverted_bool_flag_name(long_name)}"
+            prefix = self.context.bool_negative_prefix
+            if prefix is not None:
+                negative_form = f"--{inverted_bool_flag_name(long_name, prefix=prefix)}"
 
         state.default_value = spec.default if spec.has_default else False
         state.boolean_behavior = BooleanBehavior(
