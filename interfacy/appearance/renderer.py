@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from dataclasses import replace
 from typing import Any
 
@@ -482,8 +483,26 @@ class SchemaHelpRenderer:
 
     def _indent(self, text: str, width: int = 2) -> str:
         prefix = " " * width
-        lines = text.splitlines()
-        return "\n".join(prefix + line for line in lines)
+        lines: list[str] = []
+        for line in text.splitlines():
+            indented = prefix + line
+            if ansi_len(indented) <= self.terminal_width:
+                lines.append(indented)
+                continue
+
+            leading = len(indented) - len(indented.lstrip(" "))
+            wrap_indent = " " * (leading if leading < self.terminal_width - 10 else width)
+            lines.extend(
+                textwrap.wrap(
+                    indented.strip(),
+                    width=max(10, self.terminal_width),
+                    initial_indent=wrap_indent,
+                    subsequent_indent=f"{wrap_indent}  ",
+                    break_long_words=True,
+                    break_on_hyphens=False,
+                )
+            )
+        return "\n".join(lines)
 
     def _get_help_argument(self) -> Argument | None:
         if self._help_argument is _DEFAULT_HELP_ARGUMENT:

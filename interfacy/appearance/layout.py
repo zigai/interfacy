@@ -468,7 +468,22 @@ class HelpLayout:
         indent = " " * self.command_indent
         pad = max(0, ljust - len(command_name) - self.command_indent)
         name_column = f"{indent}{name_styled}{' ' * pad}"
-        return f"{name_column} {with_style(description, self.style.description)}"
+        prefix = f"{name_column} "
+        if not description:
+            return prefix.rstrip()
+
+        prefix_width = ansi_len(prefix)
+        wrap_width = max(10, self._terminal_width() - prefix_width)
+        wrapped = self._wrap_plain_words(description, wrap_width)
+        if not wrapped:
+            return prefix.rstrip()
+
+        lines = [f"{prefix}{with_style(wrapped[0], self.style.description)}"]
+        lines.extend(
+            f"{' ' * prefix_width}{with_style(line, self.style.description)}"
+            for line in wrapped[1:]
+        )
+        return "\n".join(lines)
 
     def _command_display_name(self, command: "Command") -> str:
         return self._format_command_display_name(command.cli_name, command.aliases)
@@ -673,7 +688,7 @@ class HelpLayout:
 
         prefix_width = ansi_len(probe_render[:marker_idx])
         cont_indent = " " * prefix_width
-        wrap_width = max(10, self._terminal_width() - indent - prefix_width)
+        wrap_width = max(10, self._terminal_width() - indent - prefix_width - 4)
         wrapped = self._wrap_plain_words(raw_description, wrap_width)
 
         if wrapped and not skip_wrap:
@@ -728,18 +743,11 @@ class HelpLayout:
                 wrapped_lines.append(line)
                 continue
             leading = len(line) - len(line.lstrip(" "))
-            if (
-                width >= 50
-                and leading < width - 10
-                and all(ansi_len(word) <= width - leading for word in line.split())
-            ):
-                wrapped_lines.append(line)
-                continue
             indent = " " * (leading if leading < width - 10 else 2)
             wrapped_lines.extend(
                 textwrap.wrap(
                     line.strip(),
-                    width=max(10, width),
+                    width=max(10, width - 1),
                     initial_indent=indent,
                     subsequent_indent=f"{indent}  ",
                     break_long_words=True,
@@ -1062,7 +1070,7 @@ class HelpLayout:
         prefix_width = ansi_len(prefix_str)
         term_width = self._terminal_width()
 
-        wrap_width = max(10, term_width - indent - prefix_width)
+        wrap_width = max(10, term_width - indent - prefix_width - 4)
         normalized = " ".join(raw_value.split())
         if ansi_len(normalized) <= wrap_width:
             return None

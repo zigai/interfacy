@@ -163,7 +163,16 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                         pad = max_name_len - len(invocation) + 2
                     else:
                         pad = max(2, target_help_col - (2 + len(invocation)))
-                    lines.append(f"  {invocation}{' ' * pad}{help_text}\n")
+                    prefix = f"  {invocation}{' ' * pad}"
+                    rendered = textwrap.fill(
+                        help_text,
+                        width=self._width,
+                        initial_indent=prefix,
+                        subsequent_indent=" " * ansi_len(prefix),
+                        break_long_words=True,
+                        break_on_hyphens=False,
+                    )
+                    lines.append(f"{rendered}\n")
                 else:
                     lines.append(f"  {invocation}\n")
             return "".join(lines)
