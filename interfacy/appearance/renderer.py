@@ -238,7 +238,19 @@ class SchemaHelpRenderer:
         sections: list[str] = []
         usage_prog = self._style_usage_text(self._normalize_prog(prog))
         usage_prefix = self._get_usage_prefix()
-        usage = f"{usage_prefix}{usage_prog} {layout.get_parser_command_usage_suffix()}"
+        usage_suffix = layout.get_parser_command_usage_suffix()
+        usage_text = f"{usage_prog} {usage_suffix}"
+        usage_prefix_len = ansi_len(usage_prefix)
+        if usage_prefix_len + ansi_len(usage_text) > self.terminal_width:
+            wrapped_usage = self._wrap_usage_parts(
+                [usage_prog, usage_suffix],
+                self.terminal_width,
+                usage_prefix_len,
+                " " * usage_prefix_len,
+            )
+            usage = f"{usage_prefix}{wrapped_usage}"
+        else:
+            usage = f"{usage_prefix}{usage_text}"
 
         if layout.should_render_description_before_usage():
             if schema.description:

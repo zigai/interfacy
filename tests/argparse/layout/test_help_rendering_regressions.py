@@ -956,6 +956,33 @@ def test_layout_command_descriptions_wrap_to_terminal_width(layout_cls, monkeypa
     assert all(len(line) <= 80 for line in help_text.splitlines())
 
 
+def test_schema_multi_command_usage_wraps_long_windows_prog(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((80, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((80, 24)),
+    )
+
+    def sync() -> None:
+        """Synchronize X bookmarks."""
+
+    def export() -> None:
+        """Export archived records."""
+
+    parser = Argparser(help_layout=InterfacyLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(sync)
+    parser.add_command(export)
+    built_parser = parser.build_parser()
+    built_parser.prog = r"D:\a\interfacy\interfacy\.venv\Scripts\pytest.exe"
+
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", built_parser.format_help())
+
+    assert all(len(line) <= 80 for line in help_text.splitlines())
+
+
 def test_aligned_layout_wraps_default_rows_after_metadata(monkeypatch) -> None:
     monkeypatch.setattr(
         "shutil.get_terminal_size",
