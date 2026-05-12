@@ -488,7 +488,8 @@ class HelpLayout:
             return prefix.rstrip()
 
         prefix_width = ansi_len(prefix)
-        wrap_width = max(10, self._terminal_width() - prefix_width)
+        target_width = max(10, self._terminal_width() - 2)
+        wrap_width = max(10, target_width - prefix_width)
         wrapped = self._wrap_plain_words(description, wrap_width)
         if not wrapped:
             return prefix.rstrip()
