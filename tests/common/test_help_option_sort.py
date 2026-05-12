@@ -10,6 +10,7 @@ def _help_section(help_text: str, heading: str) -> str:
         parts = help_text.split(candidate, maxsplit=1)
         if len(parts) == 2:
             return parts[1]
+
     raise AssertionError(f"Section {heading!r} not found in help text:\n{help_text}")
 
 

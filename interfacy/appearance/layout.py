@@ -183,6 +183,7 @@ class HelpLayout:
         if base is None:
             base = self.default_field_width
             self._default_field_width_base = base
+
         return base
 
     def _get_pos_flag_width_base(self) -> int:
@@ -190,6 +191,7 @@ class HelpLayout:
         if base is None:
             base = self.pos_flag_width
             self._pos_flag_width_base = base
+
         return base
 
     def _compute_default_field_width_for_len(self, max_len: int) -> int:
@@ -208,6 +210,7 @@ class HelpLayout:
             term_cap = min(term_cap, self.default_field_width_max)
 
         width = min(max_len, term_cap)
+
         return max(base_width, width)
 
     def _compute_default_field_width_from_lengths(self, lengths: list[int]) -> int:
@@ -240,6 +243,7 @@ class HelpLayout:
             percentile = min(max(self.default_field_width_percentile, 0.0), 1.0)
             idx = max(0, min(count - 1, int((percentile * count + 0.999999) - 1)))
             width = candidates[idx]
+
         return max(base_width, width)
 
     def prepare_default_field_width_for_params(self, params: list[Parameter]) -> None:
@@ -270,16 +274,19 @@ class HelpLayout:
     def _param_is_bool(self, param: Parameter) -> bool:
         if param.type is bool:
             return True
+
         if isinstance(param.type, str):
             name = simplified_type_name(param.type)
             base = name.removesuffix("?")
             return base == "bool"
+
         return False
 
     def _format_bool_default_for_help(self, value: Any) -> str:
         """Render boolean defaults, treating argparse.SUPPRESS as missing."""
         if value is argparse.SUPPRESS:
             return ""
+
         return "true" if bool(value) else "false"
 
     @staticmethod
@@ -296,6 +303,7 @@ class HelpLayout:
             return default_text
         if self._is_positive_boolean_long_flag(long_flag):
             return ""
+
         return default_text
 
     def _format_doc_text(self, text: str) -> str:
@@ -312,9 +320,11 @@ class HelpLayout:
             content = match.group(2)
             if self.doc_inline_code_mode == "bold":
                 return colored(content, style="bold")
+
             return content
 
         text = re.sub(r"(`{1,2})([^`]+?)\1", fmt, text)
+
         return text
 
     def format_description(self, description: str) -> str:
@@ -334,6 +344,7 @@ class HelpLayout:
         legacy_placeholder = self.subcommand_usage_token
         if isinstance(legacy_placeholder, str):
             return legacy_placeholder
+
         return self.subcommand_usage_placeholder
 
     def should_render_description_before_usage(self) -> bool:
@@ -420,6 +431,7 @@ class HelpLayout:
                 parts.append(
                     f"{with_style(self._format_doc_text(param.description), self.style.description)} "
                 )
+
             parts.append(self._get_param_extra_help(param))
 
         text = "".join(parts)
@@ -428,6 +440,7 @@ class HelpLayout:
                 text = f"{self.required_indicator} {text}"
             else:
                 text = f"{text} {self.required_indicator}"
+
         return text
 
     def get_command_description(
@@ -449,6 +462,7 @@ class HelpLayout:
         name = name or command.name
         command_name = self._format_command_display_name(name, aliases)
         description = command.description or ""
+
         return self._format_command_row(command_name, description, ljust)
 
     def _format_commands_title(self) -> str:
@@ -458,6 +472,7 @@ class HelpLayout:
         heading = group_title
         if self.section_heading_style is not None:
             heading = with_style(heading, self.section_heading_style)
+
         return heading
 
     def _format_command_name_for_help(self, command_name: str) -> str:
@@ -483,6 +498,7 @@ class HelpLayout:
             f"{' ' * prefix_width}{with_style(line, self.style.description)}"
             for line in wrapped[1:]
         )
+
         return "\n".join(lines)
 
     def _command_display_name(self, command: "Command") -> str:
@@ -494,6 +510,7 @@ class HelpLayout:
             command_name = self._format_command_display_name(cli_name, command.aliases)
             description = command.raw_description or ""
             return self._format_command_row(command_name, description, ljust)
+
         return self.get_command_description(
             command.obj,
             ljust,
@@ -522,10 +539,13 @@ class HelpLayout:
             if group is None:
                 ungrouped_commands.append(command)
                 continue
+
             if group not in grouped_commands:
                 grouped_commands[group] = []
                 grouped_command_order.append(group)
+
             grouped_commands[group].append(command)
+
         return grouped_command_order, grouped_commands, ungrouped_commands
 
     def _render_ungrouped_commands_help(
@@ -540,6 +560,7 @@ class HelpLayout:
         lines.extend(
             self._render_help_row_for_command(command, ljust) for command in ordered_commands
         )
+
         return "\n".join(lines)
 
     def _render_grouped_commands_help(
@@ -552,13 +573,16 @@ class HelpLayout:
         all_commands = []
         for group in grouped_command_order:
             all_commands.extend(ordered_grouped_commands[group])
+
         all_commands.extend(ordered_ungrouped_commands)
+
         ljust = self._commands_ljust_for_help_rows(all_commands)
 
         lines: list[str] = []
         for idx, group in enumerate(grouped_command_order):
             if idx > 0:
                 lines.extend("" for _ in range(self.command_group_spacing))
+
             lines.append(self._format_command_group_heading(group))
             lines.extend(
                 self._render_help_row_for_command(command, ljust)
@@ -568,6 +592,7 @@ class HelpLayout:
         if ordered_ungrouped_commands:
             if grouped_command_order:
                 lines.extend("" for _ in range(self.command_group_spacing))
+
             lines.extend(
                 self._render_help_row_for_command(command, ljust)
                 for command in ordered_ungrouped_commands
@@ -601,6 +626,7 @@ class HelpLayout:
         for method in methods:
             method_name = self._translated_method_name(method)
             lines.append(self.get_command_description(method, ljust, method_name))
+
         return "\n".join(lines)
 
     @staticmethod
@@ -627,6 +653,7 @@ class HelpLayout:
                 wrapped[-1] = f"{wrapped[-1]} {word}"
             else:
                 wrapped.append(word)
+
         return wrapped
 
     def _probe_template_field_index(
@@ -642,6 +669,7 @@ class HelpLayout:
         probe_render = self._safe_template_format(template, probe_values)
         if probe_render is None:
             return "", -1
+
         return probe_render, probe_render.find(marker)
 
     def _prepare_template_default_overflow(
@@ -664,6 +692,7 @@ class HelpLayout:
                     default_overflow = styled_default
                     values["default"] = ""
                     values["default_padded"] = " " * self.default_field_width
+
         return default_overflow, skip_wrap
 
     def _apply_template_description_wrapping(
@@ -733,6 +762,7 @@ class HelpLayout:
             values.get("default", ""),
             is_help_option=is_help_option,
         )
+
         return self._wrap_overwide_rendered_line(rendered.rstrip())
 
     def _wrap_overwide_rendered_line(self, rendered: str) -> str:
@@ -742,6 +772,7 @@ class HelpLayout:
             if ansi_len(line) <= width:
                 wrapped_lines.append(line)
                 continue
+
             leading = len(line) - len(line.lstrip(" "))
             indent = " " * (leading if leading < width - 10 else 2)
             wrapped_lines.extend(
@@ -754,6 +785,7 @@ class HelpLayout:
                     break_on_hyphens=False,
                 )
             )
+
         return "\n".join(wrapped_lines)
 
     def _format_templated_help_line(
@@ -818,6 +850,7 @@ class HelpLayout:
         raw_description = self._format_doc_text(param.description or "")
         is_varargs = param.kind == StdParameter.VAR_POSITIONAL
         is_required = param.is_required and not is_varargs
+
         return self._format_templated_help_line(
             template=template,
             values=values,
@@ -865,6 +898,7 @@ class HelpLayout:
     def _translated_method_name(self, method: Method) -> str:
         if self.flag_generator is None:
             return method.name
+
         return self.flag_generator.command_translator.translate(method.name)
 
     def _resolve_help_subcommand_sort_rules(
@@ -932,6 +966,7 @@ class HelpLayout:
                 item[0],
             ),
         )
+
         return [pair[1] for _, pair in indexed_items]
 
     def order_commands_for_help(
@@ -980,7 +1015,9 @@ class HelpLayout:
                 return True
             case "adaptive":
                 return False
+
         has_templates = bool(self.format_option or self.format_positional)
+
         return has_templates
 
     def _command_layout_probe_values(self) -> dict[str, str]:
@@ -1005,6 +1042,7 @@ class HelpLayout:
         }
         if hasattr(self, "column_gap"):
             values["column_gap"] = self.column_gap
+
         return values
 
     def _get_template_token_index(self, field_name: str) -> int | None:
@@ -1088,6 +1126,7 @@ class HelpLayout:
             return None
 
         cont_indent = " " * (prefix_width + indent)
+
         return wrapped[0] + "".join(f"\n{cont_indent}{line}" for line in wrapped[1:])
 
     def get_commands_ljust(self, max_display_len: int) -> int:
@@ -1106,6 +1145,7 @@ class HelpLayout:
             if isinstance(self.help_position, int):
                 desired = self.help_position - 1
                 return max(base, desired)
+
             return base
         desired = align_idx + 1  # align to target column (indent=2)
         return max(base, desired)
@@ -1150,7 +1190,9 @@ class HelpLayout:
     def _format_command_display_name(self, name: str, aliases: tuple[str, ...] = ()) -> str:
         if not aliases:
             return name
+
         alias_text = ", ".join(aliases)
+
         return f"{name} ({alias_text})"
 
     def _get_primary_boolean_flag(self, param: Parameter, flags: tuple[str, ...]) -> str:
@@ -1208,6 +1250,7 @@ class HelpLayout:
             flag_short = shorts[0] if shorts else ""
             flag_long = primary_flag
             joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
+
             return joined, flag_short, flag_long, is_option
 
         flag_short = with_metavar(shorts[0]) if shorts else ""
@@ -1228,7 +1271,9 @@ class HelpLayout:
             raw = value.value
             if isinstance(raw, str):
                 return raw
+
             return value.name
+
         return str(value)
 
     def _format_argument_choice_for_help(self, arg: "Argument", value: Any) -> str:
@@ -1237,6 +1282,7 @@ class HelpLayout:
             enum_member = enum_type.__members__.get(value)
             if enum_member is not None:
                 return self._format_choice_for_help(enum_member)
+
         return self._format_choice_for_help(value)
 
     @staticmethod
@@ -1326,6 +1372,7 @@ class HelpLayout:
         description = self._format_doc_text(param.description or "")
         if description and not description.endswith((".", "?", "!")) and self._param_is_bool(param):
             description += "."
+
         description = with_style(description, self.style.description)
 
         default_raw = ""
@@ -1417,6 +1464,7 @@ class HelpLayout:
 
         if default_value is True and no_flag:
             return no_flag
+
         return base_flag or longs[0]
 
     def get_primary_boolean_flag_for_argument(self, arg: "Argument") -> str:
@@ -1450,6 +1498,7 @@ class HelpLayout:
             flag_short = shorts[0] if shorts else ""
             flag_long = primary_flag
             joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
+
             return joined, flag_short, flag_long, is_option
 
         flag_short = with_metavar(shorts[0]) if shorts else ""
@@ -1498,6 +1547,7 @@ class HelpLayout:
 
         if not parts:
             return ""
+
         return f"[{''.join(parts)}]"
 
     def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
@@ -1507,6 +1557,7 @@ class HelpLayout:
         description = self._format_doc_text(arg.help or "")
         if description and not description.endswith((".", "?", "!")) and is_bool:
             description += "."
+
         description = with_style(description, self.style.description)
 
         default_raw = ""
@@ -1570,6 +1621,7 @@ class HelpLayout:
         }
 
         values.update(self._build_styled_columns(flag_short, flag_long, flag, is_option))
+
         return values
 
     def _option_sort_key(self, arg: "Argument") -> str:
@@ -1587,6 +1639,7 @@ class HelpLayout:
             return longs[0][2:].lower()
         if shorts:
             return shorts[0][1:].lower()
+
         return (arg.display_name or arg.name).lower()
 
     @staticmethod
@@ -1674,6 +1727,7 @@ class HelpLayout:
                 item[0],
             ),
         )
+
         return [option for _, option in indexed_options]
 
     def format_argument(self, arg: "Argument", indent: int = 2) -> str:
@@ -1693,6 +1747,7 @@ class HelpLayout:
         raw_description = self._format_doc_text(arg.help or "")
         is_varargs = self._enum_matches(arg.value_shape, "LIST") and is_option is False
         is_required = arg.required and not is_varargs
+
         return self._format_templated_help_line(
             template=template,
             values=values,
@@ -1722,6 +1777,7 @@ class HelpLayout:
                 parts.append(
                     f"{with_style(self._format_doc_text(arg.help), self.style.description)} "
                 )
+
             parts.append(self._build_extra_from_argument(arg))
 
         text = "".join(parts)
@@ -1730,6 +1786,7 @@ class HelpLayout:
                 text = f"{self.required_indicator} {text}"
             else:
                 text = f"{text} {self.required_indicator}"
+
         return text
 
     def prepare_default_field_width_for_arguments(self, arguments: list["Argument"]) -> None:
@@ -1757,6 +1814,7 @@ class HelpLayout:
             if self._arg_is_bool(arg):
                 if arg.is_help_action:
                     continue
+
                 if arg.boolean_behavior is not None:
                     val = arg.boolean_behavior.default
                 elif self._arg_has_default(arg):

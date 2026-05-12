@@ -48,6 +48,7 @@ def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(logger_name)
     if not logger.handlers:
         _setup_logger(logger)
+
     return logger
 
 
@@ -103,6 +104,7 @@ def _setup_logger(logger: logging.Logger) -> None:
         handler.setFormatter(formatter)
     else:
         logger.setLevel(logging.NOTSET)
+
         handler = logging.NullHandler()
 
     logger.addHandler(handler)

@@ -9,6 +9,7 @@ from interfacy.core import InterfacyParser
 def _make_literal_alias() -> object:
     if not hasattr(typing, "TypeAliasType"):
         pytest.skip("TypeAliasType not available on this Python version")
+
     return typing.TypeAliasType("Level", Literal["LOW", "MEDIUM", "HIGH"])  # type: ignore[attr-defined]
 
 

@@ -92,6 +92,7 @@ logger = get_logger(__name__)
 def validate_abbreviation_max_generated_len(value: int) -> int:
     if value < 1:
         raise ConfigurationError("abbreviation_max_generated_len must be >= 1")
+
     return value
 
 
@@ -100,6 +101,7 @@ def validate_abbreviation_scope(value: AbbreviationScope) -> AbbreviationScope:
         raise ConfigurationError(
             "abbreviation_scope must be one of: " + ", ".join(ABBREVIATION_SCOPE_VALUES)
         )
+
     return value
 
 
@@ -114,6 +116,7 @@ def validate_help_subcommand_sort(value: Any) -> HelpSubcommandSort:
 def validate_model_expansion_max_depth(value: int) -> int:
     if value < 1:
         raise ConfigurationError("model_expansion_max_depth must be >= 1")
+
     return value
 
 
@@ -124,6 +127,7 @@ def validate_bool_negative_prefix(value: BooleanNegativePrefix) -> BooleanNegati
         raise ConfigurationError("bool_negative_prefix must be a string or None")
     if not value:
         raise ConfigurationError("bool_negative_prefix must not be empty")
+
     return value
 
 
@@ -267,7 +271,6 @@ class InterfacyParser:
         self._help_position_explicit = help_position is not None or (
             help_layout is not None and help_layout.help_position is not None
         )
-
         self.autorun = run
         self.allow_args_from_file = allow_args_from_file
         self.full_error_traceback = full_error_traceback
@@ -277,7 +280,6 @@ class InterfacyParser:
         self.on_interrupt = on_interrupt
         self.silent_interrupt = silent_interrupt
         self.reraise_interrupt = reraise_interrupt
-
         self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator(
             max_generated_len=self.abbreviation_max_generated_len
         )
@@ -291,18 +293,20 @@ class InterfacyParser:
         self.help_layout = deepcopy(help_layout) if help_layout is not None else StandardLayout()
         if help_position is not None:
             self.help_layout.help_position = help_position
+
         if help_colors is not None:
             self.help_layout.style = help_colors
+
         self._refresh_help_option_sort_rules()
         self._refresh_help_subcommand_sort_rules()
         self.help_colors = self.help_layout.style
         self.help_layout.flag_generator = self.flag_strategy
         self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
         self.help_layout.name_registry = self.name_registry
-
         self.commands: dict[str, Command] = {}
         self.plugins: list[InterfacyPlugin] = []
         self._plugin_names: set[str] = set()
+
         if plugins:
             for plugin in plugins:
                 self.add_plugin(plugin)
@@ -333,8 +337,10 @@ class InterfacyParser:
         except Exception:
             self._plugin_names.remove(plugin_name)
             raise
+
         self.plugins.append(plugin)
         self._invalidate_build_cache()
+
         return plugin
 
     def add_type_parser(
@@ -350,6 +356,7 @@ class InterfacyParser:
             parser: Callable that converts a raw CLI string into ``typ``.
         """
         self.type_parser.add(typ, parser)
+
         self._type_parser_explicit = True
         self._invalidate_build_cache()
 
@@ -391,6 +398,7 @@ class InterfacyParser:
         if type_parser is not None:
             self.type_parser = type_parser
             self._type_parser_explicit = True
+
             return
 
         if allow_args_from_file is not None and not self._type_parser_explicit:
@@ -426,6 +434,7 @@ class InterfacyParser:
             self.model_expansion_max_depth = validate_model_expansion_max_depth(
                 model_expansion_max_depth
             )
+
         if bool_negative_prefix is not None:
             self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
 
@@ -449,10 +458,13 @@ class InterfacyParser:
             self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
                 abbreviation_max_generated_len
             )
+
         if abbreviation_scope is not None:
             self.abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
+
         if help_option_sort is not None:
             self.help_option_sort = validate_help_option_sort(help_option_sort)
+
         if help_subcommand_sort is not None:
             self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
 
@@ -550,6 +562,7 @@ class InterfacyParser:
     def _transform_schema_with_plugins(self, schema: "ParserSchema") -> "ParserSchema":
         for plugin in self.plugins:
             schema = plugin.transform_schema(self, schema)
+
         return schema
 
     def _recover_parse_failure(
@@ -560,14 +573,17 @@ class InterfacyParser:
             action = plugin.recover_parse_failure(self, failure)
             if action is not None:
                 return action
+
         return None
 
     def _single_command_without_root_selection(self, schema: "ParserSchema") -> "Command | None":
         if len(schema.commands) != 1:
             return None
+
         command = next(iter(schema.commands.values()))
         if command.command_type == "group":
             return None
+
         return command
 
     def _match_command_name(
@@ -578,6 +594,7 @@ class InterfacyParser:
         for command in commands.values():
             if command.cli_name == cli_name or cli_name in command.aliases:
                 return command
+
         return None
 
     @staticmethod
@@ -586,6 +603,7 @@ class InterfacyParser:
         boolean_behavior = argument.boolean_behavior
         if boolean_behavior is not None and boolean_behavior.negative_form:
             flags.append(boolean_behavior.negative_form)
+
         return tuple(flags)
 
     def _match_option_argument(
@@ -613,6 +631,7 @@ class InterfacyParser:
             unique_matches = {id(argument): argument for argument in matches}
             if len(unique_matches) == 1:
                 return next(iter(unique_matches.values()))
+
             return None
 
         if len(token) > 2:
@@ -632,6 +651,7 @@ class InterfacyParser:
             argument = self._match_option_argument(token, command_chain[index])
             if argument is not None:
                 return index, argument
+
         return None
 
     def _option_group_end(
@@ -652,6 +672,7 @@ class InterfacyParser:
         nargs = argument.nargs
         if isinstance(nargs, int):
             return min(len(args), start + 1 + nargs)
+
         if nargs in ("*", "+"):
             index = start + 1
             while index < len(args):
@@ -666,6 +687,7 @@ class InterfacyParser:
                     break
                 index += 1
             return index
+
         return min(len(args), start + 2)
 
     @staticmethod
@@ -682,6 +704,7 @@ class InterfacyParser:
             return [token[2:]]
         if argument.boolean_behavior is not None:
             return []
+
         return list(args[start + 1 : end])
 
     @staticmethod
@@ -694,10 +717,12 @@ class InterfacyParser:
             except (TypeError, ValueError) as exc:
                 raise InterspersedOptionValueError(argument, raw_value, exc) from exc
             values.append(value)
+
         if argument.value_shape.name == "LIST":
             return values
         if argument.value_shape.name == "TUPLE":
             return tuple(values)
+
         return values[-1] if values else None
 
     def _command_path_for_option_owner(
@@ -723,6 +748,7 @@ class InterfacyParser:
         owner_position = command_token_positions[owner_index]
         if owner_position is None:
             return 0
+
         return owner_position + 1
 
     def _queue_late_ancestor_option(
@@ -765,9 +791,12 @@ class InterfacyParser:
                         tuple(raw_values),
                     )
                 )
+
             if option_group:
                 insertions.setdefault(insertion_index, []).append(option_group)
+
             removed_indexes.update(range(index, end))
+
         return end
 
     def _append_matching_command(
@@ -841,11 +870,13 @@ class InterfacyParser:
         for index, token in enumerate(normalized_args):
             for group in insertions.get(index, []):
                 reordered.extend(group)
+
             if index not in removed_indexes:
                 reordered.append(token)
 
         for group in insertions.get(len(normalized_args), []):
             reordered.extend(group)
+
         return reordered
 
     def _apply_interspersed_ancestor_option_values(
@@ -861,6 +892,7 @@ class InterfacyParser:
                     bucket[argument.name] = value
         finally:
             self._interspersed_ancestor_option_values = []
+
         return namespace
 
     def _bucket_for_command_path(
@@ -887,6 +919,7 @@ class InterfacyParser:
                 value = {}
                 current[segment] = value
             current = value
+
         return current
 
     def _build_missing_arguments_failure(
@@ -905,6 +938,7 @@ class InterfacyParser:
         for argument in arguments:
             if not argument.required:
                 continue
+
             if self._argument_matches_missing_tokens(argument, remaining):
                 refs.append(
                     ArgumentRef(command_path=command_path, name=argument.name, argument=argument)
@@ -936,6 +970,7 @@ class InterfacyParser:
         possible_tokens.add(self._normalize_missing_token(argument.display_name))
         if argument.metavar:
             possible_tokens.add(self._normalize_missing_token(argument.metavar))
+
         for flag in argument.flags:
             possible_tokens.add(self._normalize_missing_token(flag))
 
@@ -945,6 +980,7 @@ class InterfacyParser:
             if normalized & possible_tokens:
                 missing_names.remove(raw_name)
                 return True
+
         return False
 
     def _find_first_missing_from_namespace(
@@ -990,6 +1026,7 @@ class InterfacyParser:
             )
             or {}
         )
+
         return self._find_missing_for_command(
             command,
             bucket,
@@ -1054,6 +1091,7 @@ class InterfacyParser:
         next_bucket = bucket.get(subcommand.cli_name)
         if not isinstance(next_bucket, dict):
             next_bucket = {}
+
         return self._find_missing_for_command(
             subcommand,
             next_bucket,
@@ -1106,15 +1144,18 @@ class InterfacyParser:
             if command_path:
                 bucket = self._bucket_for_command_path(schema, namespace, command_path, create=True)
                 assert bucket is not None
+
                 depth = max(len(command_path) - 1, 0)
                 root_command = self._single_command_without_root_selection(schema)
                 if root_command is not None and not command_path:
                     depth = 0
+
                 if root_command is not None and command_path:
                     depth = len(command_path)
                 dest_key = self.COMMAND_KEY if depth == 0 else f"{self.COMMAND_KEY}_{depth}"
                 bucket[dest_key] = subcommand_name
                 bucket.setdefault(subcommand_name, {})
+
                 continue
 
             namespace[self.COMMAND_KEY] = subcommand_name
@@ -1151,12 +1192,14 @@ class InterfacyParser:
             action = self._recover_parse_failure(failure)
             if action is None:
                 return None
+
             if isinstance(action, AbortRecovery):
                 if action.message:
                     error(action.message)
                 raise SystemExit(action.exit_code)
 
             self._apply_recovery_action(schema, namespace, action)
+
             attempts += 1
             failure = self._find_first_missing_from_namespace(
                 schema,
@@ -1168,6 +1211,7 @@ class InterfacyParser:
 
         if failure is not None:
             return None
+
         return namespace
 
     def _snapshot_registration_state(self) -> dict[str, Any]:
@@ -1188,6 +1232,7 @@ class InterfacyParser:
         self._pipe_target_overrides = dict(snapshot["pipe_target_overrides"])
         self._pipe_buffer = snapshot["pipe_buffer"]
         self.name_registry.restore(snapshot["name_registry"])
+
         self.plugins = list(snapshot["plugins"])
         self._plugin_names = set(snapshot["plugin_names"])
         self._restore_backend_registration_state(snapshot.get("backend"))
@@ -1278,6 +1323,7 @@ class InterfacyParser:
         effective_rules = list(resolve_rules(self.help_layout))
         setattr(self, effective_attr, list(effective_rules))
         setattr(self.help_layout, layout_rules_attr, list(effective_rules))
+
         return list(effective_rules)
 
     def refresh_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
@@ -1305,12 +1351,14 @@ class InterfacyParser:
     ) -> ValidateOutputT | None:
         if value is None:
             return None
+
         return validator(value)
 
     @staticmethod
     def _copy_optional_list(value: list[SortRuleT] | None) -> list[SortRuleT] | None:
         if value is None:
             return None
+
         return list(value)
 
     def _resolve_command_settings(
@@ -1496,6 +1544,7 @@ class InterfacyParser:
         )
         self.commands[canonical_name] = command
         logger.debug("Added command: %s", command)
+
         return command
 
     def command(
@@ -1556,6 +1605,7 @@ class InterfacyParser:
                 help_subcommand_sort=help_subcommand_sort,
                 help_group=help_group,
             )
+
             return func
 
         return decorator
@@ -1643,6 +1693,7 @@ class InterfacyParser:
         )
         self.commands[canonical_name] = command
         logger.debug("Added group: %s", command)
+
         return command
 
     def get_commands(self) -> list["Command"]:
@@ -1661,6 +1712,7 @@ class InterfacyParser:
         canonical = self.name_registry.canonical_for(cli_name)
         if canonical is None:
             raise InvalidCommandError(cli_name)
+
         return self.commands[canonical]
 
     def get_args(self) -> list[str]:
@@ -1678,8 +1730,10 @@ class InterfacyParser:
             code (ExitCode): Exit code to use.
         """
         logger.info("Exit code: %s", code)
+
         if self.sys_exit_enabled:
             sys.exit(code)
+
         return code
 
     def pipe_to(
@@ -1704,6 +1758,7 @@ class InterfacyParser:
             self.pipe_targets_default = config
         else:
             self._pipe_target_overrides[(command, subcommand)] = config
+
         return config
 
     def resolve_pipe_targets(
@@ -1722,8 +1777,10 @@ class InterfacyParser:
         names: list[str] = []
         if command.canonical_name:
             names.append(command.canonical_name)
+
         if command.cli_name and command.cli_name not in names:
             names.append(command.cli_name)
+
         if command.obj is not None and command.obj.name not in names:
             names.append(command.obj.name)
 
@@ -1757,6 +1814,7 @@ class InterfacyParser:
                 yield (name, sub)
 
         yield (None, subcommand)
+
         if subcommand is not None:
             alt = self.flag_strategy.command_translator.reverse(subcommand)
             if alt != subcommand:
@@ -1808,6 +1866,7 @@ class InterfacyParser:
             return None
         if buffer is None or isinstance(buffer, str):
             return buffer
+
         return None
 
     def reset_piped_input(self) -> None:
@@ -1851,6 +1910,7 @@ class InterfacyParser:
         if subcommand == "__init__":
             if cls.init_method is None:
                 raise ConfigurationError("Class does not define an __init__ method")
+
             return cls.init_method
 
         for method in cls.methods:
@@ -1878,10 +1938,12 @@ class InterfacyParser:
             main (bool): Whether this is the main parser instance.
         """
         resolve_objinspect_annotations(command)
+
         if isinstance(command, (Function, Method)):
             return self.parser_from_function(command, taken_flags=[*self.RESERVED_FLAGS])
         if isinstance(command, Class):
             return self.parser_from_class(command)
+
         raise InvalidCommandError(command)
 
     def _should_skip_method(self, method: Method) -> bool:

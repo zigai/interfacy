@@ -223,6 +223,7 @@ def fn_list_with_default(values: list[int] = [1, 2]):  # noqa: B006 - intentiona
 def fn_two_lists(strings: list[str], ints: list[int]) -> tuple[int, int]:
     print(strings, f"({len(strings)})")
     print(ints, f"({len(ints)})")
+
     return len(strings), len(ints)
 
 

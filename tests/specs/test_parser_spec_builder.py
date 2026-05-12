@@ -29,6 +29,7 @@ def doc_summary(obj) -> str | None:
     doc = inspect.getdoc(obj)
     if not doc:
         return None
+
     return doc.splitlines()[0]
 
 

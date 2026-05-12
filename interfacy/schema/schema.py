@@ -170,6 +170,7 @@ class Command:
             return None
         if self.help_layout is None:
             return self.raw_description
+
         return self.help_layout.format_description(self.raw_description)
 
     @cached_property
@@ -214,6 +215,7 @@ class ParserSchema:
         """Return the formatted parser description."""
         if self.raw_description is None:
             return None
+
         return self.theme.format_description(self.raw_description)
 
     @cached_property
@@ -221,6 +223,7 @@ class ParserSchema:
         """Return the formatted parser epilog."""
         if self.raw_epilog is None:
             return None
+
         return self.theme.format_description(self.raw_epilog)
 
     @property

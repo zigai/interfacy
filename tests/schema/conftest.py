@@ -21,6 +21,7 @@ class RecordingHelpLayout(HelpLayout):
 
     def __init__(self) -> None:
         super().__init__()
+
         self.formatted_descriptions: list[str] = []
         self.class_help_calls: list[str] = []
         self.parameter_help_calls: list[str] = []
@@ -56,7 +57,9 @@ class StubTypeParser:
     def get_parse_func(self, typ: type[Any] | None) -> Callable[[str], Any] | None:
         if typ is None:
             return None
+
         self.requests.append(typ)
+
         return self.parsers.get(typ)
 
 
@@ -136,6 +139,7 @@ class FakeParser:
             help_layout=self.help_layout,
         )
         self.commands[canonical] = command
+
         return command
 
     def set_pipe_target(
@@ -167,6 +171,7 @@ class FakeParser:
             return self._pipe_targets[key]
         if include_default:
             return self.pipe_targets_default
+
         return None
 
 
@@ -201,6 +206,7 @@ class UserWithAddress:
 def greet_with_address(user: UserWithAddress) -> str:
     if user.address is None:
         return f"Hello {user.name}, age {user.age}"
+
     return f"Hello {user.name}, age {user.age} from {user.address.city} {user.address.zip}"
 
 

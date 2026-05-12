@@ -116,6 +116,7 @@ class Interfacy(InterfacyParser):
                 plugins=plugins,
                 formatter_class=formatter,
             )
+
             return
 
         if backend == "click":
@@ -123,6 +124,7 @@ class Interfacy(InterfacyParser):
                 raise ConfigurationError(
                     "formatter_class is only supported with backend='argparse'"
                 )
+
             try:
                 from interfacy.click_backend import ClickParser
             except ImportError as exc:  # pragma: no cover - optional dependency guard
@@ -130,6 +132,7 @@ class Interfacy(InterfacyParser):
                     "Click is required to use Interfacy with backend='click'. Install it with "
                     "\"pip install 'interfacy[click]'\" or \"uv add 'interfacy[click]'\"."
                 ) from exc
+
             self._parser = ClickParser(
                 description=description,
                 epilog=epilog,
@@ -162,6 +165,7 @@ class Interfacy(InterfacyParser):
                 bool_negative_prefix=bool_negative_prefix,
                 plugins=plugins,
             )
+
             return
 
         raise ConfigurationError("backend must be one of: argparse, click")

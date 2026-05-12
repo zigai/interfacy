@@ -25,6 +25,7 @@ class SchemaMetadataPlugin(InterfacyPlugin):
         schema.metadata["transformed"] = True
         command = next(iter(schema.commands.values()))
         command.raw_description = "Plugin description"
+
         return schema
 
 
@@ -80,7 +81,9 @@ class FillMissingValuePlugin(InterfacyPlugin):
     def recover_parse_failure(self, parser, failure):
         if failure.kind is not ParseFailureKind.MISSING_ARGUMENTS:
             return None
+
         argument_ref = failure.missing_arguments[0]
+
         return ProvideArgumentValues(values={argument_ref: "Ada"})
 
 
@@ -90,6 +93,7 @@ class SelectSubcommandPlugin(InterfacyPlugin):
     def recover_parse_failure(self, parser, failure):
         if failure.kind is not ParseFailureKind.MISSING_SUBCOMMAND:
             return None
+
         return ProvideArgumentValues(subcommands={failure.command_path: "ping"})
 
 

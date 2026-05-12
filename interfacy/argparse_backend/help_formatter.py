@@ -30,7 +30,9 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         """Compatibility wrapper for _format_actions_usage (removed in Python 3.14)."""
         if _HAS_FORMAT_ACTIONS_USAGE:
             return self._format_actions_usage(actions, groups)
+
         parts, _ = self._get_actions_usage_parts(actions, groups)  # type: ignore[attr-defined]
+
         return " ".join(parts)
 
     def set_help_layout(self, help_layout: "HelpLayout") -> None:
@@ -68,6 +70,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             heading_style = layout.section_heading_style
             if heading_style is not None:
                 heading = with_style(str(heading), heading_style)
+
         return super().start_section(heading)
 
     def _split_lines(self, text: str, width: int) -> list[str]:
@@ -98,8 +101,10 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         normalized: list[str] = []
         if shorts:
             normalized.append(shorts[0])
+
         if primary_long and primary_long not in normalized:
             normalized.append(primary_long)
+
         return normalized or option_strings
 
     @staticmethod
@@ -110,6 +115,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             return [longs[0]]
         if normalized:
             return [normalized[0]]
+
         return list(action.option_strings)
 
     def _format_args(self, action: argparse.Action, default_metavar: str) -> str:
@@ -158,6 +164,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 help_text = ""
                 if raw_help not in (None, argparse.SUPPRESS):
                     help_text = " ".join(str(self._expand_help(subaction)).split())
+
                 if help_text:
                     if target_help_col is None:
                         pad = max_name_len - len(invocation) + 2
@@ -175,6 +182,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     lines.append(f"{rendered}\n")
                 else:
                     lines.append(f"  {invocation}\n")
+
             return "".join(lines)
 
         help_layout = self._get_help_layout()
@@ -201,6 +209,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             if ansi_len(line) <= self._width:
                 lines.append(line)
                 continue
+
             leading = len(line) - len(line.lstrip(" "))
             if (
                 self._width >= 50
@@ -209,6 +218,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             ):
                 lines.append(line)
                 continue
+
             indent_width = leading if leading < self._width - 10 else 2
             lines.extend(
                 textwrap.wrap(
@@ -220,6 +230,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     break_on_hyphens=False,
                 )
             )
+
         return "\n".join(lines) + ("\n" if rendered.endswith("\n") else "")
 
     def _fill_text(self, text: str, width: int, indent: str) -> str:
@@ -344,17 +355,23 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                             lines.extend(f"{indent}{chunk}" for chunk in chunks[:-1])
                             line = [chunks[-1]] if chunks else []
                             line_len = len(indent) + (len(line[0]) if line else 0)
+
                             continue
+
                         if line_len + 1 + len(part) > text_width and line:
                             lines.append(indent + " ".join(line))
                             line = []
                             line_len = len(indent) - 1
                         line.append(part)
+
                         line_len += len(part) + 1
+
                     if line:
                         lines.append(indent + " ".join(line))
+
                     if prefix is not None:
                         lines[0] = lines[0][len(indent) :]
+
                     return lines
 
                 if prefix_len + len(prog) <= 0.75 * text_width:
@@ -375,6 +392,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                         lines = []
                         lines.extend(get_lines(opt_parts, indent))
                         lines.extend(get_lines(pos_parts, indent))
+
                     lines = [prog, *lines]
 
                 usage = "\n".join(lines)
@@ -393,6 +411,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     flags=re.IGNORECASE,
                 )
             usage_text_style = layout.usage_text_style
+
         if usage_text_style is not None and isinstance(usage, str):
             usage = with_style(usage, usage_text_style)
 

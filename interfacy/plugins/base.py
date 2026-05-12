@@ -88,6 +88,7 @@ class InterfacyPlugin:
         explicit_name = self.name
         if explicit_name:
             return explicit_name
+
         return type(self).__name__
 
 

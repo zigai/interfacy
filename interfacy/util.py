@@ -46,6 +46,7 @@ def validate_help_group(
     if value is None:
         if allow_none:
             return None
+
         raise ConfigurationError(f"{value_name} must be a non-empty string")
 
     if not isinstance(value, str):
@@ -75,6 +76,7 @@ def derive_process_title(argv0: str | None = None) -> str:
     title = PurePosixPath(normalized).name.removesuffix(".exe")
     if not title:
         return _DEFAULT_PROCESS_TITLE
+
     return title
 
 
@@ -93,6 +95,7 @@ def set_process_title(title: str) -> bool:
         setproctitle(normalized)
     except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
         return False
+
     return True
 
 
@@ -141,6 +144,7 @@ def simplified_type_name(name: str) -> str:
     name = name.strip()
     if optional_suffix and not name.endswith("?"):
         name += "?"
+
     return name
 
 
@@ -153,7 +157,9 @@ def is_list_or_list_alias(t: type) -> bool:
     """
     if t is list:
         return True
+
     t_origin = type_origin(t)
+
     return t_origin is list
 
 
@@ -193,6 +199,7 @@ def get_fixed_tuple_info(t: type) -> tuple[int, tuple[type, ...]] | None:
         return None
 
     args = type_args(t)
+
     return len(args), tuple(args)
 
 
@@ -213,6 +220,7 @@ def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
             element_args = type_args(arg)
             element_type = element_args[0] if element_args else None
             return arg, element_type
+
     return None
 
 
@@ -228,6 +236,7 @@ def extract_optional_union_tuple(t: Any) -> Any | None:
     for arg in union_args:
         if is_fixed_tuple(arg):
             return arg
+
     return None
 
 
@@ -246,10 +255,12 @@ def extract_union_list(t: Any) -> tuple[Any, Any | None] | None:
         args = type_args(arg)
         if not args:
             return arg, None
+
         element_types.append(args[0])
 
     if len(element_types) == 1:
         return list_args[0], element_types[0]
+
     return list_args[0], functools.reduce(operator.or_, element_types)
 
 
@@ -259,6 +270,7 @@ def _consume_quoted_segment(text: str, start: int) -> int:
     escaped = False
     while index < len(text):
         current = text[index]
+
         if escaped:
             escaped = False
         elif current == "\\":
@@ -266,6 +278,7 @@ def _consume_quoted_segment(text: str, start: int) -> int:
         elif current == quote:
             return index + 1
         index += 1
+
     return index
 
 
@@ -273,6 +286,7 @@ def _consume_dotted_identifier(text: str, start: int) -> int:
     index = start + 1
     while index < len(text) and (text[index].isalnum() or text[index] in {"_", "."}):
         index += 1
+
     return index
 
 
@@ -285,6 +299,7 @@ def _strip_qualified_names(name: str) -> str:
         if ch in {"'", '"'}:
             end = _consume_quoted_segment(name, index)
             parts.append(name[index:end])
+
             index = end
             continue
 
@@ -292,10 +307,12 @@ def _strip_qualified_names(name: str) -> str:
             end = _consume_dotted_identifier(name, index)
             token = name[index:end]
             parts.append(token.split(".")[-1])
+
             index = end
             continue
 
         parts.append(ch)
+
         index += 1
 
     return "".join(parts)
@@ -312,6 +329,7 @@ def resolve_type_alias(annotation: Any) -> Any:
         if value is _MISSING:
             break
         annotation = value
+
     return annotation
 
 
@@ -393,6 +411,7 @@ def _normalize_enum_choices(choices: list[Any], *, for_display: bool) -> list[An
     for choice in choices:
         if choice is None:
             continue
+
         if isinstance(choice, Enum):
             if for_display:
                 value = choice.value
@@ -439,6 +458,7 @@ def _literal_choices_from_annotation(annotation: Any) -> list[Any] | None:
 
     if not raw:
         return None
+
     return [value for value in raw if value is not None] or None
 
 
@@ -450,6 +470,7 @@ def _objinspect_choices_from_annotation(annotation: Any, *, for_display: bool) -
 
     if not raw:
         return None
+
     return _normalize_enum_choices(list(raw), for_display=for_display)
 
 
@@ -511,9 +532,12 @@ def format_default_for_help(value: Any) -> str:
         raw = value.value
         if isinstance(raw, (str, int, float, bool)):
             return str(raw)
+
         return value.name
+
     if isinstance(value, PurePath):
         return repr(str(value))
+
     if isinstance(value, str):
         if value == "":
             return '""'
@@ -525,6 +549,7 @@ def format_default_for_help(value: Any) -> str:
                 parsed = None
             if isinstance(parsed, str):
                 return repr(parsed)
+
     return str(value)
 
 
@@ -567,6 +592,7 @@ def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
     """
     if name.startswith(prefix):
         return name[len(prefix) :]
+
     return prefix + name
 
 

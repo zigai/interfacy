@@ -39,6 +39,7 @@ class InterfacyLayout(HelpLayout):
             values["extra"] = f" {extra}" if has_visible_description else extra
         else:
             values["extra"] = ""
+
         return values
 
     def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
@@ -161,6 +162,7 @@ class Aligned(InterfacyLayout):
         prefix_len = self._get_commands_prefix_len()
         if prefix_len is not None:
             return max(base, prefix_len + 1)
+
         return super().get_commands_ljust(max_display_len)
 
     def keep_help_default_slot_for_arguments(self, arguments: list["Argument"]) -> bool:
@@ -176,9 +178,11 @@ class Aligned(InterfacyLayout):
     def _has_user_facing_help(text: str | None) -> bool:
         if text is None:
             return False
+
         normalized = text.strip()
         if not normalized:
             return False
+
         return normalized.lower() != "none"
 
     def _suppress_positive_false_boolean_default(
@@ -253,6 +257,7 @@ class AlignedTyped(InterfacyLayout):
         prefix_len = self._get_commands_prefix_len()
         if prefix_len is not None:
             return max(base, prefix_len + 1)
+
         return super().get_commands_ljust(max_display_len)
 
     def keep_help_default_slot_for_arguments(self, arguments: list["Argument"]) -> bool:
@@ -268,9 +273,11 @@ class AlignedTyped(InterfacyLayout):
     def _has_user_facing_help(text: str | None) -> bool:
         if text is None:
             return False
+
         normalized = text.strip()
         if not normalized:
             return False
+
         return normalized.lower() != "none"
 
     def _suppress_positive_false_boolean_default(
@@ -423,8 +430,10 @@ class ClapLayout(HelpLayout):
         text = name.upper()
         if self.dashify_metavar:
             text = text.replace("_", "-")
+
         if is_varargs:
             text = f"{text}..."
+
         return f"<{text}>"
 
     def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:
@@ -437,6 +446,7 @@ class ClapLayout(HelpLayout):
         is_bool = param.is_typed and self._param_is_bool(param)
         needs_value = param.is_typed and not is_bool
         is_varargs = param.kind == StdParameter.VAR_POSITIONAL
+
         return self._build_clap_flag_parts(
             flags=flags,
             is_option=is_option,
@@ -476,6 +486,7 @@ class ClapLayout(HelpLayout):
 
         if not parts:
             return ""
+
         return " " + " ".join(parts)
 
     def _build_extra(self, param: Parameter) -> str:
@@ -491,9 +502,12 @@ class ClapLayout(HelpLayout):
     def _style_flag_token(self, flag: str, style: TextStyle) -> str:
         if not flag:
             return ""
+
         if " " not in flag:
             return with_style(flag, style)
+
         head, tail = flag.split(" ", 1)
+
         return f"{with_style(head, style)} {with_style(tail, self.placeholder_style)}"
 
     def _build_styled_columns(
@@ -566,7 +580,9 @@ class ClapLayout(HelpLayout):
                 values["column_gap"] = ""
         else:
             values["column_gap"] = self.column_gap
+
         values["extra"] = extra
+
         return values
 
     def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
@@ -598,6 +614,7 @@ class ClapLayout(HelpLayout):
             flag_short = shorts[0] if shorts else ""
             flag_long = primary_bool_flag
             joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
+
             return joined, flag_short, flag_long, is_option
 
         flag_short = shorts[0] if shorts else ""
@@ -621,6 +638,7 @@ class ClapLayout(HelpLayout):
         is_bool = self._arg_is_bool(arg)
         needs_value = arg.type is not None and not is_bool
         is_varargs = self._enum_matches(arg.value_shape, "LIST") and not is_option
+
         return self._build_clap_flag_parts(
             flags=arg.flags,
             is_option=is_option,
@@ -651,11 +669,13 @@ class ClapLayout(HelpLayout):
     def _format_command_display_name(self, name: str, aliases: tuple[str, ...] = ()) -> str:
         if not aliases:
             return name
+
         return ", ".join((name, *aliases))
 
     def _format_commands_title(self) -> str:
         if self.section_heading_style is not None:
             return with_style(self.commands_title, self.section_heading_style)
+
         return self.commands_title
 
     def _format_command_name_for_help(self, command_name: str) -> str:
@@ -688,8 +708,10 @@ class StandardLayout(HelpLayout):
 
         stripped = text.rstrip()
         trailing_ws = text[len(stripped) :]
+
         if stripped.endswith("..") and not stripped.endswith("..."):
             stripped = stripped[:-1]
+
         return stripped + trailing_ws
 
     @classmethod
@@ -732,6 +754,7 @@ class StandardLayout(HelpLayout):
         default_block = f"[default: {default_text}]"
         if not description:
             return default_block
+
         return f"{description.rstrip()} {default_block}"
 
     @classmethod
@@ -750,6 +773,7 @@ class StandardLayout(HelpLayout):
         choices_block = f"[choices: {choices_text}]"
         if not description:
             return choices_block
+
         return f"{description.rstrip()} {choices_block}"
 
     def get_help_for_parameter(
@@ -780,6 +804,7 @@ class StandardLayout(HelpLayout):
             )
         description = self._with_default_sentence(description, has_default, default_value)
         choices = get_param_choices(param, for_display=True) if param.is_typed else None
+
         return self._with_choices_block(description, choices)
 
     def format_argument(
@@ -808,6 +833,7 @@ class StandardLayout(HelpLayout):
             if arg.choices
             else None
         )
+
         return self._with_choices_block(description, choices)
 
 
@@ -837,8 +863,10 @@ class ArgparseLayout(HelpLayout):
 
         stripped = text.rstrip()
         trailing_ws = text[len(stripped) :]
+
         if stripped.endswith("..") and not stripped.endswith("..."):
             stripped = stripped[:-1]
+
         return stripped + trailing_ws
 
     @classmethod
@@ -884,6 +912,7 @@ class ArgparseLayout(HelpLayout):
             separator = " " if description.rstrip().endswith((".", "?", "!", ":", ";")) else ". "
 
         terminal = "" if sentence.endswith((".", "?", "!", ":", ";")) else "."
+
         return f"{description}{separator}{sentence}{terminal}"
 
     @classmethod
@@ -943,6 +972,7 @@ class ArgparseLayout(HelpLayout):
             )
         description = self._with_default_sentence(description, has_default, default_value)
         choices = get_param_choices(param, for_display=True) if param.is_typed else None
+
         return self._with_choices_sentence(description, choices)
 
     def format_argument(
@@ -971,6 +1001,7 @@ class ArgparseLayout(HelpLayout):
             if arg.choices
             else None
         )
+
         return self._with_choices_sentence(description, choices)
 
 

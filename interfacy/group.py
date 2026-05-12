@@ -27,6 +27,7 @@ def validate_abbreviation_scope(value: AbbreviationScope | None) -> Abbreviation
         raise ConfigurationError(
             "abbreviation_scope must be one of: " + ", ".join(ABBREVIATION_SCOPE_VALUES)
         )
+
     return value
 
 
@@ -35,6 +36,7 @@ def validate_help_option_sort(
 ) -> list[HelpOptionSortRule] | None:
     if value is None:
         return None
+
     return resolve_help_option_sort_rules(value, value_name="help_option_sort")
 
 
@@ -43,6 +45,7 @@ def validate_help_subcommand_sort(
 ) -> list[HelpSubcommandSortRule] | None:
     if value is None:
         return None
+
     return resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
 
 
@@ -51,6 +54,7 @@ def validate_model_expansion_max_depth(value: int | None) -> int | None:
         return None
     if value < 1:
         raise ConfigurationError("model_expansion_max_depth must be >= 1")
+
     return value
 
 
@@ -127,6 +131,7 @@ class CommandGroup:
             attr = getattr(type(command), attr_name, None)
             if callable(attr):
                 return True
+
         return False
 
     def add_command(
@@ -219,6 +224,7 @@ class CommandGroup:
             executable_flags=list(resolved_executable_flags) if resolved_executable_flags else None,
         )
         self._commands[cmd_name] = entry
+
         return self
 
     def add_group(
@@ -251,6 +257,7 @@ class CommandGroup:
                 list(resolved_executable_flags) if resolved_executable_flags else None
             ),
         )
+
         return self
 
     def with_args(self, source: type | Callable[..., Any]) -> CommandGroup:
@@ -261,6 +268,7 @@ class CommandGroup:
             source: A class (uses __init__ params) or callable (uses signature).
         """
         self._group_args_source = source
+
         return self
 
     @property

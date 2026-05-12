@@ -43,6 +43,7 @@ def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None
 def log_interrupt(*, silent: bool) -> None:
     if silent:
         return
+
     message = colored("\nInterrupted", color="yellow")
     error(message)
 

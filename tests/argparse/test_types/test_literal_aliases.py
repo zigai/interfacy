@@ -28,6 +28,7 @@ def _build_pep695_alias_fn():
         ]
     )
     exec(code, namespace, namespace)
+
     return namespace["fn"]
 
 
@@ -43,6 +44,7 @@ def _build_future_annotations_alias_fn():
         ]
     )
     exec(code, namespace, namespace)
+
     return namespace["fn"]
 
 

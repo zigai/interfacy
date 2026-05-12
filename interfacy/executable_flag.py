@@ -25,9 +25,11 @@ class ExecutableFlag:
         flags = _normalize_flag_tuple(self.flags)
         if not flags:
             raise ConfigurationError("ExecutableFlag.flags must contain at least one flag token")
+
         if len(set(flags)) != len(flags):
             duplicate = next(flag for flag in flags if flags.count(flag) > 1)
             raise ReservedFlagError(duplicate)
+
         for flag in flags:
             if not isinstance(flag, str) or not flag.startswith("-") or flag == "-":
                 raise ConfigurationError(
@@ -53,6 +55,7 @@ class ExecutableFlag:
 def _normalize_flag_tuple(value: tuple[str, ...] | Sequence[str] | str) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
+
     return tuple(value)
 
 
@@ -64,6 +67,7 @@ def normalize_executable_flags(
     """Validate and copy a collection of executable flags."""
     if value is None:
         return []
+
     values = [value] if isinstance(value, ExecutableFlag) else list(value)
 
     normalized: list[ExecutableFlag] = []
@@ -71,13 +75,16 @@ def normalize_executable_flags(
     for flag in values:
         if not isinstance(flag, ExecutableFlag):
             raise ConfigurationError(f"{value_name} entries must be ExecutableFlag instances")
+
         for flag_name in flag.flags:
             if flag_name == "--help":
                 raise ReservedFlagError(flag_name)
             if flag_name in seen_tokens:
                 raise ReservedFlagError(flag_name)
             seen_tokens.add(flag_name)
+
         normalized.append(flag)
+
     return normalized
 
 
@@ -95,6 +102,7 @@ def execute_executable_flag(
     result = flag.handler()
     if result is not None and flag.display_result:
         display_result_fn(result)
+
     return flag.exit_code
 
 

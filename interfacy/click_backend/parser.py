@@ -48,6 +48,7 @@ class InterfacyOptionParser(_BaseOptionParser):
                 short_opt = _normalize_opt(f"{prefix}{ch}", self.ctx)
                 if short_opt in self._short_opt:
                     return True
+
         return False
 
     def _get_value_from_state(
@@ -67,9 +68,12 @@ class InterfacyOptionParser(_BaseOptionParser):
                 collected.extend(state.rargs)
                 state.rargs.clear()
                 break
+
             if self._token_looks_like_option(next_rarg):
                 break
+
             collected.append(state.rargs.pop(0))
+
         return tuple(collected)
 
 

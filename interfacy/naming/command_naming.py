@@ -55,6 +55,7 @@ class CommandNameRegistry:
         self._canonical.add(canonical)
         for alias in alias_tuple:
             self._alias_to_canonical[alias] = canonical
+
         return canonical, alias_tuple
 
     def canonical_for(self, cli_name: str) -> str | None:
@@ -69,6 +70,7 @@ class CommandNameRegistry:
         """
         if cli_name in self._canonical:
             return cli_name
+
         return self._alias_to_canonical.get(cli_name)
 
     def snapshot(self) -> tuple[set[str], dict[str, str]]:
@@ -91,12 +93,16 @@ class CommandNameRegistry:
         for alias in aliases:
             if not alias:
                 raise DuplicateCommandError(alias)
+
             if alias == canonical:
                 raise DuplicateCommandError(alias)
+
             if alias in seen_aliases:
                 raise DuplicateCommandError(alias)
+
             if alias in self._canonical or alias in self._alias_to_canonical:
                 raise DuplicateCommandError(alias)
+
             seen_aliases.add(alias)
 
 

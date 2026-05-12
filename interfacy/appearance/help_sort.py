@@ -25,6 +25,7 @@ def resolve_sort_rules(
     if value is None:
         if allow_none:
             return None
+
         raise ConfigurationError(f"{value_name} must be a list")
 
     if not isinstance(value, list):
@@ -36,12 +37,14 @@ def resolve_sort_rules(
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError(f"{value_name} values must be strings")
+
         token = lookup.get(normalize_sort_rule_name(item))
         if token is None:
             raise ConfigurationError(
                 f"{value_name} contains invalid value: {item}. "
                 "Allowed values: " + ", ".join(allowed_values)
             )
+
         if token in seen:
             continue
         seen.add(token)
@@ -49,6 +52,7 @@ def resolve_sort_rules(
 
     if not result and empty_means_none:
         return None
+
     return result
 
 

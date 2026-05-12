@@ -25,6 +25,7 @@ def _capture_exit_calls(parser: Argparser) -> list[ExitCode]:
         return code
 
     parser.exit = _exit  # type: ignore[method-assign]
+
     return calls
 
 

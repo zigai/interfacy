@@ -77,6 +77,7 @@ class ChoiceParamType(click.ParamType):
                 ctx=ctx,
                 param=param,
             )
+
         return converted
 
 

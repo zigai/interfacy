@@ -24,6 +24,7 @@ def _uses_template_layout(layout: HelpLayout) -> bool:
         return True
     if layout_mode == "adaptive":
         return False
+
     return bool(layout.format_option or layout.format_positional)
 
 
@@ -37,6 +38,7 @@ class InterfacyClickHelpFormatter(click.HelpFormatter):
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
+
         self.interfacy_help_position = help_position
 
     def write_dl(
@@ -62,6 +64,7 @@ class InterfacyClickHelpFormatter(click.HelpFormatter):
             if not second:
                 self.write("\n")
                 continue
+
             if term_len(first) <= first_col - col_spacing:
                 self.write(" " * (first_col - term_len(first)))
             else:
@@ -95,7 +98,9 @@ class InterfacyClickOption(click.Option):
             name, help_text = help_record
             if " " in name and not self.is_flag:
                 name = name.rsplit(" ", 1)[0]
+
             return name, help_text
+
         return None
 
 
@@ -105,6 +110,7 @@ class InterfacyListOption(InterfacyClickOption):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs["nargs"] = 1
         super().__init__(*args, **kwargs)
+
         self.nargs = -1
         self._interfacy_none_default = kwargs.get("default", None) is None
 
@@ -118,6 +124,7 @@ class InterfacyListOption(InterfacyClickOption):
         """
         if value is None and self._interfacy_none_default:
             return None
+
         return super().type_cast_value(ctx, value)
 
 
@@ -146,7 +153,9 @@ class InterfacyClickArgument(click.Argument):
             name, help_text = help_record
             parts = name.split(" ")
             name = " ".join(parts[:-1])
+
             return name, help_text
+
         return None
 
 
@@ -167,6 +176,7 @@ class HelpMixin:
         help_position = self.interfacy_help_position
         if not self.interfacy_help_position_explicit or not isinstance(help_position, int):
             return None
+
         return help_position
 
     def _render_click_help(self, ctx: click.Context) -> str:
@@ -183,12 +193,14 @@ class HelpMixin:
         for param in self.params:
             if not isinstance(param, InterfacyClickArgument):
                 continue
+
             help_record = param.get_help_record(ctx)
             if help_record is None:
                 name = param.name or ""
                 rows.append((name, param.help or ""))
                 continue
             rows.append(help_record)
+
         return rows
 
     def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
@@ -197,6 +209,7 @@ class HelpMixin:
             if positional_rows:
                 with formatter.section("Positionals"):
                     formatter.write_dl(positional_rows)
+
         return super().format_options(ctx, formatter)
 
     def _augment_help(self, _ctx: click.Context, original_help: str) -> str:
@@ -221,6 +234,7 @@ class HelpMixin:
         merged = description + extra_help + options
         if self.interfacy_epilog:
             merged = f"{merged.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
+
         return merged
 
 
@@ -237,6 +251,7 @@ class InterfacyClickCommand(HelpMixin, click.Command):
         parser = InterfacyOptionParser(ctx)
         for param in self.get_params(ctx):
             param.add_to_parser(parser, ctx)
+
         return parser
 
     def get_help(self, ctx: click.Context) -> str:
@@ -264,12 +279,14 @@ class InterfacyClickCommand(HelpMixin, click.Command):
         ):
             renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)
+
         if self._resolve_fallback_help_position() is not None:
             help_text = self._render_click_help(ctx)
             if self.interfacy_epilog:
                 return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
             return help_text
         original_help = super().get_help(ctx)
+
         return self._augment_help(ctx, original_help)
 
 
@@ -286,6 +303,7 @@ class InterfacyClickGroup(HelpMixin, click.Group):
         parser = InterfacyOptionParser(ctx)
         for param in self.get_params(ctx):
             param.add_to_parser(parser, ctx)
+
         return parser
 
     def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
@@ -299,6 +317,7 @@ class InterfacyClickGroup(HelpMixin, click.Group):
         command = super().get_command(ctx, name)
         if command is not None:
             return command
+
         for sub_cmd in self.commands.values():
             aliases = (
                 sub_cmd.interfacy_aliases
@@ -307,6 +326,7 @@ class InterfacyClickGroup(HelpMixin, click.Group):
             )
             if name in aliases:
                 return sub_cmd
+
         return None
 
     def list_commands(self, _ctx: click.Context) -> list[str]:
@@ -338,12 +358,14 @@ class InterfacyClickGroup(HelpMixin, click.Group):
         ):
             renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)
+
         if self._resolve_fallback_help_position() is not None:
             help_text = self._render_click_help(ctx)
             if self.interfacy_epilog:
                 return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
             return help_text
         original_help = super().get_help(ctx)
+
         return self._augment_help(ctx, original_help)
 
 

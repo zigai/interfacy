@@ -64,8 +64,10 @@ def build_default_type_parser(
     parser = StrToTypeParser(from_file=from_file, allow_class_init=allow_class_init)
     for typ in DIRECTLY_CASTABLE_TYPES:
         parser.add(typ, Cast(typ))
+
     for typ in MAPPING_TYPES_CAST:
         parser.add(typ, MappingParser(typ, from_file=from_file, mode="cast"))
+
     for typ in ITERABLE_TYPES:
         parser.add(typ, IterableParser(typ, from_file=from_file))
 
@@ -83,6 +85,7 @@ def build_default_type_parser(
             array.array: ArrayParser(),
         }
     )
+
     return parser
 
 

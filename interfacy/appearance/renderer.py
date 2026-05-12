@@ -39,6 +39,7 @@ def has_grouped_commands(commands: dict[str, Command] | None) -> bool:
     """Return whether any command in a mapping has a help-group label."""
     if not commands:
         return False
+
     return any(command.help_group is not None for command in commands.values())
 
 
@@ -46,6 +47,7 @@ def command_has_grouped_subcommands(command: Command | None) -> bool:
     """Return whether a command has subcommands with help-group labels."""
     if command is None:
         return False
+
     return has_grouped_commands(command.subcommands)
 
 
@@ -165,7 +167,9 @@ class SchemaHelpRenderer:
         if self.layout.should_render_description_before_usage():
             if description:
                 sections.append(description)
+
             sections.append(usage)
+
             return
 
         sections.append(usage)
@@ -195,6 +199,7 @@ class SchemaHelpRenderer:
                 lines.append(self._indent(rendered))
         finally:
             self.layout.keep_empty_default_slot_for_help = previous_keep
+
         return "\n".join(lines)
 
     def _build_epilog_block(self, command: Command, parser_epilog: str | None) -> str | None:
@@ -219,10 +224,13 @@ class SchemaHelpRenderer:
 
             if not is_generated_subcommand_epilog:
                 epilog_parts.append(command.epilog)
+
         if parser_epilog:
             epilog_parts.append(parser_epilog)
+
         if not epilog_parts:
             return None
+
         return "\n\n".join(epilog_parts)
 
     def _render_multi_command_help(self, schema: ParserSchema, prog: str) -> str:
@@ -235,6 +243,7 @@ class SchemaHelpRenderer:
         if layout.should_render_description_before_usage():
             if schema.description:
                 sections.append(schema.description)
+
             sections.append(usage)
         else:
             sections.append(usage)
@@ -264,6 +273,7 @@ class SchemaHelpRenderer:
         elif schema.commands:
             commands_help = layout.get_help_for_multiple_commands(schema.commands)
             sections.append(commands_help)
+
         if schema.epilog:
             sections.append(schema.epilog)
 
@@ -300,6 +310,7 @@ class SchemaHelpRenderer:
             help_arg = self._get_help_argument()
             if help_arg is not None:
                 parts.append(self._usage_token_for_option(help_arg))
+
             parts.extend(self._usage_token_for_option(arg) for arg in options)
 
         for arg in positionals:
@@ -308,6 +319,7 @@ class SchemaHelpRenderer:
                 raw_name = arg.display_name or arg.name or "arg"
             name = raw_name.upper()
             metavar_name = self.layout.format_usage_metavar(name, is_varargs=False)
+
             if arg.value_shape == ValueShape.LIST:
                 token = (
                     self.layout.format_usage_metavar(name, is_varargs=True)
@@ -316,6 +328,7 @@ class SchemaHelpRenderer:
                 )
                 parts.append(token if arg.nargs == "+" else f"[{token}]")
                 continue
+
             if arg.value_shape == ValueShape.TUPLE and isinstance(arg.nargs, int) and arg.nargs > 1:
                 token_atom = metavar_name if compact_options_usage else name
                 token = " ".join([token_atom] * arg.nargs)
@@ -367,6 +380,7 @@ class SchemaHelpRenderer:
         choices = [subcommand.cli_name for subcommand in ordered_subcommands]
         if not choices:
             return token
+
         return token.replace("{command}", "{" + ",".join(choices) + "}")
 
     def _usage_token_for_option(self, arg: Argument, *, compact_style: bool = False) -> str:
@@ -404,6 +418,7 @@ class SchemaHelpRenderer:
             )
 
         token = f"{primary_flag} {value_token}"
+
         return token if arg.required else f"[{token}]"
 
     def _wrap_usage_parts(
@@ -433,7 +448,9 @@ class SchemaHelpRenderer:
                 current_len = (
                     len(indent) + ansi_len(current_line[0]) if current_line else len(indent)
                 )
+
                 continue
+
             if current_line and current_len + 1 + part_len > text_width:
                 lines.append(" ".join(current_line))
                 current_line = [part]
@@ -447,6 +464,7 @@ class SchemaHelpRenderer:
 
         if len(lines) <= 1:
             return lines[0] if lines else ""
+
         return lines[0] + "\n" + "\n".join(indent + line for line in lines[1:])
 
     def _get_usage_prefix(self) -> str:
@@ -454,6 +472,7 @@ class SchemaHelpRenderer:
         prefix = layout.usage_prefix or "usage: "
         if layout.usage_style is not None:
             prefix = with_style(prefix, layout.usage_style)
+
         return prefix
 
     def _normalize_prog(self, prog: str) -> str:
@@ -467,6 +486,7 @@ class SchemaHelpRenderer:
     def _style_usage_text(self, text: str) -> str:
         if self.layout.usage_text_style is not None:
             return with_style(text, self.layout.usage_text_style)
+
         return text
 
     def _style_section_heading(self, heading: str) -> str:
@@ -477,8 +497,10 @@ class SchemaHelpRenderer:
             mapped = title_map.get(heading) or title_map.get(heading_key)
             if mapped:
                 heading = mapped
+
         if layout.section_heading_style is not None:
             heading = with_style(heading, layout.section_heading_style)
+
         return heading + ":"
 
     def _indent(self, text: str, width: int = 2) -> str:
@@ -502,6 +524,7 @@ class SchemaHelpRenderer:
                     break_on_hyphens=False,
                 )
             )
+
         return "\n".join(lines)
 
     def _get_help_argument(self) -> Argument | None:
@@ -509,6 +532,7 @@ class SchemaHelpRenderer:
             return _make_help_argument(self.layout.help_option_description)
         if self._help_argument is None:
             return None
+
         return replace(
             self._help_argument,
             help=self.layout.help_option_description,

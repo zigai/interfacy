@@ -101,10 +101,13 @@ def _replace_pipe_targets(
     updated = config
     if delimiter is not DELIMITER_UNSET:
         updated = replace(updated, delimiter=cast(str | None, delimiter))
+
     if allow_partial is not None:
         updated = replace(updated, allow_partial=allow_partial)
+
     if priority is not None:
         updated = replace(updated, priority=parse_priority(priority))
+
     return updated
 
 
@@ -202,6 +205,7 @@ def build_pipe_targets_config(
         priority=parse_priority(priority) if priority is not None else "cli",
         allow_partial=bool(allow_partial) if allow_partial is not None else False,
     )
+
     return config
 
 
@@ -225,6 +229,7 @@ def split_data(data: str, config: PipeTargets) -> list[str]:
         pieces = data.split(delimiter, max_splits) if max_splits >= 0 else data.split(delimiter)
 
     pieces = [piece.strip() for piece in pieces]
+
     return pieces
 
 
@@ -260,6 +265,7 @@ def _is_empty_collection_from_argparse(value: Any, param_type: Any) -> bool:
     origin = getattr(param_type, "__origin__", None)
     if origin in (tuple, set):
         return True
+
     return param_type in (tuple, set)
 
 
@@ -351,6 +357,7 @@ def get_chunks(
                 "stdin",
                 f"Received {len(chunks)} chunk(s) but {expected} pipe target(s) are configured",
             )
+
         chunks.extend([None] * (expected - len(chunks)))
     elif len(chunks) > expected:
         raise PipeInputError(

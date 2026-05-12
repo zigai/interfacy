@@ -67,12 +67,14 @@ class TypeHelpFormatter:
                 rendered.append(value)
             else:
                 rendered.append(with_style(value, self.token_styles.get(kind, self.style)))
+
         return "".join(rendered)
 
     def _resolve_type_token_styles(self) -> dict[str, TextStyle]:
         def pick(name: str) -> TextStyle:
             if self.theme is None:
                 return self.style
+
             return getattr(self.theme, name)
 
         return {
@@ -118,6 +120,7 @@ class TypeHelpFormatter:
         base_name = self._stringify(base)
         if base_name.endswith("?"):
             return base_name
+
         return f"{base_name}?"
 
     @staticmethod
@@ -154,6 +157,7 @@ class TypeHelpFormatter:
         index = start + 1
         while index < len(text) and text[index].isspace():
             index += 1
+
         return index
 
     @staticmethod
@@ -163,6 +167,7 @@ class TypeHelpFormatter:
         escaped = False
         while index < len(text):
             current = text[index]
+
             if escaped:
                 escaped = False
             elif current == "\\":
@@ -171,6 +176,7 @@ class TypeHelpFormatter:
                 index += 1
                 break
             index += 1
+
         return index
 
     @staticmethod
@@ -178,6 +184,7 @@ class TypeHelpFormatter:
         index = start + 1
         while index < len(text) and (text[index].isdigit() or text[index] == "."):
             index += 1
+
         return index
 
     @staticmethod
@@ -185,6 +192,7 @@ class TypeHelpFormatter:
         index = start + 1
         while index < len(text) and (text[index].isalnum() or text[index] in {"_", "."}):
             index += 1
+
         return index
 
     def _next_type_token(self, type_text: str, start: int) -> tuple[str, str, int]:
@@ -224,6 +232,7 @@ class TypeHelpFormatter:
         while index < len(type_text):
             kind, value, index = self._next_type_token(type_text, index)
             tokens.append((kind, value))
+
         return tokens
 
 

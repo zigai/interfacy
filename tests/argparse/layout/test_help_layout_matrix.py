@@ -182,6 +182,7 @@ def build_group() -> CommandGroup:
     )
     nested.add_command(cache_clean, aliases=("clean",))
     ops.add_group(nested)
+
     return ops
 
 
@@ -197,6 +198,7 @@ def build_stress_parser(layout: HelpLayout, parser: Argparser) -> Argparser:
     parser.add_command(keyword_only_options)
     parser.add_command(ReportTool)
     parser.add_command(build_group())
+
     return parser
 
 
@@ -226,6 +228,7 @@ def render_help_for_args(
     except SystemExit:
         pass
     out = capsys.readouterr()
+
     return out.out + out.err
 
 
@@ -274,9 +277,12 @@ def _extract_section_rows(help_text: str, section_title: str) -> list[str]:
             stripped = current.strip()
             if not stripped:
                 break
+
             if not current.startswith(" ") and stripped.endswith(":"):
                 break
+
             rows.append(current)
+
             cursor += 1
 
     return rows
@@ -456,6 +462,7 @@ def test_usage_wrapping_is_width_sensitive_for_template_layouts(
         while j < len(lines) and lines[j].startswith(" "):
             count += 1
             j += 1
+
         return count
 
     assert usage_block_line_count(narrow) > usage_block_line_count(wide)

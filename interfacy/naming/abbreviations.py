@@ -39,6 +39,7 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
     def __init__(self, max_generated_len: int = 1) -> None:
         if max_generated_len < 1:
             raise ValueError("max_generated_len must be >= 1")
+
         self.max_generated_len = max_generated_len
 
     def generate(self, value: str, taken: list[str]) -> str | None:
@@ -74,6 +75,7 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
             ):
                 taken.append(candidate)
                 return candidate
+
         return None
 
 

@@ -145,7 +145,9 @@ def get_default_config_paths() -> list[Path]:
     paths: list[Path] = []
     if env_path:
         paths.append(Path(env_path))
+
     paths.append(Path.home() / ".config" / "interfacy" / "config.toml")
+
     return paths
 
 
@@ -169,6 +171,7 @@ def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
         section = cast(str | None, config_field.metadata.get("section"))
         if section is None:
             continue
+
         section_data = data.get(section)
         if not isinstance(section_data, dict):
             continue
@@ -187,10 +190,13 @@ def load_config(path: Path | None = None) -> InterfacyConfig:
     if path is not None:
         if not path.exists():
             raise FileNotFoundError(path)
+
         return InterfacyConfig(**_flatten_config(_load_toml(path)))
+
     for candidate in get_default_config_paths():
         if candidate.exists():
             return InterfacyConfig(**_flatten_config(_load_toml(candidate)))
+
     return InterfacyConfig()
 
 
@@ -199,6 +205,7 @@ def _import_symbol(value: str) -> Any:
         raise ConfigurationError(
             f"Invalid import path '{value}'. Use the format 'package.module:Symbol'."
         )
+
     module_name, symbol_name = value.split(":", 1)
     module = import_module(module_name)
     try:
@@ -234,6 +241,7 @@ def _component_registry(
 
         class_name = _normalize_name(current.__name__)
         registry.setdefault(class_name, current)
+
         if suffix and class_name.endswith(suffix):
             alias = class_name.removesuffix(suffix)
             if alias:
@@ -263,6 +271,7 @@ def _resolve_named_component(
         resolved = _resolve_symbol_value(value)
         if isinstance(resolved, component_type):
             return resolved
+
         raise ConfigurationError(
             f"{value_name} symbol must resolve to {component_type.__name__}, got {type(resolved)}"
         )
@@ -273,6 +282,7 @@ def _resolve_named_component(
     resolved_type = registry.get(key)
     if resolved_type is None:
         raise ConfigurationError(f"Unknown {value_name} value: {value}")
+
     return resolved_type()
 
 
@@ -292,6 +302,7 @@ def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy |
             style=config.get("flag_style") or "required_positional",
             translation_mode=config.get("translation_mode") or "kebab",
         )
+
     raise ConfigurationError(f"Unknown flag_strategy value: {value}")
 
 
@@ -300,6 +311,7 @@ def _resolve_abbreviation_max_generated_len(value: Any) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
+
     return value
 
 
@@ -313,11 +325,15 @@ def _resolve_abbreviation_gen(
     if value is None:
         if max_generated_len is None:
             return None
+
         return DefaultAbbreviationGenerator(max_generated_len=max_generated_len)
+
     if isinstance(value, AbbreviationGenerator):
         return value
+
     if not isinstance(value, str):
         raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
+
     if ":" in value:
         resolved = _resolve_symbol_value(value)
         if isinstance(resolved, AbbreviationGenerator):
@@ -330,30 +346,37 @@ def _resolve_abbreviation_gen(
         return DefaultAbbreviationGenerator(max_generated_len=max_generated_len or 1)
     if key in {"none", "noabbrev", "noabbreviations"}:
         return NoAbbreviations()
+
     raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
 
 
 def _resolve_abbreviation_scope(value: Any) -> str | None:
     if value is None:
         return None
+
     if not isinstance(value, str):
         raise ConfigurationError("abbreviation_scope must be a string")
+
     resolved = _ABBREVIATION_SCOPE_LOOKUP.get(_normalize_name(value))
     if resolved is None:
         raise ConfigurationError(
             "abbreviation_scope must be one of: top_level_options, all_options"
         )
+
     return resolved
 
 
 def _resolve_backend(value: Any) -> Backend | None:
     if value is None:
         return None
+
     if not isinstance(value, str):
         raise ConfigurationError("backend must be a string")
+
     normalized = _normalize_name(value)
     if normalized not in {"argparse", "click"}:
         raise ConfigurationError("backend must be one of: argparse, click")
+
     return cast(Backend, normalized)
 
 
@@ -362,6 +385,7 @@ def _resolve_model_expansion_max_depth(value: Any) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigurationError("model_expansion_max_depth must be an integer >= 1")
+
     return validate_model_expansion_max_depth(value)
 
 
@@ -372,6 +396,7 @@ def _resolve_bool_negative_prefix(value: Any) -> str | None:
         raise ConfigurationError("bool_negative_prefix must be a string")
     if not value:
         raise ConfigurationError("bool_negative_prefix must not be empty")
+
     return value
 
 

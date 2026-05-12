@@ -30,11 +30,13 @@ class NameMapping:
         """
         if key in self.ignored_names:
             return key
+
         translated_key = self.translation_fn(key)
         self.translations[translated_key] = key
         normalized_key = translated_key.replace("-", "_")
         if normalized_key != translated_key:
             self.translations[normalized_key] = key
+
         return translated_key
 
     def reverse(self, translated: str) -> str:
@@ -46,6 +48,7 @@ class NameMapping:
         """
         if translated in self.ignored_names:
             return translated
+
         return self.translations.get(translated, translated)
 
     def contains_key(self, name: str) -> bool:
@@ -79,6 +82,7 @@ def reverse_translations(args: dict[str, Any], translator: NameMapping) -> dict[
     for key, value in args.items():
         canonical = translator.reverse(key)
         reversed_args[canonical] = value
+
     return reversed_args
 
 

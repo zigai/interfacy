@@ -31,6 +31,7 @@ def _split_target(target: str) -> tuple[str, str]:
             "Target must include both module/path and symbol. "
             f"Got: '{target}'. Example: 'main.py:main'."
         )
+
     return module_ref, symbol_ref
 
 
@@ -39,13 +40,17 @@ def load_module_from_path(path: Path) -> ModuleType:
     spec = spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load module from path: {path}")
+
     module = module_from_spec(spec)
     sys.modules[module_name] = module
     module_dir = str(path.parent)
     if module_dir not in sys.path:
         sys.path.insert(0, module_dir)
+
     spec.loader.exec_module(module)
+
     module.__dict__["__interfacy_target_display__"] = str(path)
+
     return module
 
 
@@ -56,7 +61,9 @@ def load_module(module_ref: str) -> ModuleType:
             raise FileNotFoundError(f"Python file not found: {path}")
         if path.is_dir():
             raise ValueError(f"Expected a Python file, got directory: {path}")
+
         return load_module_from_path(path)
+
     return import_module(module_ref)
 
 
@@ -67,6 +74,7 @@ def _resolve_symbol(module: ModuleType, symbol_ref: str) -> Any:
             display = getattr(module, "__interfacy_target_display__", module.__name__)
             raise AttributeError(f"Symbol '{symbol_ref}' not found in module '{display}'.")
         current = getattr(current, part)
+
     return current
 
 
@@ -79,6 +87,7 @@ def resolve_target(target: str) -> Any:
     """
     module_ref, symbol_ref = _split_target(target)
     module = load_module(module_ref)
+
     return _resolve_symbol(module, symbol_ref)
 
 
@@ -91,6 +100,7 @@ def resolve_target_with_module(target: str) -> tuple[ModuleType, Any]:
     """
     module_ref, symbol_ref = _split_target(target)
     module = load_module(module_ref)
+
     return module, _resolve_symbol(module, symbol_ref)
 
 
@@ -108,6 +118,7 @@ def _is_supported_entrypoint_target(target: Any) -> bool:
         probe.add_command(target)
     except Exception:  # noqa: BLE001 - type gate for user-provided target objects
         return False
+
     return True
 
 
@@ -144,6 +155,7 @@ def _resolve_help_layout(settings: dict[str, Any]) -> HelpLayout:
     help_colors = settings.get("help_colors")
     if help_colors is not None:
         help_layout.style = help_colors
+
     return help_layout
 
 
@@ -187,6 +199,7 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
         action="store_true",
         help="print config file search paths and exit.",
     )
+
     return parser
 
 
@@ -200,10 +213,13 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
     help_layout = settings.get("help_layout")
     help_colors = settings.get("help_colors")
+
     if help_layout is not None:
         kwargs["help_layout"] = help_layout
+
     if help_colors is not None:
         kwargs["help_colors"] = help_colors
+
     for key in (
         "flag_strategy",
         "abbreviation_gen",
@@ -226,6 +242,7 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
         value = settings.get(key)
         if value is not None:
             kwargs[key] = value
+
     return kwargs
 
 
@@ -234,8 +251,10 @@ def configure_runner_from_module(parser: Interfacy, module: ModuleType) -> None:
     hook = getattr(module, "configure_interfacy", None)
     if hook is None:
         return
+
     if not callable(hook):
         raise TypeError("configure_interfacy must be callable")
+
     hook(parser)
 
 
@@ -243,10 +262,12 @@ def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
     if "--version" in args:
         print(f"interfacy {version('interfacy')}")
         return ExitCode.SUCCESS
+
     if "--config-paths" in args:
         for path in get_default_config_paths():
             print(path)
         return ExitCode.SUCCESS
+
     return None
 
 
@@ -281,6 +302,7 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
             "Target must resolve to a function, class, or class instance. "
             "Parser instances, command groups, and other object types are not supported."
         )
+
         return ExitCode.ERR_INVALID_ARGS
 
     target_args = [arg for arg in args.ARGS if arg != "--"]
@@ -291,5 +313,7 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
     except (AttributeError, TypeError, ValueError) as exc:
         parser.error(str(exc))
         return ExitCode.ERR_INVALID_ARGS
+
     runner.run(target, args=target_args)
+
     return ExitCode.SUCCESS

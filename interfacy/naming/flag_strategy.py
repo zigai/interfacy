@@ -34,6 +34,7 @@ def build_name_mapping(mode: TranslationMode) -> NameMapping:
             f"Invalid flag translation mode: {mode}. "
             f"Valid modes are: {', '.join(NAME_TRANSLATORS.keys())}"
         )
+
     return NameMapping(NAME_TRANSLATORS[mode])
 
 
@@ -69,6 +70,7 @@ class FlagParamView:
     def __getattr__(self, name: str) -> Any:
         if name in self._overrides:
             return self._overrides[name]
+
         return getattr(self._param, name)
 
 
@@ -99,6 +101,7 @@ def get_arg_flags_for_parameter(
     if _is_required_list_positional_candidate(strategy, param):
         if allocation_state is None:
             return (name,)
+
         if not allocation_state.consumed_required_list_positional:
             allocation_state.consumed_required_list_positional = True
             return (name,)
@@ -126,7 +129,6 @@ class DefaultFlagStrategy(FlagStrategy):
         self.style = style
         self.translation_mode = translation_mode
         self.nested_separator = nested_separator
-
         self.argument_translator = build_name_mapping(self.translation_mode)
         self.command_translator = build_name_mapping(self.translation_mode)
 

@@ -156,13 +156,16 @@ def test_help_group_validation_rejects_invalid_values() -> None:
 
     with pytest.raises(ConfigurationError):
         parser.add_command(cmd_clone, help_group="")
+
     with pytest.raises(ConfigurationError):
         parser.add_command(cmd_clone, help_group="   ")
+
     with pytest.raises(ConfigurationError):
         parser.add_group(CommandGroup("ops"), help_group=object())  # type: ignore[arg-type]
 
     with pytest.raises(ConfigurationError):
         CommandGroup("tools").add_command(cmd_clone, help_group="")
+
     with pytest.raises(ConfigurationError):
         CommandGroup("tools").add_group(CommandGroup("sub"), help_group="   ")
 

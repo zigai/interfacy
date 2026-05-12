@@ -51,12 +51,14 @@ class SchemaRunner:
         commands = self.builder.commands
         if len(commands) == 0:
             raise ConfigurationError("No commands were provided")
+
         if len(commands) == 1:
             command = self.builder.get_commands()[0]
             if not command.is_leaf:
                 group_args = self.namespace.get(command.canonical_name, {})
                 return self._run_with_chain(command, group_args, depth=0)
             return self.run_command(command, self.namespace)
+
         return self.run_multiple(commands)
 
     def _run_awaitable(self, awaitable: Any) -> Any:
@@ -64,6 +66,7 @@ class SchemaRunner:
             loop = awaitable.get_loop()
             if loop.is_running():
                 return awaitable
+
             return loop.run_until_complete(awaitable)
 
         try:
@@ -87,11 +90,13 @@ class SchemaRunner:
 
         if error is not None:
             raise error
+
         return result
 
     def _resolve_result(self, value: Any) -> Any:
         if not inspect.isawaitable(value):
             return value
+
         return self._run_awaitable(value)
 
     def _apply_pipe(
@@ -135,14 +140,17 @@ class SchemaRunner:
             args = self._apply_pipe(command, args)
             args = self._reconstruct_expanded_models(args, self._arguments_for(command))
             return self.run_function(obj, args)
+
         if isinstance(obj, Method):
             args = self._apply_pipe(command, args)
             args = self._reconstruct_expanded_models(
                 args, [*self._initializer_for(command), *self._arguments_for(command)]
             )
             return self.run_method(obj, args)
+
         if isinstance(obj, Class):
             return self.run_class(command, args)
+
         raise InvalidCommandError(command.canonical_name)
 
     def run_function(self, func: Function | Method, args: dict[str, Any]) -> Any:
@@ -166,6 +174,7 @@ class SchemaRunner:
         result = self._resolve_result(result)
 
         logger.info("Result: %s", result)
+
         return result
 
     def run_method(self, method: Method, args: dict[str, Any]) -> Any:
@@ -191,6 +200,7 @@ class SchemaRunner:
             instance.init(*init_args, **init_kwargs)
         else:
             args_method = cli_args
+
             if not method.is_static:
                 instance.init()
 
@@ -216,6 +226,7 @@ class SchemaRunner:
         cls = command.obj
         if not isinstance(cls, Class):
             raise TypeError(f"Expected {Class}, got {type(cls)}")
+
         runtime_cls = cls
         if not cls.is_initialized:
             runtime_cls = Class(cls.cls)
@@ -256,6 +267,7 @@ class SchemaRunner:
             method_kwargs,
         )
         result = runtime_cls.call_method(method.name, *method_args, **method_kwargs)
+
         return self._resolve_result(result)
 
     def run_multiple(
@@ -274,6 +286,7 @@ class SchemaRunner:
 
         if not command.is_leaf:
             return self._run_with_chain(command, args, depth=0)
+
         return self.run_command(command, args)
 
     def _run_with_chain(
@@ -302,6 +315,7 @@ class SchemaRunner:
             normalized_args,
             depth,
         )
+
         return self._run_with_chain(subcommand, subcommand_args, depth + 1, current_instance)
 
     def _prepare_chain_level(
@@ -325,6 +339,7 @@ class SchemaRunner:
             return current_instance, normalized_args
 
         self._attach_parent_instance(instantiated, parent_instance)
+
         return instantiated, normalized_args
 
     def _instantiate_chain_class(
@@ -341,6 +356,7 @@ class SchemaRunner:
 
         cls.is_initialized = False
         cls.instance = None
+
         if command.initializer:
             args = self._apply_pipe(command, args, subcommand="__init__")
             args = self._reconstruct_expanded_models(args, command.initializer)
@@ -352,6 +368,7 @@ class SchemaRunner:
             cls.init(*init_a, **init_kw)
         else:
             cls.init()
+
         return cls.instance
 
     def _attach_parent_instance(
@@ -361,10 +378,12 @@ class SchemaRunner:
     ) -> None:
         if current_instance is None or parent_instance is None:
             return
+
         instance_dict = getattr(current_instance, "__dict__", None)
         if isinstance(instance_dict, dict):
             instance_dict["_parent"] = parent_instance
             return
+
         try:
             object.__setattr__(current_instance, "_parent", parent_instance)
         except (AttributeError, TypeError):
@@ -384,6 +403,7 @@ class SchemaRunner:
             )
 
         subcommand_name = args[dest_key]
+
         if command.subcommands is None:
             raise ConfigurationError(f"Command '{command.cli_name}' has no subcommands")
 
@@ -398,6 +418,7 @@ class SchemaRunner:
         )
         if not isinstance(subcommand_args, dict):
             subcommand_args = {}
+
         return subcommand, subcommand_args
 
     def _subcommand_bucket(
@@ -412,6 +433,7 @@ class SchemaRunner:
             bucket = nested.get(subcommand_name)
             if isinstance(bucket, dict):
                 return bucket
+
             if fallback_name is not None:
                 fallback_bucket = nested.get(fallback_name)
                 if isinstance(fallback_bucket, dict):
@@ -420,10 +442,12 @@ class SchemaRunner:
         direct_bucket = args.get(subcommand_name)
         if isinstance(direct_bucket, dict):
             return direct_bucket
+
         if fallback_name is not None:
             fallback_direct_bucket = args.get(fallback_name)
             if isinstance(fallback_direct_bucket, dict):
                 return fallback_direct_bucket
+
         return {}
 
     def _match_subcommand(
@@ -434,6 +458,7 @@ class SchemaRunner:
         for sub_cmd in subcommands.values():
             if sub_cmd.cli_name == subcommand_name or subcommand_name in sub_cmd.aliases:
                 return sub_cmd
+
         return None
 
     def _extract_init_args(
@@ -468,11 +493,13 @@ class SchemaRunner:
                     method_kwargs,
                 )
                 result = obj.call(instance, *method_args, **method_kwargs)
+
                 return self._resolve_result(result)
             args = self._apply_pipe(command, args)
             args = self._reconstruct_expanded_models(
                 args, [*self._initializer_for(command), *self._arguments_for(command)]
             )
+
             return self.run_method(obj, args)
 
         if isinstance(obj, Function):
@@ -533,9 +560,11 @@ class SchemaRunner:
         varargs = args.get(param.name)
         if not varargs:
             return
+
         if isinstance(varargs, (list, tuple)):
             positional_args.extend(varargs)
             return
+
         positional_args.append(varargs)
 
     def _append_keyword_only_param(
@@ -570,27 +599,32 @@ class SchemaRunner:
         schema = self.builder.get_last_schema()
         if schema is None:
             return None
+
         return schema.commands.get(command.canonical_name)
 
     def _arguments_for(self, command: Command) -> list[Argument]:
         schema_cmd = self._schema_command_for(command)
         if schema_cmd is None:
             return command.parameters
+
         return schema_cmd.parameters
 
     def _initializer_for(self, command: Command) -> list[Argument]:
         schema_cmd = self._schema_command_for(command)
         if schema_cmd is None:
             return command.initializer
+
         return schema_cmd.initializer
 
     def _schema_subcommand_for(self, command: Command, name: str) -> Command | None:
         schema_cmd = self._schema_command_for(command)
         if schema_cmd is None or not schema_cmd.subcommands:
             return None
+
         for sub_cmd in schema_cmd.subcommands.values():
             if sub_cmd.cli_name == name or name in sub_cmd.aliases:
                 return sub_cmd
+
         return None
 
 
