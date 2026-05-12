@@ -172,20 +172,6 @@ options:
 Use 'interfacy TARGET --help' to display the help text for the target.
 ```
 
-## Backend Selection
-
-`Interfacy` uses the argparse backend by default. To use the Click backend,
-install the optional dependency and pass `backend="click"`:
-
-```bash
-pip install "interfacy[click]"
-```
-
-```python
-from interfacy import Interfacy
-
-Interfacy(backend="click", print_result=True).run(greet)
-```
 ## License
 
 [MIT License](https://github.com/zigai/interfacy/blob/main/LICENSE)
