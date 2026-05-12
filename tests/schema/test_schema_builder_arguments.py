@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import cast
 
 import pytest
@@ -6,6 +7,7 @@ from objinspect import Class, Function
 from interfacy.exceptions import ReservedFlagError
 from interfacy.schema.builder import ParserSchemaBuilder
 from interfacy.schema.schema import ArgumentKind, ValueShape
+from interfacy.schema.value_plan import FixedTupleValue, ObjectValue, RepeatedValue
 from tests.conftest import Color
 from tests.schema.conftest import FakeParser, StubTypeParser
 
@@ -32,6 +34,20 @@ def optional_list(values: list[int] | None = None) -> list[int] | None:
 def color_list(values: list[Color]): ...
 
 
+@dataclass
+class User:
+    name: str
+    age: int
+
+
+def list_of_tuples(values: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    return values
+
+
+def tuple_of_users(pair: tuple[User, User]) -> tuple[User, User]:
+    return pair
+
+
 def positional_value(value: int) -> int:
     return value
 
@@ -54,6 +70,7 @@ def test_reserved_flag_name_raises(builder_parser: FakeParser) -> None:
     param = Function(reserved).params[0]
     with pytest.raises(ReservedFlagError) as exc:
         builder._argument_from_parameter(param, [*builder_parser.RESERVED_FLAGS])
+
     assert "help" in str(exc.value)
 
 
@@ -166,3 +183,31 @@ def test_nested_enum_list_requests_type_parser() -> None:
     assert argument.value_shape is ValueShape.LIST
     assert argument.parser is parse_color
     assert type_parser.requests == [Color]
+
+
+def test_list_of_fixed_tuples_builds_repeated_value_plan(builder_parser: FakeParser) -> None:
+    """Verify nested repeated tuple values collect raw tokens for later conversion."""
+    builder = ParserSchemaBuilder(builder_parser)
+    param = Function(list_of_tuples).params[0]
+
+    argument = builder._argument_from_parameter(param, [*builder_parser.RESERVED_FLAGS])[0]
+
+    assert argument.value_shape is ValueShape.LIST
+    assert argument.parser is None
+    assert isinstance(argument.value_plan, RepeatedValue)
+    assert isinstance(argument.value_plan.item, FixedTupleValue)
+    assert argument.value_plan.token_consumption(required=True).group_size == 2
+
+
+def test_tuple_of_dataclasses_builds_object_value_plan(builder_parser: FakeParser) -> None:
+    """Verify fixed tuples can plan fixed-size model values."""
+    builder = ParserSchemaBuilder(builder_parser)
+    param = Function(tuple_of_users).params[0]
+
+    argument = builder._argument_from_parameter(param, [*builder_parser.RESERVED_FLAGS])[0]
+
+    assert argument.value_shape is ValueShape.TUPLE
+    assert argument.parser is None
+    assert argument.nargs == 4
+    assert isinstance(argument.value_plan, FixedTupleValue)
+    assert all(isinstance(item, ObjectValue) for item in argument.value_plan.items)

@@ -28,6 +28,10 @@ def fn_tuple_mixed(values: tuple[int, str, float]) -> tuple[int, str, float]:
     return values
 
 
+def fn_list_tuple_int_str(values: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    return values
+
+
 def fn_echo(msg: str) -> str:
     return msg
 
@@ -46,6 +50,14 @@ def fn_user(user: User) -> User:
     return user
 
 
+def fn_user_pair(pair: tuple[User, User]) -> tuple[User, User]:
+    return pair
+
+
+def fn_users(users: list[User]) -> list[User]:
+    return users
+
+
 class TestClickListOptions:
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_list_option_values(self, parser):
@@ -56,6 +68,61 @@ class TestClickListOptions:
     def test_list_option_negatives(self, parser):
         parser.add_command(fn_list_int)
         assert parser.run(args=["--values", "-1", "-2"]) == [-1, -2]
+
+    @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
+    def test_list_of_fixed_tuples(self, parser):
+        parser.add_command(fn_list_tuple_int_str)
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["1", "a", "2", "b"]
+            case "keyword_only":
+                args = ["--values", "1", "a", "2", "b"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        assert parser.run(args=args) == [(1, "a"), (2, "b")]
+
+    @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
+    def test_list_of_fixed_tuples_rejects_incomplete_group(self, parser):
+        parser.add_command(fn_list_tuple_int_str)
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["1", "a", "2"]
+            case "keyword_only":
+                args = ["--values", "1", "a", "2"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        result = parser.run(args=args)
+
+        assert isinstance(result, SystemExit)
+        assert result.code == 2
+
+    @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
+    def test_tuple_of_dataclasses_from_flat_values(self, parser):
+        parser.add_command(fn_user_pair)
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["ann", "1", "bob", "2"]
+            case "keyword_only":
+                args = ["--pair", "ann", "1", "bob", "2"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        assert parser.run(args=args) == (User("ann", 1), User("bob", 2))
+
+    @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
+    def test_list_of_dataclasses_from_flat_values(self, parser):
+        parser.add_command(fn_users)
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["ann", "1", "bob", "2"]
+            case "keyword_only":
+                args = ["--users", "ann", "1", "bob", "2"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        assert parser.run(args=args) == [User("ann", 1), User("bob", 2)]
 
 
 class TestClickBooleanFlags:
@@ -174,7 +241,6 @@ def test_interfacy_click_group_help_position_aligns_command_rows() -> None:
             help="Disable the per-job duration limit.",
         )
     )
-
     group.interfacy_help_position = 42
     group.interfacy_help_position_explicit = True
 

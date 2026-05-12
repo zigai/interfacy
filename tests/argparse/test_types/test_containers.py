@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import pytest
 
 from interfacy.core import InterfacyParser
@@ -17,6 +19,24 @@ def fn_tuple_strs(items: tuple[str, str]):
 def fn_tuple_int_str(items: tuple[int, str]):
     """Heterogeneous tuple: first element should be int, second should be str."""
     return items
+
+
+@dataclass
+class User:
+    name: str
+    age: int
+
+
+def fn_list_tuple_int_str(items: list[tuple[int, str]]):
+    return items
+
+
+def fn_tuple_users(pair: tuple[User, User]):
+    return pair
+
+
+def fn_list_users(users: list[User]):
+    return users
 
 
 def fn_dict_str_int(data: dict[str, int]):
@@ -128,6 +148,69 @@ class TestContainers:
         assert result == (123, "hello")
         assert isinstance(result[0], int), f"First element should be int, got {type(result[0])}"
         assert isinstance(result[1], str), f"Second element should be str, got {type(result[1])}"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    def test_list_of_fixed_tuples(self, parser: InterfacyParser):
+        """Verify repeated fixed-size tuple items are grouped from flat CLI values."""
+        parser.add_command(fn_list_tuple_int_str, name="fn-list-tuples")
+
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["1", "a", "2", "b"]
+            case "keyword_only":
+                args = ["--items", "1", "a", "2", "b"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        assert parser.run(args=args) == [(1, "a"), (2, "b")]
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    def test_list_of_fixed_tuples_rejects_incomplete_group(self, parser: InterfacyParser):
+        """Verify grouped repeated tuple values fail when the final group is incomplete."""
+        parser.add_command(fn_list_tuple_int_str, name="fn-list-tuples")
+
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["1", "a", "2"]
+            case "keyword_only":
+                args = ["--items", "1", "a", "2"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(args)
+
+        assert excinfo.value.code == 2
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    def test_tuple_of_dataclasses_from_flat_values(self, parser: InterfacyParser):
+        """Verify fixed tuples can contain fixed-size dataclass values."""
+        parser.add_command(fn_tuple_users, name="fn-user-pair")
+
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["ann", "1", "bob", "2"]
+            case "keyword_only":
+                args = ["--pair", "ann", "1", "bob", "2"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        assert parser.run(args=args) == (User("ann", 1), User("bob", 2))
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    def test_list_of_dataclasses_from_flat_values(self, parser: InterfacyParser):
+        """Verify repeated dataclass items are grouped from flat CLI values."""
+        parser.add_command(fn_list_users, name="fn-users")
+
+        match parser.flag_strategy.style:
+            case "required_positional":
+                args = ["ann", "1", "bob", "2"]
+            case "keyword_only":
+                args = ["--users", "ann", "1", "bob", "2"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+
+        assert parser.run(args=args) == [User("ann", 1), User("bob", 2)]
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_dict_str_int(self, parser: InterfacyParser):
