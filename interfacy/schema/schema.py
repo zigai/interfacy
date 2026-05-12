@@ -13,6 +13,7 @@ from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSor
 from interfacy.appearance.layout import HelpLayout
 from interfacy.executable_flag import ExecutableFlag
 from interfacy.pipe import PipeTargets
+from interfacy.schema.value_plan import ArgumentValue
 
 CommandType = Literal["function", "method", "class", "group", "instance"]
 MODEL_DEFAULT_UNSET: Any = object()
@@ -80,6 +81,7 @@ class Argument:
         parent_is_optional (bool): Whether an ancestor model is optional.
         model_default (Any): Default model instance or sentinel.
         is_help_action (bool): Whether this argument is the parser's built-in help action.
+        value_plan (ArgumentValue | None): Internal conversion plan for nested values.
     """
 
     name: str
@@ -106,6 +108,7 @@ class Argument:
     model_default: Any = MODEL_DEFAULT_UNSET
     is_help_action: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
+    value_plan: ArgumentValue | None = None
 
 
 @dataclass
