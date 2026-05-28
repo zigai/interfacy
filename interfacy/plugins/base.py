@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -7,6 +8,18 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from interfacy.core import InterfacyParser
     from interfacy.schema.schema import Argument, ParserSchema
+
+
+@dataclass
+class PluginContext:
+    """Stable context object passed to plugin lifecycle hooks."""
+
+    parser: InterfacyParser
+    backend: str | None = None
+    schema: ParserSchema | None = None
+    args: list[str] | None = None
+    namespace: dict[str, Any] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class ParseFailureKind(str, Enum):
@@ -63,20 +76,44 @@ class InterfacyPlugin:
 
     name: str | None = None
 
-    def configure(self, _parser: InterfacyParser) -> None:
+    def configure(self, _context: PluginContext) -> None:
         """Configure a parser immediately after plugin registration."""
+
+    def before_parse(
+        self,
+        _context: PluginContext,
+        args: list[str],
+    ) -> list[str]:
+        """Transform raw CLI arguments before backend parsing."""
+        return args
+
+    def after_parse(
+        self,
+        _context: PluginContext,
+        namespace: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Transform the parsed namespace before it is returned."""
+        return namespace
 
     def transform_schema(
         self,
-        _parser: InterfacyParser,
+        _context: PluginContext,
         schema: ParserSchema,
     ) -> ParserSchema:
         """Transform a fully built parser schema before backend materialization."""
         return schema
 
+    def wrap_execute(
+        self,
+        _context: PluginContext,
+        call_next: Callable[[], Any],
+    ) -> Any:
+        """Wrap command execution."""
+        return call_next()
+
     def recover_parse_failure(
         self,
-        _parser: InterfacyParser,
+        _context: PluginContext,
         _failure: ParseFailure,
     ) -> RecoveryAction | None:
         """Optionally recover from a structured parse failure."""
@@ -98,6 +135,7 @@ __all__ = [
     "InterfacyPlugin",
     "ParseFailure",
     "ParseFailureKind",
+    "PluginContext",
     "ProvideArgumentValues",
     "RecoveryAction",
 ]

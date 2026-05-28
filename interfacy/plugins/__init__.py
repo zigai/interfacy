@@ -4,6 +4,7 @@ from interfacy.plugins.base import (
     InterfacyPlugin,
     ParseFailure,
     ParseFailureKind,
+    PluginContext,
     ProvideArgumentValues,
     RecoveryAction,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "InterfacyPlugin",
     "ParseFailure",
     "ParseFailureKind",
+    "PluginContext",
     "ProvideArgumentValues",
     "RecoveryAction",
 ]
