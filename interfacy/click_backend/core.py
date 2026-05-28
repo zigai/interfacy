@@ -72,6 +72,7 @@ class ClickParser(InterfacyParser):
     """Build and execute Interfacy command schemas on top of Click."""
 
     RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
+    plugin_backend_name: ClassVar[str] = "click"
 
     def __init__(
         self,
@@ -98,6 +99,9 @@ class ClickParser(InterfacyParser):
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
+        include_protected_methods: bool = False,
+        include_private_methods: bool = False,
+        include_staticmethods: bool = True,
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
         silent_interrupt: bool = True,
@@ -106,6 +110,8 @@ class ClickParser(InterfacyParser):
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
         plugins: Sequence[InterfacyPlugin] | None = None,
+        method_skips: Sequence[str] | None = None,
+        parse_recovery_max_attempts: int = 3,
     ) -> None:
         super().__init__(
             description,
@@ -127,6 +133,9 @@ class ClickParser(InterfacyParser):
             help_position=help_position,
             executable_flags=executable_flags,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
             on_interrupt=on_interrupt,
             silent_interrupt=silent_interrupt,
@@ -137,6 +146,8 @@ class ClickParser(InterfacyParser):
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
             plugins=plugins,
+            method_skips=method_skips,
+            parse_recovery_max_attempts=parse_recovery_max_attempts,
         )
 
         self._last_schema: ParserSchema | None = None
@@ -875,7 +886,7 @@ class ClickParser(InterfacyParser):
             raise click.BadParameter(str(exc)) from exc
 
         if self._last_schema is not None:
-            namespace = self._apply_interspersed_ancestor_option_values(
+            namespace = self._ancestor_options.apply_values(
                 self._last_schema,
                 namespace,
             )
@@ -957,13 +968,7 @@ class ClickParser(InterfacyParser):
         self,
         root: click.Command,
     ) -> list[tuple[click.Parameter, bool]]:
-        required_flags = {
-            flag
-            for _command_path, argument, _raw_values in self._interspersed_ancestor_option_values
-            if argument.required
-            for flag in argument.flags
-            if flag.startswith("-")
-        }
+        required_flags = self._ancestor_options.required_option_flags()
         if not required_flags:
             return []
 
@@ -992,11 +997,13 @@ class ClickParser(InterfacyParser):
         Args:
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
-        args = args if args is not None else self.get_args()
+        args = list(args if args is not None else self.get_args())
+        args = self._apply_before_parse_plugins(args)
+        self._last_parse_args = args
         root = self.build_parser()
         relaxed_required_params: list[tuple[click.Parameter, bool]] = []
         if self._last_schema is not None:
-            args = self._normalize_interspersed_ancestor_options(self._last_schema, args)
+            args = self._ancestor_options.normalize_args(self._last_schema, args)
             relaxed_required_params = self._relax_interspersed_required_options(root)
 
         try:
@@ -1004,7 +1011,12 @@ class ClickParser(InterfacyParser):
                 namespace = self._parse_root_group_namespace(root, args)
             else:
                 namespace = self._parse_root_command_namespace(root, args)
-            return self._finish_parsed_namespace(namespace)
+            namespace = self._finish_parsed_namespace(namespace)
+            return self._apply_after_parse_plugins(
+                namespace,
+                args=args,
+                schema=self._last_schema,
+            )
         except InterspersedOptionValueError as exc:
             raise self._click_bad_parameter_for_interspersed(exc) from exc
         except ExecutableFlagTriggeredError as exc:
@@ -1024,7 +1036,11 @@ class ClickParser(InterfacyParser):
                     raw_exception=exc,
                 )
                 if recovered is not None:
-                    return recovered
+                    return self._apply_after_parse_plugins(
+                        recovered,
+                        args=args,
+                        schema=self._last_schema,
+                    )
             raise
         finally:
             self._restore_required_options(relaxed_required_params)
@@ -1104,6 +1120,7 @@ class ClickParser(InterfacyParser):
             logger.info("Got args: %s", parsed_args)
 
             namespace = self.parse_args(parsed_args)
+            parsed_args = self._last_parse_args or parsed_args
         except (
             DuplicateCommandError,
             UnsupportedParameterTypeError,
@@ -1135,7 +1152,11 @@ class ClickParser(InterfacyParser):
                 args=args,
                 builder=self,
             )
-            return True, runner.run()
+            return True, self._execute_with_plugins(
+                namespace=namespace,
+                args=args,
+                call_next=runner.run,
+            )
         except InterfacyError as exc:
             self.log_exception(exc)
             self.exit(ExitCode.ERR_RUNTIME_INTERNAL)

@@ -163,6 +163,7 @@ class Argparser(InterfacyParser):
     """
 
     RESERVED_FLAGS: ClassVar[list[str]] = ["help"]
+    plugin_backend_name: ClassVar[str] = "argparse"
 
     def __init__(
         self,
@@ -189,6 +190,9 @@ class Argparser(InterfacyParser):
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
         print_result_func: Callable[[Any], Any] = print,
         include_inherited_methods: bool = False,
+        include_protected_methods: bool = False,
+        include_private_methods: bool = False,
+        include_staticmethods: bool = True,
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
         silent_interrupt: bool = True,
@@ -197,6 +201,8 @@ class Argparser(InterfacyParser):
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
         plugins: Sequence[InterfacyPlugin] | None = None,
+        method_skips: Sequence[str] | None = None,
+        parse_recovery_max_attempts: int = 3,
         formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
     ) -> None:
         super().__init__(
@@ -222,6 +228,9 @@ class Argparser(InterfacyParser):
             full_error_traceback=full_error_traceback,
             sys_exit_enabled=sys_exit_enabled,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
             on_interrupt=on_interrupt,
             silent_interrupt=silent_interrupt,
@@ -230,6 +239,8 @@ class Argparser(InterfacyParser):
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
             plugins=plugins,
+            method_skips=method_skips,
+            parse_recovery_max_attempts=parse_recovery_max_attempts,
         )
 
         self.formatter_class = formatter_class
@@ -1114,13 +1125,7 @@ class Argparser(InterfacyParser):
         self,
         parser: argparse.ArgumentParser,
     ) -> list[tuple[argparse.Action, bool]]:
-        required_flags = {
-            flag
-            for _command_path, argument, _raw_values in self._interspersed_ancestor_option_values
-            if argument.required
-            for flag in argument.flags
-            if flag.startswith("-")
-        }
+        required_flags = self._ancestor_options.required_option_flags()
         if not required_flags:
             return []
 
@@ -1145,11 +1150,13 @@ class Argparser(InterfacyParser):
         Args:
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
-        args = args if args is not None else self.get_args()
+        args = list(args if args is not None else self.get_args())
+        args = self._apply_before_parse_plugins(args)
+        self._last_parse_args = args
         parser = self.build_parser()
         relaxed_required_actions: list[tuple[argparse.Action, bool]] = []
         if self._last_schema is not None:
-            args = self._normalize_interspersed_ancestor_options(self._last_schema, args)
+            args = self._ancestor_options.normalize_args(self._last_schema, args)
             relaxed_required_actions = self._relax_interspersed_required_options(parser)
 
         self._parser = parser
@@ -1173,7 +1180,11 @@ class Argparser(InterfacyParser):
                     raw_exception=exc,
                 )
                 if recovered is not None:
-                    return recovered
+                    return self._apply_after_parse_plugins(
+                        recovered,
+                        args=args,
+                        schema=self._last_schema,
+                    )
 
             parser._interfacy_raise_parse_errors = False
             parser.error(str(exc))
@@ -1194,7 +1205,7 @@ class Argparser(InterfacyParser):
 
         if self._last_schema is not None:
             try:
-                namespace = self._apply_interspersed_ancestor_option_values(
+                namespace = self._ancestor_options.apply_values(
                     self._last_schema,
                     namespace,
                 )
@@ -1202,7 +1213,11 @@ class Argparser(InterfacyParser):
                 parser.error(self._interspersed_option_error(exc))
                 raise AssertionError("unreachable") from exc
 
-        return namespace
+        return self._apply_after_parse_plugins(
+            namespace,
+            args=args,
+            schema=self._last_schema,
+        )
 
     def _convert_tuple_args(self, namespace: dict[str, Any]) -> dict[str, Any]:
         """Convert arguments with ValueShape.TUPLE from list to tuple, applying per-element parsers."""
@@ -1296,6 +1311,7 @@ class Argparser(InterfacyParser):
             logger.info("Got args: %s", resolved_args)
 
             namespace = self.parse_args(resolved_args)
+            resolved_args = self._last_parse_args or resolved_args
         except (
             DuplicateCommandError,
             UnsupportedParameterTypeError,
@@ -1331,7 +1347,11 @@ class Argparser(InterfacyParser):
                 parser=self._parser,
                 builder=self,
             )
-            return runner.run()
+            return self._execute_with_plugins(
+                namespace=namespace,
+                args=args,
+                call_next=runner.run,
+            )
         except InterfacyError as exc:
             self.log_exception(exc)
             self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
