@@ -79,12 +79,15 @@ def test_standard_layout_does_not_leave_blank_metavar_slots_in_usage() -> None:
 
     parser = Argparser(help_layout=StandardLayout(), sys_exit_enabled=False, print_result=False)
     parser.add_command(demo)
-    usage_line = parser.build_parser().format_help().splitlines()[0]
+    built_parser = parser.build_parser()
+    built_parser.prog = "demo"
+    help_text = built_parser.format_help()
+    usage_block = help_text.split("\n\n", 1)[0]
 
-    assert "[-c ]" not in usage_line
-    assert "[-d ]" not in usage_line
-    assert "[-c]" in usage_line
-    assert "[-d]" in usage_line
+    assert "[-c ]" not in usage_block
+    assert "[-d ]" not in usage_block
+    assert "[-c]" in usage_block
+    assert "[-d]" in usage_block
 
 
 def test_standard_layout_renders_defaults_with_bracket_default_block() -> None:
@@ -1131,7 +1134,9 @@ def test_template_schema_descriptions_wrap_to_terminal_width(monkeypatch) -> Non
 
     parser = Argparser(help_layout=InterfacyLayout(), sys_exit_enabled=False, print_result=False)
     parser.add_command(probe)
-    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    built_parser = parser.build_parser()
+    built_parser.prog = "probe"
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", built_parser.format_help())
 
     assert "Probe CLI for finding help rendering\ndefects across layouts and backends." in help_text
     assert all(len(line) <= 40 for line in help_text.splitlines())
