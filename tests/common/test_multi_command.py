@@ -239,6 +239,34 @@ class TestMethodFiltering:
         assert "repeat" in subcommands
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_static_methods_can_be_excluded(self, parser: InterfacyParser):
+        """Verify static method inclusion can be disabled per command."""
+        parser.add_command(TextTools, include_staticmethods=False)
+        schema = parser.build_parser_schema()
+        subcommands = schema.get_command("text-tools").subcommands or {}
+
+        assert "repeat" not in subcommands
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_protected_methods_can_be_included(self, parser: InterfacyParser):
+        """Verify protected method inclusion can be enabled per command."""
+        parser.add_command(TextTools, include_protected_methods=True)
+        schema = parser.build_parser_schema()
+        subcommands = schema.get_command("text-tools").subcommands or {}
+
+        assert "helper" in subcommands
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_method_skips_override_exposed_methods(self, parser: InterfacyParser):
+        """Verify custom method skips exclude otherwise visible methods."""
+        parser.add_command(TextTools, method_skips=["join", "repeat"])
+        schema = parser.build_parser_schema()
+        subcommands = schema.get_command("text-tools").subcommands or {}
+
+        assert "join" not in subcommands
+        assert "repeat" not in subcommands
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_class_methods_as_subcommands(self, parser: InterfacyParser):
         """Verify class methods are exposed as subcommands."""
         parser.include_classmethods = True

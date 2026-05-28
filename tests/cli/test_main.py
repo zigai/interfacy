@@ -146,7 +146,10 @@ def test_main_special_flags_bypass_invalid_config(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     config_path = tmp_path / "bad.toml"
-    config_path.write_text("[help]\nlayout = 'no-such-layout'\n", encoding="utf-8")
+    config_path.write_text(
+        "[appearance]\nlayout = 'no-such-layout'\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
 
     assert main(["--config-paths"]) == ExitCode.SUCCESS
@@ -375,7 +378,7 @@ def test_main_configure_interfacy_hook_can_register_plugins(
                 "class FillNamePlugin(InterfacyPlugin):",
                 "    name = 'fill_name'",
                 "",
-                "    def recover_parse_failure(self, parser, failure):",
+                "    def recover_parse_failure(self, context, failure):",
                 "        if failure.kind is not ParseFailureKind.MISSING_ARGUMENTS:",
                 "            return None",
                 "        ref = failure.missing_arguments[0]",
@@ -399,3 +402,69 @@ def test_main_configure_interfacy_hook_can_register_plugins(
     assert excinfo.value.code == ExitCode.SUCCESS
     captured = capsys.readouterr()
     assert "Ada" in captured.out
+
+
+def test_main_config_can_load_plugins_before_module_hook(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    plugin_path = tmp_path / "plugin_cli_config_mod.py"
+    _write_module(
+        plugin_path,
+        "\n".join(
+            [
+                "from interfacy.plugins import InterfacyPlugin, ParseFailureKind, ProvideArgumentValues",
+                "",
+                "class ConfigPlugin(InterfacyPlugin):",
+                "    name = 'config_plugin'",
+                "",
+                "    def configure(self, context):",
+                "        context.metadata.setdefault('order', []).append('config')",
+                "",
+                "    def recover_parse_failure(self, context, failure):",
+                "        if failure.kind is not ParseFailureKind.MISSING_ARGUMENTS:",
+                "            return None",
+                "        ref = failure.missing_arguments[0]",
+                "        return ProvideArgumentValues(values={ref: 'Config'})",
+                "",
+            ]
+        ),
+    )
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
+        "\n".join(
+            [
+                "def echo(*, name: str) -> str:",
+                "    return name",
+                "",
+                "def configure_interfacy(parser):",
+                "    if parser.metadata.get('order') != ['config']:",
+                "        raise ValueError('config plugins did not run before module hook')",
+                "    parser.apply_setup(print_result=True)",
+                "",
+            ]
+        ),
+    )
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[plugins]",
+                'enabled = ["plugin_cli_config_mod:ConfigPlugin"]',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:echo"])
+
+    assert excinfo.value.code == ExitCode.SUCCESS
+    captured = capsys.readouterr()
+    assert "Config" in captured.out

@@ -97,6 +97,9 @@ class FakeParser:
     command_key: str | None = "command"
     metadata: dict[str, Any] | None = None
     include_inherited_methods: bool = False
+    include_protected_methods: bool = False
+    include_private_methods: bool = False
+    include_staticmethods: bool = True
     include_classmethods: bool = False
     expand_model_params: bool = True
     model_expansion_max_depth: int = 3
