@@ -7,11 +7,7 @@ import click
 from click.formatting import iter_rows, measure_table, term_len, wrap_text
 
 from interfacy.appearance.layout import HelpLayout
-from interfacy.appearance.renderer import (
-    SchemaHelpRenderer,
-    command_has_grouped_subcommands,
-    has_grouped_commands,
-)
+from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.click_backend.parser import InterfacyOptionParser
 
 if TYPE_CHECKING:
@@ -262,22 +258,15 @@ class InterfacyClickCommand(HelpMixin, click.Command):
             ctx (click.Context): Active Click context.
         """
         schema = self.interfacy_parser_schema
-        if schema is not None and (
-            _uses_template_layout(schema.theme) or has_grouped_commands(schema.commands)
-        ):
-            renderer = SchemaHelpRenderer(schema.theme)
+        if schema is not None:
+            renderer = SchemaHelpRenderer(schema.theme, terminal_width=ctx.terminal_width)
             return renderer.render_parser_help(schema, ctx.command_path)
 
         schema_command = self.interfacy_schema
-        if (
-            schema_command is not None
-            and schema_command.help_layout is not None
-            and (
-                _uses_template_layout(schema_command.help_layout)
-                or command_has_grouped_subcommands(schema_command)
+        if schema_command is not None and schema_command.help_layout is not None:
+            renderer = SchemaHelpRenderer(
+                schema_command.help_layout, terminal_width=ctx.terminal_width
             )
-        ):
-            renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)
 
         if self._resolve_fallback_help_position() is not None:
@@ -341,22 +330,15 @@ class InterfacyClickGroup(HelpMixin, click.Group):
             ctx (click.Context): Active Click context.
         """
         schema = self.interfacy_parser_schema
-        if schema is not None and (
-            _uses_template_layout(schema.theme) or has_grouped_commands(schema.commands)
-        ):
-            renderer = SchemaHelpRenderer(schema.theme)
+        if schema is not None:
+            renderer = SchemaHelpRenderer(schema.theme, terminal_width=ctx.terminal_width)
             return renderer.render_parser_help(schema, ctx.command_path)
 
         schema_command = self.interfacy_schema
-        if (
-            schema_command is not None
-            and schema_command.help_layout is not None
-            and (
-                _uses_template_layout(schema_command.help_layout)
-                or command_has_grouped_subcommands(schema_command)
+        if schema_command is not None and schema_command.help_layout is not None:
+            renderer = SchemaHelpRenderer(
+                schema_command.help_layout, terminal_width=ctx.terminal_width
             )
-        ):
-            renderer = SchemaHelpRenderer(schema_command.help_layout)
             return renderer.render_command_help(schema_command, ctx.command_path)
 
         if self._resolve_fallback_help_position() is not None:

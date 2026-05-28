@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 import click
 import pytest
 
 from interfacy import ExecutableFlag
+from interfacy.appearance.layouts import ArgparseLayout, StandardLayout
 from interfacy.click_backend import ClickParser
 from interfacy.click_backend.commands import (
     InterfacyClickArgument,
@@ -22,6 +24,48 @@ from tests.conftest import (
     fn_list_int,
     fn_list_int_optional,
 )
+
+
+def fn_metadata_help(
+    *,
+    mode: Literal["fast", "safe", "balanced"] = "balanced",
+    level: int = 2,
+) -> tuple[str, int]:
+    return mode, level
+
+
+def test_click_standard_layout_renders_schema_metadata_in_help() -> None:
+    parser = ClickParser(
+        help_layout=StandardLayout(),
+        sys_exit_enabled=False,
+        print_result=False,
+    )
+    parser.add_command(fn_metadata_help)
+    command = parser.build_parser()
+    help_text = command.get_help(click.Context(command))
+
+    assert "-l, --level" in help_text
+    assert "-m, --mode" in help_text
+    assert "[default: 2]" in help_text
+    assert "[default: balanced] [choices: fast, safe," in help_text
+    assert "balanced]" in help_text
+
+
+def test_click_argparse_layout_renders_metavars_and_schema_metadata_in_help() -> None:
+    parser = ClickParser(
+        help_layout=ArgparseLayout(),
+        sys_exit_enabled=False,
+        print_result=False,
+    )
+    parser.add_command(fn_metadata_help)
+    command = parser.build_parser()
+    help_text = command.get_help(click.Context(command))
+
+    assert "-l, --level LEVEL" in help_text
+    assert "-m, --mode MODE" in help_text
+    assert "Defaults to 2." in help_text
+    assert "Defaults to balanced. Choices: fast, safe," in help_text
+    assert "balanced." in help_text
 
 
 def fn_tuple_mixed(values: tuple[int, str, float]) -> tuple[int, str, float]:
@@ -178,7 +222,7 @@ class TestClickBooleanFlags:
         command = parser.build_parser()
         help_text = command.get_help(click.Context(command))
 
-        assert "Usage:" in help_text
+        assert "usage:" in help_text
         assert re.search(
             r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
             help_text,
@@ -206,7 +250,7 @@ class TestClickBooleanFlags:
         help_text = command.get_help(click.Context(command))
 
         assert re.search(
-            r"^\s*-d, --disable-job-duration-limit\s*$",
+            r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
             help_text,
             re.MULTILINE,
         )

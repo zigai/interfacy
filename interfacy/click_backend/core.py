@@ -619,6 +619,7 @@ class ClickParser(InterfacyParser):
             extra_executable_flags=schema.executable_flags,
             relaxed_parse=relaxed_parse,
         )
+        click_command.interfacy_parser_schema = schema
         click_command.interfacy_epilog = self._combine_epilog(cmd.epilog, schema.epilog)
         return click_command
 
