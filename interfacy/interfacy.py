@@ -39,22 +39,22 @@ class Interfacy(InterfacyParser):
 
     Register functions, classes, or command groups, and Interfacy turns their
     names, type annotations, and docstrings into commands, options, and help
-    output. Use `command()` as a decorator, `add_command()` for explicit
-    registration, or `run()` when you want to register and execute in one step.
+    output. Use ``command()`` as a decorator, ``add_command()`` for explicit
+    registration, or ``run()`` when you want to register and execute in one step.
 
     Args:
         description: Text shown before commands and options in help output.
         epilog: Text shown after generated help output.
         type_parser: Registry used to convert raw CLI strings into annotated types.
         help_layout: Layout configuration for generated help output.
-        backend: Parser implementation to use. Must be `"argparse"` or `"click"`.
+        backend: Parser implementation to use. Must be ``"argparse"`` or ``"click"``.
         help_colors: Color theme applied by the help layout.
         run: Run backend setup immediately when supported by the selected backend.
         print_result: Print returned command values after execution.
         tab_completion: Install shell completion support when the backend supports it.
         full_error_traceback: Include full tracebacks for runtime errors.
-        allow_args_from_file: Enable `@file` argument expansion.
-        sys_exit_enabled: Call `sys.exit` for parser exits instead of returning codes.
+        allow_args_from_file: Enable ``@file`` argument expansion.
+        sys_exit_enabled: Call ``sys.exit`` for parser exits instead of returning codes.
         flag_strategy: Strategy for deriving option flags from Python names.
         abbreviation_gen: Generator used for short option flags.
         abbreviation_max_generated_len: Maximum generated short-flag length. Must be >= 1.
@@ -64,7 +64,7 @@ class Interfacy(InterfacyParser):
         help_position: Absolute help-description column.
         executable_flags: Root-level flags that run without a command.
         pipe_targets: Default stdin routing configuration.
-        print_result_func: Callable used when `print_result` is enabled.
+        print_result_func: Callable used when ``print_result`` is enabled.
         include_inherited_methods: Include inherited methods when registering classes.
         include_protected_methods: Include protected methods when registering classes.
         include_private_methods: Include private methods when registering classes.
@@ -80,12 +80,12 @@ class Interfacy(InterfacyParser):
         method_skips: Class method names to skip when registering class commands.
         parse_recovery_max_attempts: Maximum plugin recovery attempts. Must be >= 0.
         formatter_class: Argparse help formatter class. Only valid with
-            `backend="argparse"`.
+            ``backend="argparse"``.
 
     Raises:
-        ConfigurationError: If `backend` is unsupported or `formatter_class` is used with
-            `backend="click"`.
-        ImportError: If `backend="click"` is requested without Click installed.
+        ConfigurationError: If ``backend`` is unsupported or ``formatter_class`` is used with
+            ``backend="click"``.
+        ImportError: If ``backend="click"`` is requested without Click installed.
     """
 
     def __init__(
@@ -291,7 +291,7 @@ class Interfacy(InterfacyParser):
         """
         Update parser defaults used by later registrations and parser builds.
 
-        Arguments left as `None` keep their current value. Plugins supplied here
+        Arguments left as ``None`` keep their current value. Plugins supplied here
         are registered immediately.
 
         Raises:
@@ -351,13 +351,13 @@ class Interfacy(InterfacyParser):
         Register a function, class, instance, or command group.
 
         Per-command options override parser defaults for this command only. If
-        `name` is omitted, the CLI name is derived from the command target.
-        `description`, `aliases`, `pipe_targets`, and `help_group` customize the
+        ``name`` is omitted, the CLI name is derived from the command target.
+        ``description``, ``aliases``, ``pipe_targets``, and ``help_group`` customize the
         public CLI surface without changing the underlying callable.
 
         Raises:
             DuplicateCommandError: If the command name or alias already exists.
-            InvalidCommandError: If `command` cannot be converted to a CLI command.
+            InvalidCommandError: If ``command`` cannot be converted to a CLI command.
             ConfigurationError: If an override is invalid.
         """
         return self._parser.add_command(
@@ -451,8 +451,8 @@ class Interfacy(InterfacyParser):
         Register an explicit command group.
 
         Group options override parser defaults for commands created from this
-        group. If `name` is omitted, the CLI name is derived from the group.
-        `description`, `aliases`, and `help_group` customize how the group is
+        group. If ``name`` is omitted, the CLI name is derived from the group.
+        ``description``, ``aliases``, and ``help_group`` customize how the group is
         presented in generated help and command resolution.
 
         Raises:
@@ -497,7 +497,7 @@ class Interfacy(InterfacyParser):
         return self._parser.get_args()
 
     def exit(self, code: ExitCode) -> ExitCode:
-        """Exit the process or return `code`, depending on parser settings."""
+        """Exit the process or return ``code``, depending on parser settings."""
         return self._parser.exit(code)
 
     def pipe_to(
@@ -511,9 +511,9 @@ class Interfacy(InterfacyParser):
         """
         Configure stdin pipe routing for the parser or a command.
 
-        Without `command`, the targets become parser defaults. With `command`
-        and optionally `subcommand`, they apply only to that command path.
-        `normalization_kwargs` are passed through to pipe-target normalization.
+        Without ``command``, the targets become parser defaults. With ``command``
+        and optionally ``subcommand``, they apply only to that command path.
+        ``normalization_kwargs`` are passed through to pipe-target normalization.
 
         Raises:
             ConfigurationError: If the pipe target declaration is invalid.
@@ -537,11 +537,11 @@ class Interfacy(InterfacyParser):
         """
         Build a backend parser from an inspected command.
 
-        `main` tells the backend to build the command as the root parser rather
+        ``main`` tells the backend to build the command as the root parser rather
         than as a nested command parser.
 
         Raises:
-            InvalidCommandError: If `command` is not a supported inspected object.
+            InvalidCommandError: If ``command`` is not a supported inspected object.
         """
         return self._parser.parser_from_command(command, main=main)
 
