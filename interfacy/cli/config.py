@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields
 from functools import cache
 from importlib import import_module
@@ -17,7 +16,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_subcommand_sort_rules,
 )
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
-from interfacy.core import validate_model_expansion_max_depth
+from interfacy.core import validate_model_expansion_max_depth, validate_parse_recovery_max_attempts
 from interfacy.exceptions import ConfigurationError
 from interfacy.naming.abbreviations import (
     AbbreviationGenerator,
@@ -30,6 +29,7 @@ from interfacy.naming.flag_strategy import (
     FlagStyle,
     TranslationMode,
 )
+from interfacy.plugins import InterfacyPlugin
 
 _ComponentT = TypeVar("_ComponentT")
 _ResolverResultT = TypeVar("_ResolverResultT")
@@ -39,16 +39,6 @@ Backend = Literal["argparse", "click"]
 _ABBREVIATION_SCOPE_LOOKUP: dict[str, str] = {
     "topleveloptions": "top_level_options",
     "alloptions": "all_options",
-}
-
-_HELP_LAYOUT_ALIASES: dict[str, str] = {
-    "default": "interfacy",
-    "alignedtype": "alignedtyped",
-}
-
-_HELP_COLORS_ALIASES: dict[str, str] = {
-    "default": "interfacy",
-    "none": "nocolor",
 }
 
 
@@ -63,32 +53,32 @@ class InterfacyConfig:
     backend: Backend | None = field(default=None, metadata={"section": "behavior"})
     help_layout: str | None = field(
         default=None,
-        metadata={"section": "appearance", "aliases": ("layout",)},
+        metadata={"section": "appearance", "key": "layout"},
     )
     help_colors: str | None = field(
         default=None,
-        metadata={"section": "appearance", "aliases": ("colors",)},
+        metadata={"section": "appearance", "key": "colors"},
     )
     flag_strategy: str | None = field(
         default=None,
-        metadata={"section": "flags", "aliases": ("strategy",)},
+        metadata={"section": "flags", "key": "strategy"},
     )
     flag_style: FlagStyle | None = field(
         default=None,
-        metadata={"section": "flags", "aliases": ("style",)},
+        metadata={"section": "flags", "key": "style"},
     )
     translation_mode: TranslationMode | None = field(default=None, metadata={"section": "flags"})
     abbreviation_gen: str | None = field(
         default=None,
-        metadata={"section": "abbreviations", "aliases": ("generator",)},
+        metadata={"section": "abbreviations", "key": "generator"},
     )
     abbreviation_max_generated_len: int | None = field(
         default=None,
-        metadata={"section": "abbreviations", "aliases": ("max_generated_len",)},
+        metadata={"section": "abbreviations", "key": "max_generated_len"},
     )
     abbreviation_scope: str | None = field(
         default=None,
-        metadata={"section": "abbreviations", "aliases": ("scope",)},
+        metadata={"section": "abbreviations", "key": "scope"},
     )
     help_option_sort: list[str] | None = field(
         default=None,
@@ -118,9 +108,25 @@ class InterfacyConfig:
         default=None,
         metadata={"section": "behavior", "passthrough": True},
     )
+    include_protected_methods: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    include_private_methods: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
+    include_staticmethods: bool | None = field(
+        default=None,
+        metadata={"section": "behavior", "passthrough": True},
+    )
     include_classmethods: bool | None = field(
         default=None,
         metadata={"section": "behavior", "passthrough": True},
+    )
+    method_skips: list[str] | None = field(
+        default=None,
+        metadata={"section": "behavior"},
     )
     silent_interrupt: bool | None = field(
         default=None,
@@ -134,9 +140,17 @@ class InterfacyConfig:
         default=None,
         metadata={"section": "behavior"},
     )
+    parse_recovery_max_attempts: int | None = field(
+        default=None,
+        metadata={"section": "behavior"},
+    )
     bool_negative_prefix: str | None = field(
         default=None,
         metadata={"section": "flags"},
+    )
+    plugins: list[str] | None = field(
+        default=None,
+        metadata={"section": "plugins", "key": "enabled"},
     )
 
 
@@ -164,23 +178,17 @@ def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
 
     for config_field in fields(InterfacyConfig):
         field_name = config_field.name
-        if field_name in data:
-            flattened[field_name] = data[field_name]
-            continue
-
         section = cast(str | None, config_field.metadata.get("section"))
+        key = cast(str, config_field.metadata.get("key", field_name))
+        section_data = data.get(section) if section is not None else None
         if section is None:
             continue
 
-        section_data = data.get(section)
         if not isinstance(section_data, dict):
             continue
 
-        keys = (field_name, *cast(tuple[str, ...], config_field.metadata.get("aliases", ())))
-        for key in keys:
-            if key in section_data:
-                flattened[field_name] = section_data[key]
-                break
+        if key in section_data:
+            flattened[field_name] = section_data[key]
 
     return flattened
 
@@ -257,8 +265,7 @@ def _resolve_named_component(
     *,
     value_name: str,
     component_type: type[_ResolverResultT],
-    registry: Mapping[str, type[_ResolverResultT]],
-    aliases: Mapping[str, str] | None = None,
+    registry: dict[str, type[_ResolverResultT]],
 ) -> _ResolverResultT | None:
     if value is None:
         return None
@@ -277,8 +284,6 @@ def _resolve_named_component(
         )
 
     key = _normalize_name(value)
-    if aliases is not None:
-        key = aliases.get(key, key)
     resolved_type = registry.get(key)
     if resolved_type is None:
         raise ConfigurationError(f"Unknown {value_name} value: {value}")
@@ -389,6 +394,32 @@ def _resolve_model_expansion_max_depth(value: Any) -> int | None:
     return validate_model_expansion_max_depth(value)
 
 
+def _resolve_parse_recovery_max_attempts(value: Any) -> int | None:
+    if value is None:
+        return None
+
+    return validate_parse_recovery_max_attempts(value)
+
+
+def _resolve_method_skips(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ConfigurationError("method_skips must be a list")
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ConfigurationError("method_skips values must be strings")
+        if item in seen:
+            continue
+        result.append(item)
+        seen.add(item)
+
+    return result
+
+
 def _resolve_bool_negative_prefix(value: Any) -> str | None:
     if value is None:
         return None
@@ -398,6 +429,31 @@ def _resolve_bool_negative_prefix(value: Any) -> str | None:
         raise ConfigurationError("bool_negative_prefix must not be empty")
 
     return value
+
+
+def _resolve_plugin(value: Any) -> InterfacyPlugin:
+    if isinstance(value, InterfacyPlugin):
+        return value
+    if not isinstance(value, str):
+        raise ConfigurationError(f"Plugin entries must be import paths, got {value!r}")
+
+    symbol = _import_symbol(value)
+    resolved = symbol() if isinstance(symbol, type) else symbol
+    if not isinstance(resolved, InterfacyPlugin):
+        raise ConfigurationError(
+            f"Plugin symbol must resolve to InterfacyPlugin, got {type(resolved)}"
+        )
+
+    return resolved
+
+
+def _resolve_plugins(value: Any) -> list[InterfacyPlugin] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ConfigurationError("plugins.enabled must be a list")
+
+    return [_resolve_plugin(item) for item in value]
 
 
 def _resolve_help_option_sort(value: Any, _config_data: dict[str, Any]) -> Any:
@@ -427,7 +483,12 @@ _FIELD_RESOLVERS = {
     "help_subcommand_sort": _resolve_help_subcommand_sort,
     "backend": lambda value, _config: _resolve_backend(value),
     "model_expansion_max_depth": lambda value, _config: _resolve_model_expansion_max_depth(value),
+    "parse_recovery_max_attempts": lambda value, _config: _resolve_parse_recovery_max_attempts(
+        value
+    ),
+    "method_skips": lambda value, _config: _resolve_method_skips(value),
     "bool_negative_prefix": lambda value, _config: _resolve_bool_negative_prefix(value),
+    "plugins": lambda value, _config: _resolve_plugins(value),
 }
 
 
@@ -444,7 +505,6 @@ def _resolve_default_for_field(
             value_name="help_layout",
             component_type=HelpLayout,
             registry=_component_registry(HelpLayout, suffix="layout"),
-            aliases=_HELP_LAYOUT_ALIASES,
         )
     elif field_name == "help_colors":
         resolved = _resolve_named_component(
@@ -456,7 +516,6 @@ def _resolve_default_for_field(
                 include_base=True,
                 suffix="colors",
             ),
-            aliases=_HELP_COLORS_ALIASES,
         )
     elif field_name in _FIELD_RESOLVERS:
         resolved = _FIELD_RESOLVERS[field_name](value, config_data)
