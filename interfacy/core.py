@@ -44,6 +44,7 @@ from interfacy.plugins import (
     InterfacyPlugin,
     ParseFailure,
     ParseFailureKind,
+    PluginContext,
     ProvideArgumentValues,
 )
 from interfacy.schema.builder import ParserSchemaBuilder
@@ -66,6 +67,7 @@ AbbreviationScope = Literal["top_level_options", "all_options"]
 BooleanNegativePrefix = str | None
 HelpOptionSort = list[HelpOptionSortRule] | None
 HelpSubcommandSort = list[HelpSubcommandSortRule] | None
+MethodSkips = Sequence[str] | None
 ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
     "top_level_options",
     "all_options",
@@ -120,6 +122,34 @@ def validate_model_expansion_max_depth(value: int) -> int:
     return value
 
 
+def validate_parse_recovery_max_attempts(value: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigurationError("parse_recovery_max_attempts must be an integer >= 0")
+    if value < 0:
+        raise ConfigurationError("parse_recovery_max_attempts must be >= 0")
+
+    return value
+
+
+def validate_method_skips(value: MethodSkips) -> list[str]:
+    if value is None:
+        return ["__init__", "__repr__", "repr"]
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise ConfigurationError("method_skips must be a sequence of strings")
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ConfigurationError("method_skips values must be strings")
+        if item in seen:
+            continue
+        result.append(item)
+        seen.add(item)
+
+    return result
+
+
 def validate_bool_negative_prefix(value: BooleanNegativePrefix) -> BooleanNegativePrefix:
     if value is None:
         return None
@@ -157,426 +187,100 @@ class InterspersedOptionValueError(ValueError):
         super().__init__(str(original))
 
 
-class InterfacyParser:
-    """
-    Base parser interface for building CLI commands from callables.
+class AncestorOptions:
+    """Normalize late ancestor options and carry values that backends cannot parse directly."""
 
-    Args:
-        description (str | None): CLI description shown in help output.
-        epilog (str | None): Epilog text shown after help output.
-        help_layout (HelpLayout | None): Help layout implementation.
-        type_parser (StrToTypeParser | None): Parser registry for typed arguments.
-        help_colors (InterfacyColors | None): Override help color theme.
-        run (bool): Whether to auto-run after command registration.
-        print_result (bool): Whether to print returned results.
-        tab_completion (bool): Whether to enable tab completion.
-        full_error_traceback (bool): Whether to print full tracebacks.
-        allow_args_from_file (bool): Allow @file argument expansion.
-        sys_exit_enabled (bool): Whether to call sys.exit on completion.
-        flag_strategy (FlagStrategy | None): Flag naming and style strategy.
-        abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
-        abbreviation_max_generated_len (int): Max generated short-flag length.
-        abbreviation_scope (AbbreviationScope): Which option groups receive generated short flags.
-        help_option_sort (list[HelpOptionSortRule] | None): Rules for option row ordering in
-            help output. When unset, layout defaults are used, then global defaults.
-        help_subcommand_sort (list[HelpSubcommandSortRule] | None): Rules for command/subcommand
-            row ordering in help output. When unset, layout defaults are used, then global
-            defaults.
-        help_position (int | None): Absolute column where help descriptions begin.
-        executable_flags (Sequence[ExecutableFlag] | None): Parser-root executable flags.
-        pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
-        print_result_func (Callable): Function used to print results.
-        include_inherited_methods (bool): Include inherited methods for class commands.
-        include_classmethods (bool): Include classmethods as commands.
-        on_interrupt (Callable[[KeyboardInterrupt], None] | None): Interrupt callback.
-        silent_interrupt (bool): Suppress interrupt message output.
-        reraise_interrupt (bool): Re-raise KeyboardInterrupt after handling.
-        expand_model_params (bool): Expand model parameters into nested flags.
-        model_expansion_max_depth (int): Max depth for model expansion.
-        bool_negative_prefix (str | None): Prefix for generated negative boolean flags.
-    """
+    def __init__(self) -> None:
+        self._pending_values: list[tuple[tuple[str, ...], Argument, tuple[str, ...]]] = []
 
-    RESERVED_FLAGS: ClassVar[list[str]] = []
-    logger_message_tag: str = "interfacy"
-    COMMAND_KEY: Final[str] = "command"
-
-    def __init__(
+    def normalize_args(
         self,
-        description: str | None = None,
-        epilog: str | None = None,
-        help_layout: HelpLayout | None = None,
-        type_parser: StrToTypeParser | None = None,
-        *,
-        help_colors: InterfacyColors | None = None,
-        run: bool = False,
-        print_result: bool = False,
-        tab_completion: bool = False,
-        full_error_traceback: bool = False,
-        allow_args_from_file: bool = True,
-        sys_exit_enabled: bool = True,
-        flag_strategy: FlagStrategy | None = None,
-        abbreviation_gen: AbbreviationGenerator | None = None,
-        abbreviation_max_generated_len: int = 1,
-        abbreviation_scope: AbbreviationScope = "top_level_options",
-        help_option_sort: list[HelpOptionSortRule] | None = None,
-        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
-        help_position: int | None = None,
-        executable_flags: Sequence[ExecutableFlag] | None = None,
-        pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
-        print_result_func: Callable[[Any], Any] = print,
-        include_inherited_methods: bool = False,
-        include_classmethods: bool = False,
-        on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
-        silent_interrupt: bool = True,
-        reraise_interrupt: bool = False,
-        expand_model_params: bool = True,
-        model_expansion_max_depth: int = 3,
-        bool_negative_prefix: BooleanNegativePrefix = "no-",
-        plugins: Sequence[InterfacyPlugin] | None = None,
-    ) -> None:
-        self.description = description
-        self.epilog = epilog
-        self.method_skips: list[str] = ["__init__", "__repr__", "repr"]
-        self.pipe_targets_default: PipeTargets | None = (
-            build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
-        )
-        self._pipe_target_overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
-        self._pipe_buffer: str | None | Any = PIPE_UNSET
-        self.result_display_fn = print_result_func
-        self.metadata: dict[str, Any] = {}
-        self._interspersed_ancestor_option_values: list[
-            tuple[tuple[str, ...], Argument, tuple[str, ...]]
-        ] = []
-        self.include_inherited_methods = include_inherited_methods
-        self.include_classmethods = include_classmethods
-        self.expand_model_params = expand_model_params
-        self.model_expansion_max_depth = validate_model_expansion_max_depth(
-            model_expansion_max_depth
-        )
-        self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
-        self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
-            abbreviation_max_generated_len
-        )
-        self.abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
-        self.help_option_sort = validate_help_option_sort(help_option_sort)
-        self.help_option_sort_effective = default_help_option_sort_rules()
-        self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
-        self.help_subcommand_sort_effective = default_help_subcommand_sort_rules()
-        self.executable_flags = normalize_executable_flags(
-            executable_flags,
-            value_name="executable_flags",
-        )
-        self.help_position = help_position
-        self._help_layout_explicit = help_layout is not None
-        self._help_position_explicit = help_position is not None or (
-            help_layout is not None and help_layout.help_position is not None
-        )
-        self.autorun = run
-        self.allow_args_from_file = allow_args_from_file
-        self.full_error_traceback = full_error_traceback
-        self.enable_tab_completion = tab_completion
-        self.sys_exit_enabled = sys_exit_enabled
-        self.display_result = print_result
-        self.on_interrupt = on_interrupt
-        self.silent_interrupt = silent_interrupt
-        self.reraise_interrupt = reraise_interrupt
-        self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator(
-            max_generated_len=self.abbreviation_max_generated_len
-        )
-        self._type_parser_explicit = type_parser is not None
-        self.type_parser = (
-            type_parser
-            if type_parser is not None
-            else build_default_type_parser(from_file=allow_args_from_file)
-        )
-        self.flag_strategy = flag_strategy or DefaultFlagStrategy()
-        self.help_layout = deepcopy(help_layout) if help_layout is not None else StandardLayout()
-        if help_position is not None:
-            self.help_layout.help_position = help_position
+        schema: "ParserSchema",
+        args: Sequence[str],
+    ) -> list[str]:
+        self._pending_values = []
+        normalized_args = list(args)
+        if not normalized_args:
+            return normalized_args
 
-        if help_colors is not None:
-            self.help_layout.style = help_colors
+        implicit_command = self._single_command_without_root_selection(schema)
+        command_chain = [implicit_command] if implicit_command else []
+        command_token_positions: list[int | None] = [None] if implicit_command else []
+        insertions: dict[int, list[list[str]]] = {}
+        removed_indexes: set[int] = set()
 
-        self._refresh_help_option_sort_rules()
-        self._refresh_help_subcommand_sort_rules()
-        self.help_colors = self.help_layout.style
-        self.help_layout.flag_generator = self.flag_strategy
-        self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
-        self.help_layout.name_registry = self.name_registry
-        self.commands: dict[str, Command] = {}
-        self.plugins: list[InterfacyPlugin] = []
-        self._plugin_names: set[str] = set()
+        index = 0
+        while index < len(normalized_args):
+            arg = normalized_args[index]
+            if arg == "--":
+                break
 
-        if plugins:
-            for plugin in plugins:
-                self.add_plugin(plugin)
+            option_end = self._queue_late_ancestor_option(
+                schema,
+                normalized_args,
+                index,
+                command_chain,
+                command_token_positions,
+                insertions,
+                removed_indexes,
+            )
+            if option_end is not None:
+                index = option_end
+                continue
 
-    def _snapshot_backend_registration_state(self) -> Any | None:
-        """Capture backend-specific mutable registration state."""
-        return None
+            self._append_matching_command(
+                schema,
+                arg,
+                command_chain,
+                command_token_positions,
+                index,
+            )
 
-    def _restore_backend_registration_state(self, snapshot: Any | None) -> None:
-        """Restore backend-specific mutable registration state."""
+            index += 1
 
-    def _invalidate_backend_build_cache(self) -> None:
-        """Clear backend-specific cached parser state after runtime config changes."""
+        if not insertions and not removed_indexes:
+            return normalized_args
 
-    def _invalidate_build_cache(self) -> None:
-        """Clear any cached parser/schema state after configuration changes."""
-        self._invalidate_backend_build_cache()
+        reordered: list[str] = []
+        for index, token in enumerate(normalized_args):
+            for group in insertions.get(index, []):
+                reordered.extend(group)
 
-    def add_plugin(self, plugin: InterfacyPlugin) -> InterfacyPlugin:
-        """Register a plugin on this parser and run its configure hook immediately."""
-        plugin_name = plugin.plugin_name
-        if plugin_name in self._plugin_names:
-            raise DuplicatePluginError(plugin_name)
+            if index not in removed_indexes:
+                reordered.append(token)
 
-        self._plugin_names.add(plugin_name)
+        for group in insertions.get(len(normalized_args), []):
+            reordered.extend(group)
+
+        return reordered
+
+    def apply_values(
+        self,
+        schema: "ParserSchema",
+        namespace: dict[str, Any],
+    ) -> dict[str, Any]:
         try:
-            plugin.configure(self)
-        except Exception:
-            self._plugin_names.remove(plugin_name)
-            raise
+            for command_path, argument, raw_values in self._pending_values:
+                value = self._parse_option_values(argument, raw_values)
+                bucket = self._bucket_for_command_path(schema, namespace, command_path, create=True)
+                if bucket is not None:
+                    bucket[argument.name] = value
+        finally:
+            self._pending_values = []
 
-        self.plugins.append(plugin)
-        self._invalidate_build_cache()
+        return namespace
 
-        return plugin
+    def required_option_flags(self) -> set[str]:
+        return {
+            flag
+            for _command_path, argument, _raw_values in self._pending_values
+            if argument.required
+            for flag in argument.flags
+            if flag.startswith("-")
+        }
 
-    def add_type_parser(
-        self,
-        typ: type[Any],
-        parser: Callable[[str], Any],
-    ) -> None:
-        """
-        Add a parser for a custom CLI parameter type.
-
-        Args:
-            typ: Type annotation to parse.
-            parser: Callable that converts a raw CLI string into ``typ``.
-        """
-        self.type_parser.add(typ, parser)
-
-        self._type_parser_explicit = True
-        self._invalidate_build_cache()
-
-    def _validate_apply_setup_request(
-        self,
-        *,
-        flag_strategy: FlagStrategy | None,
-    ) -> None:
-        if flag_strategy is not None and self.commands:
-            raise ConfigurationError(
-                "flag_strategy cannot be changed after commands have been registered"
-            )
-
-    def _apply_layout_setup(
-        self,
-        *,
-        help_layout: HelpLayout | None,
-        help_colors: InterfacyColors | None,
-        help_position: int | None,
-    ) -> None:
-        if help_layout is not None:
-            self.help_layout = deepcopy(help_layout)
-            self._help_layout_explicit = True
-
-        if help_position is not None:
-            self.help_position = help_position
-            self.help_layout.help_position = help_position
-            self._help_position_explicit = True
-
-        if help_colors is not None:
-            self.help_layout.style = help_colors
-
-    def _apply_type_parser_setup(
-        self,
-        *,
-        type_parser: StrToTypeParser | None,
-        allow_args_from_file: bool | None,
-    ) -> None:
-        if type_parser is not None:
-            self.type_parser = type_parser
-            self._type_parser_explicit = True
-
-            return
-
-        if allow_args_from_file is not None and not self._type_parser_explicit:
-            self.type_parser = build_default_type_parser(from_file=allow_args_from_file)
-
-    def _apply_runtime_setup(
-        self,
-        *,
-        print_result: bool | None,
-        tab_completion: bool | None,
-        full_error_traceback: bool | None,
-        allow_args_from_file: bool | None,
-        include_inherited_methods: bool | None,
-        include_classmethods: bool | None,
-        silent_interrupt: bool | None,
-        expand_model_params: bool | None,
-        model_expansion_max_depth: int | None,
-        bool_negative_prefix: BooleanNegativePrefix | None,
-    ) -> None:
-        optional_updates = (
-            ("display_result", print_result),
-            ("enable_tab_completion", tab_completion),
-            ("full_error_traceback", full_error_traceback),
-            ("allow_args_from_file", allow_args_from_file),
-            ("include_inherited_methods", include_inherited_methods),
-            ("include_classmethods", include_classmethods),
-            ("silent_interrupt", silent_interrupt),
-            ("expand_model_params", expand_model_params),
-        )
-        self._apply_optional_attr_updates(optional_updates)
-
-        if model_expansion_max_depth is not None:
-            self.model_expansion_max_depth = validate_model_expansion_max_depth(
-                model_expansion_max_depth
-            )
-
-        if bool_negative_prefix is not None:
-            self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
-
-    def _apply_optional_attr_updates(
-        self,
-        updates: Sequence[tuple[str, Any | None]],
-    ) -> None:
-        for attr_name, value in updates:
-            if value is not None:
-                setattr(self, attr_name, value)
-
-    def _apply_help_and_abbreviation_setup(
-        self,
-        *,
-        abbreviation_max_generated_len: int | None,
-        abbreviation_scope: AbbreviationScope | None,
-        help_option_sort: list[HelpOptionSortRule] | None,
-        help_subcommand_sort: list[HelpSubcommandSortRule] | None,
-    ) -> None:
-        if abbreviation_max_generated_len is not None:
-            self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
-                abbreviation_max_generated_len
-            )
-
-        if abbreviation_scope is not None:
-            self.abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
-
-        if help_option_sort is not None:
-            self.help_option_sort = validate_help_option_sort(help_option_sort)
-
-        if help_subcommand_sort is not None:
-            self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
-
-    def _apply_naming_setup(
-        self,
-        *,
-        flag_strategy: FlagStrategy | None,
-        abbreviation_gen: AbbreviationGenerator | None,
-        abbreviation_max_generated_len: int | None,
-    ) -> None:
-        if flag_strategy is not None:
-            self.flag_strategy = flag_strategy
-            self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
-
-        if abbreviation_gen is not None:
-            self.abbreviation_gen = abbreviation_gen
-        elif abbreviation_max_generated_len is not None:
-            self.abbreviation_gen = DefaultAbbreviationGenerator(
-                max_generated_len=self.abbreviation_max_generated_len
-            )
-
-    def _finalize_setup_changes(self) -> None:
-        self.help_layout.flag_generator = self.flag_strategy
-        self.help_layout.name_registry = self.name_registry
-        self._refresh_help_option_sort_rules()
-        self._refresh_help_subcommand_sort_rules()
-        self.help_colors = self.help_layout.style
-        self._invalidate_build_cache()
-
-    def apply_setup(
-        self,
-        *,
-        help_layout: HelpLayout | None = None,
-        help_colors: InterfacyColors | None = None,
-        type_parser: StrToTypeParser | None = None,
-        print_result: bool | None = None,
-        tab_completion: bool | None = None,
-        full_error_traceback: bool | None = None,
-        allow_args_from_file: bool | None = None,
-        flag_strategy: FlagStrategy | None = None,
-        abbreviation_gen: AbbreviationGenerator | None = None,
-        abbreviation_max_generated_len: int | None = None,
-        abbreviation_scope: AbbreviationScope | None = None,
-        help_option_sort: list[HelpOptionSortRule] | None = None,
-        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
-        help_position: int | None = None,
-        include_inherited_methods: bool | None = None,
-        include_classmethods: bool | None = None,
-        silent_interrupt: bool | None = None,
-        expand_model_params: bool | None = None,
-        model_expansion_max_depth: int | None = None,
-        bool_negative_prefix: BooleanNegativePrefix | None = None,
-        plugins: Sequence[InterfacyPlugin] | None = None,
-    ) -> None:
-        """Apply parser-level setup after construction."""
-        self._validate_apply_setup_request(flag_strategy=flag_strategy)
-        self._apply_layout_setup(
-            help_layout=help_layout,
-            help_colors=help_colors,
-            help_position=help_position,
-        )
-        self._apply_type_parser_setup(
-            type_parser=type_parser,
-            allow_args_from_file=allow_args_from_file,
-        )
-        self._apply_runtime_setup(
-            print_result=print_result,
-            tab_completion=tab_completion,
-            full_error_traceback=full_error_traceback,
-            allow_args_from_file=allow_args_from_file,
-            include_inherited_methods=include_inherited_methods,
-            include_classmethods=include_classmethods,
-            silent_interrupt=silent_interrupt,
-            expand_model_params=expand_model_params,
-            model_expansion_max_depth=model_expansion_max_depth,
-            bool_negative_prefix=bool_negative_prefix,
-        )
-        self._apply_help_and_abbreviation_setup(
-            abbreviation_max_generated_len=abbreviation_max_generated_len,
-            abbreviation_scope=abbreviation_scope,
-            help_option_sort=help_option_sort,
-            help_subcommand_sort=help_subcommand_sort,
-        )
-        self._apply_naming_setup(
-            flag_strategy=flag_strategy,
-            abbreviation_gen=abbreviation_gen,
-            abbreviation_max_generated_len=abbreviation_max_generated_len,
-        )
-        self._finalize_setup_changes()
-
-        if plugins:
-            for plugin in plugins:
-                self.add_plugin(plugin)
-
-    def _transform_schema_with_plugins(self, schema: "ParserSchema") -> "ParserSchema":
-        for plugin in self.plugins:
-            schema = plugin.transform_schema(self, schema)
-
-        return schema
-
-    def _recover_parse_failure(
-        self,
-        failure: ParseFailure,
-    ) -> AbortRecovery | ProvideArgumentValues | None:
-        for plugin in self.plugins:
-            action = plugin.recover_parse_failure(self, failure)
-            if action is not None:
-                return action
-
-        return None
-
-    def _single_command_without_root_selection(self, schema: "ParserSchema") -> "Command | None":
+    @staticmethod
+    def _single_command_without_root_selection(schema: "ParserSchema") -> "Command | None":
         if len(schema.commands) != 1:
             return None
 
@@ -586,8 +290,8 @@ class InterfacyParser:
 
         return command
 
+    @staticmethod
     def _match_command_name(
-        self,
         commands: Mapping[str, "Command"],
         cli_name: str,
     ) -> "Command | None":
@@ -784,13 +488,7 @@ class InterfacyParser:
                     command_chain,
                     owner_index,
                 )
-                self._interspersed_ancestor_option_values.append(
-                    (
-                        command_path,
-                        argument,
-                        tuple(raw_values),
-                    )
-                )
+                self._pending_values.append((command_path, argument, tuple(raw_values)))
 
             if option_group:
                 insertions.setdefault(insertion_index, []).append(option_group)
@@ -818,82 +516,595 @@ class InterfacyParser:
         command_chain.append(command)
         command_token_positions.append(index)
 
-    def _normalize_interspersed_ancestor_options(
-        self,
-        schema: "ParserSchema",
-        args: Sequence[str],
-    ) -> list[str]:
-        self._interspersed_ancestor_option_values = []
-        normalized_args = list(args)
-        if not normalized_args:
-            return normalized_args
-
-        implicit_command = self._single_command_without_root_selection(schema)
-        command_chain = [implicit_command] if implicit_command else []
-        command_token_positions: list[int | None] = [None] if implicit_command else []
-        insertions: dict[int, list[list[str]]] = {}
-        removed_indexes: set[int] = set()
-
-        index = 0
-        while index < len(normalized_args):
-            arg = normalized_args[index]
-            if arg == "--":
-                break
-
-            option_end = self._queue_late_ancestor_option(
-                schema,
-                normalized_args,
-                index,
-                command_chain,
-                command_token_positions,
-                insertions,
-                removed_indexes,
-            )
-            if option_end is not None:
-                index = option_end
-                continue
-
-            self._append_matching_command(
-                schema,
-                arg,
-                command_chain,
-                command_token_positions,
-                index,
-            )
-
-            index += 1
-
-        if not insertions and not removed_indexes:
-            return normalized_args
-
-        reordered: list[str] = []
-        for index, token in enumerate(normalized_args):
-            for group in insertions.get(index, []):
-                reordered.extend(group)
-
-            if index not in removed_indexes:
-                reordered.append(token)
-
-        for group in insertions.get(len(normalized_args), []):
-            reordered.extend(group)
-
-        return reordered
-
-    def _apply_interspersed_ancestor_option_values(
+    def _bucket_for_command_path(
         self,
         schema: "ParserSchema",
         namespace: dict[str, Any],
-    ) -> dict[str, Any]:
+        command_path: tuple[str, ...],
+        *,
+        create: bool = False,
+    ) -> dict[str, Any] | None:
+        root_command = self._single_command_without_root_selection(schema)
+        if root_command is not None and not command_path:
+            return namespace
+
+        if not command_path:
+            return namespace
+
+        current: dict[str, Any] = namespace
+        for segment in command_path:
+            value = current.get(segment)
+            if not isinstance(value, dict):
+                if not create:
+                    return None
+                value = {}
+                current[segment] = value
+            current = value
+
+        return current
+
+
+class InterfacyParser:
+    """
+    Base parser interface for building CLI commands from callables.
+
+    Args:
+        description (str | None): CLI description shown in help output.
+        epilog (str | None): Epilog text shown after help output.
+        help_layout (HelpLayout | None): Help layout implementation.
+        type_parser (StrToTypeParser | None): Parser registry for typed arguments.
+        help_colors (InterfacyColors | None): Override help color theme.
+        run (bool): Whether to auto-run after command registration.
+        print_result (bool): Whether to print returned results.
+        tab_completion (bool): Whether to enable tab completion.
+        full_error_traceback (bool): Whether to print full tracebacks.
+        allow_args_from_file (bool): Allow @file argument expansion.
+        sys_exit_enabled (bool): Whether to call sys.exit on completion.
+        flag_strategy (FlagStrategy | None): Flag naming and style strategy.
+        abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
+        abbreviation_max_generated_len (int): Max generated short-flag length.
+        abbreviation_scope (AbbreviationScope): Which option groups receive generated short flags.
+        help_option_sort (list[HelpOptionSortRule] | None): Rules for option row ordering in
+            help output. When unset, layout defaults are used, then global defaults.
+        help_subcommand_sort (list[HelpSubcommandSortRule] | None): Rules for command/subcommand
+            row ordering in help output. When unset, layout defaults are used, then global
+            defaults.
+        help_position (int | None): Absolute column where help descriptions begin.
+        executable_flags (Sequence[ExecutableFlag] | None): Parser-root executable flags.
+        pipe_targets (PipeTargets | dict[str, Any] | Sequence[Any] | str | None): Pipe config.
+        print_result_func (Callable): Function used to print results.
+        include_inherited_methods (bool): Include inherited methods for class commands.
+        include_protected_methods (bool): Include protected methods for class commands.
+        include_private_methods (bool): Include private methods for class commands.
+        include_staticmethods (bool): Include static methods for class commands.
+        include_classmethods (bool): Include classmethods as commands.
+        on_interrupt (Callable[[KeyboardInterrupt], None] | None): Interrupt callback.
+        silent_interrupt (bool): Suppress interrupt message output.
+        reraise_interrupt (bool): Re-raise KeyboardInterrupt after handling.
+        expand_model_params (bool): Expand model parameters into nested flags.
+        model_expansion_max_depth (int): Max depth for model expansion.
+        bool_negative_prefix (str | None): Prefix for generated negative boolean flags.
+        method_skips (Sequence[str] | None): Method names to exclude from class commands.
+        parse_recovery_max_attempts (int): Max plugin parse-recovery attempts.
+    """
+
+    RESERVED_FLAGS: ClassVar[list[str]] = []
+    logger_message_tag: str = "interfacy"
+    COMMAND_KEY: Final[str] = "command"
+
+    def __init__(
+        self,
+        description: str | None = None,
+        epilog: str | None = None,
+        help_layout: HelpLayout | None = None,
+        type_parser: StrToTypeParser | None = None,
+        *,
+        help_colors: InterfacyColors | None = None,
+        run: bool = False,
+        print_result: bool = False,
+        tab_completion: bool = False,
+        full_error_traceback: bool = False,
+        allow_args_from_file: bool = True,
+        sys_exit_enabled: bool = True,
+        flag_strategy: FlagStrategy | None = None,
+        abbreviation_gen: AbbreviationGenerator | None = None,
+        abbreviation_max_generated_len: int = 1,
+        abbreviation_scope: AbbreviationScope = "top_level_options",
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_position: int | None = None,
+        executable_flags: Sequence[ExecutableFlag] | None = None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[Any] | str | None = None,
+        print_result_func: Callable[[Any], Any] = print,
+        include_inherited_methods: bool = False,
+        include_protected_methods: bool = False,
+        include_private_methods: bool = False,
+        include_staticmethods: bool = True,
+        include_classmethods: bool = False,
+        on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
+        silent_interrupt: bool = True,
+        reraise_interrupt: bool = False,
+        expand_model_params: bool = True,
+        model_expansion_max_depth: int = 3,
+        bool_negative_prefix: BooleanNegativePrefix = "no-",
+        plugins: Sequence[InterfacyPlugin] | None = None,
+        method_skips: MethodSkips = None,
+        parse_recovery_max_attempts: int = MAX_PARSE_RECOVERY_ATTEMPTS,
+    ) -> None:
+        self.description = description
+        self.epilog = epilog
+        self.method_skips = validate_method_skips(method_skips)
+        self.pipe_targets_default: PipeTargets | None = (
+            build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
+        )
+        self._pipe_target_overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
+        self._pipe_buffer: str | None | Any = PIPE_UNSET
+        self.result_display_fn = print_result_func
+        self.metadata: dict[str, Any] = {}
+        self._ancestor_options = AncestorOptions()
+        self._last_parse_args: list[str] | None = None
+        self.include_inherited_methods = include_inherited_methods
+        self.include_protected_methods = include_protected_methods
+        self.include_private_methods = include_private_methods
+        self.include_staticmethods = include_staticmethods
+        self.include_classmethods = include_classmethods
+        self.expand_model_params = expand_model_params
+        self.model_expansion_max_depth = validate_model_expansion_max_depth(
+            model_expansion_max_depth
+        )
+        self.parse_recovery_max_attempts = validate_parse_recovery_max_attempts(
+            parse_recovery_max_attempts
+        )
+        self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
+        self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
+            abbreviation_max_generated_len
+        )
+        self.abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
+        self.help_option_sort = validate_help_option_sort(help_option_sort)
+        self.help_option_sort_effective = default_help_option_sort_rules()
+        self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
+        self.help_subcommand_sort_effective = default_help_subcommand_sort_rules()
+        self.executable_flags = normalize_executable_flags(
+            executable_flags,
+            value_name="executable_flags",
+        )
+        self.help_position = help_position
+        self._help_layout_explicit = help_layout is not None
+        self._help_position_explicit = help_position is not None or (
+            help_layout is not None and help_layout.help_position is not None
+        )
+        self.autorun = run
+        self.allow_args_from_file = allow_args_from_file
+        self.full_error_traceback = full_error_traceback
+        self.enable_tab_completion = tab_completion
+        self.sys_exit_enabled = sys_exit_enabled
+        self.display_result = print_result
+        self.on_interrupt = on_interrupt
+        self.silent_interrupt = silent_interrupt
+        self.reraise_interrupt = reraise_interrupt
+        self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator(
+            max_generated_len=self.abbreviation_max_generated_len
+        )
+        self._type_parser_explicit = type_parser is not None
+        self.type_parser = (
+            type_parser
+            if type_parser is not None
+            else build_default_type_parser(from_file=allow_args_from_file)
+        )
+        self.flag_strategy = flag_strategy or DefaultFlagStrategy()
+        self.help_layout = deepcopy(help_layout) if help_layout is not None else StandardLayout()
+        if help_position is not None:
+            self.help_layout.help_position = help_position
+
+        if help_colors is not None:
+            self.help_layout.style = help_colors
+
+        self._refresh_help_option_sort_rules()
+        self._refresh_help_subcommand_sort_rules()
+        self.help_colors = self.help_layout.style
+        self.help_layout.flag_generator = self.flag_strategy
+        self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
+        self.help_layout.name_registry = self.name_registry
+        self.commands: dict[str, Command] = {}
+        self.plugins: list[InterfacyPlugin] = []
+        self._plugin_names: set[str] = set()
+
+        if plugins:
+            for plugin in plugins:
+                self.add_plugin(plugin)
+
+    def _snapshot_backend_registration_state(self) -> Any | None:
+        """Capture backend-specific mutable registration state."""
+        return None
+
+    def _restore_backend_registration_state(self, snapshot: Any | None) -> None:
+        """Restore backend-specific mutable registration state."""
+
+    def _invalidate_backend_build_cache(self) -> None:
+        """Clear backend-specific cached parser state after runtime config changes."""
+
+    def _invalidate_build_cache(self) -> None:
+        """Clear any cached parser/schema state after configuration changes."""
+        self._invalidate_backend_build_cache()
+
+    def add_plugin(self, plugin: InterfacyPlugin) -> InterfacyPlugin:
+        """Register a plugin on this parser and run its configure hook immediately."""
+        plugin_name = plugin.plugin_name
+        if plugin_name in self._plugin_names:
+            raise DuplicatePluginError(plugin_name)
+
+        self._plugin_names.add(plugin_name)
         try:
-            for command_path, argument, raw_values in self._interspersed_ancestor_option_values:
-                value = self._parse_option_values(argument, raw_values)
-                bucket = self._bucket_for_command_path(schema, namespace, command_path, create=True)
-                if bucket is not None:
-                    bucket[argument.name] = value
-        finally:
-            self._interspersed_ancestor_option_values = []
+            plugin.configure(self._plugin_context())
+        except Exception:
+            self._plugin_names.remove(plugin_name)
+            raise
+
+        self.plugins.append(plugin)
+        self._invalidate_build_cache()
+
+        return plugin
+
+    def add_type_parser(
+        self,
+        typ: type[Any],
+        parser: Callable[[str], Any],
+    ) -> None:
+        """
+        Add a parser for a custom CLI parameter type.
+
+        Args:
+            typ: Type annotation to parse.
+            parser: Callable that converts a raw CLI string into ``typ``.
+        """
+        self.type_parser.add(typ, parser)
+
+        self._type_parser_explicit = True
+        self._invalidate_build_cache()
+
+    def _validate_apply_setup_request(
+        self,
+        *,
+        flag_strategy: FlagStrategy | None,
+    ) -> None:
+        if flag_strategy is not None and self.commands:
+            raise ConfigurationError(
+                "flag_strategy cannot be changed after commands have been registered"
+            )
+
+    def _apply_layout_setup(
+        self,
+        *,
+        help_layout: HelpLayout | None,
+        help_colors: InterfacyColors | None,
+        help_position: int | None,
+    ) -> None:
+        if help_layout is not None:
+            self.help_layout = deepcopy(help_layout)
+            self._help_layout_explicit = True
+
+        if help_position is not None:
+            self.help_position = help_position
+            self.help_layout.help_position = help_position
+            self._help_position_explicit = True
+
+        if help_colors is not None:
+            self.help_layout.style = help_colors
+
+    def _apply_type_parser_setup(
+        self,
+        *,
+        type_parser: StrToTypeParser | None,
+        allow_args_from_file: bool | None,
+    ) -> None:
+        if type_parser is not None:
+            self.type_parser = type_parser
+            self._type_parser_explicit = True
+
+            return
+
+        if allow_args_from_file is not None and not self._type_parser_explicit:
+            self.type_parser = build_default_type_parser(from_file=allow_args_from_file)
+
+    def _apply_runtime_setup(
+        self,
+        *,
+        print_result: bool | None,
+        tab_completion: bool | None,
+        full_error_traceback: bool | None,
+        allow_args_from_file: bool | None,
+        include_inherited_methods: bool | None,
+        include_protected_methods: bool | None,
+        include_private_methods: bool | None,
+        include_staticmethods: bool | None,
+        include_classmethods: bool | None,
+        silent_interrupt: bool | None,
+        expand_model_params: bool | None,
+        model_expansion_max_depth: int | None,
+        bool_negative_prefix: BooleanNegativePrefix | None,
+        method_skips: MethodSkips,
+        parse_recovery_max_attempts: int | None,
+    ) -> None:
+        optional_updates = (
+            ("display_result", print_result),
+            ("enable_tab_completion", tab_completion),
+            ("full_error_traceback", full_error_traceback),
+            ("allow_args_from_file", allow_args_from_file),
+            ("include_inherited_methods", include_inherited_methods),
+            ("include_protected_methods", include_protected_methods),
+            ("include_private_methods", include_private_methods),
+            ("include_staticmethods", include_staticmethods),
+            ("include_classmethods", include_classmethods),
+            ("silent_interrupt", silent_interrupt),
+            ("expand_model_params", expand_model_params),
+        )
+        self._apply_optional_attr_updates(optional_updates)
+
+        if model_expansion_max_depth is not None:
+            self.model_expansion_max_depth = validate_model_expansion_max_depth(
+                model_expansion_max_depth
+            )
+
+        if bool_negative_prefix is not None:
+            self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
+
+        if method_skips is not None:
+            self.method_skips = validate_method_skips(method_skips)
+
+        if parse_recovery_max_attempts is not None:
+            self.parse_recovery_max_attempts = validate_parse_recovery_max_attempts(
+                parse_recovery_max_attempts
+            )
+
+    def _apply_optional_attr_updates(
+        self,
+        updates: Sequence[tuple[str, Any | None]],
+    ) -> None:
+        for attr_name, value in updates:
+            if value is not None:
+                setattr(self, attr_name, value)
+
+    def _apply_help_and_abbreviation_setup(
+        self,
+        *,
+        abbreviation_max_generated_len: int | None,
+        abbreviation_scope: AbbreviationScope | None,
+        help_option_sort: list[HelpOptionSortRule] | None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None,
+    ) -> None:
+        if abbreviation_max_generated_len is not None:
+            self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
+                abbreviation_max_generated_len
+            )
+
+        if abbreviation_scope is not None:
+            self.abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
+
+        if help_option_sort is not None:
+            self.help_option_sort = validate_help_option_sort(help_option_sort)
+
+        if help_subcommand_sort is not None:
+            self.help_subcommand_sort = validate_help_subcommand_sort(help_subcommand_sort)
+
+    def _apply_naming_setup(
+        self,
+        *,
+        flag_strategy: FlagStrategy | None,
+        abbreviation_gen: AbbreviationGenerator | None,
+        abbreviation_max_generated_len: int | None,
+    ) -> None:
+        if flag_strategy is not None:
+            self.flag_strategy = flag_strategy
+            self.name_registry = CommandNameRegistry(self.flag_strategy.command_translator)
+
+        if abbreviation_gen is not None:
+            self.abbreviation_gen = abbreviation_gen
+        elif abbreviation_max_generated_len is not None:
+            self.abbreviation_gen = DefaultAbbreviationGenerator(
+                max_generated_len=self.abbreviation_max_generated_len
+            )
+
+    def _finalize_setup_changes(self) -> None:
+        self.help_layout.flag_generator = self.flag_strategy
+        self.help_layout.name_registry = self.name_registry
+        self._refresh_help_option_sort_rules()
+        self._refresh_help_subcommand_sort_rules()
+        self.help_colors = self.help_layout.style
+        self._invalidate_build_cache()
+
+    def apply_setup(
+        self,
+        *,
+        help_layout: HelpLayout | None = None,
+        help_colors: InterfacyColors | None = None,
+        type_parser: StrToTypeParser | None = None,
+        print_result: bool | None = None,
+        tab_completion: bool | None = None,
+        full_error_traceback: bool | None = None,
+        allow_args_from_file: bool | None = None,
+        flag_strategy: FlagStrategy | None = None,
+        abbreviation_gen: AbbreviationGenerator | None = None,
+        abbreviation_max_generated_len: int | None = None,
+        abbreviation_scope: AbbreviationScope | None = None,
+        help_option_sort: list[HelpOptionSortRule] | None = None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
+        help_position: int | None = None,
+        include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
+        include_classmethods: bool | None = None,
+        silent_interrupt: bool | None = None,
+        expand_model_params: bool | None = None,
+        model_expansion_max_depth: int | None = None,
+        bool_negative_prefix: BooleanNegativePrefix | None = None,
+        plugins: Sequence[InterfacyPlugin] | None = None,
+        method_skips: MethodSkips = None,
+        parse_recovery_max_attempts: int | None = None,
+    ) -> None:
+        """Apply parser-level setup after construction."""
+        self._validate_apply_setup_request(flag_strategy=flag_strategy)
+        self._apply_layout_setup(
+            help_layout=help_layout,
+            help_colors=help_colors,
+            help_position=help_position,
+        )
+        self._apply_type_parser_setup(
+            type_parser=type_parser,
+            allow_args_from_file=allow_args_from_file,
+        )
+        self._apply_runtime_setup(
+            print_result=print_result,
+            tab_completion=tab_completion,
+            full_error_traceback=full_error_traceback,
+            allow_args_from_file=allow_args_from_file,
+            include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
+            include_classmethods=include_classmethods,
+            silent_interrupt=silent_interrupt,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=model_expansion_max_depth,
+            bool_negative_prefix=bool_negative_prefix,
+            method_skips=method_skips,
+            parse_recovery_max_attempts=parse_recovery_max_attempts,
+        )
+        self._apply_help_and_abbreviation_setup(
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+        )
+        self._apply_naming_setup(
+            flag_strategy=flag_strategy,
+            abbreviation_gen=abbreviation_gen,
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+        )
+        self._finalize_setup_changes()
+
+        if plugins:
+            for plugin in plugins:
+                self.add_plugin(plugin)
+
+    def _plugin_context(
+        self,
+        *,
+        schema: "ParserSchema | None" = None,
+        args: list[str] | None = None,
+        namespace: dict[str, Any] | None = None,
+    ) -> PluginContext:
+        current_schema = schema if schema is not None else getattr(self, "_last_schema", None)
+        return PluginContext(
+            parser=self,
+            backend=getattr(self, "plugin_backend_name", None),
+            schema=current_schema,
+            args=args,
+            namespace=namespace,
+            metadata=self.metadata,
+        )
+
+    @staticmethod
+    def _validate_plugin_args_result(plugin_name: str, value: Any) -> list[str]:
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ConfigurationError(f"{plugin_name}.before_parse must return list[str]")
+
+        return value
+
+    @staticmethod
+    def _validate_plugin_namespace_result(plugin_name: str, value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ConfigurationError(f"{plugin_name}.after_parse must return dict[str, Any]")
+
+        return value
+
+    def _apply_before_parse_plugins(self, args: list[str]) -> list[str]:
+        context = self._plugin_context(args=args)
+        for plugin in self.plugins:
+            result = plugin.before_parse(context, args)
+            args = self._validate_plugin_args_result(plugin.plugin_name, result)
+            context.args = args
+
+        return args
+
+    def _apply_after_parse_plugins(
+        self,
+        namespace: dict[str, Any],
+        *,
+        args: list[str] | None = None,
+        schema: "ParserSchema | None" = None,
+    ) -> dict[str, Any]:
+        context = self._plugin_context(schema=schema, args=args, namespace=namespace)
+        for plugin in self.plugins:
+            result = plugin.after_parse(context, namespace)
+            namespace = self._validate_plugin_namespace_result(plugin.plugin_name, result)
+            context.namespace = namespace
 
         return namespace
+
+    def _execute_with_plugins(
+        self,
+        *,
+        namespace: dict[str, Any],
+        args: list[str],
+        call_next: Callable[[], Any],
+    ) -> Any:
+        context = self._plugin_context(args=args, namespace=namespace)
+        wrapped = call_next
+
+        for plugin in reversed(self.plugins):
+            next_call = wrapped
+
+            def wrapped_call(
+                plugin: InterfacyPlugin = plugin,
+                next_call: Callable[[], Any] = next_call,
+            ) -> Any:
+                return plugin.wrap_execute(context, next_call)
+
+            wrapped = wrapped_call
+
+        return wrapped()
+
+    def _transform_schema_with_plugins(self, schema: "ParserSchema") -> "ParserSchema":
+        context = self._plugin_context(schema=schema)
+        for plugin in self.plugins:
+            schema = plugin.transform_schema(context, schema)
+            context.schema = schema
+
+        return schema
+
+    def _recover_parse_failure(
+        self,
+        failure: ParseFailure,
+    ) -> AbortRecovery | ProvideArgumentValues | None:
+        context = self._plugin_context()
+        for plugin in self.plugins:
+            action = plugin.recover_parse_failure(context, failure)
+            if action is not None:
+                return action
+
+        return None
+
+    def _single_command_without_root_selection(self, schema: "ParserSchema") -> "Command | None":
+        if len(schema.commands) != 1:
+            return None
+
+        command = next(iter(schema.commands.values()))
+        if command.command_type == "group":
+            return None
+
+        return command
+
+    def _match_command_name(
+        self,
+        commands: Mapping[str, "Command"],
+        cli_name: str,
+    ) -> "Command | None":
+        for command in commands.values():
+            if command.cli_name == cli_name or cli_name in command.aliases:
+                return command
+
+        return None
 
     def _bucket_for_command_path(
         self,
@@ -1188,7 +1399,7 @@ class InterfacyParser:
             message=message,
             raw_exception=raw_exception,
         )
-        while failure is not None and attempts < MAX_PARSE_RECOVERY_ATTEMPTS:
+        while failure is not None and attempts < self.parse_recovery_max_attempts:
             action = self._recover_parse_failure(failure)
             if action is None:
                 return None
@@ -1402,8 +1613,12 @@ class InterfacyParser:
         command: "Command",
         *,
         include_inherited_methods: bool | None,
+        include_protected_methods: bool | None,
+        include_private_methods: bool | None,
+        include_staticmethods: bool | None,
         include_classmethods: bool | None,
         expand_model_params: bool | None,
+        method_skips: MethodSkips,
         model_expansion_max_depth: int | None,
         abbreviation_scope: AbbreviationScope | None,
         executable_flags: list[ExecutableFlag] | None,
@@ -1412,8 +1627,14 @@ class InterfacyParser:
         help_group: str | None,
     ) -> None:
         command.include_inherited_methods = include_inherited_methods
+        command.include_protected_methods = include_protected_methods
+        command.include_private_methods = include_private_methods
+        command.include_staticmethods = include_staticmethods
         command.include_classmethods = include_classmethods
         command.expand_model_params = expand_model_params
+        command.method_skips = (
+            validate_method_skips(method_skips) if method_skips is not None else None
+        )
         command.model_expansion_max_depth = model_expansion_max_depth
         command.abbreviation_scope = abbreviation_scope
         command.executable_flags = InterfacyParser._copy_optional_list(executable_flags) or []
@@ -1429,6 +1650,9 @@ class InterfacyParser:
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
@@ -1437,6 +1661,7 @@ class InterfacyParser:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        method_skips: MethodSkips = None,
     ) -> "Command":
         """
         Register a command callable or group with the parser.
@@ -1448,6 +1673,9 @@ class InterfacyParser:
             aliases (Sequence[str] | None): Alternative CLI names.
             pipe_targets (PipeTargets | dict[str, Any] | Sequence[str] | str | None): Pipe config.
             include_inherited_methods (bool | None): Override inherited-method inclusion.
+            include_protected_methods (bool | None): Override protected-method inclusion.
+            include_private_methods (bool | None): Override private-method inclusion.
+            include_staticmethods (bool | None): Override staticmethod inclusion.
             include_classmethods (bool | None): Override classmethod inclusion.
             expand_model_params (bool | None): Override model expansion toggle.
             model_expansion_max_depth (int | None): Override model expansion depth.
@@ -1456,6 +1684,7 @@ class InterfacyParser:
             help_option_sort (list[HelpOptionSortRule] | None): Override option sort rules.
             help_subcommand_sort (list[HelpSubcommandSortRule] | None): Override subcommand sort.
             help_group (str | None): Optional help-only command group heading.
+            method_skips (Sequence[str] | None): Override class method skip list.
 
         Raises:
             DuplicateCommandError: If the command name is already registered.
@@ -1478,8 +1707,12 @@ class InterfacyParser:
                 description=description,
                 aliases=aliases,
                 include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
                 include_classmethods=include_classmethods,
                 expand_model_params=expand_model_params,
+                method_skips=method_skips,
                 **resolved_settings,
             )
 
@@ -1492,14 +1725,26 @@ class InterfacyParser:
                 if include_inherited_methods is not None
                 else self.include_inherited_methods
             ),
-            static_methods=True,
+            static_methods=(
+                include_staticmethods
+                if include_staticmethods is not None
+                else self.include_staticmethods
+            ),
             classmethod=(
                 include_classmethods
                 if include_classmethods is not None
                 else self.include_classmethods
             ),
-            protected=False,
-            private=False,
+            protected=(
+                include_protected_methods
+                if include_protected_methods is not None
+                else self.include_protected_methods
+            ),
+            private=(
+                include_private_methods
+                if include_private_methods is not None
+                else self.include_private_methods
+            ),
         )
         resolve_objinspect_annotations(obj)
 
@@ -1538,8 +1783,12 @@ class InterfacyParser:
         self._apply_command_settings(
             command,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
+            method_skips=method_skips,
             **resolved_settings,
         )
         self.commands[canonical_name] = command
@@ -1554,6 +1803,9 @@ class InterfacyParser:
         aliases: Sequence[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
@@ -1562,6 +1814,7 @@ class InterfacyParser:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        method_skips: MethodSkips = None,
     ) -> Callable[[F], F]:
         """
         Decorator to register a command with the parser.
@@ -1575,6 +1828,9 @@ class InterfacyParser:
             aliases: Alternative names for this command.
             pipe_targets: Configure stdin piping for this command.
             include_inherited_methods: Override inherited-method inclusion.
+            include_protected_methods: Override protected-method inclusion.
+            include_private_methods: Override private-method inclusion.
+            include_staticmethods: Override staticmethod inclusion.
             include_classmethods: Override classmethod inclusion.
             expand_model_params: Override model expansion toggle.
             model_expansion_max_depth: Override model expansion depth.
@@ -1583,6 +1839,7 @@ class InterfacyParser:
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only command group heading.
+            method_skips: Override class method skip list.
 
         Returns:
             A decorator that registers the callable and returns it unchanged.
@@ -1596,6 +1853,9 @@ class InterfacyParser:
                 aliases=aliases,
                 pipe_targets=pipe_targets,
                 include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
                 include_classmethods=include_classmethods,
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
@@ -1604,6 +1864,7 @@ class InterfacyParser:
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
                 help_group=help_group,
+                method_skips=method_skips,
             )
 
             return func
@@ -1617,6 +1878,9 @@ class InterfacyParser:
         description: str | None = None,
         aliases: Sequence[str] | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
@@ -1625,6 +1889,7 @@ class InterfacyParser:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        method_skips: MethodSkips = None,
     ) -> "Command":
         """
         Add a CommandGroup to the parser for deeply nested CLI structures.
@@ -1635,6 +1900,9 @@ class InterfacyParser:
             description: Override the description
             aliases: Alternative names for this group
             include_inherited_methods: Override inherited-method inclusion.
+            include_protected_methods: Override protected-method inclusion.
+            include_private_methods: Override private-method inclusion.
+            include_staticmethods: Override staticmethod inclusion.
             include_classmethods: Override classmethod inclusion.
             expand_model_params: Override model expansion toggle.
             model_expansion_max_depth: Override model expansion depth.
@@ -1643,6 +1911,7 @@ class InterfacyParser:
             help_option_sort: Override help option sort rules.
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only command group heading.
+            method_skips: Override class method skip list.
 
         Returns:
             The Command schema for the group
@@ -1675,8 +1944,12 @@ class InterfacyParser:
             group,
             canonical_name=canonical_name,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
+            method_skips=method_skips,
             **resolved_settings,
         )
 
@@ -1687,8 +1960,12 @@ class InterfacyParser:
         self._apply_command_settings(
             command,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
+            method_skips=method_skips,
             **resolved_settings,
         )
         self.commands[canonical_name] = command

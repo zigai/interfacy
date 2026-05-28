@@ -58,6 +58,25 @@ def validate_model_expansion_max_depth(value: int | None) -> int | None:
     return value
 
 
+def validate_method_skips(value: Sequence[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise ConfigurationError("method_skips must be a sequence of strings")
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ConfigurationError("method_skips values must be strings")
+        if item in seen:
+            continue
+        result.append(item)
+        seen.add(item)
+
+    return result
+
+
 @dataclass
 class CommandEntry:
     """Internal representation of a command added to a group."""
@@ -69,7 +88,11 @@ class CommandEntry:
     is_instance: bool
     pipe_targets: PipeTargets | None = None
     include_inherited_methods: bool | None = None
+    include_protected_methods: bool | None = None
+    include_private_methods: bool | None = None
+    include_staticmethods: bool | None = None
     include_classmethods: bool | None = None
+    method_skips: list[str] | None = None
     expand_model_params: bool | None = None
     model_expansion_max_depth: int | None = None
     abbreviation_scope: AbbreviationScope | None = None
@@ -142,7 +165,11 @@ class CommandGroup:
         aliases: tuple[str, ...] | list[str] | None = None,
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: AbbreviationScope | None = None,
@@ -161,7 +188,11 @@ class CommandGroup:
             aliases: Alternative names for this command.
             pipe_targets: Configure stdin piping for this command.
             include_inherited_methods: Override inherited-method inclusion.
+            include_protected_methods: Override protected-method inclusion.
+            include_private_methods: Override private-method inclusion.
+            include_staticmethods: Override staticmethod inclusion.
             include_classmethods: Override classmethod inclusion.
+            method_skips: Override class method skip list.
             expand_model_params: Override model expansion toggle.
             model_expansion_max_depth: Override model expansion depth.
             abbreviation_scope: Override abbreviation scope.
@@ -177,6 +208,7 @@ class CommandGroup:
             model_expansion_max_depth
         )
         resolved_help_group = validate_help_group(help_group)
+        resolved_method_skips = validate_method_skips(method_skips)
         resolved_executable_flags = normalize_executable_flags(
             executable_flags,
             value_name="executable_flags",
@@ -212,7 +244,11 @@ class CommandGroup:
             pipe_targets=resolved_pipe_targets,
             is_instance=is_instance,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=resolved_method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=resolved_model_expansion_max_depth,
             abbreviation_scope=resolved_abbreviation_scope,

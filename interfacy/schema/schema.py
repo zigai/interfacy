@@ -156,7 +156,11 @@ class Command:
     parent_path: tuple[str, ...] = ()
     stored_instance: Any | None = None
     include_inherited_methods: bool | None = None
+    include_protected_methods: bool | None = None
+    include_private_methods: bool | None = None
+    include_staticmethods: bool | None = None
     include_classmethods: bool | None = None
+    method_skips: list[str] | None = None
     expand_model_params: bool | None = None
     model_expansion_max_depth: int | None = None
     abbreviation_scope: Literal["top_level_options", "all_options"] | None = None

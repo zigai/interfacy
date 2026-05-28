@@ -98,7 +98,11 @@ class ArgumentBuildState:
 @dataclass(frozen=True)
 class CommandBuildSettings:
     include_inherited_methods: bool
+    include_protected_methods: bool
+    include_private_methods: bool
+    include_staticmethods: bool
     include_classmethods: bool
+    method_skips: list[str]
     expand_model_params: bool
     model_expansion_max_depth: int
     abbreviation_scope: str
@@ -126,6 +130,9 @@ class SchemaBuildContext:
     flag_strategy: Any
     abbreviation_gen: Any
     include_inherited_methods: bool
+    include_protected_methods: bool
+    include_private_methods: bool
+    include_staticmethods: bool
     include_classmethods: bool
     expand_model_params: bool
     model_expansion_max_depth: int
@@ -155,6 +162,9 @@ class SchemaBuildContext:
             flag_strategy=parser.flag_strategy,
             abbreviation_gen=parser.abbreviation_gen,
             include_inherited_methods=parser.include_inherited_methods,
+            include_protected_methods=parser.include_protected_methods,
+            include_private_methods=parser.include_private_methods,
+            include_staticmethods=parser.include_staticmethods,
             include_classmethods=parser.include_classmethods,
             expand_model_params=parser.expand_model_params,
             model_expansion_max_depth=parser.model_expansion_max_depth,
@@ -213,7 +223,11 @@ class CommandSchemaConstructor:
         executable_flags: list[ExecutableFlag] | None = None,
         parent_settings: CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -224,7 +238,11 @@ class CommandSchemaConstructor:
         settings = self.builder._merge_build_settings(
             parent_settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -242,7 +260,11 @@ class CommandSchemaConstructor:
                 executable_flags=executable_flags,
                 settings=settings,
                 include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
                 include_classmethods=include_classmethods,
+                method_skips=method_skips,
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
                 abbreviation_scope=abbreviation_scope,
@@ -259,7 +281,11 @@ class CommandSchemaConstructor:
                 executable_flags=executable_flags,
                 settings=settings,
                 include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
                 include_classmethods=include_classmethods,
+                method_skips=method_skips,
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
                 abbreviation_scope=abbreviation_scope,
@@ -276,7 +302,11 @@ class CommandSchemaConstructor:
                 executable_flags=executable_flags,
                 settings=settings,
                 include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
                 include_classmethods=include_classmethods,
+                method_skips=method_skips,
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
                 abbreviation_scope=abbreviation_scope,
@@ -298,6 +328,202 @@ class CommandSchemaConstructor:
 
 
 _ABBREVIATION_SCOPE_ALL_OPTIONS = "all_options"
+
+
+@dataclass
+class ExpansionParameter:
+    name: str
+    default: Any
+    has_default: bool
+
+
+@dataclass
+class ModelExpansionBuilder:
+    """Build expanded CLI arguments for one model parameter."""
+
+    builder: ParserSchemaBuilder
+    param: Parameter | ExpansionParameter
+    taken_flags: list[str]
+    settings: CommandBuildSettings
+
+    @property
+    def context(self) -> SchemaBuildContext:
+        return self.builder.context
+
+    @property
+    def model_argument_mapper(self) -> ModelArgumentMapper:
+        return self.builder.model_argument_mapper
+
+    @property
+    def nested_separator(self) -> str:
+        return self.builder._nested_separator
+
+    def build(self, *, model_type: type, is_optional_model: bool) -> list[Argument]:
+        translated_name = self.context.flag_strategy.argument_translator.translate(self.param.name)
+        if translated_name in self.taken_flags:
+            raise ReservedFlagError(translated_name)
+
+        self.taken_flags.append(translated_name)
+
+        model_default = self.param.default if self.param.has_default else MODEL_DEFAULT_UNSET
+        return self._fields(
+            model_type=model_type,
+            root_name=self.param.name,
+            path=(self.param.name,),
+            depth=1,
+            parent_optional=is_optional_model,
+            parent_has_default=self.param.has_default,
+            original_model_type=model_type,
+            model_default=model_default,
+        )
+
+    def _fields(
+        self,
+        *,
+        model_type: type,
+        root_name: str,
+        path: tuple[str, ...],
+        depth: int,
+        parent_optional: bool,
+        parent_has_default: bool,
+        original_model_type: type,
+        model_default: Any,
+    ) -> list[Argument]:
+        arguments: list[Argument] = []
+        max_depth = self.settings.model_expansion_max_depth
+
+        for field in self.model_argument_mapper.model_fields_for_expansion(model_type):
+            annotation = self._normalize_annotation(field.annotation)
+            inner_type, is_optional_model = self.model_argument_mapper.unwrap_optional(annotation)
+            new_path = (*path, field.name)
+
+            if self.builder._should_expand_model(inner_type, settings=self.settings) and (
+                depth < max_depth
+            ):
+                arguments.extend(
+                    self._fields(
+                        model_type=inner_type,
+                        root_name=root_name,
+                        path=new_path,
+                        depth=depth + 1,
+                        parent_optional=parent_optional or is_optional_model,
+                        parent_has_default=parent_has_default,
+                        original_model_type=original_model_type,
+                        model_default=model_default,
+                    )
+                )
+                continue
+
+            arguments.append(
+                self._argument_for_field(
+                    field=field,
+                    annotation=annotation,
+                    path=new_path,
+                    root_name=root_name,
+                    is_optional_model=is_optional_model,
+                    parent_optional=parent_optional,
+                    parent_has_default=parent_has_default,
+                    original_model_type=original_model_type,
+                    model_default=model_default,
+                )
+            )
+
+        return arguments
+
+    @staticmethod
+    def _normalize_annotation(annotation: Any) -> Any:
+        annotation = resolve_type_alias(annotation)
+        if not isinstance(annotation, str):
+            return annotation
+
+        simple_name = simplified_type_name(annotation)
+        base_name = simple_name.removesuffix("?")
+        builtin_map = {"bool": bool, "int": int, "float": float, "str": str}
+
+        return builtin_map.get(base_name, annotation)
+
+    def _argument_for_field(
+        self,
+        *,
+        field: Any,
+        annotation: Any,
+        path: tuple[str, ...],
+        root_name: str,
+        is_optional_model: bool,
+        parent_optional: bool,
+        parent_has_default: bool,
+        original_model_type: type,
+        model_default: Any,
+    ) -> Argument:
+        translated_path = tuple(
+            self.context.flag_strategy.argument_translator.translate(part) for part in path
+        )
+        display_name = self.nested_separator.join(translated_path)
+        if display_name in self.taken_flags:
+            raise ReservedFlagError(display_name)
+
+        arg_name = self.nested_separator.join(path)
+        flags = self._option_flags(
+            display_name=display_name,
+            annotation=annotation,
+            field_default=field.default,
+        )
+        self.taken_flags.append(display_name)
+
+        is_required = field.required and not (
+            parent_optional or is_optional_model or parent_has_default
+        )
+        spec = ParamSpec(
+            name=arg_name,
+            type=annotation,
+            is_typed=annotation is not None,
+            has_default=not field.required,
+            default=field.default,
+            is_required=is_required,
+            is_optional=is_optional_model,
+            kind=InspectParameter.POSITIONAL_OR_KEYWORD,
+            description=field.description or field.name,
+        )
+
+        return self.builder._argument_from_spec(
+            spec=spec,
+            translated_name=display_name,
+            flags=flags,
+            taken_flags=self.taken_flags,
+            pipe_param_names=None,
+            allow_optional_union_list=False,
+            suppress_default=True,
+            force_optional=False,
+            help_text=None,
+            is_expanded_from=root_name,
+            expansion_path=path,
+            original_model_type=original_model_type,
+            parent_is_optional=parent_optional,
+            model_default=model_default,
+            settings=self.settings,
+        )
+
+    def _option_flags(
+        self,
+        *,
+        display_name: str,
+        annotation: Any,
+        field_default: Any,
+    ) -> tuple[str, ...]:
+        long_flag = f"--{display_name}"
+        flags: tuple[str, ...] = (long_flag,)
+        if self.settings.abbreviation_scope != _ABBREVIATION_SCOPE_ALL_OPTIONS:
+            return flags
+
+        abbrev_name = display_name
+        if annotation is bool and field_default is True:
+            abbrev_name = f"no-{display_name}"
+
+        short = self.context.abbreviation_gen.generate(abbrev_name, self.taken_flags)
+        if short and short not in (display_name, abbrev_name):
+            return (f"-{short}", long_flag)
+
+        return flags
 
 
 @dataclass
@@ -373,7 +599,11 @@ class ParserSchemaBuilder:
         )
         return CommandBuildSettings(
             include_inherited_methods=self.context.include_inherited_methods,
+            include_protected_methods=self.context.include_protected_methods,
+            include_private_methods=self.context.include_private_methods,
+            include_staticmethods=self.context.include_staticmethods,
             include_classmethods=self.context.include_classmethods,
+            method_skips=list(self.context.method_skips),
             expand_model_params=self.context.expand_model_params,
             model_expansion_max_depth=self.context.model_expansion_max_depth,
             abbreviation_scope=self.context.abbreviation_scope,
@@ -386,7 +616,11 @@ class ParserSchemaBuilder:
         parent: CommandBuildSettings | None,
         *,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -400,11 +634,29 @@ class ParserSchemaBuilder:
                 if include_inherited_methods is not None
                 else base.include_inherited_methods
             ),
+            include_protected_methods=(
+                include_protected_methods
+                if include_protected_methods is not None
+                else base.include_protected_methods
+            ),
+            include_private_methods=(
+                include_private_methods
+                if include_private_methods is not None
+                else base.include_private_methods
+            ),
+            include_staticmethods=(
+                include_staticmethods
+                if include_staticmethods is not None
+                else base.include_staticmethods
+            ),
             include_classmethods=(
                 include_classmethods
                 if include_classmethods is not None
                 else base.include_classmethods
             ),
+            method_skips=list(method_skips)
+            if method_skips is not None
+            else list(base.method_skips),
             expand_model_params=(
                 expand_model_params if expand_model_params is not None else base.expand_model_params
             ),
@@ -434,7 +686,11 @@ class ParserSchemaBuilder:
         *,
         settings: CommandBuildSettings,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -443,7 +699,11 @@ class ParserSchemaBuilder:
         help_group: str | None = None,
     ) -> None:
         command.include_inherited_methods = include_inherited_methods
+        command.include_protected_methods = include_protected_methods
+        command.include_private_methods = include_private_methods
+        command.include_staticmethods = include_staticmethods
         command.include_classmethods = include_classmethods
+        command.method_skips = list(method_skips) if method_skips is not None else None
         command.expand_model_params = expand_model_params
         command.model_expansion_max_depth = model_expansion_max_depth
         command.abbreviation_scope = abbreviation_scope
@@ -472,7 +732,11 @@ class ParserSchemaBuilder:
                     executable_flags=command.executable_flags,
                     parent_settings=None,
                     include_inherited_methods=command.include_inherited_methods,
+                    include_protected_methods=command.include_protected_methods,
+                    include_private_methods=command.include_private_methods,
+                    include_staticmethods=command.include_staticmethods,
                     include_classmethods=command.include_classmethods,
+                    method_skips=command.method_skips,
                     expand_model_params=command.expand_model_params,
                     model_expansion_max_depth=(command.model_expansion_max_depth),
                     abbreviation_scope=command.abbreviation_scope,
@@ -670,7 +934,11 @@ class ParserSchemaBuilder:
         executable_flags: list[ExecutableFlag] | None = None,
         parent_settings: CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -689,7 +957,11 @@ class ParserSchemaBuilder:
             executable_flags (list[ExecutableFlag] | None): Zero-argument executable flags.
             parent_settings (CommandBuildSettings | None): Parent effective settings.
             include_inherited_methods (bool | None): Per-command inherited-method override.
+            include_protected_methods (bool | None): Per-command protected-method override.
+            include_private_methods (bool | None): Per-command private-method override.
+            include_staticmethods (bool | None): Per-command staticmethod override.
             include_classmethods (bool | None): Per-command classmethod override.
+            method_skips (Sequence[str] | None): Per-command method skip override.
             expand_model_params (bool | None): Per-command model expansion override.
             model_expansion_max_depth (int | None): Per-command depth override.
             abbreviation_scope (str | None): Per-command abbreviation scope override.
@@ -706,7 +978,11 @@ class ParserSchemaBuilder:
             executable_flags=executable_flags,
             parent_settings=parent_settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -727,7 +1003,11 @@ class ParserSchemaBuilder:
         executable_flags: list[ExecutableFlag] | None = None,
         settings: CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -793,7 +1073,11 @@ class ParserSchemaBuilder:
             command,
             settings=resolved_settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -836,7 +1120,11 @@ class ParserSchemaBuilder:
         executable_flags: list[ExecutableFlag] | None = None,
         settings: CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -932,7 +1220,11 @@ class ParserSchemaBuilder:
             command,
             settings=resolved_settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -953,7 +1245,11 @@ class ParserSchemaBuilder:
         executable_flags: list[ExecutableFlag] | None = None,
         settings: CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -1012,7 +1308,7 @@ class ParserSchemaBuilder:
         subcommands: dict[str, Command] = {}
 
         for method in cls.methods:
-            if method.name in self.context.method_skips:
+            if method.name in resolved_settings.method_skips:
                 continue
 
             method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
@@ -1079,7 +1375,11 @@ class ParserSchemaBuilder:
             command,
             settings=resolved_settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -1287,27 +1587,12 @@ class ParserSchemaBuilder:
         taken_flags: list[str],
         settings: CommandBuildSettings,
     ) -> list[Argument]:
-        translated_name = self.context.flag_strategy.argument_translator.translate(param.name)
-        if translated_name in taken_flags:
-            raise ReservedFlagError(translated_name)
-
-        taken_flags.append(translated_name)
-
-        model_default = param.default if param.has_default else MODEL_DEFAULT_UNSET
-        max_depth = settings.model_expansion_max_depth
-        return self._expand_model_fields(
-            model_type=model_type,
-            root_name=param.name,
-            path=(param.name,),
+        return ModelExpansionBuilder(
+            builder=self,
+            param=param,
             taken_flags=taken_flags,
-            depth=1,
-            max_depth=max_depth,
-            parent_optional=is_optional_model,
-            parent_has_default=param.has_default,
-            original_model_type=model_type,
-            model_default=model_default,
             settings=settings,
-        )
+        ).build(model_type=model_type, is_optional_model=is_optional_model)
 
     def _expand_model_fields(
         self,
@@ -1324,94 +1609,27 @@ class ParserSchemaBuilder:
         model_default: Any,
         settings: CommandBuildSettings,
     ) -> list[Argument]:
-        nested_separator = self._nested_separator
-        arguments: list[Argument] = []
-
-        for field in self.model_argument_mapper.model_fields_for_expansion(model_type):
-            annotation = resolve_type_alias(field.annotation)
-            if isinstance(annotation, str):
-                simple_name = simplified_type_name(annotation)
-                base_name = simple_name.removesuffix("?")
-                builtin_map = {"bool": bool, "int": int, "float": float, "str": str}
-                if base_name in builtin_map:
-                    annotation = builtin_map[base_name]
-
-            inner_type, is_optional_model = self.model_argument_mapper.unwrap_optional(annotation)
-            new_path = (*path, field.name)
-
-            if self._should_expand_model(inner_type, settings=settings) and depth < max_depth:
-                arguments.extend(
-                    self._expand_model_fields(
-                        model_type=inner_type,
-                        root_name=root_name,
-                        path=new_path,
-                        taken_flags=taken_flags,
-                        depth=depth + 1,
-                        max_depth=max_depth,
-                        parent_optional=parent_optional or is_optional_model,
-                        parent_has_default=parent_has_default,
-                        original_model_type=original_model_type,
-                        model_default=model_default,
-                        settings=settings,
-                    )
-                )
-                continue
-
-            translated_path = tuple(
-                self.context.flag_strategy.argument_translator.translate(part) for part in new_path
-            )
-            display_name = nested_separator.join(translated_path)
-            if display_name in taken_flags:
-                raise ReservedFlagError(display_name)
-
-            arg_name = nested_separator.join(new_path)
-            flags = self._expanded_option_flags(
-                display_name=display_name,
-                annotation=annotation,
-                field_default=field.default,
-                taken_flags=taken_flags,
-                settings=settings,
-            )
-            taken_flags.append(display_name)
-
-            is_required = field.required and not (
-                parent_optional or is_optional_model or parent_has_default
-            )
-            spec = ParamSpec(
-                name=arg_name,
-                type=annotation,
-                is_typed=annotation is not None,
-                has_default=not field.required,
-                default=field.default,
-                is_required=is_required,
-                is_optional=is_optional_model,
-                kind=InspectParameter.POSITIONAL_OR_KEYWORD,
-                description=field.description,
-            )
-
-            spec.description = field.description or field.name
-
-            arguments.append(
-                self._argument_from_spec(
-                    spec=spec,
-                    translated_name=display_name,
-                    flags=flags,
-                    taken_flags=taken_flags,
-                    pipe_param_names=None,
-                    allow_optional_union_list=False,
-                    suppress_default=True,
-                    force_optional=False,
-                    help_text=None,
-                    is_expanded_from=root_name,
-                    expansion_path=new_path,
-                    original_model_type=original_model_type,
-                    parent_is_optional=parent_optional,
-                    model_default=model_default,
-                    settings=settings,
-                )
-            )
-
-        return arguments
+        del max_depth
+        parameter = ExpansionParameter(
+            name=root_name,
+            default=model_default,
+            has_default=model_default is not MODEL_DEFAULT_UNSET,
+        )
+        return ModelExpansionBuilder(
+            builder=self,
+            param=parameter,
+            taken_flags=taken_flags,
+            settings=settings,
+        )._fields(
+            model_type=model_type,
+            root_name=root_name,
+            path=path,
+            depth=depth,
+            parent_optional=parent_optional,
+            parent_has_default=parent_has_default,
+            original_model_type=original_model_type,
+            model_default=model_default,
+        )
 
     def _expanded_option_flags(
         self,
@@ -1422,22 +1640,21 @@ class ParserSchemaBuilder:
         taken_flags: list[str],
         settings: CommandBuildSettings,
     ) -> tuple[str, ...]:
-        long_flag = f"--{display_name}"
-        flags: tuple[str, ...] = (long_flag,)
-        abbreviation_scope = settings.abbreviation_scope
-        if abbreviation_scope != _ABBREVIATION_SCOPE_ALL_OPTIONS:
-            return flags
-
-        abbrev_name = display_name
-        is_bool = annotation is bool
-        if is_bool and field_default is True:
-            abbrev_name = f"no-{display_name}"
-
-        short = self.context.abbreviation_gen.generate(abbrev_name, taken_flags)
-        if short and short not in (display_name, abbrev_name):
-            return (f"-{short}", long_flag)
-
-        return flags
+        dummy_param = ExpansionParameter(
+            name=display_name,
+            default=None,
+            has_default=False,
+        )
+        return ModelExpansionBuilder(
+            builder=self,
+            param=dummy_param,
+            taken_flags=taken_flags,
+            settings=settings,
+        )._option_flags(
+            display_name=display_name,
+            annotation=annotation,
+            field_default=field_default,
+        )
 
     def _argument_from_spec(
         self,
@@ -1781,7 +1998,11 @@ class ParserSchemaBuilder:
         canonical_name: str | None = None,
         parent_settings: CommandBuildSettings | None = None,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -1794,7 +2015,11 @@ class ParserSchemaBuilder:
         settings = self._merge_build_settings(
             parent_settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -1883,7 +2108,11 @@ class ParserSchemaBuilder:
             command,
             settings=settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -1956,7 +2185,11 @@ class ParserSchemaBuilder:
         settings = self._merge_build_settings(
             parent_settings,
             include_inherited_methods=entry.include_inherited_methods,
+            include_protected_methods=entry.include_protected_methods,
+            include_private_methods=entry.include_private_methods,
+            include_staticmethods=entry.include_staticmethods,
             include_classmethods=entry.include_classmethods,
+            method_skips=entry.method_skips,
             expand_model_params=entry.expand_model_params,
             model_expansion_max_depth=entry.model_expansion_max_depth,
             abbreviation_scope=entry.abbreviation_scope,
@@ -1969,7 +2202,11 @@ class ParserSchemaBuilder:
                 parent_path,
                 settings=settings,
                 include_inherited_methods=entry.include_inherited_methods,
+                include_protected_methods=entry.include_protected_methods,
+                include_private_methods=entry.include_private_methods,
+                include_staticmethods=entry.include_staticmethods,
                 include_classmethods=entry.include_classmethods,
+                method_skips=entry.method_skips,
                 expand_model_params=entry.expand_model_params,
                 model_expansion_max_depth=entry.model_expansion_max_depth,
                 abbreviation_scope=entry.abbreviation_scope,
@@ -1985,7 +2222,11 @@ class ParserSchemaBuilder:
                 parent_path,
                 settings=settings,
                 include_inherited_methods=entry.include_inherited_methods,
+                include_protected_methods=entry.include_protected_methods,
+                include_private_methods=entry.include_private_methods,
+                include_staticmethods=entry.include_staticmethods,
                 include_classmethods=entry.include_classmethods,
+                method_skips=entry.method_skips,
                 expand_model_params=entry.expand_model_params,
                 model_expansion_max_depth=entry.model_expansion_max_depth,
                 abbreviation_scope=entry.abbreviation_scope,
@@ -2008,7 +2249,11 @@ class ParserSchemaBuilder:
                 pipe_config=entry.pipe_targets,
                 settings=settings,
                 include_inherited_methods=entry.include_inherited_methods,
+                include_protected_methods=entry.include_protected_methods,
+                include_private_methods=entry.include_private_methods,
+                include_staticmethods=entry.include_staticmethods,
                 include_classmethods=entry.include_classmethods,
+                method_skips=entry.method_skips,
                 expand_model_params=entry.expand_model_params,
                 model_expansion_max_depth=entry.model_expansion_max_depth,
                 abbreviation_scope=entry.abbreviation_scope,
@@ -2027,7 +2272,11 @@ class ParserSchemaBuilder:
         *,
         settings: CommandBuildSettings,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -2043,15 +2292,17 @@ class ParserSchemaBuilder:
             init=False,
             public=True,
             inherited=settings.include_inherited_methods,
-            static_methods=True,
+            static_methods=settings.include_staticmethods,
             classmethod=settings.include_classmethods,
+            protected=settings.include_protected_methods,
+            private=settings.include_private_methods,
         )
         assert isinstance(cls, Class)
         resolve_objinspect_annotations(cls)
 
         subcommands: dict[str, Command] = {}
         for method in cls.methods:
-            if method.name.startswith("_") or method.name in self.context.method_skips:
+            if method.name in settings.method_skips:
                 continue
             method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
             subcommands[method_cli_name] = self._function_spec(
@@ -2104,7 +2355,11 @@ class ParserSchemaBuilder:
             command,
             settings=settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
@@ -2122,7 +2377,11 @@ class ParserSchemaBuilder:
         *,
         settings: CommandBuildSettings,
         include_inherited_methods: bool | None = None,
+        include_protected_methods: bool | None = None,
+        include_private_methods: bool | None = None,
+        include_staticmethods: bool | None = None,
         include_classmethods: bool | None = None,
+        method_skips: Sequence[str] | None = None,
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         abbreviation_scope: str | None = None,
@@ -2139,8 +2398,10 @@ class ParserSchemaBuilder:
             init=True,
             public=True,
             inherited=settings.include_inherited_methods,
-            static_methods=True,
+            static_methods=settings.include_staticmethods,
             classmethod=settings.include_classmethods,
+            protected=settings.include_protected_methods,
+            private=settings.include_private_methods,
         )
         assert isinstance(cls, Class)
         cli_name = self.context.flag_strategy.command_translator.translate(entry.name)
@@ -2177,7 +2438,7 @@ class ParserSchemaBuilder:
         subcommands: dict[str, Command] = {}
 
         for method in cls.methods:
-            if method.name.startswith("_") or method.name in self.context.method_skips:
+            if method.name in settings.method_skips:
                 continue
 
             method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
@@ -2254,7 +2515,11 @@ class ParserSchemaBuilder:
             command,
             settings=settings,
             include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
+            method_skips=method_skips,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
