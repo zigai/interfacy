@@ -155,7 +155,8 @@ class Aligned(InterfacyLayout):
     layout_mode: Literal["auto", "adaptive", "template"] = "template"
 
     def get_commands_ljust(self, max_display_len: int) -> int:
-        base = max(self.min_ljust, max_display_len + 3)
+        term_cap = max(self.min_ljust, self._terminal_width() // 2)
+        base = min(max(self.min_ljust, max_display_len + 3), term_cap)
         default_idx = self._get_template_token_index("default_padded")
         if default_idx is not None:
             return max(base, default_idx + 1)
@@ -168,7 +169,7 @@ class Aligned(InterfacyLayout):
     def keep_help_default_slot_for_arguments(self, arguments: list["Argument"]) -> bool:
         non_help_args = [arg for arg in arguments if arg.name != "help"]
         if not non_help_args:
-            return self.keep_empty_default_slot_for_help
+            return False
 
         described = sum(1 for arg in non_help_args if self._has_user_facing_help(arg.help))
         metadata_only = len(non_help_args) - described
@@ -250,7 +251,8 @@ class AlignedTyped(InterfacyLayout):
     layout_mode: Literal["auto", "adaptive", "template"] = "template"
 
     def get_commands_ljust(self, max_display_len: int) -> int:
-        base = max(self.min_ljust, max_display_len + 3)
+        term_cap = max(self.min_ljust, self._terminal_width() // 2)
+        base = min(max(self.min_ljust, max_display_len + 3), term_cap)
         default_idx = self._get_template_token_index("default_padded")
         if default_idx is not None:
             return max(base, default_idx + 1)
@@ -263,7 +265,7 @@ class AlignedTyped(InterfacyLayout):
     def keep_help_default_slot_for_arguments(self, arguments: list["Argument"]) -> bool:
         non_help_args = [arg for arg in arguments if arg.name != "help"]
         if not non_help_args:
-            return self.keep_empty_default_slot_for_help
+            return False
 
         described = sum(1 for arg in non_help_args if self._has_user_facing_help(arg.help))
         metadata_only = len(non_help_args) - described

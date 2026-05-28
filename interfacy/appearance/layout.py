@@ -388,6 +388,7 @@ class HelpLayout:
 
         prefix = rendered[: match.start()]
         suffix = rendered[match.end() :]
+        removed_width = match.end() - match.start()
         if is_help_option and self.keep_empty_default_slot_for_help:
             slot_width = match.end() - match.start()
             return f"{prefix}{' ' * slot_width}{suffix}"
@@ -396,7 +397,18 @@ class HelpLayout:
             bool(prefix) and bool(suffix) and not prefix[-1].isspace() and not suffix[0].isspace()
         )
         separator = " " if needs_separator else ""
-        return f"{prefix}{separator}{suffix}"
+        collapsed = f"{prefix}{separator}{suffix}"
+        if "\n" not in collapsed:
+            return collapsed
+
+        shift = max(0, removed_width - len(separator))
+        lines = collapsed.splitlines()
+        shifted = [lines[0]]
+        for line in lines[1:]:
+            leading = len(line) - len(line.lstrip(" "))
+            shifted.append(line[min(shift, leading) :])
+
+        return "\n".join(shifted)
 
     def get_help_for_parameter(
         self,
@@ -489,6 +501,23 @@ class HelpLayout:
 
         prefix_width = ansi_len(prefix)
         target_width = max(10, self._terminal_width() - 2)
+        if prefix_width > target_width - 10:
+            desc_indent_width = min(max(self.command_indent + 2, ljust + 1), target_width - 10)
+            desc_indent = " " * desc_indent_width
+            wrapped = self._wrap_text_preserving_words(
+                description,
+                width=target_width,
+                initial_indent=desc_indent,
+                subsequent_indent=desc_indent,
+            )
+            if not wrapped:
+                return name_column.rstrip()
+
+            lines = [name_column.rstrip()]
+            lines.extend(with_style(line, self.style.description) for line in wrapped)
+
+            return "\n".join(lines)
+
         wrap_width = max(10, target_width - prefix_width)
         wrapped = self._wrap_plain_words(description, wrap_width)
         if not wrapped:
@@ -657,6 +686,23 @@ class HelpLayout:
 
         return wrapped
 
+    @staticmethod
+    def _wrap_text_preserving_words(
+        text: str,
+        *,
+        width: int,
+        initial_indent: str = "",
+        subsequent_indent: str = "",
+    ) -> list[str]:
+        return textwrap.wrap(
+            text,
+            width=max(10, width),
+            initial_indent=initial_indent,
+            subsequent_indent=subsequent_indent,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+
     def _probe_template_field_index(
         self,
         *,
@@ -755,7 +801,7 @@ class HelpLayout:
             rendered = f"{rendered} {values['required']}"
 
         if "[type:" in rendered and "type" in values and not values["type"]:
-            rendered = re.sub(r"\s*\[type:\s*\]", "", rendered)
+            rendered = re.sub(r" ?\[type:\s*\]", "", rendered)
 
         rendered = self._collapse_empty_default_slot(
             rendered,
@@ -774,20 +820,57 @@ class HelpLayout:
                 wrapped_lines.append(line)
                 continue
 
+            metadata_idx = self._metadata_wrap_index(line)
+            if metadata_idx is not None:
+                prefix = line[:metadata_idx]
+                body = line[metadata_idx:]
+                wrapped_lines.extend(
+                    self._wrap_text_preserving_words(
+                        body.strip(),
+                        width=width,
+                        initial_indent=prefix,
+                        subsequent_indent=" " * ansi_len(prefix),
+                    )
+                )
+                continue
+
+            column_match = re.match(r"^(\s*\S(?:.*\S)?\s{2,})(\S.*)$", line)
+            if column_match is not None:
+                head = column_match.group(1)
+                body = column_match.group(2)
+                wrapped_lines.extend(
+                    self._wrap_text_preserving_words(
+                        body.strip(),
+                        width=width,
+                        initial_indent=head,
+                        subsequent_indent=" " * ansi_len(head),
+                    )
+                )
+                continue
+
             leading = len(line) - len(line.lstrip(" "))
             indent = " " * (leading if leading < width - 10 else 2)
-            wrapped_lines.extend(
-                textwrap.wrap(
-                    line.strip(),
-                    width=max(10, width - 1),
-                    initial_indent=indent,
-                    subsequent_indent=f"{indent}  ",
-                    break_long_words=True,
-                    break_on_hyphens=False,
-                )
+            wrapped = self._wrap_text_preserving_words(
+                line.strip(),
+                width=width - 1,
+                initial_indent=indent,
+                subsequent_indent=f"{indent}  ",
             )
+            wrapped_lines.extend(wrapped or [line])
 
         return "\n".join(wrapped_lines)
+
+    @staticmethod
+    def _metadata_wrap_index(line: str) -> int | None:
+        candidates = [
+            line.find("[choices:"),
+            line.find("[possible values:"),
+        ]
+        indexes = [idx for idx in candidates if idx > 0]
+        if not indexes:
+            return None
+
+        return min(indexes)
 
     def _format_templated_help_line(
         self,
@@ -1137,7 +1220,8 @@ class HelpLayout:
         Args:
             max_display_len (int): Maximum display name length.
         """
-        base = max(self.min_ljust, max_display_len + 3)
+        term_cap = max(self.min_ljust, self._terminal_width() // 2)
+        base = min(max(self.min_ljust, max_display_len + 3), term_cap)
         default_idx = self._get_template_token_index("default_padded")
         prefix_len = self._get_commands_prefix_len()
         align_idx = default_idx if default_idx is not None else prefix_len
@@ -1757,6 +1841,21 @@ class HelpLayout:
             is_required=is_required,
             is_help_option=arg.is_help_action,
         )
+
+    def format_adaptive_argument_row(self, arg: "Argument") -> str:
+        """Format one schema argument with its flag/name column for adaptive layouts."""
+        flag, flag_short, flag_long, is_option = self._build_flag_parts_from_argument(arg)
+        if is_option and flag_short and flag_long and self.include_metavar_in_flag_display:
+            flag = f"{flag_short.split(' ', 1)[0]}, {flag_long}"
+        help_text = self.format_argument(arg)
+        if not help_text:
+            return flag
+
+        help_position = self.help_position if isinstance(self.help_position, int) else 32
+        gap = max(2, help_position - ansi_len(flag))
+        rendered = f"{flag}{' ' * gap}{help_text}"
+
+        return self._wrap_overwide_rendered_line(rendered)
 
     def _format_argument_legacy(self, arg: "Argument", _indent: int = 2) -> str:
         is_bool = self._arg_is_bool(arg)

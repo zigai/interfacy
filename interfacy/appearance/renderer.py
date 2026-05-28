@@ -80,14 +80,13 @@ class SchemaHelpRenderer:
         """
         if len(schema.commands) == 1:
             cmd = next(iter(schema.commands.values()))
-            if cmd.is_leaf:
-                return self.render_command_help(
-                    cmd,
-                    prog,
-                    parser_description=schema.description,
-                    parser_epilog=schema.epilog,
-                    parser_executable_flags=schema.executable_flags,
-                )
+            return self.render_command_help(
+                cmd,
+                prog,
+                parser_description=schema.description,
+                parser_epilog=schema.epilog,
+                parser_executable_flags=schema.executable_flags,
+            )
 
         return self._render_multi_command_help(schema, prog)
 
@@ -164,17 +163,44 @@ class SchemaHelpRenderer:
         usage: str,
         description: str | None,
     ) -> None:
+        rendered_description = self._wrap_description(description)
         if self.layout.should_render_description_before_usage():
-            if description:
-                sections.append(description)
+            if rendered_description:
+                sections.append(rendered_description)
 
             sections.append(usage)
 
             return
 
         sections.append(usage)
-        if description:
-            sections.append(description)
+        if rendered_description:
+            sections.append(rendered_description)
+
+    def _wrap_description(self, description: str | None) -> str | None:
+        if not description:
+            return None
+
+        formatted = self.layout.format_description(description)
+        paragraphs = formatted.splitlines()
+        if not paragraphs:
+            return None
+
+        wrapped: list[str] = []
+        for paragraph in paragraphs:
+            if not paragraph.strip():
+                wrapped.append("")
+                continue
+
+            wrapped.append(
+                textwrap.fill(
+                    paragraph.strip(),
+                    width=max(10, self.terminal_width),
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
+            )
+
+        return "\n".join(wrapped)
 
     def _render_argument_section(
         self,
@@ -193,7 +219,10 @@ class SchemaHelpRenderer:
         lines = [self._style_section_heading(heading)]
         try:
             for arg in arguments:
-                rendered = self.layout.format_argument(arg)
+                if self.layout._use_template_layout():
+                    rendered = self.layout.format_argument(arg)
+                else:
+                    rendered = self.layout.format_adaptive_argument_row(arg)
                 if normalize_help_only and arg.is_help_action:
                     rendered = self._normalize_help_only_option_line(rendered, arg)
                 lines.append(self._indent(rendered))
@@ -254,13 +283,13 @@ class SchemaHelpRenderer:
 
         if layout.should_render_description_before_usage():
             if schema.description:
-                sections.append(schema.description)
+                sections.append(self._wrap_description(schema.description) or "")
 
             sections.append(usage)
         else:
             sections.append(usage)
             if schema.description:
-                sections.append(schema.description)
+                sections.append(self._wrap_description(schema.description) or "")
 
         help_arg = self._get_help_argument()
         root_options = self._ordered_option_arguments(
@@ -405,6 +434,9 @@ class SchemaHelpRenderer:
             primary_bool = self.layout.get_primary_boolean_flag_for_argument(arg) or primary_flag
             return primary_bool if arg.required else f"[{primary_bool}]"
 
+        if self.layout.clear_metavar and not self.layout.include_metavar_in_flag_display:
+            return primary_flag if arg.required else f"[{primary_flag}]"
+
         raw_metavar = arg.metavar
         if raw_metavar is None or "\b" in raw_metavar:
             raw_metavar = arg.display_name or arg.name or "value"
@@ -444,25 +476,8 @@ class SchemaHelpRenderer:
         current_line: list[str] = []
         current_len = prefix_len
 
-        for part in parts:
+        for part in self._expand_usage_parts(parts, max(10, text_width - len(indent))):
             part_len = ansi_len(part)
-            available_width = max(10, text_width - len(indent))
-            if part_len > available_width:
-                if current_line:
-                    lines.append(" ".join(current_line))
-                    current_line = []
-                chunks = [
-                    part[index : index + available_width]
-                    for index in range(0, len(part), available_width)
-                ]
-                lines.extend(chunks[:-1])
-                current_line = [chunks[-1]] if chunks else []
-                current_len = (
-                    len(indent) + ansi_len(current_line[0]) if current_line else len(indent)
-                )
-
-                continue
-
             if current_line and current_len + 1 + part_len > text_width:
                 lines.append(" ".join(current_line))
                 current_line = [part]
@@ -478,6 +493,26 @@ class SchemaHelpRenderer:
             return lines[0] if lines else ""
 
         return lines[0] + "\n" + "\n".join(indent + line for line in lines[1:])
+
+    @staticmethod
+    def _expand_usage_parts(parts: list[str], available_width: int) -> list[str]:
+        expanded: list[str] = []
+        for part in parts:
+            if ansi_len(part) <= available_width:
+                expanded.append(part)
+                continue
+
+            if part.startswith("{") and part.endswith("}") and "," in part:
+                choices = part[1:-1].split(",")
+                for idx, choice in enumerate(choices):
+                    prefix = "{" if idx == 0 else ""
+                    suffix = "}" if idx == len(choices) - 1 else ","
+                    expanded.append(f"{prefix}{choice}{suffix}")
+                continue
+
+            expanded.append(part)
+
+        return expanded
 
     def _get_usage_prefix(self) -> str:
         layout = self.layout
@@ -554,6 +589,15 @@ class SchemaHelpRenderer:
     def _normalize_help_only_option_line(self, line: str, help_arg: Argument) -> str:
         """Normalize synthetic help-only rows so the configured help flag stays visible."""
         normalized = line.lstrip()
+        removed = len(line) - len(normalized)
+        if removed and "\n" in normalized:
+            normalized_lines = normalized.splitlines()
+            dedented = [normalized_lines[0]]
+            for continuation in normalized_lines[1:]:
+                leading = len(continuation) - len(continuation.lstrip(" "))
+                dedented.append(continuation[min(removed, leading) :])
+            normalized = "\n".join(dedented)
+
         if any(flag and flag in normalized for flag in help_arg.flags):
             return normalized
 

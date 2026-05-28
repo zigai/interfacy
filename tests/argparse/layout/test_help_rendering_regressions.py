@@ -73,6 +73,20 @@ def test_standard_layout_hides_option_metavar_by_default() -> None:
     assert "--level" in help_text
 
 
+def test_standard_layout_does_not_leave_blank_metavar_slots_in_usage() -> None:
+    def demo(*, count: int = 1, delay: float = 0.5) -> None:
+        return None
+
+    parser = Argparser(help_layout=StandardLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    usage_line = parser.build_parser().format_help().splitlines()[0]
+
+    assert "[-c ]" not in usage_line
+    assert "[-d ]" not in usage_line
+    assert "[-c]" in usage_line
+    assert "[-d]" in usage_line
+
+
 def test_standard_layout_renders_defaults_with_bracket_default_block() -> None:
     def demo(*, level: int = 2) -> None:
         """Set output level."""
@@ -532,6 +546,125 @@ def test_aligned_layout_help_only_option_row_is_not_over_indented() -> None:
 
 
 @pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_help_option_continuation_aligns_to_description_column(
+    layout_cls: type[Aligned | AlignedTyped],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+
+    def demo(*, delay: float = 0.5) -> None:
+        return None
+
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--help" in line and "Show" in line)
+    second = next(line for line in lines if "message and exit" in line)
+
+    assert first.index("Show") == second.index("message")
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_choice_continuation_uses_metadata_column(
+    layout_cls: type[Aligned | AlignedTyped],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+
+    def demo(*, mode: Literal["fast", "safe", "balanced"] = "balanced") -> None:
+        return None
+
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--mode" in line and "[choices:" in line)
+    second = next(line for line in lines if "balanced]" in line and "--mode" not in line)
+
+    assert second.index("balanced]") >= first.index("[choices:")
+
+
+def test_aligned_typed_positional_literal_choices_keep_column_padding() -> None:
+    def demo(target: Literal["dev", "prod"]) -> None:
+        return None
+
+    parser = Argparser(help_layout=AlignedTyped(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    target_line = next(
+        line for line in help_text.splitlines() if "TARGET" in line and "[choices:" in line
+    )
+
+    assert "TARGET [choices:" not in target_line
+    assert "TARGET                   [choices: dev, prod]" in target_line
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_help_only_option_continuation_aligns(
+    layout_cls: type[Aligned | AlignedTyped],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+
+    def demo() -> None:
+        return None
+
+    parser = Argparser(help_layout=layout_cls(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--help" in line and "Show" in line)
+    second = next(line for line in lines if "message and exit" in line)
+
+    assert first.index("Show") == second.index("message")
+
+
+def test_modern_detail_continuation_uses_detail_column(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+
+    def demo(*, mode: Literal["fast", "safe", "balanced"] = "balanced") -> None:
+        return None
+
+    parser = Argparser(help_layout=Modern(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--mode" in line and "choices:" in line)
+    second = next(line for line in lines if "fast, safe, balanced" in line)
+
+    assert first.index("→") == second.index("fast")
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
 def test_aligned_family_omits_suppressed_boolean_default_for_model_expansion(
     layout_cls: type[Aligned | AlignedTyped],
 ) -> None:
@@ -981,6 +1114,82 @@ def test_schema_multi_command_usage_wraps_long_windows_prog(monkeypatch) -> None
     help_text = re.sub(r"\x1b\[[0-9;]*m", "", built_parser.format_help())
 
     assert all(len(line) <= 80 for line in help_text.splitlines())
+
+
+def test_template_schema_descriptions_wrap_to_terminal_width(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((40, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((40, 24)),
+    )
+
+    def probe() -> None:
+        """Probe CLI for finding help rendering defects across layouts and backends."""
+
+    parser = Argparser(help_layout=InterfacyLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(probe)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    assert "Probe CLI for finding help rendering\ndefects across layouts and backends." in help_text
+    assert all(len(line) <= 40 for line in help_text.splitlines())
+
+
+def test_template_usage_wrapping_preserves_command_choice_tokens(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((50, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((50, 24)),
+    )
+
+    def command_with_a_really_really_long_name() -> None:
+        return None
+
+    def short() -> None:
+        return None
+
+    parser = Argparser(help_layout=InterfacyLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(command_with_a_really_really_long_name)
+    parser.add_command(short)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    assert "reall\ny" not in help_text
+    assert "command-with-a-really-really-long-name" in help_text
+
+
+def test_long_command_name_does_not_force_one_character_description_wrapping(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "shutil.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+    monkeypatch.setattr(
+        "os.get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((60, 24)),
+    )
+
+    def command_with_a_really_really_long_name() -> None:
+        """Long command row description remains readable."""
+
+    def short() -> None:
+        """Short command."""
+
+    parser = Argparser(help_layout=StandardLayout(), sys_exit_enabled=False, print_result=False)
+    parser.add_command(command_with_a_really_really_long_name)
+    parser.add_command(short)
+    help_text = parser.build_parser().format_help()
+
+    assert "\n                                                       L\n" not in help_text
+    assert "Long command row" in help_text
+    assert "description" in help_text
+    assert "remains" in help_text
+    assert "readable." in help_text
 
 
 def test_aligned_layout_wraps_default_rows_after_metadata(monkeypatch) -> None:

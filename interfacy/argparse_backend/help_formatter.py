@@ -171,12 +171,30 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     else:
                         pad = max(2, target_help_col - (2 + len(invocation)))
                     prefix = f"  {invocation}{' ' * pad}"
+                    prefix_len = ansi_len(prefix)
+                    if prefix_len > self._width - 10:
+                        lines.append(f"  {invocation}\n")
+                        continuation_indent = (
+                            target_help_col
+                            if target_help_col is not None and target_help_col < self._width - 10
+                            else 4
+                        )
+                        rendered = textwrap.fill(
+                            help_text,
+                            width=self._width,
+                            initial_indent=" " * continuation_indent,
+                            subsequent_indent=" " * continuation_indent,
+                            break_long_words=False,
+                            break_on_hyphens=False,
+                        )
+                        lines.append(f"{rendered}\n")
+                        continue
                     rendered = textwrap.fill(
                         help_text,
                         width=self._width,
                         initial_indent=prefix,
-                        subsequent_indent=" " * ansi_len(prefix),
-                        break_long_words=True,
+                        subsequent_indent=" " * prefix_len,
+                        break_long_words=False,
                         break_on_hyphens=False,
                     )
                     lines.append(f"{rendered}\n")
@@ -210,6 +228,22 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 lines.append(line)
                 continue
 
+            column_match = re.match(r"^(\s*\S(?:.*\S)?\s{2,})(\S.*)$", line)
+            if column_match is not None:
+                head = column_match.group(1)
+                body = column_match.group(2)
+                lines.extend(
+                    textwrap.wrap(
+                        body.strip(),
+                        width=max(10, self._width),
+                        initial_indent=head,
+                        subsequent_indent=" " * ansi_len(head),
+                        break_long_words=False,
+                        break_on_hyphens=False,
+                    )
+                )
+                continue
+
             leading = len(line) - len(line.lstrip(" "))
             if (
                 self._width >= 50
@@ -226,7 +260,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     width=max(10, self._width),
                     initial_indent=" " * indent_width,
                     subsequent_indent=" " * indent_width,
-                    break_long_words=True,
+                    break_long_words=False,
                     break_on_hyphens=False,
                 )
             )
@@ -326,6 +360,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             format_actions = self._compat_format_actions_usage
             action_usage = format_actions(optionals + positionals, groups)
             usage = " ".join([s for s in [prog, action_usage] if s])
+            usage = re.sub(r"(?<=\S)\s+\]", "]", usage)
 
             text_width = self._width - self._current_indent
             prefix_len = ansi_len(prefix)
@@ -342,22 +377,8 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     lines: list[str] = []
                     line: list[str] = []
                     line_len = ansi_len(prefix) - 1 if prefix is not None else len(indent) - 1
-                    for part in parts:
-                        available = max(10, text_width - len(indent))
-                        if len(part) > available:
-                            if line:
-                                lines.append(indent + " ".join(line))
-                                line = []
-                            chunks = [
-                                part[index : index + available]
-                                for index in range(0, len(part), available)
-                            ]
-                            lines.extend(f"{indent}{chunk}" for chunk in chunks[:-1])
-                            line = [chunks[-1]] if chunks else []
-                            line_len = len(indent) + (len(line[0]) if line else 0)
-
-                            continue
-
+                    available = max(10, text_width - len(indent))
+                    for part in self._expand_usage_parts(parts, available):
                         if line_len + 1 + len(part) > text_width and line:
                             lines.append(indent + " ".join(line))
                             line = []
@@ -416,6 +437,36 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             usage = with_style(usage, usage_text_style)
 
         return f"{prefix}{usage}\n\n"
+
+    @staticmethod
+    def _expand_usage_parts(parts: list[str], available_width: int) -> list[str]:
+        expanded: list[str] = []
+        for part in parts:
+            if ansi_len(part) <= available_width:
+                expanded.append(part)
+                continue
+
+            bracket_prefix = ""
+            bracket_suffix = ""
+            body = part
+            if part.startswith("[") and part.endswith("]"):
+                bracket_prefix = "["
+                bracket_suffix = "]"
+                body = part[1:-1]
+
+            if body.startswith("{") and body.endswith("}") and "," in body:
+                choices = body[1:-1].split(",")
+                for idx, choice in enumerate(choices):
+                    prefix = bracket_prefix + ("{" if idx == 0 else "")
+                    suffix = ("}" if idx == len(choices) - 1 else ",") + (
+                        bracket_suffix if idx == len(choices) - 1 else ""
+                    )
+                    expanded.append(f"{prefix}{choice}{suffix}")
+                continue
+
+            expanded.append(part)
+
+        return expanded
 
 
 __all__ = ["InterfacyHelpFormatter"]
