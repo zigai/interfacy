@@ -4,7 +4,7 @@
 [![PyPI version](https://badge.fury.io/py/interfacy.svg)](https://badge.fury.io/py/interfacy)
 ![Supported versions](https://img.shields.io/badge/python-3.10+-blue.svg)
 [![Downloads](https://static.pepy.tech/badge/interfacy)](https://pepy.tech/project/interfacy)
-[![license](https://img.shields.io/github/license/zigai/interfacy.svg)](https://github.com/zigai/interfacy/blob/main/LICENSE)
+[![license](https://img.shields.io/github/license/zigai/interfacy.svg)](https://github.com/zigai/interfacy/blob/master/LICENSE)
 
 Interfacy is a CLI framework that turns Python functions, classes, and class instances into command-line interfaces. It derives the CLI from signatures, type annotations, and docstrings instead of making you define it twice.
 
@@ -161,17 +161,18 @@ usage: interfacy [--help] [--version] [--config-paths] [TARGET] ...
 Interfacy is a framework for building CLIs from Python callables.
 
 positional arguments:
-  TARGET                      Python file or module with a function/class/instance symbol (e.g. main.py:main, pkg.cli:App, pkg.cli:service).
-  ARGS                        Arguments passed through to the target command.
+  [TARGET]        Python file or module with a function/class/instance symbol
+                  (e.g. main.py:main, pkg.cli:App, pkg.cli:service).
+  ...             Arguments passed through to the target command.
 
 options:
-  --help                      show this help message and exit
-  --version                   show version and exit.
-  --config-paths              print config file search paths and exit.
+  --help                        Show this help message and exit
+  --version                     show version and exit.
+  --config-paths                print config file search paths and exit.
 
 Use 'interfacy TARGET --help' to display the help text for the target.
 ```
 
 ## License
 
-[MIT License](https://github.com/zigai/interfacy/blob/main/LICENSE)
+[MIT License](https://github.com/zigai/interfacy/blob/master/LICENSE)
