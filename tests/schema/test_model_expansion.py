@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 import pytest
 from objinspect import Function
@@ -8,6 +8,7 @@ from interfacy.appearance.layouts import InterfacyLayout
 from interfacy.argparse_backend.argparser import Argparser
 from interfacy.interfacy import Interfacy
 from interfacy.schema.builder import ParserSchemaBuilder
+from interfacy.schema.model_argument_mapper import ModelArgumentMapper
 from interfacy.type_parsers import build_default_type_parser
 from tests.schema.conftest import (
     Address,
@@ -434,3 +435,192 @@ def test_registered_parser_for_plain_class_prevents_model_expansion() -> None:
 
         assert isinstance(result, Custom)
         assert result.value == "ok"
+
+
+class FakePydanticField:
+    def __init__(
+        self,
+        annotation: Any,
+        *,
+        required: bool = False,
+        default: Any = None,
+        description: str | None = None,
+        callable_required: bool = True,
+    ) -> None:
+        self.annotation = annotation
+        self.required = required
+        self.default = default
+        self.description = description
+        if callable_required:
+            self.is_required = lambda: required
+        else:
+            self.is_required = required
+
+
+class FakePydanticAddress:
+    model_fields = {
+        "city": FakePydanticField(str, required=True, description="City name."),
+        "zip": FakePydanticField(int, required=True, description="Postal code."),
+    }
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.city = kwargs["city"]
+        self.zip = kwargs["zip"]
+
+    def model_dump(self) -> dict[str, Any]:
+        return {"city": self.city, "zip": self.zip}
+
+
+class FakePydanticUser:
+    model_fields = {
+        "name": FakePydanticField(str, required=True, description="Display name."),
+        "age": FakePydanticField(int, default=7, description="Age in years."),
+        "address": FakePydanticField(FakePydanticAddress, required=True),
+    }
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.name = kwargs["name"]
+        self.age = kwargs.get("age", 7)
+        self.address = kwargs["address"]
+
+    def model_dump(self) -> dict[str, Any]:
+        return {"name": self.name, "age": self.age, "address": self.address.model_dump()}
+
+
+def greet_fake_pydantic(user: FakePydanticUser) -> str:
+    return f"Hello {user.name}, age {user.age} from {user.address.city} {user.address.zip}"
+
+
+def test_pydantic_like_v2_model_expands_without_optional_dependency() -> None:
+    parser = FakeParser(help_layout=InterfacyLayout())
+    parser.register_command(Function(greet_fake_pydantic), canonical_name="greet-fake")
+
+    cmd = ParserSchemaBuilder(parser).build().commands["greet-fake"]
+    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+
+    assert {arg.name for arg in cmd.parameters} == {
+        "user.name",
+        "user.age",
+        "user.address.city",
+        "user.address.zip",
+    }
+    assert "Display name." in help_text["user.name"]
+    assert "City name." in help_text["user.address.city"]
+    assert {arg.name: arg.required for arg in cmd.parameters}["user.age"] is False
+
+
+def test_pydantic_like_v2_model_reconstructs_nested_values() -> None:
+    parser = Argparser(sys_exit_enabled=False)
+
+    result = parser.run(
+        greet_fake_pydantic,
+        args=[
+            "--user.name",
+            "Ada",
+            "--user.address.city",
+            "Austin",
+            "--user.address.zip",
+            "78701",
+        ],
+    )
+
+    assert result == "Hello Ada, age 7 from Austin 78701"
+
+
+def test_pydantic_like_v2_model_default_merges_nested_override() -> None:
+    default_user = FakePydanticUser(
+        name="Tess",
+        age=40,
+        address=FakePydanticAddress(city="Austin", zip=78701),
+    )
+
+    def command(user: FakePydanticUser = default_user) -> str:
+        return f"{user.name}:{user.age}:{user.address.city}:{user.address.zip}"
+
+    parser = Argparser(sys_exit_enabled=False)
+    assert parser.run(command, args=["--user.address.zip", "78702"]) == "Tess:40:Austin:78702"
+
+
+class FakeLegacyFieldInfo:
+    def __init__(self, description: str | None = None) -> None:
+        self.description = description
+
+
+class FakeLegacyField:
+    def __init__(
+        self,
+        outer_type_: Any,
+        *,
+        required: bool = False,
+        default: Any = None,
+        description: str | None = None,
+    ) -> None:
+        self.outer_type_ = outer_type_
+        self.required = required
+        self.default = default
+        self.field_info = FakeLegacyFieldInfo(description)
+
+
+class FakePydanticV1User:
+    __fields__ = {
+        "name": FakeLegacyField(str, required=True, description="Legacy display name."),
+        "age": FakeLegacyField(int, default=9, description="Legacy age."),
+    }
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.name = kwargs["name"]
+        self.age = kwargs.get("age", 9)
+
+    def dict(self) -> dict[str, Any]:
+        return {"name": self.name, "age": self.age}
+
+
+def test_pydantic_like_v1_model_expands_field_metadata() -> None:
+    def command(user: FakePydanticV1User) -> str:
+        return user.name
+
+    parser = FakeParser(help_layout=InterfacyLayout())
+    parser.register_command(Function(command), canonical_name="legacy")
+
+    cmd = ParserSchemaBuilder(parser).build().commands["legacy"]
+    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+
+    assert {arg.name for arg in cmd.parameters} == {"user.name", "user.age"}
+    assert "Legacy display name." in help_text["user.name"]
+    assert {arg.name: arg.required for arg in cmd.parameters} == {
+        "user.name": True,
+        "user.age": False,
+    }
+
+
+def test_pydantic_like_v1_model_reconstructs_and_uses_default() -> None:
+    def command(user: FakePydanticV1User) -> str:
+        return f"{user.name}:{user.age}"
+
+    parser = Argparser(sys_exit_enabled=False)
+
+    assert parser.run(command, args=["--user.name", "Ada"]) == "Ada:9"
+
+
+def test_model_mapper_optional_empty_nested_dict_becomes_none() -> None:
+    mapper = ModelArgumentMapper()
+
+    assert mapper._coerce_model_value(Address | None, {}) is None
+
+
+def test_dataclass_expansion_falls_back_when_forward_reference_is_unresolved() -> None:
+    @dataclass
+    class BrokenReferenceConfig:
+        value: Any
+
+    BrokenReferenceConfig.__annotations__["value"] = "DoesNotExist"
+
+    def command(config: BrokenReferenceConfig) -> BrokenReferenceConfig:
+        return config
+
+    parser = FakeParser(help_layout=InterfacyLayout())
+    parser.register_command(Function(command), canonical_name="broken")
+    cmd = ParserSchemaBuilder(parser).build().commands["broken"]
+
+    arg = next(arg for arg in cmd.parameters if arg.name == "config.value")
+    assert arg.type is Any
