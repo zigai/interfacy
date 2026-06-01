@@ -52,6 +52,7 @@ from interfacy.util import (
     extract_optional_union_list,
     extract_optional_union_tuple,
     extract_union_list,
+    get_annotation_choices,
     get_fixed_tuple_info,
     get_param_choices,
     inverted_bool_flag_name,
@@ -1840,6 +1841,10 @@ class ParserSchemaBuilder:
 
         if element_type is not None:
             state.parsed_type = element_type
+            if state.choices is None:
+                raw_choices = get_annotation_choices(element_type, for_display=False)
+                if raw_choices:
+                    state.choices = tuple(raw_choices)
             if element_type is not str and not plan_requires_post_conversion(
                 state.value_plan,
                 required=spec.is_required,
@@ -2404,6 +2409,7 @@ class ParserSchemaBuilder:
             private=settings.include_private_methods,
         )
         assert isinstance(cls, Class)
+        resolve_objinspect_annotations(cls)
         cli_name = self.context.flag_strategy.command_translator.translate(entry.name)
         current_path = (*parent_path, cli_name)
 

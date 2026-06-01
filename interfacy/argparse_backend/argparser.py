@@ -53,6 +53,7 @@ from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchem
 from interfacy.schema.value_plan import normalize_argument_values
 from interfacy.util import (
     extract_optional_union_list,
+    get_annotation_choices,
     get_param_choices,
     is_list_or_list_alias,
     resolve_type_alias,
@@ -469,6 +470,8 @@ class Argparser(InterfacyParser):
             extra["type"] = self.type_parser.get_parse_func(annotation)
 
         choices = get_param_choices(param, for_display=False)
+        if not choices and element_type is not None:
+            choices = get_annotation_choices(element_type, for_display=False)
         if choices:
             extra["choices"] = self._coerce_choices_for_parser(choices, extra.get("type"))
 

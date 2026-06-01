@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
-from interfacy.cli.main import ExitCode, _split_target, main, resolve_target
+from interfacy.cli.main import ExitCode, _split_target, build_parser, main, resolve_target
 
 
 def _write_module(path: Path, source: str) -> None:
@@ -165,6 +168,18 @@ def test_main_missing_target_is_argparse_usage_error(capsys: pytest.CaptureFixtu
 
     assert excinfo.value.code == 2
     assert "TARGET" in capsys.readouterr().err
+
+
+def test_entrypoint_parser_installs_argcomplete_when_config_enables_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[Any] = []
+    fake_argcomplete = SimpleNamespace(autocomplete=lambda parser: calls.append(parser))
+    monkeypatch.setitem(sys.modules, "argcomplete", fake_argcomplete)
+
+    parser = build_parser({"tab_completion": True})
+
+    assert calls == [parser]
 
 
 def test_main_passthrough_double_dash(

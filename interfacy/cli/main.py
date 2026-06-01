@@ -14,6 +14,7 @@ from interfacy.appearance.layout import HelpLayout
 from interfacy.appearance.layouts import StandardLayout
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
+from interfacy.console import warn
 from interfacy.core import ExitCode, InterfacyParser
 from interfacy.interfacy import Interfacy
 
@@ -205,6 +206,17 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
         action="store_true",
         help="print config file search paths and exit.",
     )
+
+    if settings.get("tab_completion"):
+        try:
+            import argcomplete
+        except ImportError:
+            warn(
+                "argcomplete not installed. Tab completion not available."
+                " Install with 'pip install argcomplete'"
+            )
+        else:
+            argcomplete.autocomplete(parser)
 
     return parser
 
