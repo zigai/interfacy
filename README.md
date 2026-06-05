@@ -64,6 +64,20 @@ Hello, Ada! Hello, Ada!
 
 By default, required non-boolean parameters become positional arguments and optional parameters become flags.
 
+## Agent Skill
+
+The official AI agent skill can be installed from this repo.
+
+```bash
+npx skills add https://github.com/zigai/interfacy/tree/master/interfacy/.agents/skills/interfacy
+```
+
+or
+
+```bash
+uvx library-skills
+```
+
 ## Class-Based Commands
 
 Classes become command namespaces. `__init__` parameters live at the command level and public methods become subcommands.
