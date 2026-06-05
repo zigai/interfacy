@@ -1,7 +1,31 @@
 from __future__ import annotations
 
 import os
+import re
+import sys
 from importlib.metadata import version as package_version
+from pathlib import Path
+
+from bs4 import BeautifulSoup
+from docutils.nodes import document
+from sphinx.application import Sphinx
+from sphinx.domains import python
+from sphinx.highlighting import lexers as sphinx_lexers
+
+sys.path.insert(0, str(Path(__file__).parent / "_ext"))
+from rattle_pygments import DarkerModernPythonLexer
+
+py_sig_re = re.compile(
+    r"""^ ([\w.]*\.)?            # class name(s)
+          ([\w-]+)  \s*          # thing name
+          (?: \(\s*(.*)\s*\)     # optional: arguments
+           (?:\s* -> \s* (.*))?  #           return annotation
+          )? $                   # and nothing more
+          """,
+    re.VERBOSE,
+)
+
+python.py_sig_re = py_sig_re
 
 project = "Interfacy"
 author = "Žiga Ivanšek"
@@ -20,6 +44,8 @@ extensions = [
     "notfound.extension",
     "sphinxext.opengraph",
 ]
+
+templates_path = ["_templates"]
 
 source_suffix = {
     ".rst": "restructuredtext",
@@ -46,6 +72,16 @@ add_module_names = False
 default_role = "any"
 python_use_unqualified_type_names = True
 python_maximum_signature_line_length = 68
+
+pygments_style = "github-light"
+pygments_dark_style = "rattle_pygments.DarkerModernStyle"
+sphinx_lexers["python"] = DarkerModernPythonLexer()
+sphinx_lexers["python3"] = DarkerModernPythonLexer()
+sphinx_lexers["py"] = DarkerModernPythonLexer()
+
+copybutton_prompt_text = r"^((>>> |\.\.\. |\$ |# )|((\(.+\) )?\$ ))"
+copybutton_prompt_is_regexp = True
+copybutton_remove_prompts = True
 
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
@@ -139,18 +175,14 @@ nitpick_ignore = [
     ("py:class", "TypeAliasForwardRef"),
 ]
 
-html_theme = "sphinx_book_theme"
+html_theme = "furo"
 html_title = project
 html_show_sourcelink = False
 html_baseurl = os.environ.get("READTHEDOCS_CANONICAL_URL", "")
 ogp_social_cards = {"enable": False}
 
 html_theme_options = {
-    "path_to_docs": "docs",
-    "repository_branch": "master",
-    "repository_url": "https://github.com/zigai/interfacy",
-    "use_repository_button": True,
-    "use_source_button": True,
+    "top_of_page_buttons": "",
 }
 
 html_context = {}
@@ -161,3 +193,33 @@ if html_baseurl:
     ogp_site_url = html_baseurl
 
 notfound_urls_prefix = "/"
+
+
+def _expand_current_sidebar_sections(
+    _app: Sphinx,
+    _pagename: str,
+    _templatename: str,
+    context: dict[str, object],
+    _doctree: document | None,
+) -> None:
+    navigation_tree = context.get("furo_navigation_tree")
+    if not isinstance(navigation_tree, str):
+        return
+
+    soup = BeautifulSoup(navigation_tree, "html.parser")
+    for item in soup.select("li.has-children.current, li.has-children.active"):
+        checkbox = item.find("input", class_="toctree-checkbox", recursive=False)
+        if checkbox is not None:
+            checkbox["checked"] = ""
+
+    context["furo_navigation_tree"] = str(soup)
+
+
+def setup(app: Sphinx) -> dict[str, bool]:
+    app.connect("html-page-context", _expand_current_sidebar_sections, priority=900)
+    return {"parallel_read_safe": True, "parallel_write_safe": True}
+
+
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
+html_js_files = ["copy_as_markdown.js"]
