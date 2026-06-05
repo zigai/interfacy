@@ -65,13 +65,19 @@ PIPE_UNSET: Final[Any] = object()
 MAX_PARSE_RECOVERY_ATTEMPTS: Final[int] = 3
 AbbreviationScope = Literal["top_level_options", "all_options"]
 BooleanNegativePrefix = str | None
+NegativeBoolNameMode = Literal["flag_only", "dual"]
 HelpOptionSort = list[HelpOptionSortRule] | None
 HelpSubcommandSort = list[HelpSubcommandSortRule] | None
 MethodSkips = Sequence[str] | None
+HelpFlags = Sequence[str]
+NegativeBoolNamePrefixes = Sequence[str]
 ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
     "top_level_options",
     "all_options",
 )
+NEGATIVE_BOOL_NAME_MODE_VALUES: tuple[NegativeBoolNameMode, ...] = ("flag_only", "dual")
+DEFAULT_HELP_FLAGS: tuple[str, ...] = ("--help",)
+DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES: tuple[str, ...] = ("no-", "disable-", "without-")
 
 F = TypeVar("F", bound=Callable[..., Any])
 SortRuleT = TypeVar("SortRuleT")
@@ -159,6 +165,60 @@ def validate_bool_negative_prefix(value: BooleanNegativePrefix) -> BooleanNegati
         raise ConfigurationError("bool_negative_prefix must not be empty")
 
     return value
+
+
+def validate_negative_bool_name_mode(value: NegativeBoolNameMode) -> NegativeBoolNameMode:
+    if value not in NEGATIVE_BOOL_NAME_MODE_VALUES:
+        raise ConfigurationError(
+            f"negative_bool_name_mode must be one of: {', '.join(NEGATIVE_BOOL_NAME_MODE_VALUES)}"
+        )
+
+    return value
+
+
+def validate_negative_bool_name_prefixes(
+    value: NegativeBoolNamePrefixes,
+) -> tuple[str, ...]:
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise ConfigurationError("negative_bool_name_prefixes must be a sequence of strings")
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ConfigurationError("negative_bool_name_prefixes values must be strings")
+        if not item:
+            raise ConfigurationError("negative_bool_name_prefixes values must not be empty")
+        if item in seen:
+            continue
+        result.append(item)
+        seen.add(item)
+
+    return tuple(result)
+
+
+def validate_help_flags(value: HelpFlags) -> tuple[str, ...]:
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise ConfigurationError("help_flags must be a sequence of flag strings")
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str) or not item.startswith("-") or item == "-":
+            raise ConfigurationError("help_flags values must start with '-' or '--'")
+        if item in seen:
+            continue
+        result.append(item)
+        seen.add(item)
+
+    if not result:
+        raise ConfigurationError("help_flags must contain at least one flag")
+
+    return tuple(result)
+
+
+def reserved_names_for_help_flags(help_flags: Sequence[str]) -> list[str]:
+    return [flag.lstrip("-") for flag in help_flags if flag.lstrip("-")]
 
 
 class ExitCode(IntEnum):
@@ -584,6 +644,9 @@ class InterfacyParser:
         expand_model_params (bool): Expand model parameters into nested flags.
         model_expansion_max_depth (int): Max depth for model expansion.
         bool_negative_prefix (str | None): Prefix for generated negative boolean flags.
+        negative_bool_name_mode (str): Behavior for negative-looking bool names.
+        negative_bool_name_prefixes (Sequence[str]): Prefixes treated as negative bool names.
+        help_flags (Sequence[str]): Flag aliases that trigger help output.
         method_skips (Sequence[str] | None): Method names to exclude from class commands.
         parse_recovery_max_attempts (int): Max plugin parse-recovery attempts.
     """
@@ -627,6 +690,9 @@ class InterfacyParser:
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
+        negative_bool_name_mode: NegativeBoolNameMode = "flag_only",
+        negative_bool_name_prefixes: NegativeBoolNamePrefixes = DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
+        help_flags: HelpFlags = DEFAULT_HELP_FLAGS,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: MethodSkips = None,
         parse_recovery_max_attempts: int = MAX_PARSE_RECOVERY_ATTEMPTS,
@@ -656,6 +722,12 @@ class InterfacyParser:
             parse_recovery_max_attempts
         )
         self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
+        self.negative_bool_name_mode = validate_negative_bool_name_mode(negative_bool_name_mode)
+        self.negative_bool_name_prefixes = validate_negative_bool_name_prefixes(
+            negative_bool_name_prefixes
+        )
+        self.help_flags = validate_help_flags(help_flags)
+        self.RESERVED_FLAGS = reserved_names_for_help_flags(self.help_flags)
         self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
             abbreviation_max_generated_len
         )
@@ -822,6 +894,9 @@ class InterfacyParser:
         expand_model_params: bool | None,
         model_expansion_max_depth: int | None,
         bool_negative_prefix: BooleanNegativePrefix | None,
+        negative_bool_name_mode: NegativeBoolNameMode | None,
+        negative_bool_name_prefixes: NegativeBoolNamePrefixes | None,
+        help_flags: HelpFlags | None,
         method_skips: MethodSkips,
         parse_recovery_max_attempts: int | None,
     ) -> None:
@@ -847,6 +922,18 @@ class InterfacyParser:
 
         if bool_negative_prefix is not None:
             self.bool_negative_prefix = validate_bool_negative_prefix(bool_negative_prefix)
+
+        if negative_bool_name_mode is not None:
+            self.negative_bool_name_mode = validate_negative_bool_name_mode(negative_bool_name_mode)
+
+        if negative_bool_name_prefixes is not None:
+            self.negative_bool_name_prefixes = validate_negative_bool_name_prefixes(
+                negative_bool_name_prefixes
+            )
+
+        if help_flags is not None:
+            self.help_flags = validate_help_flags(help_flags)
+            self.RESERVED_FLAGS = reserved_names_for_help_flags(self.help_flags)
 
         if method_skips is not None:
             self.method_skips = validate_method_skips(method_skips)
@@ -938,6 +1025,9 @@ class InterfacyParser:
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         bool_negative_prefix: BooleanNegativePrefix | None = None,
+        negative_bool_name_mode: NegativeBoolNameMode | None = None,
+        negative_bool_name_prefixes: NegativeBoolNamePrefixes | None = None,
+        help_flags: HelpFlags | None = None,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: MethodSkips = None,
         parse_recovery_max_attempts: int | None = None,
@@ -967,6 +1057,9 @@ class InterfacyParser:
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
+            negative_bool_name_mode=negative_bool_name_mode,
+            negative_bool_name_prefixes=negative_bool_name_prefixes,
+            help_flags=help_flags,
             method_skips=method_skips,
             parse_recovery_max_attempts=parse_recovery_max_attempts,
         )

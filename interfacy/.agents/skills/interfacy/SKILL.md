@@ -55,6 +55,7 @@ Hello, Ada! Hello, Ada!
 3. Make the callable signature describe the CLI:
    - Required inputs are positional parameters.
    - Options are keyword/defaulted parameters, often keyword-only.
+   - Boolean options should use plain `bool` defaults. Positive names keep paired toggle behavior; negative-looking `bool = False` names such as `disable_cache` and `without_color` become one-way flags like `--disable-cache` without an inverse alias.
    - Choices are `Literal[...]` or `Enum`.
    - Repeated values are `list[T]` or variadic parameters.
    - Grouped settings are small dataclasses, Pydantic models, or typed config classes.
@@ -73,6 +74,7 @@ Interfacy(print_result=True).run(command)
 - The command function can be called normally from Python tests.
 - Existing functions/classes are reused directly when their signatures and docstrings are already CLI-ready.
 - The CLI does not duplicate parameter names, defaults, choices, or help in a second parser definition.
+- Negative-action booleans stay in ordinary signatures, e.g. `disable_cache: bool = False`; do not add Interfacy-specific annotations just to force `--disable-cache`.
 - Parsing concerns stay at the boundary; business logic stays in ordinary Python functions/classes.
 - Return values are meaningful Python values. Use `print_result=True` when the CLI should display them.
 - Return values, including integers, are command results, not process exit codes.

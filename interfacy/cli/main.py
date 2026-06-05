@@ -152,6 +152,9 @@ def resolve_entrypoint_settings() -> dict[str, Any]:
             "model_expansion_max_depth": None,
             "parse_recovery_max_attempts": None,
             "bool_negative_prefix": None,
+            "negative_bool_name_mode": None,
+            "negative_bool_name_prefixes": None,
+            "help_flags": None,
             "plugins": None,
         },
     )
@@ -181,6 +184,7 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
         description=description,
         epilog=epilog,
         help_layout=_resolve_help_layout(settings),
+        help_flags=settings.get("help_flags") or ("--help",),
     )
     parser.add_argument(
         "target",
@@ -260,6 +264,9 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
         "model_expansion_max_depth",
         "parse_recovery_max_attempts",
         "bool_negative_prefix",
+        "negative_bool_name_mode",
+        "negative_bool_name_prefixes",
+        "help_flags",
         "plugins",
         "backend",
     ):

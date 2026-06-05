@@ -17,6 +17,11 @@
 ```
 
 ```{eval-rst}
+.. autoclass:: interfacy.schema.schema.BooleanMode
+   :members:
+```
+
+```{eval-rst}
 .. autoclass:: interfacy.schema.schema.BooleanBehavior
    :exclude-members: __init__, __new__
 ```

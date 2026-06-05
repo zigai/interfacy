@@ -64,6 +64,19 @@ Hello, Ada! Hello, Ada!
 
 By default, required non-boolean parameters become positional arguments and optional parameters become flags.
 
+Boolean flags follow the callable's name. Positive names keep paired toggle behavior, while negative-looking `bool = False` names become one-way flags:
+
+```python
+def sync(disable_cache: bool = False, verbose: bool = False) -> None:
+    ...
+```
+
+```text
+$ python app.py --disable-cache --verbose
+```
+
+`--disable-cache` is accepted without generating an inverse `--cache` alias.
+
 ## Agent Skill
 
 The official AI agent skill can be installed from this repo.

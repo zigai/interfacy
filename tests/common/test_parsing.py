@@ -358,6 +358,20 @@ class TestBooleanFlags:
         args = parser.parse_args(["--no-value"])
         assert args["value"] is False
 
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_negative_named_bool_is_one_way_flag(self, parser: InterfacyParser):
+        def run(*, no_stdio: bool = False) -> bool:
+            return no_stdio
+
+        parser.add_command(run)
+
+        assert parser.run(args=[]) is False
+        assert parser.run(args=["--no-stdio"]) is True
+
+        result = parser.run(args=["--stdio"])
+        assert isinstance(result, SystemExit)
+        assert result.code == 2
+
 
 class TestEnums:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)

@@ -33,6 +33,7 @@ from interfacy.schema.schema import (
     Argument,
     ArgumentKind,
     BooleanBehavior,
+    BooleanMode,
     Command,
     ParserSchema,
     ValueShape,
@@ -143,6 +144,9 @@ class SchemaBuildContext:
     help_option_sort_effective: list[HelpOptionSortRule]
     help_subcommand_sort_effective: list[HelpSubcommandSortRule]
     bool_negative_prefix: str | None
+    negative_bool_name_mode: str
+    negative_bool_name_prefixes: tuple[str, ...]
+    help_flags: tuple[str, ...]
 
     @classmethod
     def from_parser(cls, parser: InterfacyParser) -> SchemaBuildContext:
@@ -181,6 +185,11 @@ class SchemaBuildContext:
                 )
             ),
             bool_negative_prefix=getattr(parser, "bool_negative_prefix", "no-"),
+            negative_bool_name_mode=getattr(parser, "negative_bool_name_mode", "flag_only"),
+            negative_bool_name_prefixes=tuple(
+                getattr(parser, "negative_bool_name_prefixes", ("no-", "disable-", "without-"))
+            ),
+            help_flags=tuple(getattr(parser, "help_flags", ("--help",))),
         )
 
     def resolve_pipe_targets_by_names(
@@ -761,6 +770,7 @@ class ParserSchemaBuilder:
             help_option_sort_effective=list(
                 getattr(self.context, "help_option_sort_effective", [])
             ),
+            help_flags=self.context.help_flags,
         )
         schema = self.context.transform_schema_with_plugins(schema)
 
@@ -893,8 +903,9 @@ class ParserSchemaBuilder:
         taken_tokens: set[str],
     ) -> None:
         executable_tokens = executable_flag_tokens(executable_flags)
-        if "--help" in executable_tokens:
-            raise ReservedFlagError("--help")
+        for help_flag in self.context.help_flags:
+            if help_flag in executable_tokens:
+                raise ReservedFlagError(help_flag)
 
         for token in executable_tokens:
             if token in taken_tokens:
@@ -1915,18 +1926,31 @@ class ParserSchemaBuilder:
         state.value_plan = FlagValue()
         supports_negative = any(flag.startswith("--") for flag in flags)
         negative_form = None
+        mode = BooleanMode.DUAL
+        state.default_value = spec.default if spec.has_default else False
+        long_flags = [flag for flag in flags if flag.startswith("--")]
+        primary_long_name = long_flags[0][2:] if long_flags else translated_name
+        if (
+            self.context.negative_bool_name_mode == "flag_only"
+            and state.default_value is False
+            and any(
+                primary_long_name.startswith(prefix)
+                for prefix in self.context.negative_bool_name_prefixes
+            )
+        ):
+            supports_negative = False
+            mode = BooleanMode.FLAG_ONLY
+
         if supports_negative:
-            long_flags = [flag for flag in flags if flag.startswith("--")]
-            long_name = long_flags[0][2:] if long_flags else translated_name
             prefix = self.context.bool_negative_prefix
             if prefix is not None:
-                negative_form = f"--{inverted_bool_flag_name(long_name, prefix=prefix)}"
+                negative_form = f"--{inverted_bool_flag_name(primary_long_name, prefix=prefix)}"
 
-        state.default_value = spec.default if spec.has_default else False
         state.boolean_behavior = BooleanBehavior(
             supports_negative=supports_negative,
             negative_form=negative_form,
             default=state.default_value,
+            mode=mode,
         )
 
         return True
@@ -1994,6 +2018,7 @@ class ParserSchemaBuilder:
                 supports_negative=state.boolean_behavior.supports_negative,
                 negative_form=state.boolean_behavior.negative_form,
                 default=argparse.SUPPRESS,
+                mode=state.boolean_behavior.mode,
             )
 
     def build_from_group(

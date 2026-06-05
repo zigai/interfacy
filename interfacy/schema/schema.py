@@ -35,6 +35,13 @@ class ValueShape(str, Enum):
     FLAG = "flag"
 
 
+class BooleanMode(str, Enum):
+    """How a boolean CLI flag should be exposed."""
+
+    DUAL = "dual"
+    FLAG_ONLY = "flag_only"
+
+
 @dataclass
 class BooleanBehavior:
     """
@@ -45,11 +52,13 @@ class BooleanBehavior:
         negative_form (str | None): Negative flag form (e.g., "--no-flag") if any.
         default (bool | str | None): Effective default value for the flag.
             Can be argparse.SUPPRESS (a str sentinel) to suppress the default.
+        mode (BooleanMode): Whether the flag is dual-form or one-way.
     """
 
     supports_negative: bool
     negative_form: str | None
     default: bool | str | None
+    mode: BooleanMode = BooleanMode.DUAL
 
 
 @dataclass
@@ -203,6 +212,7 @@ class ParserSchema:
         metadata (dict[str, Any]): Additional parser metadata.
         executable_flags (list[ExecutableFlag]): Parser-root executable flags.
         help_option_sort_effective (list[HelpOptionSortRule] | None): Effective root option sort.
+        help_flags (tuple[str, ...]): Help flag aliases for synthetic help rows.
     """
 
     raw_description: str | None
@@ -216,6 +226,7 @@ class ParserSchema:
     metadata: dict[str, Any] = field(default_factory=dict)
     executable_flags: list[ExecutableFlag] = field(default_factory=list)
     help_option_sort_effective: list[HelpOptionSortRule] | None = None
+    help_flags: tuple[str, ...] = ("--help",)
 
     @cached_property
     def description(self) -> str | None:
@@ -258,6 +269,7 @@ __all__ = [
     "Argument",
     "ArgumentKind",
     "BooleanBehavior",
+    "BooleanMode",
     "Command",
     "CommandType",
     "ExecutableFlag",

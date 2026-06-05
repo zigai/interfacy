@@ -148,6 +148,18 @@ class InterfacyConfig:
         default=None,
         metadata={"section": "flags"},
     )
+    negative_bool_name_mode: str | None = field(
+        default=None,
+        metadata={"section": "flags"},
+    )
+    negative_bool_name_prefixes: list[str] | None = field(
+        default=None,
+        metadata={"section": "flags"},
+    )
+    help_flags: list[str] | None = field(
+        default=None,
+        metadata={"section": "flags"},
+    )
     plugins: list[str] | None = field(
         default=None,
         metadata={"section": "plugins", "key": "enabled"},
@@ -431,6 +443,33 @@ def _resolve_bool_negative_prefix(value: Any) -> str | None:
     return value
 
 
+def _resolve_negative_bool_name_mode(value: Any) -> str:
+    from interfacy.core import validate_negative_bool_name_mode
+
+    if value is None:
+        return _UNSET
+
+    return validate_negative_bool_name_mode(value)
+
+
+def _resolve_negative_bool_name_prefixes(value: Any) -> tuple[str, ...]:
+    from interfacy.core import validate_negative_bool_name_prefixes
+
+    if value is None:
+        return _UNSET
+
+    return validate_negative_bool_name_prefixes(value)
+
+
+def _resolve_help_flags(value: Any) -> tuple[str, ...]:
+    from interfacy.core import validate_help_flags
+
+    if value is None:
+        return _UNSET
+
+    return validate_help_flags(value)
+
+
 def _resolve_plugin(value: Any) -> InterfacyPlugin:
     if isinstance(value, InterfacyPlugin):
         return value
@@ -488,6 +527,11 @@ _FIELD_RESOLVERS = {
     ),
     "method_skips": lambda value, _config: _resolve_method_skips(value),
     "bool_negative_prefix": lambda value, _config: _resolve_bool_negative_prefix(value),
+    "negative_bool_name_mode": lambda value, _config: _resolve_negative_bool_name_mode(value),
+    "negative_bool_name_prefixes": lambda value, _config: _resolve_negative_bool_name_prefixes(
+        value
+    ),
+    "help_flags": lambda value, _config: _resolve_help_flags(value),
     "plugins": lambda value, _config: _resolve_plugins(value),
 }
 

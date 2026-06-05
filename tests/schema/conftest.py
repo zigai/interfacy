@@ -107,10 +107,14 @@ class FakeParser:
     help_option_sort: list[str] | None = None
     help_subcommand_sort: list[str] | None = None
     abbreviation_max_generated_len: int = 1
+    bool_negative_prefix: str | None = "no-"
+    negative_bool_name_mode: str = "flag_only"
+    negative_bool_name_prefixes: tuple[str, ...] = ("no-", "disable-", "without-")
+    help_flags: tuple[str, ...] = ("--help",)
 
     def __post_init__(self) -> None:
         self.COMMAND_KEY = self.command_key
-        self.RESERVED_FLAGS = list(self.reserved_flags)
+        self.RESERVED_FLAGS = [flag.lstrip("-") for flag in self.help_flags]
         self.flag_strategy = self.flag_strategy or DefaultFlagStrategy(style="required_positional")
         self.abbreviation_gen = self.abbreviation_gen or DefaultAbbreviationGenerator(
             max_generated_len=self.abbreviation_max_generated_len

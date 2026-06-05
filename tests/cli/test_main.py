@@ -378,6 +378,34 @@ def test_main_config_boolean_negative_prefix(
     assert "False" in captured.out
 
 
+def test_main_negative_named_boolean_uses_one_way_flag(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
+        "\n".join(
+            [
+                "def run(no_stdio: bool = False) -> bool:",
+                "    return no_stdio",
+                "",
+            ]
+        ),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:run", "--no-stdio"])
+
+    assert excinfo.value.code == ExitCode.SUCCESS
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:run", "--stdio"])
+
+    assert excinfo.value.code == 2
+
+
 def test_main_configure_interfacy_hook_can_register_plugins(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

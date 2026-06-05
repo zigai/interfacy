@@ -54,7 +54,7 @@ def test_root_help_groups_commands_before_ungrouped(parser, capsys) -> None:
     assert sum(1 for line in lines if line.strip().startswith("clone")) == 1
     assert sum(1 for line in lines if line.strip().startswith("init")) == 1
     assert sum(1 for line in lines if line.strip().startswith("status")) == 1
-    assert sum(1 for line in lines if line.strip().startswith("--help")) == 1
+    assert sum(1 for line in lines if "--help" in line and "Show " in line) == 1
     assert "commands:" not in combined.lower()
     assert "start a working area:" not in combined
     assert heading_idx < clone_idx
@@ -143,7 +143,7 @@ def test_nested_help_groups_render_with_adaptive_layout(backend: str, capsys) ->
     assert sum(1 for line in lines if line.strip().startswith("clone")) == 1
     assert sum(1 for line in lines if line.strip().startswith("init")) == 1
     assert sum(1 for line in lines if line.strip().startswith("status")) == 1
-    assert sum(1 for line in lines if line.strip().startswith("--help")) == 1
+    assert sum(1 for line in lines if "--help" in line and "Show " in line) == 1
     assert "commands:" not in combined.lower()
     assert "setup" in combined
     assert "setup:" not in combined

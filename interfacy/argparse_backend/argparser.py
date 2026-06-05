@@ -26,10 +26,15 @@ from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.argparse_backend.runner import ArgparseRunner
 from interfacy.console import warn
 from interfacy.core import (
+    DEFAULT_HELP_FLAGS,
+    DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
     BooleanNegativePrefix,
     ExitCode,
+    HelpFlags,
     InterfacyParser,
     InterspersedOptionValueError,
+    NegativeBoolNameMode,
+    NegativeBoolNamePrefixes,
 )
 from interfacy.exceptions import (
     ConfigurationError,
@@ -49,7 +54,14 @@ from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
 from interfacy.pipe import PipeTargets
 from interfacy.plugins import InterfacyPlugin
-from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
+from interfacy.schema.schema import (
+    Argument,
+    ArgumentKind,
+    BooleanMode,
+    Command,
+    ParserSchema,
+    ValueShape,
+)
 from interfacy.schema.value_plan import normalize_argument_values
 from interfacy.util import (
     extract_optional_union_list,
@@ -201,6 +213,9 @@ class Argparser(InterfacyParser):
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
+        negative_bool_name_mode: NegativeBoolNameMode = "flag_only",
+        negative_bool_name_prefixes: NegativeBoolNamePrefixes = DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
+        help_flags: HelpFlags = DEFAULT_HELP_FLAGS,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int = 3,
@@ -239,6 +254,9 @@ class Argparser(InterfacyParser):
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
+            negative_bool_name_mode=negative_bool_name_mode,
+            negative_bool_name_prefixes=negative_bool_name_prefixes,
+            help_flags=help_flags,
             plugins=plugins,
             method_skips=method_skips,
             parse_recovery_max_attempts=parse_recovery_max_attempts,
@@ -251,7 +269,10 @@ class Argparser(InterfacyParser):
 
     def _new_parser(self, name: str | None = None) -> ArgumentParser:
         return ArgumentParser(
-            name, formatter_class=self.formatter_class, help_layout=self.help_layout
+            name,
+            formatter_class=self.formatter_class,
+            help_layout=self.help_layout,
+            help_flags=self.help_flags,
         )
 
     def _add_parameter_to_parser(
@@ -511,6 +532,13 @@ class Argparser(InterfacyParser):
             extra["required"] = param.is_required
 
         if is_bool_param:
+            if self._is_negative_bool_flag_only(param, flags):
+                extra["action"] = "store_true"
+                extra["default"] = False
+                extra.pop("_interfacy_flags", None)
+
+                return extra
+
             extra["action"] = argparse.BooleanOptionalAction
             extra["default"] = param.default if not param.is_required else False
             extra.pop("_interfacy_flags", None)
@@ -523,6 +551,23 @@ class Argparser(InterfacyParser):
         extra.pop("_interfacy_flags", None)
 
         return extra
+
+    def _is_negative_bool_flag_only(self, param: Parameter, flags: tuple[str, ...]) -> bool:
+        if self.negative_bool_name_mode != "flag_only":
+            return False
+
+        default_value = param.default if param.has_default else False
+        if default_value is not False:
+            return False
+
+        long_flags = [flag for flag in flags if flag.startswith("--")]
+        if not long_flags:
+            return False
+
+        primary_long_name = long_flags[0][2:]
+        return any(
+            primary_long_name.startswith(prefix) for prefix in self.negative_bool_name_prefixes
+        )
 
     def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
         help_text = arg.help or ""
@@ -579,6 +624,9 @@ class Argparser(InterfacyParser):
 
     @staticmethod
     def _boolean_action_kwargs(arg: Argument) -> dict[str, Any]:
+        if arg.boolean_behavior is not None and arg.boolean_behavior.mode is BooleanMode.FLAG_ONLY:
+            return {"action": "store_true"}
+
         if (
             arg.boolean_behavior is not None
             and arg.boolean_behavior.negative_form is not None

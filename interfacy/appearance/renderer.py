@@ -80,15 +80,33 @@ class SchemaHelpRenderer:
         """
         if len(schema.commands) == 1:
             cmd = next(iter(schema.commands.values()))
-            return self.render_command_help(
-                cmd,
-                prog,
-                parser_description=schema.description,
-                parser_epilog=schema.epilog,
-                parser_executable_flags=schema.executable_flags,
-            )
+            previous_help_argument = self._help_argument
+            if previous_help_argument is _DEFAULT_HELP_ARGUMENT:
+                self._help_argument = _make_help_argument(
+                    self.layout.help_option_description,
+                    flags=schema.help_flags,
+                )
+            try:
+                return self.render_command_help(
+                    cmd,
+                    prog,
+                    parser_description=schema.description,
+                    parser_epilog=schema.epilog,
+                    parser_executable_flags=schema.executable_flags,
+                )
+            finally:
+                self._help_argument = previous_help_argument
 
-        return self._render_multi_command_help(schema, prog)
+        previous_help_argument = self._help_argument
+        if previous_help_argument is _DEFAULT_HELP_ARGUMENT:
+            self._help_argument = _make_help_argument(
+                self.layout.help_option_description,
+                flags=schema.help_flags,
+            )
+        try:
+            return self._render_multi_command_help(schema, prog)
+        finally:
+            self._help_argument = previous_help_argument
 
     def render_command_help(
         self,

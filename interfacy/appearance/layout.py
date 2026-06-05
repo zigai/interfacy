@@ -1542,6 +1542,11 @@ class HelpLayout:
         if base_flag and not no_flag:
             no_flag = f"--no-{base_flag[2:]}"
 
+        from interfacy.schema.schema import BooleanMode
+
+        if arg.boolean_behavior is not None and arg.boolean_behavior.mode is BooleanMode.FLAG_ONLY:
+            return longs[0]
+
         if arg.boolean_behavior is not None:
             default_value = arg.boolean_behavior.default
         else:

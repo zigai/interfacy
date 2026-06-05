@@ -159,6 +159,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         metavar: str | None = None,
         formatter_class: type[argparse.HelpFormatter] | None = None,
         help_layout: "HelpLayout | None" = None,
+        help_flags: Sequence[str] = ("--help",),
     ) -> None:
         super().__init__(
             option_strings,
@@ -174,6 +175,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         self.nest_separator = nest_separator
         self._child_formatter_class = formatter_class or InterfacyHelpFormatter
         self._child_help_layout = help_layout
+        self._child_help_flags = tuple(help_flags)
 
     def add_parser(  # type: ignore[override]
         self,
@@ -251,6 +253,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
                 nest_path=nested_components,
                 nest_separator=self.nest_separator,
                 exit_on_error=exit_on_error,
+                help_flags=self._child_help_flags,
                 **kwargs,
             ),
         )
@@ -303,6 +306,7 @@ class ArgumentParser(argparse.ArgumentParser):
         *,
         help_layout: "HelpLayout | None" = None,
         help_position: int | None = None,
+        help_flags: Sequence[str] = ("--help",),
         color: bool | None = None,
     ) -> None:
         if parents is None:
@@ -354,16 +358,19 @@ class ArgumentParser(argparse.ArgumentParser):
         self._schema: ParserSchema | None = None
         self._interfacy_raise_parse_errors = False
         self.add_help = add_help
+        self.help_flags = tuple(help_flags)
 
         if add_help:
             if "-" in self.prefix_chars:
-                help_flags = ["--help"]
+                help_flags_to_add = [flag for flag in self.help_flags if flag.startswith("-")] or [
+                    "--help"
+                ]
             else:
                 default_prefix = self.prefix_chars[0]
-                help_flags = [default_prefix * 2 + "help"]
+                help_flags_to_add = [default_prefix * 2 + "help"]
 
             self.add_argument(
-                *help_flags,
+                *help_flags_to_add,
                 action="help",
                 default=argparse.SUPPRESS,
                 help=argparse._("Show this help message and exit"),

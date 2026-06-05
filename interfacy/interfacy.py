@@ -12,7 +12,17 @@ from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.argparse_backend.argparser import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser, NestedSubParsersAction
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
-from interfacy.core import AbbreviationScope, BooleanNegativePrefix, ExitCode, InterfacyParser
+from interfacy.core import (
+    DEFAULT_HELP_FLAGS,
+    DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
+    AbbreviationScope,
+    BooleanNegativePrefix,
+    ExitCode,
+    HelpFlags,
+    InterfacyParser,
+    NegativeBoolNameMode,
+    NegativeBoolNamePrefixes,
+)
 from interfacy.exceptions import ConfigurationError
 from interfacy.executable_flag import ExecutableFlag
 from interfacy.group import CommandGroup
@@ -76,6 +86,9 @@ class Interfacy(InterfacyParser):
         expand_model_params: Expand supported model parameters into nested CLI flags.
         model_expansion_max_depth: Maximum model expansion depth. Must be >= 1.
         bool_negative_prefix: Prefix used for generated negative boolean flags.
+        negative_bool_name_mode: Behavior for negative-looking bool names.
+        negative_bool_name_prefixes: Prefixes treated as negative bool names.
+        help_flags: Flag aliases that trigger help output.
         plugins: Plugins to register during initialization.
         method_skips: Class method names to skip when registering class commands.
         parse_recovery_max_attempts: Maximum plugin recovery attempts. Must be >= 0.
@@ -124,6 +137,9 @@ class Interfacy(InterfacyParser):
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
+        negative_bool_name_mode: NegativeBoolNameMode = "flag_only",
+        negative_bool_name_prefixes: NegativeBoolNamePrefixes = DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
+        help_flags: HelpFlags = DEFAULT_HELP_FLAGS,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int = 3,
@@ -165,6 +181,9 @@ class Interfacy(InterfacyParser):
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
                 bool_negative_prefix=bool_negative_prefix,
+                negative_bool_name_mode=negative_bool_name_mode,
+                negative_bool_name_prefixes=negative_bool_name_prefixes,
+                help_flags=help_flags,
                 plugins=plugins,
                 method_skips=method_skips,
                 parse_recovery_max_attempts=parse_recovery_max_attempts,
@@ -221,6 +240,9 @@ class Interfacy(InterfacyParser):
                 expand_model_params=expand_model_params,
                 model_expansion_max_depth=model_expansion_max_depth,
                 bool_negative_prefix=bool_negative_prefix,
+                negative_bool_name_mode=negative_bool_name_mode,
+                negative_bool_name_prefixes=negative_bool_name_prefixes,
+                help_flags=help_flags,
                 plugins=plugins,
                 method_skips=method_skips,
                 parse_recovery_max_attempts=parse_recovery_max_attempts,
@@ -284,6 +306,9 @@ class Interfacy(InterfacyParser):
         expand_model_params: bool | None = None,
         model_expansion_max_depth: int | None = None,
         bool_negative_prefix: BooleanNegativePrefix | None = None,
+        negative_bool_name_mode: NegativeBoolNameMode | None = None,
+        negative_bool_name_prefixes: NegativeBoolNamePrefixes | None = None,
+        help_flags: HelpFlags | None = None,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int | None = None,
@@ -321,6 +346,9 @@ class Interfacy(InterfacyParser):
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
+            negative_bool_name_mode=negative_bool_name_mode,
+            negative_bool_name_prefixes=negative_bool_name_prefixes,
+            help_flags=help_flags,
             plugins=plugins,
             method_skips=method_skips,
             parse_recovery_max_attempts=parse_recovery_max_attempts,

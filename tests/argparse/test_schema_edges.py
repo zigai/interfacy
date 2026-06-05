@@ -27,6 +27,32 @@ def test_build_parser_without_commands_raises_configuration_error() -> None:
         parser.build_parser()
 
 
+def test_negative_named_bool_help_shows_only_declared_flag() -> None:
+    parser = Argparser(sys_exit_enabled=False)
+
+    def run(*, no_stdio: bool = False) -> bool:
+        return no_stdio
+
+    parser.add_command(run)
+    help_text = parser.build_parser().format_help()
+
+    assert "--no-stdio" in help_text
+    assert "--stdio" not in help_text
+    assert "--help" in help_text
+
+
+def test_configured_help_alias_accepts_short_help_flag() -> None:
+    parser = Argparser(sys_exit_enabled=False, help_flags=("-h", "--help"))
+
+    def run() -> None:
+        """Run command."""
+
+    parser.add_command(run)
+    help_text = parser.build_parser().format_help()
+
+    assert "-h, --help" in help_text
+
+
 def test_install_tab_completion_warns_when_argcomplete_is_missing(
     monkeypatch,
     capsys,

@@ -201,6 +201,31 @@ class TestClickBooleanFlags:
         assert parser.run(args=[]) is False
         assert parser.run(args=["--value"]) is True
 
+    @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
+    def test_negative_named_bool_help_shows_only_declared_flag(self, parser):
+        def run(*, no_stdio: bool = False) -> bool:
+            return no_stdio
+
+        parser.add_command(run)
+        command = parser.build_parser()
+        help_text = command.get_help(click.Context(command))
+
+        assert "--no-stdio" in help_text
+        assert "--stdio" not in help_text
+        assert "--help" in help_text
+
+    def test_configured_help_alias_accepts_short_help_flag(self) -> None:
+        parser = ClickParser(help_flags=("-h", "--help"), sys_exit_enabled=False)
+
+        def run() -> None:
+            """Run command."""
+
+        parser.add_command(run)
+        command = parser.build_parser()
+        help_text = command.get_help(click.Context(command))
+
+        assert "-h, --help" in help_text
+
     def test_parser_help_position_keeps_long_executable_flag_help_inline(self) -> None:
         parser = ClickParser(
             help_position=42,

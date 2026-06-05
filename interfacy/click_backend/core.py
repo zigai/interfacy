@@ -33,10 +33,15 @@ from interfacy.click_backend.commands import (
 )
 from interfacy.click_backend.types import ChoiceParamType, ClickFuncParamType
 from interfacy.core import (
+    DEFAULT_HELP_FLAGS,
+    DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
     BooleanNegativePrefix,
     ExitCode,
+    HelpFlags,
     InterfacyParser,
     InterspersedOptionValueError,
+    NegativeBoolNameMode,
+    NegativeBoolNamePrefixes,
 )
 from interfacy.exceptions import (
     ConfigurationError,
@@ -57,7 +62,14 @@ from interfacy.pipe import PipeTargets
 from interfacy.plugins import InterfacyPlugin
 from interfacy.runner import SchemaRunner
 from interfacy.schema.model_argument_mapper import ExpandedModelValidationError
-from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
+from interfacy.schema.schema import (
+    Argument,
+    ArgumentKind,
+    BooleanMode,
+    Command,
+    ParserSchema,
+    ValueShape,
+)
 from interfacy.schema.value_plan import normalize_argument_values
 
 logger = get_logger(__name__)
@@ -109,6 +121,9 @@ class ClickParser(InterfacyParser):
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
+        negative_bool_name_mode: NegativeBoolNameMode = "flag_only",
+        negative_bool_name_prefixes: NegativeBoolNamePrefixes = DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
+        help_flags: HelpFlags = DEFAULT_HELP_FLAGS,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int = 3,
@@ -145,6 +160,9 @@ class ClickParser(InterfacyParser):
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
+            negative_bool_name_mode=negative_bool_name_mode,
+            negative_bool_name_prefixes=negative_bool_name_prefixes,
+            help_flags=help_flags,
             plugins=plugins,
             method_skips=method_skips,
             parse_recovery_max_attempts=parse_recovery_max_attempts,
@@ -269,6 +287,10 @@ class ClickParser(InterfacyParser):
             flag for flag in argument.flags if flag.startswith("-") and not flag.startswith("--")
         ]
         boolean_behavior = argument.boolean_behavior
+        if boolean_behavior is not None and boolean_behavior.mode is BooleanMode.FLAG_ONLY:
+            param_decls.extend(argument.flags)
+            return param_decls
+
         if boolean_behavior is not None and boolean_behavior.supports_negative and long_flags:
             positive = long_flags[0]
             negative = boolean_behavior.negative_form or ""
@@ -515,6 +537,7 @@ class ClickParser(InterfacyParser):
                 name=command.cli_name,
                 help=command.description,
                 params=params,
+                context_settings={"help_option_names": list(self.help_flags)},
             )
             self._attach_param_metadata(
                 click_command, param_bindings, arg_specs, suppress_defaults, command
@@ -532,7 +555,10 @@ class ClickParser(InterfacyParser):
             name=command.cli_name,
             help=command.description,
             params=params,
-            context_settings={"allow_interspersed_args": False},
+            context_settings={
+                "allow_interspersed_args": False,
+                "help_option_names": list(self.help_flags),
+            },
             invoke_without_command=relaxed_parse,
             no_args_is_help=not relaxed_parse,
         )
@@ -591,6 +617,7 @@ class ClickParser(InterfacyParser):
                 name="main",
                 help=schema.description,
                 params=root_params,
+                context_settings={"help_option_names": list(self.help_flags)},
                 invoke_without_command=relaxed_parse,
                 no_args_is_help=not relaxed_parse,
             )
