@@ -66,10 +66,12 @@ full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
 test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1"]
 docs = [
+    "beautifulsoup4",
     "click>=8.3.1",
-    "myst-parser",
-    "sphinx",
-    "sphinx-book-theme",
+    "furo",
+    "jinja2 == 3.1.6",
+    "myst-parser == 4.0.1",
+    "sphinx == 8.0.2",
     "sphinx-copybutton",
     "sphinx-notfound-page",
     "sphinxcontrib-mermaid",
