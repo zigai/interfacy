@@ -54,13 +54,13 @@ interfacy = "interfacy.cli.main:main"
 dev = [
     "pytest>=9.0.3",
     "pytest-mock",
-    "ruff==0.15.15",
+    "ruff==0.15.16",
     "pre-commit>=4.6.0",
     "coverage>=7.14.1",
     "pyrefly>=1.0.0",
     "click>=8.3.1",
     "argcomplete",
-    "rattle-lint>=2.1.0",
+    "rattle-lint>=2.1.1",
 ]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
