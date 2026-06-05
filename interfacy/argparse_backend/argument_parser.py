@@ -606,6 +606,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 "nest_separator": self.nest_separator,
                 "formatter_class": self.formatter_class,
                 "help_layout": self._interfacy_help_layout,
+                "help_flags": self.help_flags,
             }
         )
 

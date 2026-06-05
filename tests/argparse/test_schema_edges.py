@@ -53,6 +53,18 @@ def test_configured_help_alias_accepts_short_help_flag() -> None:
     assert "-h, --help" in help_text
 
 
+def test_configured_help_alias_applies_to_subcommands(capsys) -> None:
+    parser = Argparser(sys_exit_enabled=False, help_flags=("-h", "--help"))
+    parser.add_command(alpha)
+    parser.add_command(beta)
+
+    result = parser.run(args=["alpha", "-h"])
+
+    assert isinstance(result, SystemExit)
+    assert result.code == 0
+    assert "-h, --help" in capsys.readouterr().out
+
+
 def test_install_tab_completion_warns_when_argcomplete_is_missing(
     monkeypatch,
     capsys,
