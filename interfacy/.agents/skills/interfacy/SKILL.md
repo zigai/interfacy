@@ -1,6 +1,6 @@
 ---
 name: interfacy
-description: High-level guidance for using Interfacy for creating CLIs.
+description: Use when designing, building, reviewing, or refactoring Python CLIs with Interfacy.
 ---
 
 # Interfacy
