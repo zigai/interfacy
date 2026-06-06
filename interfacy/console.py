@@ -30,13 +30,12 @@ def log_error(tag: str, message: str) -> None:
     error(formatted)
 
 
-def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None:
+def log_exception(_tag: str, exc: BaseException, *, full_traceback: bool) -> None:
     if full_traceback:
         error(traceback.format_exc())
 
     exception_str = type_name(str(type(exc))) + ": " + str(exc)
-    message = f"[{tag}] {colored(exception_str, color='red')}"
-    message = colored(message, color="red")
+    message = colored(exception_str, color="red")
     error(message)
 
 
