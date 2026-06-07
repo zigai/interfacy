@@ -41,29 +41,29 @@ BUILTIN_TYPES = {
 TokenItem = tuple[int, Token, str]
 
 
-def _is_whitespace(token: Token, value: str) -> bool:
+def is_whitespace(token: Token, value: str) -> bool:
     return token in Text and not value.strip()
 
 
-def _next_significant(tokens: list[TokenItem], start: int) -> TokenItem | None:
+def next_significant(tokens: list[TokenItem], start: int) -> TokenItem | None:
     for item in tokens[start:]:
-        if not _is_whitespace(item[1], item[2]):
+        if not is_whitespace(item[1], item[2]):
             return item
     return None
 
 
-def _previous_significant(tokens: list[TokenItem], start: int) -> TokenItem | None:
+def previous_significant(tokens: list[TokenItem], start: int) -> TokenItem | None:
     for item in reversed(tokens[:start]):
-        if not _is_whitespace(item[1], item[2]):
+        if not is_whitespace(item[1], item[2]):
             return item
     return None
 
 
-def _is_capitalized_name(value: str) -> bool:
+def is_capitalized_name(value: str) -> bool:
     return bool(value) and value[0].isupper()
 
 
-def _darker_modern_token(
+def darker_modern_token(
     token: Token,
     value: str,
     *,
@@ -79,7 +79,7 @@ def _darker_modern_token(
         resolved = Name.Class
     elif token in Name.Builtin and next_value == "(":
         resolved = Name.Function
-    elif token is Name and _is_capitalized_name(value):
+    elif token is Name and is_capitalized_name(value):
         resolved = Name.Class
     elif token is Name and (next_value == "(" or (previous_value == "." and next_value == "(")):
         resolved = Name.Function
@@ -96,11 +96,11 @@ class DarkerModernPythonLexer(PythonLexer):
         tokens = list(super().get_tokens_unprocessed(text))
 
         for position, (index, token, value) in enumerate(tokens):
-            previous_token = _previous_significant(tokens, position)
-            next_token = _next_significant(tokens, position + 1)
+            previous_token = previous_significant(tokens, position)
+            next_token = next_significant(tokens, position + 1)
             yield (
                 index,
-                _darker_modern_token(
+                darker_modern_token(
                     token,
                     value,
                     previous_value=previous_token[2] if previous_token else "",
