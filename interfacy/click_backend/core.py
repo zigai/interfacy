@@ -346,6 +346,7 @@ class ClickParser(InterfacyParser):
         if argument.value_shape == ValueShape.LIST:
             if not suppress and not argument.required:
                 attrs["default"] = default
+
             return InterfacyListOption([param_name, *argument.flags], **attrs), suppress
 
         if argument.value_shape == ValueShape.TUPLE and isinstance(argument.nargs, int):
@@ -648,6 +649,7 @@ class ClickParser(InterfacyParser):
         )
         click_command.interfacy_parser_schema = schema
         click_command.interfacy_epilog = self._combine_epilog(cmd.epilog, schema.epilog)
+
         return click_command
 
     def build_parser(self) -> click.Command:
@@ -723,6 +725,7 @@ class ClickParser(InterfacyParser):
             )
             if relaxed_parse and not combined_args:
                 return namespace
+
             cmd_name, sub_cmd, remaining = command.resolve_command(ctx, combined_args)
             if not isinstance(sub_cmd, (InterfacyClickCommand, InterfacyClickGroup)):
                 raise ConfigurationError(f"Unexpected command type from click: {type(sub_cmd)!r}")
@@ -789,6 +792,7 @@ class ClickParser(InterfacyParser):
     def _normalize_argument_value(self, argument: Argument, bucket: dict[str, Any]) -> None:
         if argument.name not in bucket:
             return
+
         value = bucket[argument.name]
         if argument.value_shape == ValueShape.TUPLE and isinstance(value, (list, tuple)):
             bucket[argument.name] = self._convert_tuple_value(argument, value)
@@ -810,6 +814,7 @@ class ClickParser(InterfacyParser):
     def _is_single_leaf_schema(self, schema: ParserSchema) -> Command | None:
         if len(schema.commands) != 1 or schema.is_multi_command:
             return None
+
         single_cmd = next(iter(schema.commands.values()))
         if single_cmd.is_leaf:
             return single_cmd
@@ -1040,6 +1045,7 @@ class ClickParser(InterfacyParser):
             else:
                 namespace = self._parse_root_command_namespace(root, args)
             namespace = self._finish_parsed_namespace(namespace)
+
             return self._apply_after_parse_plugins(
                 namespace,
                 args=args,
@@ -1048,8 +1054,9 @@ class ClickParser(InterfacyParser):
         except InterspersedOptionValueError as exc:
             raise self._click_bad_parameter_for_interspersed(exc) from exc
         except ExecutableFlagTriggeredError as exc:
-            exit_code = execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
-            raise SystemExit(exit_code) from None
+            raise SystemExit(
+                execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
+            ) from None
         except click.UsageError as exc:
             if not self.plugins or self._last_schema is None:
                 raise
@@ -1069,6 +1076,7 @@ class ClickParser(InterfacyParser):
                         args=args,
                         schema=self._last_schema,
                     )
+
             raise
         finally:
             self._restore_required_options(relaxed_required_params)
@@ -1235,13 +1243,16 @@ class ClickParser(InterfacyParser):
                 return parse_payload
 
             parsed_args, namespace = parse_payload
+
             if can_handle_sigint:
                 signal.signal(signal.SIGINT, self._sigint_handler)
+
             try:
                 run_ok, run_payload = self._execute_schema_runner(namespace, parsed_args)
             finally:
                 if can_handle_sigint:
                     signal.signal(signal.SIGINT, original_handler)
+
             if not run_ok:
                 return run_payload
 
@@ -1250,6 +1261,7 @@ class ClickParser(InterfacyParser):
                 self.result_display_fn(result)
 
             self.exit(ExitCode.SUCCESS)
+
             return result
         finally:
             if registration_snapshot is not None:

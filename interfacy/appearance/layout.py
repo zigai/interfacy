@@ -389,6 +389,7 @@ class HelpLayout:
         prefix = rendered[: match.start()]
         suffix = rendered[match.end() :]
         removed_width = match.end() - match.start()
+
         if is_help_option and self.keep_empty_default_slot_for_help:
             slot_width = match.end() - match.start()
             return f"{prefix}{' ' * slot_width}{suffix}"
@@ -430,6 +431,7 @@ class HelpLayout:
         is_required = param.is_required and not is_varargs
         if is_required and not param.is_typed:
             return ""
+
         parts: list[str] = []
 
         if self._param_is_bool(param):
@@ -997,6 +999,7 @@ class HelpLayout:
                     allow_none=False,
                 )
             )
+
         active_rules = resolve_help_subcommand_sort_rules(
             self.help_subcommand_sort_rules,
             value_name=f"{self.__class__.__name__}.help_subcommand_sort_rules",
@@ -1232,6 +1235,7 @@ class HelpLayout:
                 return max(base, desired)
 
             return base
+
         desired = align_idx + 1  # align to target column (indent=2)
         return max(base, desired)
 
@@ -1758,6 +1762,7 @@ class HelpLayout:
                     allow_none=False,
                 )
             )
+
         active_rules = resolve_help_option_sort_rules(
             self.help_option_sort_rules,
             value_name=f"{self.__class__.__name__}.help_option_sort_rules",

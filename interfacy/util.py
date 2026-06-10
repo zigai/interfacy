@@ -299,7 +299,6 @@ def _strip_qualified_names(name: str) -> str:
         if ch in {"'", '"'}:
             end = _consume_quoted_segment(name, index)
             parts.append(name[index:end])
-
             index = end
             continue
 
@@ -307,7 +306,6 @@ def _strip_qualified_names(name: str) -> str:
             end = _consume_dotted_identifier(name, index)
             token = name[index:end]
             parts.append(token.split(".")[-1])
-
             index = end
             continue
 
@@ -328,6 +326,7 @@ def resolve_type_alias(annotation: Any) -> Any:
         value = _resolve_type_alias_value(annotation)
         if value is _MISSING:
             break
+
         annotation = value
 
     return annotation
@@ -541,12 +540,14 @@ def format_default_for_help(value: Any) -> str:
     if isinstance(value, str):
         if value == "":
             return '""'
+
         match = _PATH_DEFAULT_REPR_RE.fullmatch(value.strip())
         if match is not None:
             try:
                 parsed = ast.literal_eval(match.group(1))
             except (SyntaxError, ValueError):
                 parsed = None
+
             if isinstance(parsed, str):
                 return repr(parsed)
 

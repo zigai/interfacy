@@ -105,6 +105,7 @@ def get_arg_flags_for_parameter(
         if not allocation_state.consumed_required_list_positional:
             allocation_state.consumed_required_list_positional = True
             return (name,)
+
         param = FlagParamView(param, is_required=False)
 
     return strategy.get_arg_flags(name, param, taken_flags, abbrev_gen)

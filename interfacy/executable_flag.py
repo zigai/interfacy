@@ -27,8 +27,7 @@ class ExecutableFlag:
             raise ConfigurationError("ExecutableFlag.flags must contain at least one flag token")
 
         if len(set(flags)) != len(flags):
-            duplicate = next(flag for flag in flags if flags.count(flag) > 1)
-            raise ReservedFlagError(duplicate)
+            raise ReservedFlagError(next(flag for flag in flags if flags.count(flag) > 1))
 
         for flag in flags:
             if not isinstance(flag, str) or not flag.startswith("-") or flag == "-":
@@ -79,8 +78,10 @@ def normalize_executable_flags(
         for flag_name in flag.flags:
             if flag_name == "--help":
                 raise ReservedFlagError(flag_name)
+
             if flag_name in seen_tokens:
                 raise ReservedFlagError(flag_name)
+
             seen_tokens.add(flag_name)
 
         normalized.append(flag)

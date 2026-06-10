@@ -69,8 +69,10 @@ def validate_method_skips(value: Sequence[str] | None) -> list[str] | None:
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError("method_skips values must be strings")
+
         if item in seen:
             continue
+
         result.append(item)
         seen.add(item)
 
@@ -151,6 +153,7 @@ class CommandGroup:
         for attr_name in dir(type(command)):
             if attr_name.startswith("_") or attr_name == "__call__":
                 continue
+
             attr = getattr(type(command), attr_name, None)
             if callable(attr):
                 return True

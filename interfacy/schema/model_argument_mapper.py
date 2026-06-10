@@ -88,6 +88,7 @@ class ModelArgumentMapper:
             )
         except OBJINSPECT_CLASS_ERRORS:
             return False
+
         init_method = cls_info.init_method
         if init_method is None:
             return False
@@ -172,6 +173,7 @@ class ModelArgumentMapper:
                 description = field_info.metadata.get("description") or field_info.metadata.get(
                     "help"
                 )
+
             if description is None:
                 description = arg_docs.get(field_info.name)
 
@@ -270,6 +272,7 @@ class ModelArgumentMapper:
         for param in init_method.params:
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
+
             result.append(
                 ModelField(
                     name=param.name,
@@ -324,6 +327,7 @@ class ModelArgumentMapper:
         for arg in arguments:
             if arg.is_expanded_from is None:
                 continue
+
             grouped.setdefault(arg.is_expanded_from, []).append(arg)
 
         return grouped
@@ -401,6 +405,7 @@ class ModelArgumentMapper:
 
         if is_dataclass(model_type):
             return asdict(instance)
+
         dumped_values = self._dump_model_instance(instance)
         if dumped_values is not None:
             return dumped_values
@@ -440,6 +445,7 @@ class ModelArgumentMapper:
         for key in self._plain_class_param_annotations(model_type):
             if not hasattr(instance, key):
                 continue
+
             values[key] = getattr(instance, key)
 
         return values
@@ -464,6 +470,7 @@ class ModelArgumentMapper:
             path = arg.expansion_path[1:] if arg.expansion_path else ()
             if not path:
                 continue
+
             current = values
             for part in path[:-1]:
                 current = current.setdefault(part, {})
@@ -570,6 +577,7 @@ class ModelArgumentMapper:
         for arg in group:
             if arg.expansion_path not in provided_paths or not arg.flags:
                 continue
+
             candidate = (len(arg.expansion_path), arg.flags[0])
             if best is None or candidate[0] > best[0]:
                 best = candidate
@@ -583,6 +591,7 @@ class ModelArgumentMapper:
         for value in values:
             if value in seen:
                 continue
+
             seen.add(value)
             deduped.append(value)
 
@@ -643,6 +652,7 @@ class ModelArgumentMapper:
             )
         except OBJINSPECT_CLASS_ERRORS:
             return []
+
         init_method = cls_info.init_method
         if init_method is None:
             return []
@@ -651,6 +661,7 @@ class ModelArgumentMapper:
         for param in init_method.params:
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
+
             result.append(
                 ModelField(
                     name=param.name,
@@ -735,6 +746,7 @@ class ModelArgumentMapper:
             )
         except OBJINSPECT_CLASS_ERRORS:
             return {}
+
         init_method = cls_info.init_method
         if init_method is None:
             return {}
@@ -743,6 +755,7 @@ class ModelArgumentMapper:
         for param in init_method.params:
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
+
             annotations[param.name] = param.type if param.is_typed else None
 
         return annotations

@@ -148,8 +148,10 @@ def validate_method_skips(value: MethodSkips) -> list[str]:
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError("method_skips values must be strings")
+
         if item in seen:
             continue
+
         result.append(item)
         seen.add(item)
 
@@ -187,10 +189,13 @@ def validate_negative_bool_name_prefixes(
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError("negative_bool_name_prefixes values must be strings")
+
         if not item:
             raise ConfigurationError("negative_bool_name_prefixes values must not be empty")
+
         if item in seen:
             continue
+
         result.append(item)
         seen.add(item)
 
@@ -206,8 +211,10 @@ def validate_help_flags(value: HelpFlags) -> tuple[str, ...]:
     for item in value:
         if not isinstance(item, str) or not item.startswith("-") or item == "-":
             raise ConfigurationError("help_flags values must start with '-' or '--'")
+
         if item in seen:
             continue
+
         result.append(item)
         seen.add(item)
 
@@ -443,13 +450,16 @@ class AncestorOptions:
                 value = args[index]
                 if value == "--" or self._find_nearest_option_owner(value, command_chain):
                     break
+
                 if (
                     command_chain
                     and command_chain[-1].subcommands
                     and self._match_command_name(command_chain[-1].subcommands, value)
                 ):
                     break
+
                 index += 1
+
             return index
 
         return min(len(args), start + 2)
@@ -480,6 +490,7 @@ class AncestorOptions:
                 value = parse(raw_value) if parse is not None else raw_value
             except (TypeError, ValueError) as exc:
                 raise InterspersedOptionValueError(argument, raw_value, exc) from exc
+
             values.append(value)
 
         if argument.value_shape.name == "LIST":
@@ -597,6 +608,7 @@ class AncestorOptions:
             if not isinstance(value, dict):
                 if not create:
                     return None
+
                 value = {}
                 current[segment] = value
             current = value
@@ -1220,6 +1232,7 @@ class InterfacyParser:
             if not isinstance(value, dict):
                 if not create:
                     return None
+
                 value = {}
                 current[segment] = value
             current = value
@@ -1473,6 +1486,7 @@ class InterfacyParser:
                 raise ConfigurationError(
                     f"Could not resolve recovery command path: {argument_ref.command_path!r}"
                 )
+
             bucket[argument_ref.name] = value
 
     def _recover_namespace_from_partial_parse(
@@ -1500,6 +1514,7 @@ class InterfacyParser:
             if isinstance(action, AbortRecovery):
                 if action.message:
                     error(action.message)
+
                 raise SystemExit(action.exit_code)
 
             self._apply_recovery_action(schema, namespace, action)
@@ -2264,6 +2279,7 @@ class InterfacyParser:
             if subcommand in (None, "__init__"):
                 if obj.init_method is None:
                     return {}
+
                 params = obj.init_method.params
             else:
                 method = self._resolve_class_method(obj, subcommand)

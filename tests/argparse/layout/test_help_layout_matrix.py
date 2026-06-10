@@ -307,6 +307,7 @@ def _extract_payload_start_column(line: str, section_title: str) -> int | None:
         if lower_section == "commands:":
             if payload.startswith("{"):
                 continue
+
             return gap.end()
 
     return None
@@ -695,6 +696,7 @@ def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
                 payload_start = _extract_payload_start_column(row, section_title)
                 if payload_start is None:
                     continue
+
                 payload_columns.append((row.strip(), payload_start))
 
             if len(payload_columns) < 2:

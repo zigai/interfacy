@@ -376,6 +376,7 @@ class ModelExpansionBuilder:
         self.taken_flags.append(translated_name)
 
         model_default = self.param.default if self.param.has_default else MODEL_DEFAULT_UNSET
+
         return self._fields(
             model_type=model_type,
             root_name=self.param.name,
@@ -888,6 +889,7 @@ class ParserSchemaBuilder:
         for argument in arguments:
             if argument.kind is not ArgumentKind.OPTION:
                 continue
+
             option_strings.update(flag for flag in argument.flags if flag.startswith("-"))
 
         return option_strings
@@ -1856,6 +1858,7 @@ class ParserSchemaBuilder:
                 raw_choices = get_annotation_choices(element_type, for_display=False)
                 if raw_choices:
                     state.choices = tuple(raw_choices)
+
             if element_type is not str and not plan_requires_post_conversion(
                 state.value_plan,
                 required=spec.is_required,
@@ -1897,6 +1900,7 @@ class ParserSchemaBuilder:
             state.nargs = tuple_plan.token_consumption(required=True).group_size
 
             return True
+
         first_type = element_types[0]
         all_same_type = all(t == first_type for t in element_types)
 
@@ -2334,6 +2338,7 @@ class ParserSchemaBuilder:
         for method in cls.methods:
             if method.name in settings.method_skips:
                 continue
+
             method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
             subcommands[method_cli_name] = self._function_spec(
                 method,

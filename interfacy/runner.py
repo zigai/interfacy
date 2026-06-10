@@ -57,6 +57,7 @@ class SchemaRunner:
             if not command.is_leaf:
                 group_args = self.namespace.get(command.canonical_name, {})
                 return self._run_with_chain(command, group_args, depth=0)
+
             return self.run_command(command, self.namespace)
 
         return self.run_multiple(commands)
@@ -495,6 +496,7 @@ class SchemaRunner:
                 result = obj.call(instance, *method_args, **method_kwargs)
 
                 return self._resolve_result(result)
+
             args = self._apply_pipe(command, args)
             args = self._reconstruct_expanded_models(
                 args, [*self._initializer_for(command), *self._arguments_for(command)]
@@ -528,6 +530,7 @@ class SchemaRunner:
         for param in callable_obj.params:
             if self._should_skip_call_param(param, args):
                 continue
+
             handler = handlers.get(param.kind)
             if handler is not None:
                 handler(param, args, positional_args, keyword_args)

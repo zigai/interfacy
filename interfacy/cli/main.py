@@ -74,6 +74,7 @@ def _resolve_symbol(module: ModuleType, symbol_ref: str) -> Any:
         if not hasattr(current, part):
             display = getattr(module, "__interfacy_target_display__", module.__name__)
             raise AttributeError(f"Symbol '{symbol_ref}' not found in module '{display}'.")
+
         current = getattr(current, part)
 
     return current
@@ -297,6 +298,7 @@ def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
     if "--config-paths" in args:
         for path in get_default_config_paths():
             print(path)
+
         return ExitCode.SUCCESS
 
     return None

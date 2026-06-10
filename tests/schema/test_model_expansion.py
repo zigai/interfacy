@@ -451,6 +451,7 @@ class FakePydanticField:
         self.required = required
         self.default = default
         self.description = description
+
         if callable_required:
             self.is_required = lambda: required
         else:

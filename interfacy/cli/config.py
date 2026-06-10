@@ -193,6 +193,7 @@ def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
         section = cast(str | None, config_field.metadata.get("section"))
         key = cast(str, config_field.metadata.get("key", field_name))
         section_data = data.get(section) if section is not None else None
+
         if section is None:
             continue
 
@@ -257,6 +258,7 @@ def _component_registry(
         current = stack.pop()
         if current in seen:
             continue
+
         seen.add(current)
 
         class_name = _normalize_name(current.__name__)
@@ -355,9 +357,11 @@ def _resolve_abbreviation_gen(
         resolved = _resolve_symbol_value(value)
         if isinstance(resolved, AbbreviationGenerator):
             return resolved
+
         raise ConfigurationError(
             f"abbreviation_gen symbol must resolve to AbbreviationGenerator, got {type(resolved)}"
         )
+
     key = _normalize_name(value)
     if key in {"default", "standard"}:
         return DefaultAbbreviationGenerator(max_generated_len=max_generated_len or 1)
@@ -424,8 +428,10 @@ def _resolve_method_skips(value: Any) -> list[str] | None:
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError("method_skips values must be strings")
+
         if item in seen:
             continue
+
         result.append(item)
         seen.add(item)
 

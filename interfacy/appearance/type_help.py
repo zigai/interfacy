@@ -106,6 +106,7 @@ class TypeHelpFormatter:
         try:
             if not is_union_type(annotation):
                 return None
+
             args = list(type_args(annotation))
         except (AttributeError, KeyError, NameError, TypeError, ValueError):
             return None

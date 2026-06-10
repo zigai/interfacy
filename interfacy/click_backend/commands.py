@@ -195,6 +195,7 @@ class HelpMixin:
                 name = param.name or ""
                 rows.append((name, param.help or ""))
                 continue
+
             rows.append(help_record)
 
         return rows
@@ -273,7 +274,9 @@ class InterfacyClickCommand(HelpMixin, click.Command):
             help_text = self._render_click_help(ctx)
             if self.interfacy_epilog:
                 return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
+
             return help_text
+
         original_help = super().get_help(ctx)
 
         return self._augment_help(ctx, original_help)
@@ -345,7 +348,9 @@ class InterfacyClickGroup(HelpMixin, click.Group):
             help_text = self._render_click_help(ctx)
             if self.interfacy_epilog:
                 return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
+
             return help_text
+
         original_help = super().get_help(ctx)
 
         return self._augment_help(ctx, original_help)

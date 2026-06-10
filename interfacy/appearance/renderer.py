@@ -86,6 +86,7 @@ class SchemaHelpRenderer:
                     self.layout.help_option_description,
                     flags=schema.help_flags,
                 )
+
             try:
                 return self.render_command_help(
                     cmd,
@@ -103,6 +104,7 @@ class SchemaHelpRenderer:
                 self.layout.help_option_description,
                 flags=schema.help_flags,
             )
+
         try:
             return self._render_multi_command_help(schema, prog)
         finally:
@@ -241,6 +243,7 @@ class SchemaHelpRenderer:
                     rendered = self.layout.format_argument(arg)
                 else:
                     rendered = self.layout.format_adaptive_argument_row(arg)
+
                 if normalize_help_only and arg.is_help_action:
                     rendered = self._normalize_help_only_option_line(rendered, arg)
                 lines.append(self._indent(rendered))
@@ -393,6 +396,7 @@ class SchemaHelpRenderer:
                 token = " ".join([token_atom] * arg.nargs)
                 parts.append(token if arg.required else f"[{token}]")
                 continue
+
             token = metavar_name if compact_options_usage else name
             parts.append(token if arg.required else f"[{token}]")
 
@@ -502,6 +506,7 @@ class SchemaHelpRenderer:
                 current_len = len(indent) + part_len
             else:
                 current_line.append(part)
+
                 current_len += part_len + (1 if len(current_line) > 1 else 0)
 
         if current_line:
@@ -526,6 +531,7 @@ class SchemaHelpRenderer:
                     prefix = "{" if idx == 0 else ""
                     suffix = "}" if idx == len(choices) - 1 else ","
                     expanded.append(f"{prefix}{choice}{suffix}")
+
                 continue
 
             expanded.append(part)
@@ -614,6 +620,7 @@ class SchemaHelpRenderer:
             for continuation in normalized_lines[1:]:
                 leading = len(continuation) - len(continuation.lstrip(" "))
                 dedented.append(continuation[min(removed, leading) :])
+
             normalized = "\n".join(dedented)
 
         if any(flag and flag in normalized for flag in help_arg.flags):

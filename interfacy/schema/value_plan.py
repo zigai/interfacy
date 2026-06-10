@@ -190,6 +190,7 @@ def normalize_argument_values(command: Any, bucket: dict[str, Any], *, type_pars
 
         if not plan_requires_post_conversion(argument.value_plan, required=argument.required):
             continue
+
         bucket[argument.name] = convert_with_value_plan(
             argument.value_plan,
             bucket[argument.name],

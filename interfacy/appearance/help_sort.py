@@ -47,6 +47,7 @@ def resolve_sort_rules(
 
         if token in seen:
             continue
+
         seen.add(token)
         result.append(token)
 

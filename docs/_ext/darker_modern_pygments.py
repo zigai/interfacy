@@ -49,6 +49,7 @@ def next_significant(tokens: list[TokenItem], start: int) -> TokenItem | None:
     for item in tokens[start:]:
         if not is_whitespace(item[1], item[2]):
             return item
+
     return None
 
 
@@ -56,6 +57,7 @@ def previous_significant(tokens: list[TokenItem], start: int) -> TokenItem | Non
     for item in reversed(tokens[:start]):
         if not is_whitespace(item[1], item[2]):
             return item
+
     return None
 
 
@@ -83,6 +85,7 @@ def darker_modern_token(
         resolved = Name.Class
     elif token is Name and (next_value == "(" or (previous_value == "." and next_value == "(")):
         resolved = Name.Function
+
     return resolved
 
 

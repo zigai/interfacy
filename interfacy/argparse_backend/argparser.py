@@ -493,6 +493,7 @@ class Argparser(InterfacyParser):
         choices = get_param_choices(param, for_display=False)
         if not choices and element_type is not None:
             choices = get_annotation_choices(element_type, for_display=False)
+
         if choices:
             extra["choices"] = self._coerce_choices_for_parser(choices, extra.get("type"))
 
@@ -565,6 +566,7 @@ class Argparser(InterfacyParser):
             return False
 
         primary_long_name = long_flags[0][2:]
+
         return any(
             primary_long_name.startswith(prefix) for prefix in self.negative_bool_name_prefixes
         )
@@ -679,6 +681,7 @@ class Argparser(InterfacyParser):
             parser_id = id(parser)
             if parser_id in seen_parsers:
                 continue
+
             seen_parsers.add(parser_id)
             names.append(name)
 
@@ -747,6 +750,7 @@ class Argparser(InterfacyParser):
             if executable_flag is not None:
                 entries.append(executable_flag)
                 continue
+
             entries.append(argument)
 
         return entries
@@ -795,6 +799,7 @@ class Argparser(InterfacyParser):
             if isinstance(entry, ExecutableFlag):
                 self._add_executable_flag(parser, entry)
                 continue
+
             self._add_argument_from_schema(parser, entry, relaxed_parse=relaxed_parse)
 
     def _create_command_subparsers(
@@ -1136,6 +1141,7 @@ class Argparser(InterfacyParser):
             if name in namespace:
                 removable = False
                 continue
+
             namespace[name] = bucket
 
         if removable:
@@ -1241,8 +1247,9 @@ class Argparser(InterfacyParser):
             parser.error(str(exc))
             raise AssertionError("unreachable") from exc
         except ExecutableFlagTriggeredError as exc:
-            exit_code = execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
-            raise SystemExit(exit_code) from None
+            raise SystemExit(
+                execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
+            ) from None
         finally:
             self._restore_required_options(relaxed_required_actions)
 
@@ -1294,6 +1301,7 @@ class Argparser(InterfacyParser):
         for argument in arguments:
             if argument.value_shape != ValueShape.TUPLE:
                 continue
+
             value = namespace.get(argument.name)
             if isinstance(value, list):
                 namespace[argument.name] = self._tuple_value(argument, value)
@@ -1410,6 +1418,7 @@ class Argparser(InterfacyParser):
         except SystemExit as exc:
             if self.sys_exit_enabled:
                 raise
+
             return exc
         except KeyboardInterrupt as exc:
             return self._handle_interrupt(exc)

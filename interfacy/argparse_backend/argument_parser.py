@@ -457,6 +457,7 @@ class ArgumentParser(argparse.ArgumentParser):
             if isinstance(action, argparse._SubParsersAction):  # type: ignore[private-member-access]
                 subcommands = self._subcommands_from_action(action)
                 continue
+
             parameters.append(self._argument_from_action(action))
 
         command_name = self._command_name_for_schema()
@@ -832,8 +833,7 @@ class ArgumentParser(argparse.ArgumentParser):
             result = parse_func(arg_string)
 
         except argparse.ArgumentTypeError as exc:
-            msg = str(sys.exc_info()[1])
-            raise argparse.ArgumentError(action, msg) from exc
+            raise argparse.ArgumentError(action, str(sys.exc_info()[1])) from exc
 
         except (TypeError, ValueError) as exc:
             t_name = _callable_type_name(parse_func, fallback="value")

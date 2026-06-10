@@ -189,6 +189,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                         )
                         lines.append(f"{rendered}\n")
                         continue
+
                     rendered = textwrap.fill(
                         help_text,
                         width=self._width,
@@ -462,6 +463,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                         bracket_suffix if idx == len(choices) - 1 else ""
                     )
                     expanded.append(f"{prefix}{choice}{suffix}")
+
                 continue
 
             expanded.append(part)

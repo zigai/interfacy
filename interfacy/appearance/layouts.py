@@ -160,6 +160,7 @@ class Aligned(InterfacyLayout):
         default_idx = self._get_template_token_index("default_padded")
         if default_idx is not None:
             return max(base, default_idx + 1)
+
         prefix_len = self._get_commands_prefix_len()
         if prefix_len is not None:
             return max(base, prefix_len + 1)
@@ -256,6 +257,7 @@ class AlignedTyped(InterfacyLayout):
         default_idx = self._get_template_token_index("default_padded")
         if default_idx is not None:
             return max(base, default_idx + 1)
+
         prefix_len = self._get_commands_prefix_len()
         if prefix_len is not None:
             return max(base, prefix_len + 1)
