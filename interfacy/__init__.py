@@ -1,3 +1,5 @@
+from typing import Any
+
 _EXPORTS = {
     "BooleanMode": ("interfacy.schema", "BooleanMode"),
     "CommandGroup": ("interfacy.group", "CommandGroup"),
@@ -6,7 +8,7 @@ _EXPORTS = {
 }
 
 
-def __getattr__(name: str) -> object:
+def __getattr__(name: str) -> Any:
     try:
         module_name, export_name = _EXPORTS[name]
     except KeyError as exc:

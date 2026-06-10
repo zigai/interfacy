@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from objinspect import Parameter
 from objinspect.typing import get_literal_choices, type_args
@@ -48,11 +48,12 @@ TargetsInput = PipeTargets | str | Sequence[str] | dict[str, Any]
 
 def parse_priority(value: str | None) -> PipePriority:
     """Parse a user-supplied priority value. Defaults to 'cli' if value is None."""
-    choices = get_literal_choices(PipePriority)
-    if value in choices:
-        return cast(PipePriority, value)
     if value is None:
         return "cli"
+    if value in ("cli", "pipe"):
+        return value
+
+    choices = tuple(str(choice) for choice in get_literal_choices(PipePriority))
 
     raise ConfigurationError(f"Invalid pipe priority '{value}'. Valid values: {','.join(choices)}")
 
@@ -100,7 +101,10 @@ def _replace_pipe_targets(
 ) -> PipeTargets:
     updated = config
     if delimiter is not DELIMITER_UNSET:
-        updated = replace(updated, delimiter=cast(str | None, delimiter))
+        if delimiter is not None and not isinstance(delimiter, str):
+            raise ConfigurationError("Pipe delimiter must be a string or None")
+
+        updated = replace(updated, delimiter=delimiter)
 
     if allow_partial is not None:
         updated = replace(updated, allow_partial=allow_partial)
@@ -120,9 +124,13 @@ def _resolve_pipe_target_inputs(
 ) -> tuple[Any, bool, str | None, bool | None, str | PipePriority | None]:
     names_value: Any = targets
     delimiter_explicit = delimiter is not DELIMITER_UNSET
-    final_delimiter: str | None = (
-        None if delimiter is DELIMITER_UNSET else cast(str | None, delimiter)
-    )
+
+    if delimiter is DELIMITER_UNSET:
+        final_delimiter: str | None = None
+    elif delimiter is None or isinstance(delimiter, str):
+        final_delimiter = delimiter
+    else:
+        raise ConfigurationError("Pipe delimiter must be a string or None")
     resolved_allow_partial = allow_partial
     resolved_priority = priority
 
@@ -135,7 +143,11 @@ def _resolve_pipe_target_inputs(
 
         if "delimiter" in targets and delimiter is DELIMITER_UNSET:
             delimiter_explicit = True
-            final_delimiter = targets.get("delimiter")
+            delimiter_value = targets.get("delimiter")
+            if delimiter_value is not None and not isinstance(delimiter_value, str):
+                raise ConfigurationError("Pipe delimiter must be a string or None")
+
+            final_delimiter = delimiter_value
 
         if resolved_allow_partial is None and "allow_partial" in targets:
             resolved_allow_partial = bool(targets["allow_partial"])
@@ -348,7 +360,7 @@ def get_chunks(
     if data == "":
         return [None] * len(config.targets)
 
-    chunks: list[str | None] = cast(list[str | None], split_data(data, config))
+    chunks: list[str | None] = list(split_data(data, config))
     expected = len(config.targets)
 
     if len(chunks) < expected:

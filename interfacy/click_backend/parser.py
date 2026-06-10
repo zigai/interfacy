@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 import click.parser as click_parser
 
@@ -22,10 +22,8 @@ def _click_parser_symbol(name: str) -> Any:
         raise RuntimeError(f"Unsupported Click parser internals: missing {name!r}.") from exc
 
 
-_BaseOptionParser: type[Any] = cast(type[Any], _click_parser_symbol("_OptionParser"))
-_normalize_opt: Callable[[str, Any], str] = cast(
-    Callable[[str, Any], str], _click_parser_symbol("_normalize_opt")
-)
+_BaseOptionParser: type[Any] = _click_parser_symbol("_OptionParser")
+_normalize_opt: Callable[[str, Any], str] = _click_parser_symbol("_normalize_opt")
 
 
 class InterfacyOptionParser(_BaseOptionParser):

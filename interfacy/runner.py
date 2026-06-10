@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import threading
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect._class import split_init_args

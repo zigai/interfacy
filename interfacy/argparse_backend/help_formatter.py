@@ -2,7 +2,7 @@ import argparse
 import re
 import textwrap
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from stdl.st import ansi_len, with_style
 

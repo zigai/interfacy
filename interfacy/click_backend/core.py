@@ -916,7 +916,7 @@ class ClickParser(InterfacyParser):
         try:
             namespace = self._normalize_parsed_args(namespace)
         except ValueError as exc:
-            raise click.BadParameter(str(exc)) from exc
+            raise click.BadParameter("invalid parsed argument namespace") from exc
 
         if self._last_schema is not None:
             namespace = self._ancestor_options.apply_values(

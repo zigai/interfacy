@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass, field, fields
 from functools import cache
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, Literal, TypeGuard, TypeVar
 
 from stdl.fs import toml_load
 
@@ -190,8 +190,16 @@ def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
 
     for config_field in fields(InterfacyConfig):
         field_name = config_field.name
-        section = cast(str | None, config_field.metadata.get("section"))
-        key = cast(str, config_field.metadata.get("key", field_name))
+        section_value = config_field.metadata.get("section")
+        if section_value is not None and not isinstance(section_value, str):
+            raise ConfigurationError(f"Invalid config section metadata for {field_name}")
+
+        section = section_value
+        key_value = config_field.metadata.get("key", field_name)
+        if not isinstance(key_value, str):
+            raise ConfigurationError(f"Invalid config key metadata for {field_name}")
+
+        key = key_value
         section_data = data.get(section) if section is not None else None
 
         if section is None:
@@ -252,7 +260,7 @@ def _component_registry(
     registry: dict[str, type[_ComponentT]] = {}
     seen: set[type[_ComponentT]] = set()
     stack: list[type[_ComponentT]] = [base_class] if include_base else []
-    stack.extend(cast(list[type[_ComponentT]], base_class.__subclasses__()))
+    stack.extend(base_class.__subclasses__())
 
     while stack:
         current = stack.pop()
@@ -269,7 +277,7 @@ def _component_registry(
             if alias:
                 registry.setdefault(alias, current)
 
-        stack.extend(cast(list[type[_ComponentT]], current.__subclasses__()))
+        stack.extend(current.__subclasses__())
 
     return registry
 
@@ -305,17 +313,30 @@ def _resolve_named_component(
     return resolved_type()
 
 
+def _is_flag_strategy(value: Any) -> TypeGuard[FlagStrategy]:
+    return callable(getattr(value, "get_arg_flags", None))
+
+
 def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy | None:
     if value is None:
         return None
+
     if isinstance(value, DefaultFlagStrategy):
         return value
-    if callable(getattr(value, "get_arg_flags", None)):
-        return cast(FlagStrategy, value)
+
+    if _is_flag_strategy(value):
+        return value
+
     if not isinstance(value, str):
         raise ConfigurationError(f"Unknown flag_strategy value: {value}")
+
     if ":" in value:
-        return cast(FlagStrategy, _resolve_symbol_value(value))
+        resolved = _resolve_symbol_value(value)
+        if _is_flag_strategy(resolved):
+            return resolved
+
+        raise ConfigurationError("flag_strategy symbol must resolve to a flag strategy")
+
     if _normalize_name(value) in {"default", "standard"}:
         return DefaultFlagStrategy(
             style=config.get("flag_style") or "required_positional",
@@ -398,7 +419,10 @@ def _resolve_backend(value: Any) -> Backend | None:
     if normalized not in {"argparse", "click"}:
         raise ConfigurationError("backend must be one of: argparse, click")
 
-    return cast(Backend, normalized)
+    if normalized == "argparse":
+        return "argparse"
+
+    return "click"
 
 
 def _resolve_model_expansion_max_depth(value: Any) -> int | None:
@@ -598,10 +622,7 @@ def apply_config_defaults(
             resolved[field_name] = default_value
             continue
 
-        if (
-            cast(bool, config_field.metadata.get("passthrough", False))
-            and field_name in config_data
-        ):
+        if bool(config_field.metadata.get("passthrough", False)) and field_name in config_data:
             resolved[field_name] = value
 
     return resolved

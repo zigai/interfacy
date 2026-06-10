@@ -4,7 +4,7 @@ import sys
 from argparse import Namespace
 from collections.abc import Callable, Sequence
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 from objinspect.typing import type_name
 from typing_extensions import Never
@@ -232,31 +232,29 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         else:
             nested_components.append(nest_dir or name)
 
-        return cast(
-            ArgumentParser,
-            super().add_parser(
-                name,
-                help=help,
-                aliases=aliases,
-                prog=prog,
-                usage=usage,
-                description=description,
-                epilog=epilog,
-                parents=parents,
-                formatter_class=formatter_class or self._child_formatter_class,
-                prefix_chars=prefix_chars,
-                fromfile_prefix_chars=fromfile_prefix_chars,
-                argument_default=argument_default,
-                conflict_handler=conflict_handler,
-                add_help=add_help,
-                allow_abbrev=allow_abbrev,
-                nest_path=nested_components,
-                nest_separator=self.nest_separator,
-                exit_on_error=exit_on_error,
-                help_flags=self._child_help_flags,
-                **kwargs,
-            ),
+        parser: ArgumentParser = super().add_parser(  # type: ignore[assignment]
+            name,
+            help=help,
+            aliases=aliases,
+            prog=prog,
+            usage=usage,
+            description=description,
+            epilog=epilog,
+            parents=parents,
+            formatter_class=formatter_class or self._child_formatter_class,
+            prefix_chars=prefix_chars,
+            fromfile_prefix_chars=fromfile_prefix_chars,
+            argument_default=argument_default,
+            conflict_handler=conflict_handler,
+            add_help=add_help,
+            allow_abbrev=allow_abbrev,
+            nest_path=nested_components,
+            nest_separator=self.nest_separator,
+            exit_on_error=exit_on_error,
+            help_flags=self._child_help_flags,
+            **kwargs,
         )
+        return parser
 
 
 class ArgumentParser(argparse.ArgumentParser):

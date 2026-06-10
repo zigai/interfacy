@@ -67,7 +67,11 @@ class ChoiceParamType(click.ParamType):
             try:
                 converted = self.parser(value)
             except (TypeError, ValueError, click.BadParameter) as exc:
-                raise click.BadParameter(str(exc), ctx=ctx, param=param) from exc
+                raise click.BadParameter(
+                    "invalid value for configured type parser",
+                    ctx=ctx,
+                    param=param,
+                ) from exc
 
         allowed = self._parsed_choices if self._parsed_choices is not None else self.choices
         if converted not in allowed:
