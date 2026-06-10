@@ -155,6 +155,27 @@ class ModelArgumentMapper:
 
         return []
 
+    def reconstruct_expanded_models(
+        self,
+        args: dict[str, Any],
+        arguments: list[Argument],
+    ) -> dict[str, Any]:
+        """
+        Rebuild expanded model parameters from flattened argument values.
+
+        Args:
+            args (dict[str, Any]): Parsed command arguments to mutate and normalize.
+            arguments (list[Argument]): Command argument schemas with expansion metadata.
+        """
+        grouped = self._group_expanded_arguments(arguments)
+        if not grouped:
+            return args
+
+        for root_name, group in grouped.items():
+            self._reconstruct_expanded_model_group(args, root_name, group)
+
+        return args
+
     def _dataclass_model_fields_for_expansion(self, model_type: type) -> list[ModelField]:
         arg_docs = self._parse_docstring_args(model_type.__doc__)
         resolved_hints = self._resolved_type_hints(model_type)
@@ -299,27 +320,6 @@ class ModelArgumentMapper:
             for param in parsed.params
             if param.arg_name
         }
-
-    def reconstruct_expanded_models(
-        self,
-        args: dict[str, Any],
-        arguments: list[Argument],
-    ) -> dict[str, Any]:
-        """
-        Rebuild expanded model parameters from flattened argument values.
-
-        Args:
-            args (dict[str, Any]): Parsed command arguments to mutate and normalize.
-            arguments (list[Argument]): Command argument schemas with expansion metadata.
-        """
-        grouped = self._group_expanded_arguments(arguments)
-        if not grouped:
-            return args
-
-        for root_name, group in grouped.items():
-            self._reconstruct_expanded_model_group(args, root_name, group)
-
-        return args
 
     @staticmethod
     def _group_expanded_arguments(arguments: list[Argument]) -> dict[str, list[Argument]]:

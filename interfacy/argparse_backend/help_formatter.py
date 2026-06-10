@@ -14,26 +14,11 @@ _HAS_FORMAT_ACTIONS_USAGE = hasattr(argparse.HelpFormatter, "_format_actions_usa
 _STORE_TRUE_ACTION_ATTR = "_StoreTrueAction"
 _SUBPARSERS_ACTION_ATTR = "_SubParsersAction"
 _ARGPARSE_STORE_TRUE_ACTION = getattr(argparse, _STORE_TRUE_ACTION_ATTR, None)
-_ARGPARSE_SUBPARSERS_ACTION = cast(
-    type[argparse.Action], getattr(argparse, _SUBPARSERS_ACTION_ATTR)
-)
+_ARGPARSE_SUBPARSERS_ACTION: type[argparse.Action] = getattr(argparse, _SUBPARSERS_ACTION_ATTR)
 
 
 class InterfacyHelpFormatter(argparse.HelpFormatter):
     """Help formatter that integrates Interfacy layout settings."""
-
-    def _compat_format_actions_usage(
-        self,
-        actions: list[argparse.Action],
-        groups: Iterable[argparse._MutuallyExclusiveGroup],
-    ) -> str:
-        """Compatibility wrapper for _format_actions_usage (removed in Python 3.14)."""
-        if _HAS_FORMAT_ACTIONS_USAGE:
-            return self._format_actions_usage(actions, groups)
-
-        parts, _ = self._get_actions_usage_parts(actions, groups)  # type: ignore[attr-defined]
-
-        return " ".join(parts)
 
     def set_help_layout(self, help_layout: "HelpLayout") -> None:
         """
@@ -43,9 +28,6 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             help_layout (HelpLayout): Layout instance to use.
         """
         self._interfacy_help_layout = help_layout
-
-    def _get_help_layout(self) -> "HelpLayout | None":
-        return getattr(self, "_interfacy_help_layout", None)
 
     def start_section(self, heading: str | None) -> None:
         """
@@ -72,6 +54,22 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                 heading = with_style(str(heading), heading_style)
 
         return super().start_section(heading)
+
+    def _compat_format_actions_usage(
+        self,
+        actions: list[argparse.Action],
+        groups: Iterable[argparse._MutuallyExclusiveGroup],
+    ) -> str:
+        """Compatibility wrapper for _format_actions_usage (removed in Python 3.14)."""
+        if _HAS_FORMAT_ACTIONS_USAGE:
+            return self._format_actions_usage(actions, groups)
+
+        parts, _ = self._get_actions_usage_parts(actions, groups)  # type: ignore[attr-defined]
+
+        return " ".join(parts)
+
+    def _get_help_layout(self) -> "HelpLayout | None":
+        return getattr(self, "_interfacy_help_layout", None)
 
     def _split_lines(self, text: str, width: int) -> list[str]:
         return super()._split_lines(text, width)

@@ -62,72 +62,6 @@ class SchemaRunner:
 
         return self.run_multiple(commands)
 
-    def _run_awaitable(self, awaitable: Any) -> Any:
-        if isinstance(awaitable, asyncio.Future):
-            loop = awaitable.get_loop()
-            if loop.is_running():
-                return awaitable
-
-            return loop.run_until_complete(awaitable)
-
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(cast(Any, awaitable))
-
-        result: Any | None = None
-        error: BaseException | None = None
-
-        def _runner() -> None:
-            nonlocal result, error
-            try:
-                result = asyncio.run(cast(Any, awaitable))
-            except BaseException as exc:  # noqa: BLE001 - propagate user/runtime errors
-                error = exc
-
-        thread = threading.Thread(target=_runner)
-        thread.start()
-        thread.join()
-
-        if error is not None:
-            raise error
-
-        return result
-
-    def _resolve_result(self, value: Any) -> Any:
-        if not inspect.isawaitable(value):
-            return value
-
-        return self._run_awaitable(value)
-
-    def _apply_pipe(
-        self,
-        command: Command,
-        args: dict[str, Any],
-        *,
-        subcommand: str | None = None,
-    ) -> dict[str, Any]:
-        config = self.builder.resolve_pipe_targets(command, subcommand=subcommand)
-        if config is None:
-            return args
-
-        payload = self.builder.read_piped_input()
-        parameters = self.builder.get_parameters_for(command, subcommand=subcommand)
-        if payload is None:
-            return validate_required_pipe_targets(
-                config=config,
-                arguments=args,
-                parameters=parameters,
-            )
-
-        return apply_pipe_values(
-            payload,
-            config=config,
-            arguments=args,
-            parameters=parameters,
-            type_parser=self.builder.type_parser,
-        )
-
     def run_command(self, command: Command, args: dict[str, Any]) -> Any:
         """
         Dispatch a command to its underlying callable.
@@ -289,6 +223,72 @@ class SchemaRunner:
             return self._run_with_chain(command, args, depth=0)
 
         return self.run_command(command, args)
+
+    def _run_awaitable(self, awaitable: Any) -> Any:
+        if isinstance(awaitable, asyncio.Future):
+            loop = awaitable.get_loop()
+            if loop.is_running():
+                return awaitable
+
+            return loop.run_until_complete(awaitable)
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(awaitable)
+
+        result: Any | None = None
+        error: BaseException | None = None
+
+        def _runner() -> None:
+            nonlocal result, error
+            try:
+                result = asyncio.run(awaitable)
+            except BaseException as exc:  # noqa: BLE001 - propagate user/runtime errors
+                error = exc
+
+        thread = threading.Thread(target=_runner)
+        thread.start()
+        thread.join()
+
+        if error is not None:
+            raise error
+
+        return result
+
+    def _resolve_result(self, value: Any) -> Any:
+        if not inspect.isawaitable(value):
+            return value
+
+        return self._run_awaitable(value)
+
+    def _apply_pipe(
+        self,
+        command: Command,
+        args: dict[str, Any],
+        *,
+        subcommand: str | None = None,
+    ) -> dict[str, Any]:
+        config = self.builder.resolve_pipe_targets(command, subcommand=subcommand)
+        if config is None:
+            return args
+
+        payload = self.builder.read_piped_input()
+        parameters = self.builder.get_parameters_for(command, subcommand=subcommand)
+        if payload is None:
+            return validate_required_pipe_targets(
+                config=config,
+                arguments=args,
+                parameters=parameters,
+            )
+
+        return apply_pipe_values(
+            payload,
+            config=config,
+            arguments=args,
+            parameters=parameters,
+            type_parser=self.builder.type_parser,
+        )
 
     def _run_with_chain(
         self,

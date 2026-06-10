@@ -35,9 +35,6 @@ class Math:
     def __init__(self, rounding: int = 6) -> None:
         self.rounding = rounding
 
-    def _round(self, value: float | int) -> float | int:
-        return round(value, self.rounding)
-
     def pow(self, base: int, exponent: int = 2) -> float:
         """
         Raise base to the power of exponent.
@@ -77,6 +74,9 @@ class Math:
         """
         return self._round(a - b)
 
+    def _round(self, value: float | int) -> float | int:
+        return round(value, self.rounding)
+
 
 def greet(name: str) -> str:
     """Return a friendly greeting."""
@@ -95,9 +95,6 @@ class TextTools:
     def prefix_text(self, text: str) -> str:
         return f"{self.prefix}{text}"
 
-    def _helper(self, text: str) -> str:
-        return text.strip()
-
     @staticmethod
     def repeat(text: str, times: int = 2) -> str:
         return text * times
@@ -109,6 +106,9 @@ class TextTools:
     @property
     def label(self) -> str:
         return f"prefix-{self.prefix}"
+
+    def _helper(self, text: str) -> str:
+        return text.strip()
 
 
 class Empty:

@@ -376,17 +376,6 @@ class ArgumentParser(argparse.ArgumentParser):
 
         self.register("action", "parsers", NestedSubParsersAction)
 
-    def _get_formatter(self) -> argparse.HelpFormatter:  # type: ignore[override]
-        formatter = self.formatter_class(str(self.prog))
-        set_help_layout = getattr(formatter, "set_help_layout", None)
-        if callable(set_help_layout):
-            try:
-                set_help_layout(self._interfacy_help_layout)
-            except TypeError:
-                logger.debug("Formatter rejected help layout", exc_info=True)
-
-        return formatter
-
     def format_help(self) -> str:
         """Render help text using schema-aware layout rendering when available."""
         layout = self._interfacy_help_layout
@@ -415,13 +404,6 @@ class ArgumentParser(argparse.ArgumentParser):
 
         return super().format_help()
 
-    def _get_help_argument_for_schema(self) -> Argument | None:
-        for action in self._actions:
-            if isinstance(action, argparse._HelpAction):  # type: ignore[private-member-access]
-                return _action_to_help_argument(action)
-
-        return None
-
     def set_schema_command(self, command: "Command | None") -> None:
         """
         Store the active command schema for schema-aware help rendering.
@@ -439,6 +421,145 @@ class ArgumentParser(argparse.ArgumentParser):
             schema (ParserSchema | None): Full parser schema tied to this parser.
         """
         self._schema = schema
+
+    def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
+        """
+        Create a nested subparser group with remapped destinations.
+
+        Args:
+            **kwargs (Any): Arguments forwarded to argparse add_subparsers.
+        """
+        logger.info("Adding subparsers with kwargs=%s", kwargs)
+
+        if DEST_KEY in kwargs:
+            dest = kwargs[DEST_KEY]
+            nested_dest = self._get_nested_destination(dest.replace("-", "_"), store=True)
+            kwargs[DEST_KEY] = nested_dest
+
+        kwargs.update(
+            {
+                "base_nest_path": self.nest_path_components,
+                "nest_separator": self.nest_separator,
+                "formatter_class": self.formatter_class,
+                "help_layout": self._interfacy_help_layout,
+                "help_flags": self.help_flags,
+            }
+        )
+
+        action = super().add_subparsers(**kwargs)
+        if not isinstance(action, NestedSubParsersAction):
+            raise TypeError("Nested subparser factory returned an unexpected action type")
+
+        return action
+
+    def parse_known_args(  # type: ignore[override]
+        self,
+        args: Sequence[str] | None = None,
+        namespace: Namespace | None = None,
+    ) -> tuple[Namespace, list[str]]:
+        """
+        Parse known args and deflatten nested destinations.
+
+        Args:
+            args (Sequence[str] | None): Argument list to parse. Defaults to sys.argv.
+            namespace (Namespace | None): Optional namespace to populate.
+        """
+        parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
+        logger.info("Initial parse result: %s, unknown=%s", vars(parsed_args), unknown_args)
+
+        if parsed_args is None:
+            raise ValueError("No parsed arguments found.")
+
+        deflattened_args = self._deflatten_namespace(parsed_args)
+        logger.info("Deflattened result:   %s", vars(deflattened_args))
+
+        return deflattened_args, unknown_args
+
+    def set_defaults(self, **kwargs: Any) -> None:
+        """
+        Set defaults while respecting nested destinations.
+
+        Args:
+            **kwargs (Any): Default values keyed by original destination names.
+        """
+        nested_kwargs = {
+            self._get_nested_destination(dest, store=True): value for dest, value in kwargs.items()
+        }
+        logger.info("Nested defaults: %s", nested_kwargs)
+        super().set_defaults(**nested_kwargs)
+
+    def get_default(self, dest: str) -> Any:
+        """
+        Return the default value for a destination name.
+
+        Args:
+            dest (str): Original destination name.
+        """
+        nested_dest = self._get_nested_destination(dest)
+        value = super().get_default(nested_dest)
+
+        return value
+
+    def error(self, message: str) -> Never:
+        """
+        Override argparse's default error output for missing required subcommands.
+
+        By default, argparse prints only a short usage line on errors. For CLIs built
+        around subcommands, a missing subcommand is much more useful when the full help is displayed.
+        """
+        if self._interfacy_raise_parse_errors:
+            raise ArgparseParseError(message)
+
+        marker = "the following arguments are required:"
+        if marker in message:
+            subparser_actions = [
+                action for action in self._actions if isinstance(action, argparse._SubParsersAction)
+            ]
+            subparser_dests: set[str] = {action.dest for action in subparser_actions}
+            subparser_choices: set[str] = set()
+            for action in subparser_actions:
+                subparser_choices.update(action.choices.keys())
+
+            if subparser_dests:
+                missing_part = message.split(marker, 1)[1].strip()
+                missing_names = [name.strip() for name in missing_part.split(",") if name.strip()]
+                denested_missing = [
+                    self._original_destinations.get(name, name) for name in missing_names
+                ]
+                denested_subparser_dests = {
+                    self._original_destinations.get(dest, dest) for dest in subparser_dests
+                }
+                brace_choices: set[str] = set()
+                for grouped in re.findall(r"\{([^}]*)\}", missing_part):
+                    brace_choices.update(choice.strip() for choice in grouped.split(",") if choice)
+
+                is_missing_subcommand = any(
+                    name in denested_subparser_dests for name in denested_missing
+                ) or bool(brace_choices & subparser_choices)
+
+                if is_missing_subcommand:
+                    self.print_help(sys.stderr)
+                    raise SystemExit(2)
+
+        super().error(message)
+
+    def _get_formatter(self) -> argparse.HelpFormatter:  # type: ignore[override]
+        formatter = self.formatter_class(str(self.prog))
+        set_help_layout = getattr(formatter, "set_help_layout", None)
+        if callable(set_help_layout):
+            try:
+                set_help_layout(self._interfacy_help_layout)
+            except TypeError:
+                logger.debug("Formatter rejected help layout", exc_info=True)
+
+        return formatter
+
+    def _get_help_argument_for_schema(self) -> Argument | None:
+        for action in self._actions:
+            if isinstance(action, argparse._HelpAction):  # type: ignore[private-member-access]
+                return _action_to_help_argument(action)
+
+        return None
 
     def _build_implicit_schema_command(self) -> Command:
         layout = self._interfacy_help_layout
@@ -584,80 +705,6 @@ class ArgumentParser(argparse.ArgumentParser):
             boolean_behavior=boolean_behavior,
             choices=choices,
         )
-
-    def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
-        """
-        Create a nested subparser group with remapped destinations.
-
-        Args:
-            **kwargs (Any): Arguments forwarded to argparse add_subparsers.
-        """
-        logger.info("Adding subparsers with kwargs=%s", kwargs)
-
-        if DEST_KEY in kwargs:
-            dest = kwargs[DEST_KEY]
-            nested_dest = self._get_nested_destination(dest.replace("-", "_"), store=True)
-            kwargs[DEST_KEY] = nested_dest
-
-        kwargs.update(
-            {
-                "base_nest_path": self.nest_path_components,
-                "nest_separator": self.nest_separator,
-                "formatter_class": self.formatter_class,
-                "help_layout": self._interfacy_help_layout,
-                "help_flags": self.help_flags,
-            }
-        )
-
-        return cast(NestedSubParsersAction, super().add_subparsers(**kwargs))
-
-    def parse_known_args(  # type: ignore[override]
-        self,
-        args: Sequence[str] | None = None,
-        namespace: Namespace | None = None,
-    ) -> tuple[Namespace, list[str]]:
-        """
-        Parse known args and deflatten nested destinations.
-
-        Args:
-            args (Sequence[str] | None): Argument list to parse. Defaults to sys.argv.
-            namespace (Namespace | None): Optional namespace to populate.
-        """
-        parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
-        logger.info("Initial parse result: %s, unknown=%s", vars(parsed_args), unknown_args)
-
-        if parsed_args is None:
-            raise ValueError("No parsed arguments found.")
-
-        deflattened_args = self._deflatten_namespace(parsed_args)
-        logger.info("Deflattened result:   %s", vars(deflattened_args))
-
-        return deflattened_args, unknown_args
-
-    def set_defaults(self, **kwargs: Any) -> None:
-        """
-        Set defaults while respecting nested destinations.
-
-        Args:
-            **kwargs (Any): Default values keyed by original destination names.
-        """
-        nested_kwargs = {
-            self._get_nested_destination(dest, store=True): value for dest, value in kwargs.items()
-        }
-        logger.info("Nested defaults: %s", nested_kwargs)
-        super().set_defaults(**nested_kwargs)
-
-    def get_default(self, dest: str) -> Any:
-        """
-        Return the default value for a destination name.
-
-        Args:
-            dest (str): Original destination name.
-        """
-        nested_dest = self._get_nested_destination(dest)
-        value = super().get_default(nested_dest)
-
-        return value
 
     def _add_container_actions(self, container: argparse._ActionsContainer) -> None:
         self._remap_container_destinations(container)
@@ -838,49 +885,6 @@ class ArgumentParser(argparse.ArgumentParser):
             raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'") from exc
 
         return result
-
-    def error(self, message: str) -> Never:
-        """
-        Override argparse's default error output for missing required subcommands.
-
-        By default, argparse prints only a short usage line on errors. For CLIs built
-        around subcommands, a missing subcommand is much more useful when the full help is displayed.
-        """
-        if self._interfacy_raise_parse_errors:
-            raise ArgparseParseError(message)
-
-        marker = "the following arguments are required:"
-        if marker in message:
-            subparser_actions = [
-                action for action in self._actions if isinstance(action, argparse._SubParsersAction)
-            ]
-            subparser_dests: set[str] = {action.dest for action in subparser_actions}
-            subparser_choices: set[str] = set()
-            for action in subparser_actions:
-                subparser_choices.update(action.choices.keys())
-
-            if subparser_dests:
-                missing_part = message.split(marker, 1)[1].strip()
-                missing_names = [name.strip() for name in missing_part.split(",") if name.strip()]
-                denested_missing = [
-                    self._original_destinations.get(name, name) for name in missing_names
-                ]
-                denested_subparser_dests = {
-                    self._original_destinations.get(dest, dest) for dest in subparser_dests
-                }
-                brace_choices: set[str] = set()
-                for grouped in re.findall(r"\{([^}]*)\}", missing_part):
-                    brace_choices.update(choice.strip() for choice in grouped.split(",") if choice)
-
-                is_missing_subcommand = any(
-                    name in denested_subparser_dests for name in denested_missing
-                ) or bool(brace_choices & subparser_choices)
-
-                if is_missing_subcommand:
-                    self.print_help(sys.stderr)
-                    raise SystemExit(2)
-
-        super().error(message)
 
 
 __all__ = [

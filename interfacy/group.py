@@ -137,29 +137,6 @@ class CommandGroup:
         self._subgroups: dict[str, SubgroupEntry] = {}
         self._group_args_source: type | Callable[..., Any] | None = None
 
-    def _ensure_unique_child_name(self, name: str) -> None:
-        if name in self._commands or name in self._subgroups:
-            raise DuplicateCommandError(name)
-
-    @staticmethod
-    def _is_instance_command(command: Callable[..., Any] | type | Any) -> bool:
-        if isinstance(command, type):
-            return False
-        if not callable(command):
-            return True
-        if isroutine(command):
-            return False
-
-        for attr_name in dir(type(command)):
-            if attr_name.startswith("_") or attr_name == "__call__":
-                continue
-
-            attr = getattr(type(command), attr_name, None)
-            if callable(attr):
-                return True
-
-        return False
-
     def add_command(
         self,
         command: Callable[..., Any] | type | Any,
@@ -346,6 +323,29 @@ class CommandGroup:
             f"commands={list(self._commands.keys())}, "
             f"subgroups={list(self._subgroups.keys())})"
         )
+
+    def _ensure_unique_child_name(self, name: str) -> None:
+        if name in self._commands or name in self._subgroups:
+            raise DuplicateCommandError(name)
+
+    @staticmethod
+    def _is_instance_command(command: Callable[..., Any] | type | Any) -> bool:
+        if isinstance(command, type):
+            return False
+        if not callable(command):
+            return True
+        if isroutine(command):
+            return False
+
+        for attr_name in dir(type(command)):
+            if attr_name.startswith("_") or attr_name == "__call__":
+                continue
+
+            attr = getattr(type(command), attr_name, None)
+            if callable(attr):
+                return True
+
+        return False
 
 
 __all__ = ["CommandEntry", "CommandGroup", "SubgroupEntry"]

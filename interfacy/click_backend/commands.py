@@ -168,6 +168,15 @@ class HelpMixin:
     interfacy_help_position: int | None = None
     interfacy_help_position_explicit: bool = False
 
+    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        if isinstance(formatter, InterfacyClickHelpFormatter):
+            positional_rows = self._positionals_help_rows(ctx)
+            if positional_rows:
+                with formatter.section("Positionals"):
+                    formatter.write_dl(positional_rows)
+
+        return super().format_options(ctx, formatter)
+
     def _resolve_fallback_help_position(self) -> int | None:
         help_position = self.interfacy_help_position
         if not self.interfacy_help_position_explicit or not isinstance(help_position, int):
@@ -199,15 +208,6 @@ class HelpMixin:
             rows.append(help_record)
 
         return rows
-
-    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        if isinstance(formatter, InterfacyClickHelpFormatter):
-            positional_rows = self._positionals_help_rows(ctx)
-            if positional_rows:
-                with formatter.section("Positionals"):
-                    formatter.write_dl(positional_rows)
-
-        return super().format_options(ctx, formatter)
 
     def _augment_help(self, _ctx: click.Context, original_help: str) -> str:
         if "Options:" in original_help:

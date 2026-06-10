@@ -172,6 +172,160 @@ class ClickParser(InterfacyParser):
         self._root_command: click.Command | None = None
         self._last_interrupt_time: float = 0.0
 
+    def build_click_command(
+        self,
+        command: Command,
+        depth: int = 0,
+        *,
+        extra_executable_flags: Sequence[ExecutableFlag] = (),
+        relaxed_parse: bool = False,
+    ) -> InterfacyClickCommand | InterfacyClickGroup:
+        """
+        Build a Click command or group from one Interfacy command schema.
+
+        Args:
+            command (Command): Command schema to convert.
+            depth (int): Nesting depth from the parser root.
+            extra_executable_flags (Sequence[ExecutableFlag]): Parser-level executable flags
+                merged into this command when the root collapses to a single leaf command.
+            relaxed_parse (bool): Allow partial parsing by relaxing required-argument
+                enforcement and help-trigger behavior for recovery flows.
+        """
+        is_group_like = (
+            command.command_type in ("group", "instance")
+            or command.subcommands is not None
+            or isinstance(command.obj, Class)
+        )
+        if not is_group_like:
+            params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
+                command.parameters,
+                executable_flags=[*extra_executable_flags, *command.executable_flags],
+                help_option_sort=command.help_option_sort_effective,
+                relaxed_parse=relaxed_parse,
+            )
+            click_command = InterfacyClickCommand(
+                name=command.cli_name,
+                help=command.description,
+                params=params,
+                context_settings={"help_option_names": list(self.help_flags)},
+            )
+            self._attach_param_metadata(
+                click_command, param_bindings, arg_specs, suppress_defaults, command
+            )
+
+            return click_command
+
+        params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
+            command.initializer,
+            executable_flags=[*extra_executable_flags, *command.executable_flags],
+            help_option_sort=command.help_option_sort_effective,
+            relaxed_parse=relaxed_parse,
+        )
+        group = InterfacyClickGroup(
+            name=command.cli_name,
+            help=command.description,
+            params=params,
+            context_settings={
+                "allow_interspersed_args": False,
+                "help_option_names": list(self.help_flags),
+            },
+            invoke_without_command=relaxed_parse,
+            no_args_is_help=not relaxed_parse,
+        )
+        self._attach_param_metadata(group, param_bindings, arg_specs, suppress_defaults, command)
+
+        if command.subcommands:
+            for subcommand in self._ordered_commands_for_help(
+                command.subcommands,
+                rules=command.help_subcommand_sort_effective,
+            ):
+                group.add_command(
+                    self.build_click_command(
+                        subcommand,
+                        depth + 1,
+                        relaxed_parse=relaxed_parse,
+                    ),
+                    name=subcommand.cli_name,
+                )
+
+        return group
+
+    def build_parser(self) -> click.Command:
+        """Build and return a Click command tree from the current commands."""
+        if not self.commands:
+            raise ConfigurationError("No commands were provided")
+
+        schema = self.build_parser_schema()
+        self._last_schema = schema
+        root = self._build_from_schema(schema)
+        self._root_command = root
+        if self.enable_tab_completion:
+            self.install_tab_completion(root)
+
+        return root
+
+    def get_last_schema(self) -> ParserSchema | None:
+        """Return the most recently built parser schema for this backend."""
+        return self._last_schema
+
+    def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
+        """
+        Parse CLI args into a nested dict keyed by command name.
+
+        Args:
+            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
+        """
+        args = list(args if args is not None else self.get_args())
+        args = self._apply_before_parse_plugins(args)
+        self._last_parse_args = args
+        root = self.build_parser()
+        relaxed_required_params: list[tuple[click.Parameter, bool]] = []
+        if self._last_schema is not None:
+            args = self._ancestor_options.normalize_args(self._last_schema, args)
+            relaxed_required_params = self._relax_interspersed_required_options(root)
+
+        try:
+            if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
+                namespace = self._parse_root_group_namespace(root, args)
+            else:
+                namespace = self._parse_root_command_namespace(root, args)
+            namespace = self._finish_parsed_namespace(namespace)
+
+            return self._apply_after_parse_plugins(
+                namespace,
+                args=args,
+                schema=self._last_schema,
+            )
+        except InterspersedOptionValueError as exc:
+            raise self._click_bad_parameter_for_interspersed(exc) from exc
+        except ExecutableFlagTriggeredError as exc:
+            raise SystemExit(
+                execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
+            ) from None
+        except click.UsageError as exc:
+            if not self.plugins or self._last_schema is None:
+                raise
+
+            namespace = self._parse_partial_namespace_for_recovery(self._last_schema, args)
+            if namespace is not None:
+                recovered = self._recover_namespace_from_partial_parse(
+                    self._last_schema,
+                    namespace,
+                    backend="click",
+                    message=str(exc),
+                    raw_exception=exc,
+                )
+                if recovered is not None:
+                    return self._apply_after_parse_plugins(
+                        recovered,
+                        args=args,
+                        schema=self._last_schema,
+                    )
+
+            raise
+        finally:
+            self._restore_required_options(relaxed_required_params)
+
     def _command_key_for_depth(self, depth: int) -> str:
         return f"{self.COMMAND_KEY}_{depth}" if depth > 0 else self.COMMAND_KEY
 
@@ -503,84 +657,6 @@ class ClickParser(InterfacyParser):
         command.interfacy_help_position = self.help_layout.help_position
         command.interfacy_help_position_explicit = self._help_position_explicit
 
-    def build_click_command(
-        self,
-        command: Command,
-        depth: int = 0,
-        *,
-        extra_executable_flags: Sequence[ExecutableFlag] = (),
-        relaxed_parse: bool = False,
-    ) -> InterfacyClickCommand | InterfacyClickGroup:
-        """
-        Build a Click command or group from one Interfacy command schema.
-
-        Args:
-            command (Command): Command schema to convert.
-            depth (int): Nesting depth from the parser root.
-            extra_executable_flags (Sequence[ExecutableFlag]): Parser-level executable flags
-                merged into this command when the root collapses to a single leaf command.
-            relaxed_parse (bool): Allow partial parsing by relaxing required-argument
-                enforcement and help-trigger behavior for recovery flows.
-        """
-        is_group_like = (
-            command.command_type in ("group", "instance")
-            or command.subcommands is not None
-            or isinstance(command.obj, Class)
-        )
-        if not is_group_like:
-            params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
-                command.parameters,
-                executable_flags=[*extra_executable_flags, *command.executable_flags],
-                help_option_sort=command.help_option_sort_effective,
-                relaxed_parse=relaxed_parse,
-            )
-            click_command = InterfacyClickCommand(
-                name=command.cli_name,
-                help=command.description,
-                params=params,
-                context_settings={"help_option_names": list(self.help_flags)},
-            )
-            self._attach_param_metadata(
-                click_command, param_bindings, arg_specs, suppress_defaults, command
-            )
-
-            return click_command
-
-        params, param_bindings, arg_specs, suppress_defaults = self._build_click_params(
-            command.initializer,
-            executable_flags=[*extra_executable_flags, *command.executable_flags],
-            help_option_sort=command.help_option_sort_effective,
-            relaxed_parse=relaxed_parse,
-        )
-        group = InterfacyClickGroup(
-            name=command.cli_name,
-            help=command.description,
-            params=params,
-            context_settings={
-                "allow_interspersed_args": False,
-                "help_option_names": list(self.help_flags),
-            },
-            invoke_without_command=relaxed_parse,
-            no_args_is_help=not relaxed_parse,
-        )
-        self._attach_param_metadata(group, param_bindings, arg_specs, suppress_defaults, command)
-
-        if command.subcommands:
-            for subcommand in self._ordered_commands_for_help(
-                command.subcommands,
-                rules=command.help_subcommand_sort_effective,
-            ):
-                group.add_command(
-                    self.build_click_command(
-                        subcommand,
-                        depth + 1,
-                        relaxed_parse=relaxed_parse,
-                    ),
-                    name=subcommand.cli_name,
-                )
-
-        return group
-
     def _combine_epilog(self, *parts: str | None) -> str | None:
         chunks = [part for part in parts if part]
         if not chunks:
@@ -652,20 +728,6 @@ class ClickParser(InterfacyParser):
 
         return click_command
 
-    def build_parser(self) -> click.Command:
-        """Build and return a Click command tree from the current commands."""
-        if not self.commands:
-            raise ConfigurationError("No commands were provided")
-
-        schema = self.build_parser_schema()
-        self._last_schema = schema
-        root = self._build_from_schema(schema)
-        self._root_command = root
-        if self.enable_tab_completion:
-            self.install_tab_completion(root)
-
-        return root
-
     def _snapshot_backend_registration_state(self) -> Any | None:
         return {
             "last_schema": self._last_schema,
@@ -682,10 +744,6 @@ class ClickParser(InterfacyParser):
     def _invalidate_backend_build_cache(self) -> None:
         self._last_schema = None
         self._root_command = None
-
-    def get_last_schema(self) -> ParserSchema | None:
-        """Return the most recently built parser schema for this backend."""
-        return self._last_schema
 
     def _params_to_schema(
         self,
@@ -1022,64 +1080,6 @@ class ClickParser(InterfacyParser):
     def _restore_required_options(relaxed: list[tuple[click.Parameter, bool]]) -> None:
         for param, required in relaxed:
             param.required = required
-
-    def parse_args(self, args: list[str] | None = None) -> dict[str, Any]:
-        """
-        Parse CLI args into a nested dict keyed by command name.
-
-        Args:
-            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
-        """
-        args = list(args if args is not None else self.get_args())
-        args = self._apply_before_parse_plugins(args)
-        self._last_parse_args = args
-        root = self.build_parser()
-        relaxed_required_params: list[tuple[click.Parameter, bool]] = []
-        if self._last_schema is not None:
-            args = self._ancestor_options.normalize_args(self._last_schema, args)
-            relaxed_required_params = self._relax_interspersed_required_options(root)
-
-        try:
-            if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
-                namespace = self._parse_root_group_namespace(root, args)
-            else:
-                namespace = self._parse_root_command_namespace(root, args)
-            namespace = self._finish_parsed_namespace(namespace)
-
-            return self._apply_after_parse_plugins(
-                namespace,
-                args=args,
-                schema=self._last_schema,
-            )
-        except InterspersedOptionValueError as exc:
-            raise self._click_bad_parameter_for_interspersed(exc) from exc
-        except ExecutableFlagTriggeredError as exc:
-            raise SystemExit(
-                execute_executable_flag(exc.flag, display_result_fn=self.result_display_fn)
-            ) from None
-        except click.UsageError as exc:
-            if not self.plugins or self._last_schema is None:
-                raise
-
-            namespace = self._parse_partial_namespace_for_recovery(self._last_schema, args)
-            if namespace is not None:
-                recovered = self._recover_namespace_from_partial_parse(
-                    self._last_schema,
-                    namespace,
-                    backend="click",
-                    message=str(exc),
-                    raw_exception=exc,
-                )
-                if recovered is not None:
-                    return self._apply_after_parse_plugins(
-                        recovered,
-                        args=args,
-                        schema=self._last_schema,
-                    )
-
-            raise
-        finally:
-            self._restore_required_options(relaxed_required_params)
 
     def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
         if self.on_interrupt is not None:
