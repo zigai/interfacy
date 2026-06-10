@@ -169,6 +169,19 @@ enable = [
 [tool.rattle.options."forbidden-call"]
 forbidden_calls = ["typing.cast"]
 
+[tool.rattle.options."public-method-order"]
+excluded_class_name_patterns = [
+    "*Enum",
+    "*Model",
+    "*Record",
+    "*Schema",
+    "*Settings",
+    "*Table",
+    "Argparser",
+    "ClickParser",
+    "InterfacyParser",
+]
+
 [tool.ruff]
 line-length = 100
 
