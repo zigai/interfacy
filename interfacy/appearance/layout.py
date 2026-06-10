@@ -1237,6 +1237,7 @@ class HelpLayout:
             return base
 
         desired = align_idx + 1  # align to target column (indent=2)
+
         return max(base, desired)
 
     def _get_param_extra_help(self, param: Parameter) -> str:
