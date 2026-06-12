@@ -57,7 +57,8 @@ def load_module_from_path(path: Path) -> ModuleType:
 
 def load_module(module_ref: str) -> ModuleType:
     path = Path(module_ref)
-    if module_ref.endswith(".py") or path.exists():
+    path_like = module_ref.endswith(".py") or "/" in module_ref or "\\" in module_ref
+    if module_ref.endswith(".py") or path.is_file() or (path_like and path.exists()):
         if not path.exists():
             raise FileNotFoundError(f"Python file not found: {path}")
         if path.is_dir():
@@ -291,11 +292,11 @@ def configure_runner_from_module(parser: Interfacy, module: ModuleType) -> None:
 
 
 def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
-    if "--version" in args:
+    if list(args) == ["--version"]:
         print(f"interfacy {version('interfacy')}")
         return ExitCode.SUCCESS
 
-    if "--config-paths" in args:
+    if list(args) == ["--config-paths"]:
         for path in get_default_config_paths():
             print(path)
 
@@ -338,7 +339,9 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
 
         return ExitCode.ERR_INVALID_ARGS
 
-    target_args = [arg for arg in args.ARGS if arg != "--"]
+    target_args = list(args.ARGS)
+    if target_args[:1] == ["--"]:
+        target_args = target_args[1:]
 
     runner = Interfacy(**build_runner_kwargs(settings))
     try:

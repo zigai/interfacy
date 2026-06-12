@@ -33,6 +33,22 @@ def test_resolve_target_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert target() == "ok"
 
 
+def test_resolve_target_package_module_when_package_directory_exists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package_path = tmp_path / "sample_pkg"
+    package_path.mkdir()
+    _write_module(package_path / "__init__.py", "def hello():\n    return 'ok'\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    target = resolve_target("sample_pkg:hello")
+
+    assert callable(target)
+    assert target() == "ok"
+
+
 def test_resolve_target_file_path(tmp_path: Path) -> None:
     module_path = tmp_path / "entry.py"
     _write_module(
@@ -203,6 +219,72 @@ def test_main_passthrough_double_dash(
         main([f"{module_path}:echo", "--", "hi"])
 
     assert excinfo.value.code == ExitCode.SUCCESS
+
+
+def test_main_passes_target_version_flag_to_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
+        "\n".join(
+            [
+                "def show(version: bool = False) -> bool:",
+                "    return version",
+                "",
+                "def configure_interfacy(parser):",
+                "    parser.apply_setup(print_result=True)",
+                "",
+            ]
+        ),
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    with pytest.raises(SystemExit) as excinfo:
+        main([f"{module_path}:show", "--version"])
+
+    assert excinfo.value.code == ExitCode.SUCCESS
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "True"
+
+
+def test_main_preserves_literal_double_dash_for_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module_path = tmp_path / "mod.py"
+    _write_module(
+        module_path,
+        "\n".join(
+            [
+                "def echo(value: str) -> str:",
+                "    return value",
+                "",
+            ]
+        ),
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    captured: dict[str, list[str]] = {}
+
+    class RecordingInterfacy:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        def add_command(self, _target: Any) -> None:
+            return None
+
+        def run(self, _target: Any, *, args: list[str]) -> None:
+            captured["args"] = args
+
+    monkeypatch.setattr("interfacy.cli.main.Interfacy", RecordingInterfacy)
+
+    result = main([f"{module_path}:echo", "--", "--", "--", "value"])
+
+    assert result == ExitCode.SUCCESS
+    assert captured["args"] == ["--", "value"]
 
 
 def test_main_rejects_parser_target(
