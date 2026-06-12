@@ -27,6 +27,10 @@ def fn_partial(a: str, b: str | None = None):
     return (a, b)
 
 
+def fn_default_msg(msg: str = "default"):
+    return msg
+
+
 class TestPipeExecution:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_single_target_pipe(self, parser: InterfacyParser, mocker):
@@ -118,6 +122,18 @@ class TestPipeExecution:
         # We pass a CLI value "cli_value". If pipe works, result is "piped_value"
         args = ["--msg", "cli_value"]
         assert parser.run(args=args) == "piped_value"
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_priority_cli_keeps_explicit_value_equal_to_default(
+        self,
+        parser: InterfacyParser,
+        mocker,
+    ):
+        """Explicit CLI values win even when they equal the callable default."""
+        parser.add_command(fn_default_msg, pipe_targets="msg")
+        mocker.patch("interfacy.core.read_piped", return_value="piped")
+
+        assert parser.run(args=["--msg", "default"]) == "default"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_typed_conversion(self, parser: InterfacyParser, mocker):

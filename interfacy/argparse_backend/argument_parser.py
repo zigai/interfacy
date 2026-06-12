@@ -429,7 +429,7 @@ class ArgumentParser(argparse.ArgumentParser):
         Args:
             **kwargs (Any): Arguments forwarded to argparse add_subparsers.
         """
-        logger.info("Adding subparsers with kwargs=%s", kwargs)
+        logger.info("Adding subparsers with kwarg keys=%s", sorted(kwargs))
 
         if DEST_KEY in kwargs:
             dest = kwargs[DEST_KEY]
@@ -465,13 +465,17 @@ class ArgumentParser(argparse.ArgumentParser):
             namespace (Namespace | None): Optional namespace to populate.
         """
         parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
-        logger.info("Initial parse result: %s, unknown=%s", vars(parsed_args), unknown_args)
+        logger.info(
+            "Initial parse keys: %s, unknown count=%d",
+            sorted(vars(parsed_args)),
+            len(unknown_args),
+        )
 
         if parsed_args is None:
             raise ValueError("No parsed arguments found.")
 
         deflattened_args = self._deflatten_namespace(parsed_args)
-        logger.info("Deflattened result:   %s", vars(deflattened_args))
+        logger.info("Deflattened keys: %s", sorted(vars(deflattened_args)))
 
         return deflattened_args, unknown_args
 
@@ -485,7 +489,7 @@ class ArgumentParser(argparse.ArgumentParser):
         nested_kwargs = {
             self._get_nested_destination(dest, store=True): value for dest, value in kwargs.items()
         }
-        logger.info("Nested defaults: %s", nested_kwargs)
+        logger.info("Nested default keys: %s", sorted(nested_kwargs))
         super().set_defaults(**nested_kwargs)
 
     def get_default(self, dest: str) -> Any:
@@ -766,7 +770,7 @@ class ArgumentParser(argparse.ArgumentParser):
                         f'Cannot merge namespaces due to conflict at attribute "{name}".'
                     )
             else:
-                logger.info("Setting new attribute: %s=%s", name, value)
+                logger.info("Setting new attribute: %s", name)
                 setattr(destination, name, value)
 
         return destination
@@ -795,18 +799,18 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def _remap_container_destinations(self, container: argparse._ActionsContainer) -> None:
         defaults = self._container_defaults(container)
-        logger.info("Remapping container destinations: %s", defaults)
+        logger.info("Remapping container destination keys: %s", sorted(defaults))
         remapped_defaults = {
             self._get_nested_destination(dest): value for dest, value in defaults.items()
         }
         self._set_container_defaults(container, remapped_defaults)
-        logger.info("Remapped container destinations: %s", remapped_defaults)
+        logger.info("Remapped container destination keys: %s", sorted(remapped_defaults))
 
         for action in self._iter_container_actions(container):
             self._remap_action_destinations(action)
 
     def _remap_action_destinations(self, action: argparse.Action) -> None:
-        logger.info("Remapping action: %s", action)
+        logger.info("Remapping action dest: %s", action.dest)
 
         if action.dest is not None:
             old_dest = action.dest

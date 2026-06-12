@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import replace
 from types import FrameType
 from typing import Any, ClassVar, Literal
 
@@ -57,6 +58,7 @@ from interfacy.plugins import InterfacyPlugin
 from interfacy.schema.schema import (
     Argument,
     ArgumentKind,
+    BooleanBehavior,
     BooleanMode,
     Command,
     ParserSchema,
@@ -299,7 +301,7 @@ class Argparser(InterfacyParser):
         if extra_args.get("action") is argparse.BooleanOptionalAction:
             add_flags = self._normalize_boolean_optional_flags(flags)
 
-        logger.info("Flags: %s, Extra args: %s", flags, extra_args)
+        logger.info("Flags: %s, parser kwarg keys: %s", flags, sorted(extra_args))
 
         return parser.add_argument(*add_flags, **extra_args)
 
@@ -656,7 +658,7 @@ class Argparser(InterfacyParser):
         add_flags = argument.flags
         if kwargs.get("action") is argparse.BooleanOptionalAction:
             add_flags = self._normalize_boolean_optional_flags(argument.flags)
-        logger.info("Adding argument flags=%s, kwargs=%s", add_flags, kwargs)
+        logger.info("Adding argument flags=%s, kwarg keys=%s", add_flags, sorted(kwargs))
         parser.add_argument(*add_flags, **kwargs)
 
     @staticmethod
@@ -1050,6 +1052,79 @@ class Argparser(InterfacyParser):
         """Return the most recently built parser schema for this backend."""
         return self._last_schema
 
+    def _argument_with_suppressed_default(self, argument: Argument) -> Argument:
+        boolean_behavior = argument.boolean_behavior
+        if boolean_behavior is not None:
+            boolean_behavior = BooleanBehavior(
+                supports_negative=boolean_behavior.supports_negative,
+                negative_form=boolean_behavior.negative_form,
+                default=argparse.SUPPRESS,
+                mode=boolean_behavior.mode,
+            )
+
+        return replace(
+            argument,
+            default=argparse.SUPPRESS,
+            boolean_behavior=boolean_behavior,
+        )
+
+    def _command_with_suppressed_defaults(self, command: Command) -> Command:
+        subcommands = None
+        if command.subcommands is not None:
+            subcommands = {
+                name: self._command_with_suppressed_defaults(subcommand)
+                for name, subcommand in command.subcommands.items()
+            }
+
+        return replace(
+            command,
+            initializer=[
+                self._argument_with_suppressed_default(argument) for argument in command.initializer
+            ],
+            parameters=[
+                self._argument_with_suppressed_default(argument) for argument in command.parameters
+            ],
+            subcommands=subcommands,
+        )
+
+    def _schema_with_suppressed_defaults(self, schema: ParserSchema) -> ParserSchema:
+        return replace(
+            schema,
+            commands={
+                name: self._command_with_suppressed_defaults(command)
+                for name, command in schema.commands.items()
+            },
+        )
+
+    def _record_cli_supplied_namespace(self, schema: ParserSchema, args: list[str]) -> None:
+        suppressed_schema = self._schema_with_suppressed_defaults(schema)
+        parser = self._build_from_schema(suppressed_schema)
+        parser._interfacy_raise_parse_errors = True
+        try:
+            parsed = parser.parse_args(args)
+            namespace = self._normalize_parsed_namespace(namespace_to_dict(parsed))
+        except (
+            ArgparseParseError,
+            argparse.ArgumentError,
+            ExecutableFlagTriggeredError,
+            SystemExit,
+            ValueError,
+        ):
+            self._last_cli_supplied_namespace = None
+            return
+        finally:
+            parser._interfacy_raise_parse_errors = False
+
+        self._last_cli_supplied_namespace = namespace
+
+    def _record_cli_supplied_namespace_if_needed(
+        self,
+        schema: ParserSchema,
+        args: list[str],
+    ) -> None:
+        if self._schema_uses_pipe_targets(schema):
+            self._record_cli_supplied_namespace(schema, args)
+
     def _normalize_parsed_namespace(self, namespace: dict[str, Any]) -> dict[str, Any]:
         if self.COMMAND_KEY in namespace:
             cli_name = namespace[self.COMMAND_KEY]
@@ -1210,6 +1285,8 @@ class Argparser(InterfacyParser):
         args = list(args if args is not None else self.get_args())
         args = self._apply_before_parse_plugins(args)
         self._last_parse_args = args
+        self._last_cli_supplied_namespace = None
+        source_args = list(args)
         parser = self.build_parser()
         relaxed_required_actions: list[tuple[argparse.Action, bool]] = []
         if self._last_schema is not None:
@@ -1270,6 +1347,8 @@ class Argparser(InterfacyParser):
             except InterspersedOptionValueError as exc:
                 parser.error(self._interspersed_option_error(exc))
                 raise AssertionError("unreachable") from exc
+
+            self._record_cli_supplied_namespace_if_needed(self._last_schema, source_args)
 
         return self._apply_after_parse_plugins(
             namespace,
@@ -1367,7 +1446,7 @@ class Argparser(InterfacyParser):
                 self.add_command(command, name=None, description=None)
 
             resolved_args = args if args is not None else self.get_args()
-            logger.info("Got args: %s", resolved_args)
+            logger.info("Got %d CLI arg(s)", len(resolved_args))
 
             namespace = self.parse_args(resolved_args)
             resolved_args = self._last_parse_args or resolved_args

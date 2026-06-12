@@ -66,6 +66,26 @@ def test_get_logger_emits_to_stderr_when_interfacy_log_is_set() -> None:
     assert "enabled message" in process.stderr
 
 
+def test_interfacy_log_does_not_emit_command_values() -> None:
+    process = _run_python(
+        """
+        from interfacy import Interfacy
+
+        def login(api_key: str) -> str:
+            return api_key
+
+        parser = Interfacy(sys_exit_enabled=False, print_result=False)
+        result = parser.run(login, args=["SECRET_TOKEN"])
+        assert result == "SECRET_TOKEN"
+        """,
+        env_overrides={"INTERFACY_LOG": "INFO"},
+    )
+
+    assert process.returncode == 0, process.stderr
+    assert "Calling function 'login'" in process.stderr
+    assert "SECRET_TOKEN" not in process.stderr
+
+
 def test_get_logger_treats_interfacy_log_one_as_info() -> None:
     process = _run_python(
         """

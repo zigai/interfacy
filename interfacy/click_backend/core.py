@@ -278,6 +278,8 @@ class ClickParser(InterfacyParser):
         args = list(args if args is not None else self.get_args())
         args = self._apply_before_parse_plugins(args)
         self._last_parse_args = args
+        self._last_cli_supplied_namespace = None
+        source_args = list(args)
         root = self.build_parser()
         relaxed_required_params: list[tuple[click.Parameter, bool]] = []
         if self._last_schema is not None:
@@ -290,6 +292,8 @@ class ClickParser(InterfacyParser):
             else:
                 namespace = self._parse_root_command_namespace(root, args)
             namespace = self._finish_parsed_namespace(namespace)
+            if self._last_schema is not None and self._schema_uses_pipe_targets(self._last_schema):
+                self._record_cli_supplied_namespace(root, source_args)
 
             return self._apply_after_parse_plugins(
                 namespace,
@@ -749,6 +753,8 @@ class ClickParser(InterfacyParser):
         self,
         ctx: click.Context,
         command: InterfacyClickCommand | InterfacyClickGroup,
+        *,
+        include_defaults: bool = True,
     ) -> dict[str, Any]:
         bindings = command.interfacy_param_bindings
         suppress_defaults = command.interfacy_suppress_defaults
@@ -756,10 +762,11 @@ class ClickParser(InterfacyParser):
 
         for click_name, value in ctx.params.items():
             schema_name = bindings.get(click_name, click_name)
-            if schema_name in suppress_defaults:
-                source = ctx.get_parameter_source(click_name)
-                if source in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP, None):
-                    continue
+            source = ctx.get_parameter_source(click_name)
+            if source in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP, None) and (
+                not include_defaults or schema_name in suppress_defaults
+            ):
+                continue
             params[schema_name] = value
 
         return params
@@ -771,8 +778,9 @@ class ClickParser(InterfacyParser):
         depth: int,
         *,
         relaxed_parse: bool = False,
+        include_defaults: bool = True,
     ) -> dict[str, Any]:
-        namespace = self._params_to_schema(ctx, command)
+        namespace = self._params_to_schema(ctx, command, include_defaults=include_defaults)
 
         if isinstance(command, click.Group) and command.commands:
             combined_args = self._remaining_args(ctx)
@@ -805,6 +813,7 @@ class ClickParser(InterfacyParser):
                 sub_cmd,
                 depth + 1,
                 relaxed_parse=relaxed_parse,
+                include_defaults=include_defaults,
             )
 
         return namespace
@@ -988,6 +997,8 @@ class ClickParser(InterfacyParser):
         self,
         root: InterfacyClickGroup,
         args: list[str],
+        *,
+        include_defaults: bool = True,
     ) -> dict[str, Any]:
         ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
         combined_args = self._remaining_args(ctx)
@@ -1007,20 +1018,57 @@ class ClickParser(InterfacyParser):
 
         return {
             self.COMMAND_KEY: top_cli_name,
-            top_cli_name: self._build_namespace_for_ctx(sub_ctx, cmd, depth=0),
+            top_cli_name: self._build_namespace_for_ctx(
+                sub_ctx,
+                cmd,
+                depth=0,
+                include_defaults=include_defaults,
+            ),
         }
 
     def _parse_root_command_namespace(
         self,
         root: click.Command,
         args: list[str],
+        *,
+        include_defaults: bool = True,
     ) -> dict[str, Any]:
         ctx = root.make_context(root.name or "main", args, resilient_parsing=False)
 
         if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
             raise ConfigurationError(f"Unexpected root command type: {type(root)!r}")
 
-        return self._build_namespace_for_ctx(ctx, root, depth=0)
+        return self._build_namespace_for_ctx(
+            ctx,
+            root,
+            depth=0,
+            include_defaults=include_defaults,
+        )
+
+    def _record_cli_supplied_namespace(self, root: click.Command, args: list[str]) -> None:
+        try:
+            if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
+                namespace = self._parse_root_group_namespace(
+                    root,
+                    args,
+                    include_defaults=False,
+                )
+            else:
+                namespace = self._parse_root_command_namespace(
+                    root,
+                    args,
+                    include_defaults=False,
+                )
+            self._last_cli_supplied_namespace = self._normalize_parsed_args(namespace)
+        except (
+            click.UsageError,
+            click.BadParameter,
+            click.BadOptionUsage,
+            click.NoSuchOption,
+            ExecutableFlagTriggeredError,
+            ValueError,
+        ):
+            self._last_cli_supplied_namespace = None
 
     @staticmethod
     def _interspersed_option_label(argument: Argument) -> str:
@@ -1153,7 +1201,7 @@ class ClickParser(InterfacyParser):
             for cmd in commands:
                 self.add_command(cmd, name=None, description=None)
             parsed_args = args if args is not None else self.get_args()
-            logger.info("Got args: %s", parsed_args)
+            logger.info("Got %d CLI arg(s)", len(parsed_args))
 
             namespace = self.parse_args(parsed_args)
             parsed_args = self._last_parse_args or parsed_args

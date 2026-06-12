@@ -251,12 +251,24 @@ def _split_list_values(chunk: str, delimiter: str | None) -> list[str]:
     return values
 
 
-def is_cli_supplied(value: Any, parameter: Parameter) -> bool:
+def is_cli_supplied(
+    value: Any,
+    parameter: Parameter,
+    *,
+    present: bool = True,
+    cli_supplied_parameters: set[str] | None = None,
+) -> bool:
     """
     Check if a value was explicitly provided via CLI.
 
     For collection types (list, tuple, set), argparse returns an empty collection when nargs='*' and no CLI args are provided.
     """
+    if cli_supplied_parameters is not None and parameter.name in cli_supplied_parameters:
+        return True
+
+    if not present:
+        return False
+
     if value is None:
         return False
 
@@ -385,6 +397,7 @@ def validate_required_pipe_targets(
     config: PipeTargets,
     arguments: dict[str, Any],
     parameters: dict[str, Parameter],
+    cli_supplied_parameters: set[str] | None = None,
 ) -> dict[str, Any]:
     """Validate that required pipe targets were supplied by CLI or stdin."""
     updated = dict(arguments)
@@ -396,7 +409,12 @@ def validate_required_pipe_targets(
         if not parameter.is_required:
             continue
 
-        if is_cli_supplied(updated.get(param_name), parameter):
+        if is_cli_supplied(
+            updated.get(param_name),
+            parameter,
+            present=param_name in updated,
+            cli_supplied_parameters=cli_supplied_parameters,
+        ):
             continue
 
         raise PipeInputError(
@@ -414,6 +432,7 @@ def apply_pipe_values(
     arguments: dict[str, Any],
     parameters: dict[str, Parameter],
     type_parser: StrToTypeParser,
+    cli_supplied_parameters: set[str] | None = None,
 ) -> dict[str, Any]:
     """Return a new argument mapping with piped stdin applied."""
     updated = dict(arguments)
@@ -425,7 +444,12 @@ def apply_pipe_values(
             raise ConfigurationError(f"Pipe target references unknown parameter '{param_name}'")
 
         existing = updated.get(param_name)
-        cli_supplied = is_cli_supplied(existing, parameter)
+        cli_supplied = is_cli_supplied(
+            existing,
+            parameter,
+            present=param_name in updated,
+            cli_supplied_parameters=cli_supplied_parameters,
+        )
 
         if raw_chunk is None or raw_chunk == "":  # No piped data for this binding
             continue
@@ -448,6 +472,7 @@ def apply_pipe_values(
         config=config,
         arguments=updated,
         parameters=parameters,
+        cli_supplied_parameters=cli_supplied_parameters,
     )
 
 

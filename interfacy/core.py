@@ -721,6 +721,7 @@ class InterfacyParser:
         self.metadata: dict[str, Any] = {}
         self._ancestor_options = AncestorOptions()
         self._last_parse_args: list[str] | None = None
+        self._last_cli_supplied_namespace: dict[str, Any] | None = None
         self.include_inherited_methods = include_inherited_methods
         self.include_protected_methods = include_protected_methods
         self.include_private_methods = include_private_methods
@@ -2258,6 +2259,27 @@ class InterfacyParser:
         """Clear any cached stdin content."""
         self._pipe_buffer = PIPE_UNSET
 
+    def _schema_uses_pipe_targets(self, schema: "ParserSchema") -> bool:
+        if schema.pipe_targets is not None:
+            return True
+        if self.pipe_targets_default is not None or self._pipe_target_overrides:
+            return True
+
+        return any(self._command_uses_pipe_targets(command) for command in schema.commands.values())
+
+    def _command_uses_pipe_targets(self, command: "Command") -> bool:
+        if command.pipe_targets is not None:
+            return True
+        if any(argument.accepts_stdin for argument in (*command.initializer, *command.parameters)):
+            return True
+        if command.subcommands is None:
+            return False
+
+        return any(
+            self._command_uses_pipe_targets(subcommand)
+            for subcommand in command.subcommands.values()
+        )
+
     def get_parameters_for(
         self,
         command: "Command",
@@ -2288,6 +2310,94 @@ class InterfacyParser:
             return {}
 
         return {param.name: param for param in params}
+
+    def get_cli_supplied_parameters(
+        self,
+        command: "Command",
+        *,
+        subcommand: str | None = None,
+    ) -> set[str] | None:
+        """Return parameter names supplied by the most recent CLI parse, if known."""
+        namespace = self._last_cli_supplied_namespace
+        if not isinstance(namespace, dict):
+            return None
+
+        bucket = self._cli_source_bucket_for_command(namespace, command)
+        if subcommand not in (None, "__init__"):
+            bucket = self._cli_source_bucket_for_subcommand(bucket, command, subcommand)
+
+        if not isinstance(bucket, dict):
+            return set()
+
+        return set(bucket)
+
+    def _cli_source_bucket_for_command(
+        self,
+        namespace: dict[str, Any],
+        command: "Command",
+    ) -> dict[str, Any]:
+        for name in self._cli_source_command_names(command):
+            value = namespace.get(name)
+            if isinstance(value, dict):
+                return value
+
+        return namespace
+
+    def _cli_source_bucket_for_subcommand(
+        self,
+        bucket: dict[str, Any],
+        command: "Command",
+        subcommand: str,
+    ) -> dict[str, Any]:
+        candidates = self._cli_source_subcommand_candidates(command, subcommand)
+
+        for name in candidates:
+            value = bucket.get(name)
+            if isinstance(value, dict):
+                return value
+
+        nested = bucket.get("_subcommands")
+        if isinstance(nested, dict):
+            for name in candidates:
+                value = nested.get(name)
+                if isinstance(value, dict):
+                    return value
+
+        return {}
+
+    def _cli_source_subcommand_candidates(
+        self,
+        command: "Command",
+        subcommand: str,
+    ) -> list[str]:
+        candidates: list[str] = [subcommand]
+        translated = self.flag_strategy.command_translator.translate(subcommand)
+        if translated not in candidates:
+            candidates.append(translated)
+        reversed_name = self.flag_strategy.command_translator.reverse(subcommand)
+        if reversed_name not in candidates:
+            candidates.append(reversed_name)
+
+        if command.subcommands:
+            for sub_cmd in command.subcommands.values():
+                names = self._cli_source_command_names(sub_cmd)
+                if any(name in candidates for name in names):
+                    candidates.extend(name for name in names if name not in candidates)
+
+        return candidates
+
+    @staticmethod
+    def _cli_source_command_names(command: "Command") -> list[str]:
+        names: list[str] = []
+        for name in (command.canonical_name, command.cli_name, *command.aliases):
+            if name and name not in names:
+                names.append(name)
+
+        obj = command.obj
+        if obj is not None and obj.name not in names:
+            names.append(obj.name)
+
+        return names
 
     def _resolve_class_method(self, cls: Class, subcommand: str | None) -> Method:
         if subcommand is None:

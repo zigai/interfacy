@@ -100,15 +100,15 @@ class SchemaRunner:
         positional_args, keyword_args = self._build_call_args(func, cli_args)
 
         logger.info(
-            "Calling function '%s' with args: %s, kwargs: %s",
+            "Calling function '%s' with %d positional arg(s) and %d keyword arg(s)",
             func.name,
-            positional_args,
-            keyword_args,
+            len(positional_args),
+            len(keyword_args),
         )
         result = func.call(*positional_args, **keyword_args)
         result = self._resolve_result(result)
 
-        logger.info("Result: %s", result)
+        logger.info("Function '%s' completed", func.name)
 
         return result
 
@@ -131,7 +131,11 @@ class SchemaRunner:
         if instance.init_method:
             args_init, args_method = split_init_args(cli_args, instance, method)
             init_args, init_kwargs = split_args_kwargs(args_init, instance.init_method)
-            logger.info("__init__ method args: %s, kwargs: %s", init_args, init_kwargs)
+            logger.info(
+                "__init__ received %d positional arg(s) and %d keyword arg(s)",
+                len(init_args),
+                len(init_kwargs),
+            )
             instance.init(*init_args, **init_kwargs)
         else:
             args_method = cli_args
@@ -141,10 +145,10 @@ class SchemaRunner:
 
         method_args, method_kwargs = self._build_call_args(method, args_method)
         logger.info(
-            "Calling method '%s' with args: %s, kwargs: %s",
+            "Calling method '%s' with %d positional arg(s) and %d keyword arg(s)",
             method.name,
-            method_args,
-            method_kwargs,
+            len(method_args),
+            len(method_kwargs),
         )
         result = instance.call_method(method.name, *method_args, **method_kwargs)
         return self._resolve_result(result)
@@ -170,7 +174,7 @@ class SchemaRunner:
         command_args = self._subcommand_bucket(args, command_name)
         del args[self.COMMAND_KEY]
         args.pop(command_name, None)
-        logger.info("Namespace: %s", command_args)
+        logger.info("Subcommand namespace keys: %s", sorted(command_args))
 
         resolved_name = self.builder.flag_strategy.command_translator.reverse(command_name)
         try:
@@ -183,7 +187,11 @@ class SchemaRunner:
                 args = self._apply_pipe(command, args, subcommand="__init__")
                 args = self._reconstruct_expanded_models(args, self._initializer_for(command))
                 init_args, init_kwargs = split_args_kwargs(args, runtime_cls.init_method)
-                logger.info("__init__ method args: %s, kwargs: %s", init_args, init_kwargs)
+                logger.info(
+                    "__init__ received %d positional arg(s) and %d keyword arg(s)",
+                    len(init_args),
+                    len(init_kwargs),
+                )
                 runtime_cls.init(*init_args, **init_kwargs)
             else:
                 runtime_cls.init()
@@ -196,10 +204,10 @@ class SchemaRunner:
             )
         method_args, method_kwargs = self._build_call_args(method, command_args)
         logger.info(
-            "Calling method '%s' with args: %s, kwargs: %s",
+            "Calling method '%s' with %d positional arg(s) and %d keyword arg(s)",
             method.name,
-            method_args,
-            method_kwargs,
+            len(method_args),
+            len(method_kwargs),
         )
         result = runtime_cls.call_method(method.name, *method_args, **method_kwargs)
 
@@ -275,11 +283,16 @@ class SchemaRunner:
 
         payload = self.builder.read_piped_input()
         parameters = self.builder.get_parameters_for(command, subcommand=subcommand)
+        cli_supplied_parameters = self.builder.get_cli_supplied_parameters(
+            command,
+            subcommand=subcommand,
+        )
         if payload is None:
             return validate_required_pipe_targets(
                 config=config,
                 arguments=args,
                 parameters=parameters,
+                cli_supplied_parameters=cli_supplied_parameters,
             )
 
         return apply_pipe_values(
@@ -288,6 +301,7 @@ class SchemaRunner:
             arguments=args,
             parameters=parameters,
             type_parser=self.builder.type_parser,
+            cli_supplied_parameters=cli_supplied_parameters,
         )
 
     def _run_with_chain(
@@ -488,10 +502,10 @@ class SchemaRunner:
                 )
                 method_args, method_kwargs = self._build_call_args(obj, args)
                 logger.info(
-                    "Calling method '%s' on instance with args: %s, kwargs: %s",
+                    "Calling method '%s' on instance with %d positional arg(s) and %d keyword arg(s)",
                     obj.name,
-                    method_args,
-                    method_kwargs,
+                    len(method_args),
+                    len(method_kwargs),
                 )
                 result = obj.call(instance, *method_args, **method_kwargs)
 
