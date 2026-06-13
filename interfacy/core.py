@@ -1,8 +1,13 @@
+import signal
 import sys
+import threading
+import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from enum import IntEnum, auto
+from types import FrameType
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, TypedDict, TypeVar
 
 from objinspect import Class, Function, Method, Parameter, inspect
@@ -26,7 +31,10 @@ from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
     DuplicatePluginError,
+    InterfacyError,
     InvalidCommandError,
+    ReservedFlagError,
+    UnsupportedParameterTypeError,
 )
 from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
 from interfacy.logger import get_logger
@@ -92,6 +100,17 @@ class ResolvedCommandSettings(TypedDict):
     help_subcommand_sort: HelpSubcommandSort
     model_expansion_max_depth: int | None
     help_group: str | None
+
+
+@dataclass(frozen=True)
+class RunFailure:
+    value: Any
+
+
+@dataclass(frozen=True)
+class RunParseSuccess:
+    args: list[str]
+    namespace: dict[str, Any]
 
 
 logger = get_logger(__name__)
@@ -767,6 +786,7 @@ class InterfacyParser:
         self.on_interrupt = on_interrupt
         self.silent_interrupt = silent_interrupt
         self.reraise_interrupt = reraise_interrupt
+        self._last_interrupt_time: float = 0.0
         self.abbreviation_gen = abbreviation_gen or DefaultAbbreviationGenerator(
             max_generated_len=self.abbreviation_max_generated_len
         )
@@ -2454,7 +2474,11 @@ class InterfacyParser:
         """
         raise NotImplementedError
 
-    def run(self, *commands: Callable[..., Any], args: list[str] | None = None) -> Any:
+    def run(
+        self,
+        *commands: Callable[..., Any] | type | Any,
+        args: list[str] | None = None,
+    ) -> Any:
         """
         Register commands, parse args, and execute the selected command.
 
@@ -2462,6 +2486,160 @@ class InterfacyParser:
             *commands (Callable): Commands to register.
             args (list[str] | None): Argument list to parse. Defaults to sys.argv.
         """
+        registration_snapshot = self._snapshot_registration_state() if commands else None
+        self._set_runtime_process_title()
+
+        original_handler, sigint_handler = self._install_sigint_handler()
+        try:
+            try:
+                parse_result = self._parse_run_input(commands, args)
+            finally:
+                if sigint_handler is not None:
+                    signal.signal(signal.SIGINT, original_handler)
+
+            if isinstance(parse_result, RunFailure):
+                return parse_result.value
+
+            if sigint_handler is not None:
+                signal.signal(signal.SIGINT, sigint_handler)
+
+            try:
+                run_result = self._execute_run_result(parse_result.namespace, parse_result.args)
+            finally:
+                if sigint_handler is not None:
+                    signal.signal(signal.SIGINT, original_handler)
+
+            if isinstance(run_result, RunFailure):
+                return run_result.value
+
+            if self.display_result:
+                self.result_display_fn(run_result)
+
+            self.exit(ExitCode.SUCCESS)
+
+            return run_result
+        finally:
+            if registration_snapshot is not None:
+                self._restore_registration_state(registration_snapshot)
+
+    def _install_sigint_handler(
+        self,
+    ) -> tuple[Any, Callable[[int, FrameType | None], None] | None]:
+        if threading.current_thread() is not threading.main_thread():
+            return None, None
+
+        original_handler = signal.getsignal(signal.SIGINT)
+        sigint_handler = self._sigint_handler
+        signal.signal(signal.SIGINT, sigint_handler)
+
+        return original_handler, sigint_handler
+
+    def _sigint_handler(self, _signum: int, _frame: FrameType | None) -> None:
+        now = time.time()
+        if now - self._last_interrupt_time < 1.0:
+            sys.exit(ExitCode.INTERRUPTED)
+
+        self._last_interrupt_time = now
+
+        raise KeyboardInterrupt()
+
+    def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
+        if self.on_interrupt is not None:
+            self.on_interrupt(exc)
+
+        self.log_interrupt()
+        self.exit(ExitCode.INTERRUPTED)
+        if self.reraise_interrupt:
+            raise exc
+
+        return exc
+
+    def _handle_system_exit(self, exc: SystemExit) -> SystemExit:
+        if self.sys_exit_enabled:
+            raise exc
+
+        return exc
+
+    def _parse_run_input(
+        self,
+        commands: Sequence[Callable[..., Any] | type | Any],
+        args: list[str] | None,
+    ) -> RunParseSuccess | RunFailure:
+        try:
+            self.reset_piped_input()
+            for command in commands:
+                self.add_command(command, name=None, description=None)
+
+            resolved_args = args if args is not None else self.get_args()
+            logger.info("Got %d CLI arg(s)", len(resolved_args))
+
+            namespace = self.parse_args(resolved_args)
+            resolved_args = self._last_parse_args or resolved_args
+        except KeyboardInterrupt as exc:
+            return RunFailure(self._handle_interrupt(exc))
+        except SystemExit as exc:
+            return RunFailure(self._handle_system_exit(exc))
+        except Exception as exc:  # noqa: BLE001 - parser boundary maps backend/user parse errors
+            return self._handle_run_parse_exception(exc)
+
+        return RunParseSuccess(args=resolved_args, namespace=namespace)
+
+    def _execute_run_result(
+        self,
+        namespace: dict[str, Any],
+        args: list[str],
+    ) -> Any | RunFailure:
+        try:
+            return self._execute_with_plugins(
+                namespace=namespace,
+                args=args,
+                call_next=self._build_run_callable(namespace, args),
+            )
+        except KeyboardInterrupt as exc:
+            return RunFailure(self._handle_interrupt(exc))
+        except SystemExit as exc:
+            return RunFailure(self._handle_system_exit(exc))
+        except Exception as exc:  # noqa: BLE001 - CLI boundary catches user command errors
+            return self._handle_run_execute_exception(exc)
+
+    def _handle_run_parse_exception(self, exc: Exception) -> RunFailure:
+        if isinstance(
+            exc,
+            (
+                DuplicateCommandError,
+                UnsupportedParameterTypeError,
+                ReservedFlagError,
+                InvalidCommandError,
+                ConfigurationError,
+            ),
+        ):
+            self.log_exception(exc)
+            self.exit(ExitCode.ERR_PARSING)
+
+            return RunFailure(exc)
+
+        self.log_exception(exc)
+        self.exit(ExitCode.ERR_RUNTIME)
+
+        return RunFailure(exc)
+
+    def _handle_run_execute_exception(self, exc: Exception) -> RunFailure:
+        if isinstance(exc, InterfacyError):
+            self.log_exception(exc)
+            self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
+
+            return RunFailure(exc)
+
+        self.log_exception(exc)
+        self.exit(ExitCode.ERR_RUNTIME)
+
+        return RunFailure(exc)
+
+    def _build_run_callable(
+        self,
+        namespace: dict[str, Any],
+        args: list[str],
+    ) -> Callable[[], Any]:
         raise NotImplementedError
 
     @abstractmethod

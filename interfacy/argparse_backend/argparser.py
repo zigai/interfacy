@@ -2,13 +2,8 @@ from __future__ import annotations
 
 import argparse
 import re
-import signal
-import sys
-import threading
-import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
-from types import FrameType
 from typing import Any, ClassVar, Literal
 
 from objinspect import Class, Function, Method, Parameter
@@ -30,7 +25,6 @@ from interfacy.core import (
     DEFAULT_HELP_FLAGS,
     DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
     BooleanNegativePrefix,
-    ExitCode,
     HelpFlags,
     InterfacyParser,
     InterspersedOptionValueError,
@@ -39,11 +33,7 @@ from interfacy.core import (
 )
 from interfacy.exceptions import (
     ConfigurationError,
-    DuplicateCommandError,
-    InterfacyError,
-    InvalidCommandError,
     ReservedFlagError,
-    UnsupportedParameterTypeError,
 )
 from interfacy.executable_flag import (
     ExecutableFlag,
@@ -266,7 +256,6 @@ class Argparser(InterfacyParser):
 
         self.formatter_class = formatter_class
         self._parser: ArgumentParser | None = None
-        self._last_interrupt_time: float = 0.0
         self._last_schema: ParserSchema | None = None
 
     def _new_parser(self, name: str | None = None) -> ArgumentParser:
@@ -1402,159 +1391,22 @@ class Argparser(InterfacyParser):
             if isinstance(sub_namespace, dict):
                 self._convert_command_tuple_arguments(subcommand, sub_namespace)
 
-    def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
-        """Handle KeyboardInterrupt with callback, logging, and optional re-raise."""
-        if self.on_interrupt is not None:
-            self.on_interrupt(exc)
-
-        self.log_interrupt()
-        self.exit(ExitCode.INTERRUPTED)
-        if self.reraise_interrupt:
-            raise exc
-
-        return exc
-
-    def _install_sigint_handler(
+    def _build_run_callable(
         self,
-    ) -> tuple[Any, Callable[[int, FrameType | None], None] | None]:
-        if threading.current_thread() is not threading.main_thread():
-            return None, None
-
-        original_handler = signal.getsignal(signal.SIGINT)
-
-        def sigint_handler(_signum: int, _frame: FrameType | None) -> None:
-            now = time.time()
-            if now - self._last_interrupt_time < 1.0:  # Double Ctrl+C: force immediate exit
-                sys.exit(ExitCode.INTERRUPTED)
-
-            self._last_interrupt_time = now
-
-            raise KeyboardInterrupt()
-
-        signal.signal(signal.SIGINT, sigint_handler)
-
-        return original_handler, sigint_handler
-
-    def _parse_run_input(
-        self,
-        commands: Sequence[Callable[..., Any] | type | Any],
-        args: list[str] | None,
-    ) -> tuple[list[str], dict[str, Any]] | BaseException:
-        try:
-            self.reset_piped_input()
-            for command in commands:
-                self.add_command(command, name=None, description=None)
-
-            resolved_args = args if args is not None else self.get_args()
-            logger.info("Got %d CLI arg(s)", len(resolved_args))
-
-            namespace = self.parse_args(resolved_args)
-            resolved_args = self._last_parse_args or resolved_args
-        except (
-            DuplicateCommandError,
-            UnsupportedParameterTypeError,
-            ReservedFlagError,
-            InvalidCommandError,
-            ConfigurationError,
-        ) as exc:
-            self.log_exception(exc)
-            self.exit(ExitCode.ERR_PARSING)
-            return exc
-        except SystemExit as exc:
-            if self.sys_exit_enabled:
-                raise
-
-            return exc
-        except KeyboardInterrupt as exc:
-            return self._handle_interrupt(exc)
-        except Exception as exc:  # noqa: BLE001 - executable-flag handlers may raise user errors
-            self.log_exception(exc)
-            self.exit(ExitCode.ERR_RUNTIME)
-            return exc
-        else:
-            return resolved_args, namespace
-
-    def _run_runner(self, namespace: dict[str, Any], args: list[str]) -> Any | BaseException:
+        namespace: dict[str, Any],
+        args: list[str],
+    ) -> Callable[[], Any]:
         if self._parser is None:
             raise RuntimeError("Parser not initialized")
 
-        try:
-            runner = ArgparseRunner(
-                namespace=namespace,
-                args=args,
-                parser=self._parser,
-                builder=self,
-            )
-            return self._execute_with_plugins(
-                namespace=namespace,
-                args=args,
-                call_next=runner.run,
-            )
-        except InterfacyError as exc:
-            self.log_exception(exc)
-            self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
-            return exc
-        except SystemExit as exc:
-            if self.sys_exit_enabled:
-                raise
+        runner = ArgparseRunner(
+            namespace=namespace,
+            args=args,
+            parser=self._parser,
+            builder=self,
+        )
 
-            return exc
-        except KeyboardInterrupt as exc:
-            return self._handle_interrupt(exc)
-        except Exception as exc:  # noqa: BLE001 - CLI boundary catches user command errors
-            self.log_exception(exc)
-            self.exit(ExitCode.ERR_RUNTIME)
-            return exc
-
-    def run(
-        self,
-        *commands: Callable[..., Any] | type | Any,
-        args: list[str] | None = None,
-    ) -> Any:
-        """
-        Register commands, parse args, and execute the selected command.
-
-        Args:
-            *commands (Callable[..., Any] | type | Any): Commands to register.
-            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
-        """
-        registration_snapshot = self._snapshot_registration_state() if commands else None
-        self._set_runtime_process_title()
-
-        original_handler, sigint_handler = self._install_sigint_handler()
-        try:
-            try:
-                parse_result = self._parse_run_input(commands, args)
-            finally:
-                if sigint_handler is not None:
-                    signal.signal(signal.SIGINT, original_handler)
-
-            if isinstance(parse_result, BaseException):
-                return parse_result
-
-            resolved_args, namespace = parse_result
-
-            if sigint_handler is not None:
-                signal.signal(signal.SIGINT, sigint_handler)
-
-            try:
-                result = self._run_runner(namespace, resolved_args)
-            finally:
-                if sigint_handler is not None:
-                    signal.signal(signal.SIGINT, original_handler)
-
-            if isinstance(result, BaseException):
-                return result
-
-            if self.display_result:
-                self.result_display_fn(result)
-
-            self.exit(ExitCode.SUCCESS)
-
-            return result
-        finally:
-            if registration_snapshot is not None:
-                self._restore_registration_state(registration_snapshot)
+        return runner.run
 
 
 __all__ = ["Argparser"]

@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import signal
 import sys
-import threading
-import time
 import warnings
 from collections.abc import Callable, Iterable, Sequence
-from types import FrameType
 from typing import Any, ClassVar, Literal
 
 try:
@@ -42,15 +38,9 @@ from interfacy.core import (
     InterspersedOptionValueError,
     NegativeBoolNameMode,
     NegativeBoolNamePrefixes,
+    RunFailure,
 )
-from interfacy.exceptions import (
-    ConfigurationError,
-    DuplicateCommandError,
-    InterfacyError,
-    InvalidCommandError,
-    ReservedFlagError,
-    UnsupportedParameterTypeError,
-)
+from interfacy.exceptions import ConfigurationError
 from interfacy.executable_flag import (
     ExecutableFlag,
     executable_flag_to_argument,
@@ -170,7 +160,6 @@ class ClickParser(InterfacyParser):
 
         self._last_schema: ParserSchema | None = None
         self._root_command: click.Command | None = None
-        self._last_interrupt_time: float = 0.0
 
     def build_click_command(
         self,
@@ -767,6 +756,7 @@ class ClickParser(InterfacyParser):
                 not include_defaults or schema_name in suppress_defaults
             ):
                 continue
+
             params[schema_name] = value
 
         return params
@@ -1129,26 +1119,6 @@ class ClickParser(InterfacyParser):
         for param, required in relaxed:
             param.required = required
 
-    def _handle_interrupt(self, exc: KeyboardInterrupt) -> KeyboardInterrupt:
-        if self.on_interrupt is not None:
-            self.on_interrupt(exc)
-
-        self.log_interrupt()
-        self.exit(ExitCode.INTERRUPTED)
-        if self.reraise_interrupt:
-            raise exc
-
-        return exc
-
-    def _sigint_handler(self, _signum: int, _frame: FrameType | None) -> None:
-        now = time.time()
-        if now - self._last_interrupt_time < 1.0:
-            sys.exit(ExitCode.INTERRUPTED)
-
-        self._last_interrupt_time = now
-
-        raise KeyboardInterrupt()
-
     def _handle_system_exit(self, exc: click.exceptions.Exit | SystemExit) -> SystemExit:
         if isinstance(exc, click.exceptions.Exit):
             system_exit = SystemExit(exc.exit_code)
@@ -1172,148 +1142,42 @@ class ClickParser(InterfacyParser):
 
         return system_exit
 
-    def _handle_parse_failure(
-        self,
-        exc: (
-            DuplicateCommandError
-            | UnsupportedParameterTypeError
-            | ReservedFlagError
-            | InvalidCommandError
-            | ConfigurationError
-            | click.UsageError
-        ),
-    ) -> Exception:
+    def _handle_run_parse_exception(self, exc: Exception) -> RunFailure:
         if isinstance(exc, click.UsageError):
-            return self._handle_click_usage_error(exc)
+            return RunFailure(self._handle_click_usage_error(exc))
 
-        self.log_exception(exc)
-        self.exit(ExitCode.ERR_PARSING)
+        if isinstance(exc, click.exceptions.Exit):
+            return RunFailure(self._handle_system_exit(exc))
 
-        return exc
+        return super()._handle_run_parse_exception(exc)
 
-    def _register_commands_and_parse(
-        self,
-        commands: tuple[Callable[..., Any], ...],
-        args: list[str] | None,
-    ) -> tuple[bool, tuple[list[str], dict[str, Any]] | Any]:
-        try:
-            self.reset_piped_input()
-            for cmd in commands:
-                self.add_command(cmd, name=None, description=None)
-            parsed_args = args if args is not None else self.get_args()
-            logger.info("Got %d CLI arg(s)", len(parsed_args))
-
-            namespace = self.parse_args(parsed_args)
-            parsed_args = self._last_parse_args or parsed_args
-        except (
-            DuplicateCommandError,
-            UnsupportedParameterTypeError,
-            ReservedFlagError,
-            InvalidCommandError,
-            ConfigurationError,
-            click.UsageError,
-        ) as exc:
-            return False, self._handle_parse_failure(exc)
-        except (click.exceptions.Exit, SystemExit) as exc:
-            return False, self._handle_system_exit(exc)
-        except KeyboardInterrupt as exc:
-            return False, self._handle_interrupt(exc)
-        except Exception as exc:  # noqa: BLE001 - executable-flag handlers may raise user errors
-            self.log_exception(exc)
-            self.exit(ExitCode.ERR_RUNTIME)
-            return False, exc
-        else:
-            return True, (parsed_args, namespace)
-
-    def _execute_schema_runner(
+    def _build_run_callable(
         self,
         namespace: dict[str, Any],
         args: list[str],
-    ) -> tuple[bool, Any]:
-        try:
-            runner = SchemaRunner(
-                namespace=namespace,
-                args=args,
-                builder=self,
-            )
-            return True, self._execute_with_plugins(
-                namespace=namespace,
-                args=args,
-                call_next=runner.run,
-            )
-        except InterfacyError as exc:
+    ) -> Callable[[], Any]:
+        runner = SchemaRunner(
+            namespace=namespace,
+            args=args,
+            builder=self,
+        )
+
+        return runner.run
+
+    def _handle_run_execute_exception(self, exc: Exception) -> RunFailure:
+        if isinstance(exc, click.exceptions.Exit):
+            return RunFailure(self._handle_system_exit(exc))
+
+        if isinstance(exc, ExpandedModelValidationError):
+            return RunFailure(self._handle_click_usage_error(click.UsageError(str(exc))))
+
+        if isinstance(exc, click.UsageError):
             self.log_exception(exc)
-            self.exit(ExitCode.ERR_RUNTIME_INTERNAL)
-            return False, exc
-        except (click.exceptions.Exit, SystemExit) as exc:
-            return False, self._handle_system_exit(exc)
-        except (ExpandedModelValidationError, click.UsageError) as exc:
-            if isinstance(exc, ExpandedModelValidationError):
-                payload = self._handle_click_usage_error(click.UsageError(str(exc)))
-            else:
-                self.log_exception(exc)
-                self.exit(ExitCode.ERR_PARSING)
+            self.exit(ExitCode.ERR_PARSING)
 
-                payload = exc
+            return RunFailure(exc)
 
-            return False, payload
-        except KeyboardInterrupt as exc:
-            return False, self._handle_interrupt(exc)
-        except Exception as exc:  # noqa: BLE001 - runtime boundary fallback
-            self.log_exception(exc)
-            self.exit(ExitCode.ERR_RUNTIME)
-            return False, exc
-
-    def run(self, *commands: Callable[..., Any], args: list[str] | None = None) -> Any:
-        """
-        Register commands, parse args, and execute the selected command.
-
-        Args:
-            *commands (Callable[..., Any]): Commands to register.
-            args (list[str] | None): Argument list to parse. Defaults to sys.argv.
-        """
-        registration_snapshot = self._snapshot_registration_state() if commands else None
-        self._set_runtime_process_title()
-        can_handle_sigint = threading.current_thread() is threading.main_thread()
-        original_handler = signal.getsignal(signal.SIGINT) if can_handle_sigint else None
-
-        if can_handle_sigint:
-            signal.signal(signal.SIGINT, self._sigint_handler)
-
-        try:
-            try:
-                parse_ok, parse_payload = self._register_commands_and_parse(commands, args)
-            finally:
-                if can_handle_sigint:
-                    signal.signal(signal.SIGINT, original_handler)
-
-            if not parse_ok:
-                return parse_payload
-
-            parsed_args, namespace = parse_payload
-
-            if can_handle_sigint:
-                signal.signal(signal.SIGINT, self._sigint_handler)
-
-            try:
-                run_ok, run_payload = self._execute_schema_runner(namespace, parsed_args)
-            finally:
-                if can_handle_sigint:
-                    signal.signal(signal.SIGINT, original_handler)
-
-            if not run_ok:
-                return run_payload
-
-            result = run_payload
-            if self.display_result:
-                self.result_display_fn(result)
-
-            self.exit(ExitCode.SUCCESS)
-
-            return result
-        finally:
-            if registration_snapshot is not None:
-                self._restore_registration_state(registration_snapshot)
+        return super()._handle_run_execute_exception(exc)
 
     def parser_from_function(
         self,
