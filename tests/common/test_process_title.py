@@ -1,3 +1,5 @@
+import signal
+
 import pytest
 
 from interfacy.core import InterfacyParser
@@ -77,3 +79,37 @@ def test_parsers_set_runtime_process_title_on_run(
     parser.run(args=[])
 
     assert len(called) == 1
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_run_installs_sigint_handler_for_parse_and_execute(
+    parser: InterfacyParser,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_handler = object()
+    installed_handlers: list[object] = []
+
+    def record_signal(signum: signal.Signals, handler: object) -> object:
+        assert signum is signal.SIGINT
+        installed_handlers.append(handler)
+
+        return original_handler
+
+    monkeypatch.setattr(signal, "getsignal", lambda signum: original_handler)
+    monkeypatch.setattr(signal, "signal", record_signal)
+    parser.add_command(_noop)
+
+    parser.run(args=[])
+
+    assert len(installed_handlers) == 4
+    parse_handler, parse_restore, execute_handler, execute_restore = installed_handlers
+    assert parse_handler is not original_handler
+    assert parse_restore is original_handler
+    assert execute_handler is not original_handler
+
+    if hasattr(parse_handler, "__func__") and hasattr(execute_handler, "__func__"):
+        assert execute_handler.__func__ is parse_handler.__func__
+    else:
+        assert execute_handler is parse_handler
+
+    assert execute_restore is original_handler

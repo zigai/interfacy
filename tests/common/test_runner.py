@@ -1,6 +1,7 @@
 import pytest
 
 from interfacy.core import InterfacyParser
+from interfacy.plugins import InterfacyPlugin
 from interfacy.runner import SchemaRunner
 from tests.conftest import (
     Color,
@@ -52,6 +53,82 @@ class TestParserReuse:
 
         assert parser.run(greet_once, args=["Ada"]) == "hello Ada"
         assert parser.run(greet_once, args=["Ada"]) == "hello Ada"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_inline_run_restores_registered_commands_and_backend_cache(
+        self,
+        parser: InterfacyParser,
+    ):
+        """Inline run() commands should not replace existing registrations."""
+
+        def persistent(name: str) -> str:
+            return f"persisted {name}"
+
+        def temporary() -> str:
+            return "temporary"
+
+        parser.add_command(persistent)
+        parser.build_parser()
+        schema_before = parser.get_last_schema()
+        command_names_before = [command.canonical_name for command in parser.get_commands()]
+
+        result = parser.run(temporary, args=["temporary"])
+
+        assert result == "temporary"
+        assert [command.canonical_name for command in parser.get_commands()] == command_names_before
+        assert parser.get_last_schema() is schema_before
+        assert parser.run(args=["Ada"]) == "persisted Ada"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_inline_run_restores_state_after_parse_failure(self, parser: InterfacyParser):
+        """Failed inline parsing should leave existing parser registrations intact."""
+
+        def persistent(name: str) -> str:
+            return f"persisted {name}"
+
+        def temporary(name: str) -> str:
+            return f"temporary {name}"
+
+        parser.add_command(persistent)
+        parser.build_parser()
+        schema_before = parser.get_last_schema()
+
+        result = parser.run(temporary, args=["temporary"])
+
+        assert isinstance(result, SystemExit)
+        assert [command.canonical_name for command in parser.get_commands()] == ["persistent"]
+        assert parser.get_last_schema() is schema_before
+        assert parser.run(args=["Ada"]) == "persisted Ada"
+        parser.add_command(temporary)
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_inline_run_restores_plugins_and_pipe_overrides_after_runtime_failure(
+        self,
+        parser: InterfacyParser,
+        mocker,
+    ):
+        """Runtime failures should not discard parser-level plugins or pipe settings."""
+
+        class MarkerPlugin(InterfacyPlugin):
+            name = "marker"
+
+        def persistent(name: str) -> str:
+            return name
+
+        def boom() -> None:
+            raise ValueError("boom")
+
+        plugin = MarkerPlugin()
+        parser.add_plugin(plugin)
+        parser.add_command(persistent, pipe_targets="name")
+        plugins_before = list(parser.plugins)
+        mocker.patch("interfacy.core.read_piped", return_value="piped")
+
+        result = parser.run(boom, args=["boom"])
+
+        assert isinstance(result, ValueError)
+        assert parser.plugins == plugins_before
+        assert parser.run(args=[]) == "piped"
 
 
 class TestMathClassParsing:
