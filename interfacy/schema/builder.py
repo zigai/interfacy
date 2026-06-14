@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from inspect import Parameter as InspectParameter
@@ -115,9 +115,10 @@ class CommandBuildSettings:
 
 @dataclass
 class SchemaBuildContext:
-    """Builder-owned Interface for parser state needed during schema construction."""
+    """Builder-owned snapshot of parser state needed during schema construction."""
 
-    source: InterfacyParser
+    pipe_target_resolver: Callable[..., PipeTargets | None]
+    schema_transformer: Callable[[ParserSchema], ParserSchema]
     description: str | None
     epilog: str | None
     commands: dict[str, Command]
@@ -152,7 +153,8 @@ class SchemaBuildContext:
     @classmethod
     def from_parser(cls, parser: InterfacyParser) -> SchemaBuildContext:
         return cls(
-            source=parser,
+            pipe_target_resolver=parser.resolve_pipe_targets_by_names,
+            schema_transformer=parser._transform_schema_with_plugins,
             description=parser.description,
             epilog=parser.epilog,
             commands=parser.commands,
@@ -193,163 +195,8 @@ class SchemaBuildContext:
             help_flags=tuple(getattr(parser, "help_flags", ("--help",))),
         )
 
-    def resolve_pipe_targets_by_names(
-        self,
-        *,
-        canonical_name: str | None,
-        obj_name: str | None,
-        aliases: Iterable[str] | None,
-        subcommand: str | None,
-        include_default: bool,
-    ) -> PipeTargets | None:
-        return self.source.resolve_pipe_targets_by_names(
-            canonical_name=canonical_name,
-            obj_name=obj_name,
-            aliases=aliases,
-            subcommand=subcommand,
-            include_default=include_default,
-        )
-
-    def transform_schema_with_plugins(self, schema: ParserSchema) -> ParserSchema:
-        transform_schema = getattr(self.source, "_transform_schema_with_plugins", None)
-        if callable(transform_schema):
-            return transform_schema(schema)
-
-        return schema
-
-
-@dataclass
-class CommandSchemaConstructor:
-    """Build command schemas for callable, method, and class command shapes."""
-
-    builder: ParserSchemaBuilder
-
-    def build_command_spec_for(
-        self,
-        obj: Class | Function | Method,
-        *,
-        canonical_name: str,
-        description: str | None = None,
-        aliases: tuple[str, ...] = (),
-        executable_flags: list[ExecutableFlag] | None = None,
-        parent_settings: CommandBuildSettings | None = None,
-        include_inherited_methods: bool | None = None,
-        include_protected_methods: bool | None = None,
-        include_private_methods: bool | None = None,
-        include_staticmethods: bool | None = None,
-        include_classmethods: bool | None = None,
-        method_skips: Sequence[str] | None = None,
-        expand_model_params: bool | None = None,
-        model_expansion_max_depth: int | None = None,
-        abbreviation_scope: str | None = None,
-        help_option_sort: list[HelpOptionSortRule] | None = None,
-        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
-        help_group: str | None = None,
-        parameter_settings: dict[str, Param] | None = None,
-    ) -> Command:
-        settings = self.builder._merge_build_settings(
-            parent_settings,
-            include_inherited_methods=include_inherited_methods,
-            include_protected_methods=include_protected_methods,
-            include_private_methods=include_private_methods,
-            include_staticmethods=include_staticmethods,
-            include_classmethods=include_classmethods,
-            method_skips=method_skips,
-            expand_model_params=expand_model_params,
-            model_expansion_max_depth=model_expansion_max_depth,
-            abbreviation_scope=abbreviation_scope,
-            help_option_sort=help_option_sort,
-            help_subcommand_sort=help_subcommand_sort,
-        )
-        resolve_objinspect_annotations(obj)
-
-        if isinstance(obj, Function):
-            return self.function_spec(
-                obj,
-                canonical_name=canonical_name,
-                description=description,
-                aliases=aliases,
-                executable_flags=executable_flags,
-                settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                method_skips=method_skips,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_group=help_group,
-                parameter_settings=parameter_settings,
-            )
-        if isinstance(obj, Method):
-            return self.method_command(
-                obj,
-                canonical_name=canonical_name,
-                description=description,
-                aliases=aliases,
-                executable_flags=executable_flags,
-                settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                method_skips=method_skips,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_group=help_group,
-                parameter_settings=parameter_settings,
-            )
-        if isinstance(obj, Class):
-            return self.class_command(
-                obj,
-                canonical_name=canonical_name,
-                description=description,
-                aliases=aliases,
-                executable_flags=executable_flags,
-                settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                method_skips=method_skips,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_group=help_group,
-                parameter_settings=parameter_settings,
-            )
-
-        raise InvalidCommandError(obj)
-
-    def function_spec(self, function: Function | Method, **kwargs: Any) -> Command:
-        return self.builder._function_spec(**{"function": function, **kwargs})
-
-    def method_command(self, method: Method, **kwargs: Any) -> Command:
-        return self.builder._method_command(**{"method": method, **kwargs})
-
-    def class_command(self, cls: Class, **kwargs: Any) -> Command:
-        return self.builder._class_command(**{"cls": cls, **kwargs})
-
 
 _ABBREVIATION_SCOPE_ALL_OPTIONS = "all_options"
-
-
-@dataclass
-class ExpansionParameter:
-    name: str
-    default: Any
-    has_default: bool
 
 
 @dataclass
@@ -357,24 +204,14 @@ class ModelExpansionBuilder:
     """Build expanded CLI arguments for one model parameter."""
 
     builder: ParserSchemaBuilder
-    param: Parameter | ExpansionParameter
+    param: Parameter
     taken_flags: list[str]
     settings: CommandBuildSettings
 
-    @property
-    def context(self) -> SchemaBuildContext:
-        return self.builder.context
-
-    @property
-    def model_argument_mapper(self) -> ModelArgumentMapper:
-        return self.builder.model_argument_mapper
-
-    @property
-    def nested_separator(self) -> str:
-        return self.builder._nested_separator
-
     def build(self, *, model_type: type, is_optional_model: bool) -> list[Argument]:
-        translated_name = self.context.flag_strategy.argument_translator.translate(self.param.name)
+        translated_name = self.builder.context.flag_strategy.argument_translator.translate(
+            self.param.name
+        )
         if translated_name in self.taken_flags:
             raise ReservedFlagError(translated_name)
 
@@ -408,9 +245,11 @@ class ModelExpansionBuilder:
         arguments: list[Argument] = []
         max_depth = self.settings.model_expansion_max_depth
 
-        for field in self.model_argument_mapper.model_fields_for_expansion(model_type):
+        for field in self.builder.model_argument_mapper.model_fields_for_expansion(model_type):
             annotation = self._normalize_annotation(field.annotation)
-            inner_type, is_optional_model = self.model_argument_mapper.unwrap_optional(annotation)
+            inner_type, is_optional_model = self.builder.model_argument_mapper.unwrap_optional(
+                annotation
+            )
             new_path = (*path, field.name)
 
             if self.builder._should_expand_model(inner_type, settings=self.settings) and (
@@ -472,13 +311,14 @@ class ModelExpansionBuilder:
         model_default: Any,
     ) -> Argument:
         translated_path = tuple(
-            self.context.flag_strategy.argument_translator.translate(part) for part in path
+            self.builder.context.flag_strategy.argument_translator.translate(part) for part in path
         )
-        display_name = self.nested_separator.join(translated_path)
+        nested_separator = self.builder._nested_separator
+        display_name = nested_separator.join(translated_path)
         if display_name in self.taken_flags:
             raise ReservedFlagError(display_name)
 
-        arg_name = self.nested_separator.join(path)
+        arg_name = nested_separator.join(path)
         flags = self._option_flags(
             display_name=display_name,
             annotation=annotation,
@@ -535,7 +375,7 @@ class ModelExpansionBuilder:
         if annotation is bool and field_default is True:
             abbrev_name = f"no-{display_name}"
 
-        short = self.context.abbreviation_gen.generate(abbrev_name, self.taken_flags)
+        short = self.builder.context.abbreviation_gen.generate(abbrev_name, self.taken_flags)
         if short and short not in (display_name, abbrev_name):
             return (f"-{short}", long_flag)
 
@@ -556,11 +396,9 @@ class ParserSchemaBuilder:
         default_factory=ModelArgumentMapper
     )
     context: SchemaBuildContext = dataclass_field(init=False)
-    command_constructor: CommandSchemaConstructor = dataclass_field(init=False)
 
     def __post_init__(self) -> None:
         self.context = SchemaBuildContext.from_parser(self.parser)
-        self.command_constructor = CommandSchemaConstructor(self)
 
     def _resolve_help_option_sort_value(
         self,
@@ -779,7 +617,7 @@ class ParserSchemaBuilder:
             ),
             help_flags=self.context.help_flags,
         )
-        schema = self.context.transform_schema_with_plugins(schema)
+        schema = self.context.schema_transformer(schema)
 
         self._finalize_schema(schema)
         self._validate_executable_flags_against_tokens(parser_executable_flags, set())
@@ -992,13 +830,8 @@ class ParserSchemaBuilder:
             help_group (str | None): Optional help-only command group heading.
             parameter_settings (dict[str, Param] | None): Per-parameter settings.
         """
-        return self.command_constructor.build_command_spec_for(
-            obj,
-            canonical_name=canonical_name,
-            description=description,
-            aliases=aliases,
-            executable_flags=executable_flags,
-            parent_settings=parent_settings,
+        settings = self._merge_build_settings(
+            parent_settings,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -1010,9 +843,77 @@ class ParserSchemaBuilder:
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
-            help_group=help_group,
-            parameter_settings=parameter_settings,
         )
+        resolve_objinspect_annotations(obj)
+
+        if isinstance(obj, Function):
+            return self._function_spec(
+                function=obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+                executable_flags=executable_flags,
+                settings=settings,
+                include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
+                include_classmethods=include_classmethods,
+                method_skips=method_skips,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
+                parameter_settings=parameter_settings,
+            )
+        if isinstance(obj, Method):
+            return self._method_command(
+                method=obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+                executable_flags=executable_flags,
+                settings=settings,
+                include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
+                include_classmethods=include_classmethods,
+                method_skips=method_skips,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
+                parameter_settings=parameter_settings,
+            )
+        if isinstance(obj, Class):
+            return self._class_command(
+                cls=obj,
+                canonical_name=canonical_name,
+                description=description,
+                aliases=aliases,
+                executable_flags=executable_flags,
+                settings=settings,
+                include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
+                include_classmethods=include_classmethods,
+                method_skips=method_skips,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
+                parameter_settings=parameter_settings,
+            )
+
+        raise InvalidCommandError(obj)
 
     def _function_spec(
         self,
@@ -1044,7 +945,7 @@ class ParserSchemaBuilder:
         flag_state = FlagAllocationState()
         effective_pipe_config = pipe_config
         if pipe_config is None and canonical_name is not None:
-            effective_pipe_config = self.context.resolve_pipe_targets_by_names(
+            effective_pipe_config = self.context.pipe_target_resolver(
                 canonical_name=canonical_name,
                 obj_name=function.name,
                 aliases=aliases,
@@ -1190,7 +1091,7 @@ class ParserSchemaBuilder:
         is_initialized = hasattr(method.func, "__self__")
         init_pipe_config: PipeTargets | None = None
         if canonical_name is not None:
-            init_pipe_config = self.context.resolve_pipe_targets_by_names(
+            init_pipe_config = self.context.pipe_target_resolver(
                 canonical_name=canonical_name,
                 obj_name=method.name,
                 aliases=aliases,
@@ -1233,7 +1134,7 @@ class ParserSchemaBuilder:
 
         method_pipe_config = None
         if canonical_name is not None:
-            method_pipe_config = self.context.resolve_pipe_targets_by_names(
+            method_pipe_config = self.context.pipe_target_resolver(
                 canonical_name=canonical_name,
                 obj_name=method.name,
                 aliases=aliases,
@@ -1331,7 +1232,7 @@ class ParserSchemaBuilder:
         class_pipe_config = None
         init_pipe_config = None
         if canonical_name is not None:
-            class_pipe_config = self.context.resolve_pipe_targets_by_names(
+            class_pipe_config = self.context.pipe_target_resolver(
                 canonical_name=canonical_name,
                 obj_name=cls.name,
                 aliases=aliases,
@@ -1339,7 +1240,7 @@ class ParserSchemaBuilder:
                 include_default=False,
             )
             init_pipe_config = (
-                self.context.resolve_pipe_targets_by_names(
+                self.context.pipe_target_resolver(
                     canonical_name=canonical_name,
                     obj_name=cls.name,
                     aliases=aliases,
@@ -1382,14 +1283,14 @@ class ParserSchemaBuilder:
             sub_pipe_config = None
             if canonical_name is not None:
                 sub_pipe_config = (
-                    self.context.resolve_pipe_targets_by_names(
+                    self.context.pipe_target_resolver(
                         canonical_name=canonical_name,
                         obj_name=cls.name,
                         aliases=aliases,
                         subcommand=method_cli_name,
                         include_default=False,
                     )
-                    or self.context.resolve_pipe_targets_by_names(
+                    or self.context.pipe_target_resolver(
                         canonical_name=canonical_name,
                         obj_name=cls.name,
                         aliases=aliases,
@@ -1760,68 +1661,6 @@ class ParserSchemaBuilder:
             taken_flags=taken_flags,
             settings=settings,
         ).build(model_type=model_type, is_optional_model=is_optional_model)
-
-    def _expand_model_fields(
-        self,
-        *,
-        model_type: type,
-        root_name: str,
-        path: tuple[str, ...],
-        taken_flags: list[str],
-        depth: int,
-        max_depth: int,
-        parent_optional: bool,
-        parent_has_default: bool,
-        original_model_type: type,
-        model_default: Any,
-        settings: CommandBuildSettings,
-    ) -> list[Argument]:
-        del max_depth
-        parameter = ExpansionParameter(
-            name=root_name,
-            default=model_default,
-            has_default=model_default is not MODEL_DEFAULT_UNSET,
-        )
-        return ModelExpansionBuilder(
-            builder=self,
-            param=parameter,
-            taken_flags=taken_flags,
-            settings=settings,
-        )._fields(
-            model_type=model_type,
-            root_name=root_name,
-            path=path,
-            depth=depth,
-            parent_optional=parent_optional,
-            parent_has_default=parent_has_default,
-            original_model_type=original_model_type,
-            model_default=model_default,
-        )
-
-    def _expanded_option_flags(
-        self,
-        *,
-        display_name: str,
-        annotation: Any,
-        field_default: Any,
-        taken_flags: list[str],
-        settings: CommandBuildSettings,
-    ) -> tuple[str, ...]:
-        dummy_param = ExpansionParameter(
-            name=display_name,
-            default=None,
-            has_default=False,
-        )
-        return ModelExpansionBuilder(
-            builder=self,
-            param=dummy_param,
-            taken_flags=taken_flags,
-            settings=settings,
-        )._option_flags(
-            display_name=display_name,
-            annotation=annotation,
-            field_default=field_default,
-        )
 
     def _argument_from_spec(
         self,

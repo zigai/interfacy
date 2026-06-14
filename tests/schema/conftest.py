@@ -13,7 +13,7 @@ from interfacy.naming import (
     FlagStrategy,
 )
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
-from interfacy.schema.schema import Command
+from interfacy.schema.schema import Command, ParserSchema
 
 
 class RecordingHelpLayout(HelpLayout):
@@ -180,6 +180,9 @@ class FakeParser:
             return self.pipe_targets_default
 
         return None
+
+    def _transform_schema_with_plugins(self, schema: ParserSchema) -> ParserSchema:
+        return schema
 
 
 @dataclass
