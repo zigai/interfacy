@@ -28,6 +28,16 @@ def test_legacy_click_parser_module_reexports_click_parser() -> None:
     assert LegacyClickParser is ClickParser
 
 
+def test_click_parser_does_not_publish_argparse_parser_construction_helpers() -> None:
+    for name in (
+        "install_tab_completion",
+        "parser_from_class",
+        "parser_from_function",
+        "parser_from_multiple_commands",
+    ):
+        assert not hasattr(ClickParser, name)
+
+
 def test_click_backend_defers_missing_click_import_error() -> None:
     process = _run_python(
         """

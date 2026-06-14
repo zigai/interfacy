@@ -2,7 +2,6 @@ import signal
 import sys
 import threading
 import time
-from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
@@ -2457,27 +2456,6 @@ class InterfacyParser:
             f"Could not resolve subcommand '{subcommand}' for class '{cls.name}'"
         )
 
-    def parser_from_command(
-        self,
-        command: Function | Method | Class,
-        main: bool = False,  # noqa: ARG002 - reserved API parameter
-    ) -> Any:
-        """
-        Build a parser object from an inspected command.
-
-        Args:
-            command (Function | Method | Class): Inspected command object.
-            main (bool): Whether this is the main parser instance.
-        """
-        resolve_objinspect_annotations(command)
-
-        if isinstance(command, (Function, Method)):
-            return self.parser_from_function(command, taken_flags=[*self.RESERVED_FLAGS])
-        if isinstance(command, Class):
-            return self.parser_from_class(command)
-
-        raise InvalidCommandError(command)
-
     def _should_skip_method(self, method: Method) -> bool:
         return method.name.startswith("_")
 
@@ -2658,43 +2636,9 @@ class InterfacyParser:
     ) -> Callable[[], Any]:
         raise NotImplementedError
 
-    @abstractmethod
-    def parser_from_function(
-        self,
-        function: Function,
-        parser: Any | None = None,
-        taken_flags: list[str] | None = None,
-    ) -> Any:
-        """Build a parser from a function or method command."""
-        ...
-
-    @abstractmethod
-    def parser_from_class(
-        self,
-        cls: Class,
-        parser: Any | None = None,
-        subparser: Any | None = None,
-    ) -> Any:
-        """Build a parser from a class command."""
-        ...
-
-    @abstractmethod
-    def parser_from_multiple_commands(
-        self,
-        *commands: Callable[..., Any] | type | Any,
-    ) -> Any:
-        """Build a parser from multiple commands."""
-        ...
-
-    @abstractmethod
-    def install_tab_completion(self, parser: Any) -> None:
-        """Install tab completion for a parser instance."""
-        ...
-
-    @abstractmethod
     def build_parser(self) -> Any:
         """Build and return the backend-native parser object."""
-        ...
+        raise NotImplementedError
 
     def log(self, message: str) -> None:
         """Log an informational message using the console helpers."""

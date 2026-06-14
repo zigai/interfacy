@@ -4,13 +4,12 @@ import argparse
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
 
-from objinspect import Class, Function
 from strto import StrToTypeParser
 
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.argparse_backend.argparser import Argparser
-from interfacy.argparse_backend.argument_parser import ArgumentParser, NestedSubParsersAction
+from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.core import (
     DEFAULT_HELP_FLAGS,
@@ -44,7 +43,7 @@ CommandTarget = object
 F = TypeVar("F", bound=Callable[..., object])
 
 
-class Interfacy(InterfacyParser):
+class Interfacy:
     """
     Build and run command-line interfaces from Python callables.
 
@@ -201,7 +200,7 @@ class Interfacy(InterfacyParser):
                 )
 
             try:
-                from interfacy.click_backend import ClickParser
+                from interfacy.click_backend.core import ClickParser
             except ImportError as exc:  # pragma: no cover - optional dependency guard
                 raise ImportError(
                     "Click is required to use Interfacy with backend='click'. Install it with "
@@ -568,18 +567,6 @@ class Interfacy(InterfacyParser):
         """Clear cached stdin data."""
         self._parser.reset_piped_input()
 
-    def parser_from_command(self, command: Function | Class, main: bool = False) -> BackendParser:
-        """
-        Build a backend parser from an inspected command.
-
-        ``main`` tells the backend to build the command as the root parser rather
-        than as a nested command parser.
-
-        Raises:
-            InvalidCommandError: If ``command`` is not a supported inspected object.
-        """
-        return self._parser.parser_from_command(command, main=main)
-
     def parse_args(self, args: list[str] | None = None) -> dict[str, object]:
         """
         Parse CLI arguments into a command argument mapping.
@@ -597,46 +584,6 @@ class Interfacy(InterfacyParser):
         """
         return self._parser.run(*commands, args=args)
 
-    def parser_from_function(
-        self,
-        function: Function,
-        parser: ArgumentParser | None = None,
-        taken_flags: list[str] | None = None,
-    ) -> BackendParser:
-        """
-        Build a backend parser for an inspected function.
-
-        Existing parser and flag reservations are used by backends that build
-        nested or shared argparse parsers.
-        """
-        return self._parser.parser_from_function(
-            function,
-            parser=parser,
-            taken_flags=taken_flags,
-        )
-
-    def parser_from_class(
-        self,
-        cls: Class,
-        parser: ArgumentParser | None = None,
-        subparser: NestedSubParsersAction | None = None,
-    ) -> BackendParser:
-        """
-        Build a backend parser for an inspected class.
-
-        Existing parser objects are used by backends that populate nested
-        argparse parser trees.
-        """
-        return self._parser.parser_from_class(cls, parser=parser, subparser=subparser)
-
-    def parser_from_multiple_commands(self, *commands: CommandTarget) -> BackendParser:
-        """Build a backend parser from multiple command targets."""
-        return self._parser.parser_from_multiple_commands(*commands)
-
-    def install_tab_completion(self, parser: BackendParser) -> None:
-        """Install tab completion for a backend parser when supported."""
-        self._parser.install_tab_completion(parser)
-
     def build_parser(self) -> BackendParser:
         """Build the backend parser for registered commands."""
         return self._parser.build_parser()
@@ -648,6 +595,14 @@ class Interfacy(InterfacyParser):
     def get_last_schema(self) -> ParserSchema | None:
         """Return the most recently built parser schema, if any."""
         return self._parser.get_last_schema()
+
+    def refresh_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
+        """Recompute help option sort rules on the active backend parser."""
+        return self._parser.refresh_help_option_sort_rules()
+
+    def refresh_help_subcommand_sort_rules(self) -> list[HelpSubcommandSortRule]:
+        """Recompute help subcommand sort rules on the active backend parser."""
+        return self._parser.refresh_help_subcommand_sort_rules()
 
     def log(self, message: str) -> None:
         """Write an informational parser log message."""

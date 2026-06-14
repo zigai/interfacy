@@ -110,7 +110,7 @@ def resolve_target_with_module(target: str) -> tuple[ModuleType, Any]:
 def _is_supported_entrypoint_target(target: Any) -> bool:
     from interfacy.group import CommandGroup
 
-    if isinstance(target, (InterfacyParser, CommandGroup)):
+    if isinstance(target, (Interfacy, InterfacyParser, CommandGroup)):
         return False
 
     # Accept anything Interfacy can treat as a command target

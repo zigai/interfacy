@@ -40,11 +40,17 @@ def test_interfacy_init_is_fully_typed_without_variadic_kwargs() -> None:
     assert inspect.Parameter.VAR_KEYWORD not in {param.kind for param in parameters}
 
 
-def test_interfacy_exposes_public_parser_api() -> None:
+def test_interfacy_facade_hides_backend_specific_parser_construction_helpers() -> None:
     parser = Interfacy(sys_exit_enabled=False)
 
-    for name in ("add_command", "add_group", "get_commands", "parse_args", "build_parser", "run"):
-        assert callable(getattr(parser, name))
+    for name in (
+        "install_tab_completion",
+        "parser_from_class",
+        "parser_from_command",
+        "parser_from_function",
+        "parser_from_multiple_commands",
+    ):
+        assert not hasattr(parser, name)
 
 
 def test_public_parameter_settings_type_hints_resolve() -> None:

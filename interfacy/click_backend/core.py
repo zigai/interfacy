@@ -15,7 +15,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - handled by optional dep
         "\"pip install 'interfacy[click]'\" or \"uv add 'interfacy[click]'\"."
     ) from exc
 
-from objinspect import Class, Function
+from objinspect import Class
 from strto import StrToTypeParser
 
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
@@ -248,8 +248,6 @@ class ClickParser(InterfacyParser):
         self._last_schema = schema
         root = self._build_from_schema(schema)
         self._root_command = root
-        if self.enable_tab_completion:
-            self.install_tab_completion(root)
 
         return root
 
@@ -1178,65 +1176,6 @@ class ClickParser(InterfacyParser):
             return RunFailure(exc)
 
         return super()._handle_run_execute_exception(exc)
-
-    def parser_from_function(
-        self,
-        function: Function,
-        parser: Any | None = None,
-        taken_flags: list[str] | None = None,
-    ) -> Any:
-        """
-        Reject direct function-parser construction for the Click backend.
-
-        Args:
-            function (Function): Unused inspected function.
-            parser (Any | None): Unused parser instance.
-            taken_flags (list[str] | None): Unused reserved flags.
-
-        Raises:
-            NotImplementedError: Always; ClickParser builds from parser schema only.
-        """
-        raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
-
-    def parser_from_class(
-        self,
-        cls: Class,
-        parser: Any | None = None,
-        subparser: Any | None = None,
-    ) -> Any:
-        """
-        Reject direct class-parser construction for the Click backend.
-
-        Args:
-            cls (Class): Unused inspected class.
-            parser (Any | None): Unused parser instance.
-            subparser (Any | None): Unused subparser action.
-
-        Raises:
-            NotImplementedError: Always; ClickParser builds from parser schema only.
-        """
-        raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
-
-    def parser_from_multiple_commands(self, *commands: Callable[..., Any] | type | Any) -> Any:
-        """
-        Reject direct multi-command parser construction for the Click backend.
-
-        Args:
-            *commands (Callable[..., Any] | type | Any): Unused command objects.
-
-        Raises:
-            NotImplementedError: Always; ClickParser builds from parser schema only.
-        """
-        raise NotImplementedError("ClickParser builds commands from ParserSchema only.")
-
-    def install_tab_completion(self, _parser: Any) -> None:
-        """
-        Keep tab-completion installation as a no-op for ClickParser.
-
-        Args:
-            _parser (Any): Unused parser instance.
-        """
-        return None
 
 
 __all__ = ["ClickParser"]

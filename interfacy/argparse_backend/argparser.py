@@ -33,6 +33,7 @@ from interfacy.core import (
 )
 from interfacy.exceptions import (
     ConfigurationError,
+    InvalidCommandError,
     ReservedFlagError,
 )
 from interfacy.executable_flag import (
@@ -60,6 +61,7 @@ from interfacy.util import (
     get_annotation_choices,
     get_param_choices,
     is_list_or_list_alias,
+    resolve_objinspect_annotations,
     resolve_type_alias,
 )
 
@@ -293,6 +295,21 @@ class Argparser(InterfacyParser):
         logger.info("Flags: %s, parser kwarg keys: %s", flags, sorted(extra_args))
 
         return parser.add_argument(*add_flags, **extra_args)
+
+    def parser_from_command(
+        self,
+        command: Function | Method | Class,
+        main: bool = False,  # noqa: ARG002 - reserved API parameter
+    ) -> ArgumentParser:
+        """Build an ArgumentParser from one inspected function, method, or class."""
+        resolve_objinspect_annotations(command)
+
+        if isinstance(command, (Function, Method)):
+            return self.parser_from_function(command, taken_flags=[*self.RESERVED_FLAGS])
+        if isinstance(command, Class):
+            return self.parser_from_class(command)
+
+        raise InvalidCommandError(str(command))
 
     def parser_from_function(
         self,
