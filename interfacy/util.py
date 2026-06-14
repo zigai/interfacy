@@ -17,7 +17,6 @@ from objinspect.typing import get_literal_choices, is_union_type, type_args, typ
 from setproctitle import setproctitle
 from stdl.st import TextStyle
 
-from interfacy.console import display_result
 from interfacy.exceptions import ConfigurationError
 
 
@@ -339,70 +338,44 @@ def _resolve_type_alias_value(annotation: Any) -> Any:
         return _MISSING
 
 
-def _resolve_owner_localns(owner_cls: type | Any | None) -> dict[str, Any] | None:
-    if owner_cls is None:
-        return None
-
-    owner_type = owner_cls if isinstance(owner_cls, type) else type(owner_cls)
-    localns = dict(vars(owner_type))
-    localns.setdefault(owner_type.__name__, owner_type)
-    return localns
-
-
-def _resolve_callable_hints(
-    fn: Callable[..., Any], *, owner_cls: type | Any | None = None
-) -> dict[str, Any] | None:
-    globalns = getattr(fn, "__globals__", None)
-    localns = _resolve_owner_localns(owner_cls)
-    try:
-        return typing.get_type_hints(
-            fn,
-            globalns=globalns,
-            localns=localns,
-            include_extras=True,
-        )
-    except TypeError:
-        try:
-            return typing.get_type_hints(fn, globalns=globalns, localns=localns)
-        except (AttributeError, NameError, TypeError, ValueError):
-            return None
-    except (AttributeError, NameError, ValueError):
-        return None
-
-
-def _apply_hints(params: list[Parameter], hints: dict[str, Any]) -> None:
-    for param in params:
-        hint = hints.get(param.name, _MISSING)
-        if hint is not _MISSING:
-            param.type = hint
-
-
-def _resolve_and_apply_hints(
-    fn: Callable[..., Any], params: list[Parameter], *, owner_cls: type | Any | None = None
-) -> None:
-    hints = _resolve_callable_hints(fn, owner_cls=owner_cls)
-    if hints:
-        _apply_hints(params, hints)
-
-
 def resolve_objinspect_annotations(obj: Function | Method | Class) -> None:
     """Resolve string/forward-ref annotations for objinspect objects in-place."""
     if isinstance(obj, Function):
-        _resolve_and_apply_hints(obj.func, obj.params)
-        return
-
-    if isinstance(obj, Method):
-        _resolve_and_apply_hints(obj.func, obj.params, owner_cls=obj.cls)
-        return
-
-    if isinstance(obj, Class):
+        targets: list[tuple[Callable[..., Any], list[Parameter], type | Any | None]] = [
+            (obj.func, obj.params, None)
+        ]
+    elif isinstance(obj, Method):
+        targets = [(obj.func, obj.params, obj.cls)]
+    else:
+        targets = []
         if obj.init_method is not None:
-            _resolve_and_apply_hints(
-                obj.init_method.func, obj.init_method.params, owner_cls=obj.cls
-            )
+            targets.append((obj.init_method.func, obj.init_method.params, obj.cls))
 
         for method in obj.methods:
-            _resolve_and_apply_hints(method.func, method.params, owner_cls=obj.cls)
+            targets.append((method.func, method.params, obj.cls))
+
+    for fn, params, owner_cls in targets:
+        globalns = getattr(fn, "__globals__", None)
+        localns = None
+        if owner_cls is not None:
+            owner_type = owner_cls if isinstance(owner_cls, type) else type(owner_cls)
+            localns = dict(vars(owner_type))
+            localns.setdefault(owner_type.__name__, owner_type)
+
+        try:
+            hints = typing.get_type_hints(
+                fn,
+                globalns=globalns,
+                localns=localns,
+                include_extras=True,
+            )
+        except (AttributeError, NameError, TypeError, ValueError):
+            continue
+
+        for param in params:
+            hint = hints.get(param.name, _MISSING)
+            if hint is not _MISSING:
+                param.type = hint
 
 
 def _normalize_enum_choices(choices: list[Any], *, for_display: bool) -> list[Any] | None:
@@ -572,17 +545,6 @@ def strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
-def show_result(result: Any, handler: Callable[[Any], Any | None] = print) -> None:
-    """
-    Display a result value using the shared console helpers.
-
-    Args:
-        result (Any): Result value to display.
-        handler (Callable[[Any], Any]): Output handler for non-dict results.
-    """
-    display_result(result, handler=handler)
-
-
 def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
     """
     Return the inverted boolean flag name with a prefix toggle.
@@ -632,7 +594,6 @@ __all__ = [
     "resolve_objinspect_annotations",
     "resolve_type_alias",
     "set_process_title_from_argv",
-    "show_result",
     "simplified_type_name",
     "strip_ansi",
     "validate_help_group",

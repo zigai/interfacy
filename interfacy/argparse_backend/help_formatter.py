@@ -71,9 +71,6 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
     def _get_help_layout(self) -> "HelpLayout | None":
         return getattr(self, "_interfacy_help_layout", None)
 
-    def _split_lines(self, text: str, width: int) -> list[str]:
-        return super()._split_lines(text, width)
-
     @staticmethod
     def _primary_boolean_option_strings(action: argparse.Action) -> list[str]:
         option_strings = list(action.option_strings)
