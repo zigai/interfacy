@@ -60,7 +60,7 @@ dev = [
     "pyrefly>=1.0.0",
     "click>=8.3.1",
     "argcomplete",
-    "rattle-lint>=2.4.2",
+    "rattle-lint>=2.5.1",
 ]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
