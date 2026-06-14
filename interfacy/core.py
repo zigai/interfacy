@@ -45,6 +45,7 @@ from interfacy.naming import (
     DefaultFlagStrategy,
     FlagStrategy,
 )
+from interfacy.parameters import ParameterSettingsInput, normalize_parameter_settings
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.plugins import (
     AbortRecovery,
@@ -1754,6 +1755,7 @@ class InterfacyParser:
         help_option_sort: HelpOptionSort,
         help_subcommand_sort: HelpSubcommandSort,
         help_group: str | None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> None:
         command.include_inherited_methods = include_inherited_methods
         command.include_protected_methods = include_protected_methods
@@ -1770,6 +1772,7 @@ class InterfacyParser:
         command.help_option_sort = InterfacyParser._copy_optional_list(help_option_sort)
         command.help_subcommand_sort = InterfacyParser._copy_optional_list(help_subcommand_sort)
         command.help_group = help_group
+        command.parameter_settings = normalize_parameter_settings(parameter_settings)
 
     def add_command(
         self,
@@ -1791,6 +1794,7 @@ class InterfacyParser:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: MethodSkips = None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> "Command":
         """
         Register a command callable or group with the parser.
@@ -1814,6 +1818,7 @@ class InterfacyParser:
             help_subcommand_sort (list[HelpSubcommandSortRule] | None): Override subcommand sort.
             help_group (str | None): Optional help-only command group heading.
             method_skips (Sequence[str] | None): Override class method skip list.
+            parameter_settings: Per-parameter CLI settings keyed by parameter name.
 
         Raises:
             DuplicateCommandError: If the command name is already registered.
@@ -1842,6 +1847,7 @@ class InterfacyParser:
                 include_classmethods=include_classmethods,
                 expand_model_params=expand_model_params,
                 method_skips=method_skips,
+                parameter_settings=parameter_settings,
                 **resolved_settings,
             )
 
@@ -1918,6 +1924,7 @@ class InterfacyParser:
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
             method_skips=method_skips,
+            parameter_settings=parameter_settings,
             **resolved_settings,
         )
         self.commands[canonical_name] = command
@@ -1944,6 +1951,7 @@ class InterfacyParser:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: MethodSkips = None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> Callable[[F], F]:
         """
         Decorator to register a command with the parser.
@@ -1969,6 +1977,7 @@ class InterfacyParser:
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only command group heading.
             method_skips: Override class method skip list.
+            parameter_settings: Per-parameter CLI settings keyed by parameter name.
 
         Returns:
             A decorator that registers the callable and returns it unchanged.
@@ -1994,6 +2003,7 @@ class InterfacyParser:
                 help_subcommand_sort=help_subcommand_sort,
                 help_group=help_group,
                 method_skips=method_skips,
+                parameter_settings=parameter_settings,
             )
 
             return func
@@ -2019,6 +2029,7 @@ class InterfacyParser:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: MethodSkips = None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> "Command":
         """
         Add a CommandGroup to the parser for deeply nested CLI structures.
@@ -2041,6 +2052,7 @@ class InterfacyParser:
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only command group heading.
             method_skips: Override class method skip list.
+            parameter_settings: Per-parameter CLI settings for group-level arguments.
 
         Returns:
             The Command schema for the group
@@ -2068,6 +2080,8 @@ class InterfacyParser:
             help_group=help_group,
         )
 
+        resolved_parameter_settings = normalize_parameter_settings(parameter_settings)
+
         builder = ParserSchemaBuilder(self)
         command = builder.build_from_group(
             group,
@@ -2079,6 +2093,7 @@ class InterfacyParser:
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
             method_skips=method_skips,
+            parameter_settings=resolved_parameter_settings,
             **resolved_settings,
         )
 
@@ -2095,6 +2110,7 @@ class InterfacyParser:
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
             method_skips=method_skips,
+            parameter_settings=resolved_parameter_settings,
             **resolved_settings,
         )
         self.commands[canonical_name] = command

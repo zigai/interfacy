@@ -27,6 +27,7 @@ from interfacy.exceptions import ConfigurationError
 from interfacy.executable_flag import ExecutableFlag
 from interfacy.group import CommandGroup
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
+from interfacy.parameters import ParameterSettingsInput
 from interfacy.pipe import PipeTargets
 from interfacy.plugins import InterfacyPlugin
 from interfacy.schema.schema import Command, ParserSchema
@@ -374,6 +375,7 @@ class Interfacy(InterfacyParser):
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: Sequence[str] | None = None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> Command:
         """
         Register a function, class, instance, or command group.
@@ -407,6 +409,7 @@ class Interfacy(InterfacyParser):
             help_subcommand_sort=help_subcommand_sort,
             help_group=help_group,
             method_skips=method_skips,
+            parameter_settings=parameter_settings,
         )
 
     def command(
@@ -428,6 +431,7 @@ class Interfacy(InterfacyParser):
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: Sequence[str] | None = None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> Callable[[F], F]:
         """
         Return a decorator that registers a function or class as a command.
@@ -453,6 +457,7 @@ class Interfacy(InterfacyParser):
             help_subcommand_sort=help_subcommand_sort,
             help_group=help_group,
             method_skips=method_skips,
+            parameter_settings=parameter_settings,
         )
 
     def add_group(
@@ -474,6 +479,7 @@ class Interfacy(InterfacyParser):
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: Sequence[str] | None = None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> Command:
         """
         Register an explicit command group.
@@ -505,6 +511,7 @@ class Interfacy(InterfacyParser):
             help_subcommand_sort=help_subcommand_sort,
             help_group=help_group,
             method_skips=method_skips,
+            parameter_settings=parameter_settings,
         )
 
     def get_commands(self) -> list[Command]:

@@ -5,6 +5,8 @@ _EXPORTS = {
     "CommandGroup": ("interfacy.group", "CommandGroup"),
     "ExecutableFlag": ("interfacy.executable_flag", "ExecutableFlag"),
     "Interfacy": ("interfacy.interfacy", "Interfacy"),
+    "Param": ("interfacy.parameters", "Param"),
+    "params": ("interfacy.parameters", "params"),
 }
 
 
@@ -19,4 +21,4 @@ def __getattr__(name: str) -> Any:
     return getattr(import_module(module_name), export_name)
 
 
-__all__ = ["BooleanMode", "CommandGroup", "ExecutableFlag", "Interfacy"]
+__all__ = ["BooleanMode", "CommandGroup", "ExecutableFlag", "Interfacy", "Param", "params"]

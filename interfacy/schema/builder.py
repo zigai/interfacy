@@ -26,6 +26,7 @@ from interfacy.exceptions import (
 )
 from interfacy.executable_flag import ExecutableFlag, executable_flag_tokens
 from interfacy.naming.flag_strategy import FlagAllocationState, get_arg_flags_for_parameter
+from interfacy.parameters import Param, get_parameter_settings, merge_parameter_settings
 from interfacy.pipe import PipeTargets
 from interfacy.schema.model_argument_mapper import ModelArgumentMapper
 from interfacy.schema.schema import (
@@ -244,6 +245,7 @@ class CommandSchemaConstructor:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         settings = self.builder._merge_build_settings(
             parent_settings,
@@ -281,6 +283,7 @@ class CommandSchemaConstructor:
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
                 help_group=help_group,
+                parameter_settings=parameter_settings,
             )
         if isinstance(obj, Method):
             return self.method_command(
@@ -302,6 +305,7 @@ class CommandSchemaConstructor:
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
                 help_group=help_group,
+                parameter_settings=parameter_settings,
             )
         if isinstance(obj, Class):
             return self.class_command(
@@ -323,6 +327,7 @@ class CommandSchemaConstructor:
                 help_option_sort=help_option_sort,
                 help_subcommand_sort=help_subcommand_sort,
                 help_group=help_group,
+                parameter_settings=parameter_settings,
             )
 
         raise InvalidCommandError(obj)
@@ -754,6 +759,7 @@ class ParserSchemaBuilder:
                     help_option_sort=command.help_option_sort,
                     help_subcommand_sort=command.help_subcommand_sort,
                     help_group=command.help_group,
+                    parameter_settings=command.parameter_settings,
                 )
                 commands[canonical_name] = rebuilt
 
@@ -959,6 +965,7 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         """
         Build a Command schema for a callable or class.
@@ -983,6 +990,7 @@ class ParserSchemaBuilder:
             help_subcommand_sort (list[HelpSubcommandSortRule] | None): Per-command
                 subcommand rules.
             help_group (str | None): Optional help-only command group heading.
+            parameter_settings (dict[str, Param] | None): Per-parameter settings.
         """
         return self.command_constructor.build_command_spec_for(
             obj,
@@ -1003,6 +1011,7 @@ class ParserSchemaBuilder:
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
             help_group=help_group,
+            parameter_settings=parameter_settings,
         )
 
     def _function_spec(
@@ -1028,6 +1037,7 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.context.reserved_flags]
@@ -1045,6 +1055,10 @@ class ParserSchemaBuilder:
         pipe_param_names = (
             effective_pipe_config.targeted_parameters() if effective_pipe_config else set()
         )
+        effective_parameter_settings = merge_parameter_settings(
+            self._callable_parameter_settings(function),
+            parameter_settings,
+        )
 
         self._prepare_layout_for_params(function.params)
 
@@ -1057,6 +1071,7 @@ class ParserSchemaBuilder:
                 pipe_param_names,
                 settings=resolved_settings,
                 flag_allocation_state=flag_state,
+                parameter_setting=self._settings_for_param(effective_parameter_settings, param),
             )
         ]
         raw_description = description or (function.description if function.has_docstring else None)
@@ -1082,6 +1097,7 @@ class ParserSchemaBuilder:
             pipe_targets=pipe_config,
             help_layout=self.context.help_layout,
             executable_flags=resolved_executable_flags,
+            parameter_settings=dict(effective_parameter_settings),
         )
         self._attach_command_build_settings(
             command,
@@ -1101,6 +1117,24 @@ class ParserSchemaBuilder:
         )
 
         return command
+
+    @staticmethod
+    def _callable_parameter_settings(function: Function | Method) -> dict[str, Param]:
+        return get_parameter_settings(function.func)
+
+    @staticmethod
+    def _class_parameter_settings(class_info: Class) -> dict[str, Param]:
+        class_settings = get_parameter_settings(class_info.cls)
+        init_settings = (
+            get_parameter_settings(class_info.init_method.func)
+            if class_info.init_method is not None
+            else {}
+        )
+        return merge_parameter_settings(class_settings, init_settings)
+
+    @staticmethod
+    def _settings_for_param(settings: dict[str, Param], param: Parameter) -> Param | None:
+        return settings.get(param.name)
 
     @staticmethod
     def _pipe_config_for_params(
@@ -1145,6 +1179,7 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.context.reserved_flags]
@@ -1164,9 +1199,18 @@ class ParserSchemaBuilder:
             )
 
         init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
+        init_parameter_settings: dict[str, Param] = {}
+        method_parameter_settings = merge_parameter_settings(
+            self._callable_parameter_settings(method),
+            parameter_settings,
+        )
 
         init_params: list[Parameter] = []
         if (init := Class(method.cls).init_method) and not is_initialized:
+            init_parameter_settings = merge_parameter_settings(
+                get_parameter_settings(method.cls),
+                get_parameter_settings(init.func),
+            )
             init_params = init.params
             class_arg_docs = ModelArgumentMapper._parse_docstring_args(method.cls.__doc__)
             self._prepare_layout_for_params([*init_params, *method.params])
@@ -1181,6 +1225,7 @@ class ParserSchemaBuilder:
                     settings=resolved_settings,
                     flag_allocation_state=init_flag_state,
                     description_override=class_arg_docs.get(param.name),
+                    parameter_setting=self._settings_for_param(init_parameter_settings, param),
                 )
             ]
         else:
@@ -1206,6 +1251,7 @@ class ParserSchemaBuilder:
                 pipe_param_names,
                 settings=resolved_settings,
                 flag_allocation_state=method_flag_state,
+                parameter_setting=self._settings_for_param(method_parameter_settings, param),
             )
         ]
 
@@ -1229,6 +1275,7 @@ class ParserSchemaBuilder:
             pipe_targets=method_pipe_config,
             help_layout=self.context.help_layout,
             executable_flags=resolved_executable_flags,
+            parameter_settings=dict(method_parameter_settings),
         )
         self._attach_command_build_settings(
             command,
@@ -1270,6 +1317,7 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         resolved_settings = settings or self._base_build_settings()
         taken_flags = [*self.context.reserved_flags]
@@ -1300,6 +1348,10 @@ class ParserSchemaBuilder:
                 )
                 or class_pipe_config
             )
+        effective_parameter_settings = merge_parameter_settings(
+            self._class_parameter_settings(cls),
+            parameter_settings,
+        )
 
         if cls.has_init and not cls.is_initialized:
             init_params = cls.get_method("__init__").params
@@ -1316,6 +1368,7 @@ class ParserSchemaBuilder:
                     settings=resolved_settings,
                     flag_allocation_state=init_flag_state,
                     description_override=class_arg_docs.get(param.name),
+                    parameter_setting=self._settings_for_param(effective_parameter_settings, param),
                 )
             ]
 
@@ -1354,6 +1407,7 @@ class ParserSchemaBuilder:
                 cli_name_override=method_cli_name,
                 pipe_config=sub_pipe_config,
                 settings=resolved_settings,
+                parameter_settings=parameter_settings,
             )
 
         raw_description = description or (cls.description if cls.has_docstring else None)
@@ -1384,6 +1438,7 @@ class ParserSchemaBuilder:
             command_type="class",
             is_leaf=False,
             metadata={"_interfacy_derived_epilog": True},
+            parameter_settings=dict(effective_parameter_settings),
         )
         self._attach_command_build_settings(
             command,
@@ -1404,6 +1459,103 @@ class ParserSchemaBuilder:
 
         return command
 
+    @staticmethod
+    def _flag_token_key(flag: str) -> str:
+        return flag.lstrip("-") if flag.startswith("-") else flag
+
+    def _reserve_parameter_flags(self, flags: tuple[str, ...], taken_flags: list[str]) -> None:
+        for flag in flags:
+            key = self._flag_token_key(flag)
+            if key in taken_flags:
+                raise ReservedFlagError(key)
+
+            taken_flags.append(key)
+
+    def _default_long_flag(self, translated_name: str) -> str:
+        return f"--{translated_name}"
+
+    def _short_flag_from_setting(
+        self,
+        setting: Param,
+        *,
+        abbrev_name: str,
+        taken_flags: list[str],
+    ) -> str | None:
+        if setting.short is False:
+            return None
+        if isinstance(setting.short, str):
+            return setting.short
+        if setting.short is True or setting.short is None:
+            short = self.context.abbreviation_gen.generate(abbrev_name, list(taken_flags))
+            return f"-{short.strip()}" if short else None
+
+        return None
+
+    def _flags_from_parameter_setting(
+        self,
+        *,
+        translated_name: str,
+        param: Parameter,
+        setting: Param,
+        taken_flags: list[str],
+    ) -> tuple[str, ...]:
+        if setting.flags is not None:
+            flags = tuple(setting.flags)
+            self._reserve_parameter_flags(flags, taken_flags)
+            return flags
+
+        long_flag = setting.long or self._default_long_flag(translated_name)
+        flags: tuple[str, ...] = (long_flag,)
+        abbrev_name = long_flag.lstrip("-")
+        if param.is_typed and param.type is bool:
+            default_value = param.default if param.has_default else False
+            if default_value is True:
+                abbrev_name = f"no-{abbrev_name}"
+
+        short_flag = self._short_flag_from_setting(
+            setting,
+            abbrev_name=abbrev_name,
+            taken_flags=taken_flags,
+        )
+        if short_flag and short_flag not in flags:
+            flags = (short_flag, long_flag)
+
+        self._reserve_parameter_flags(flags, taken_flags)
+
+        return flags
+
+    def _flags_for_parameter(
+        self,
+        *,
+        translated_name: str,
+        param: Parameter,
+        taken_flags: list[str],
+        flag_allocation_state: FlagAllocationState | None,
+        parameter_setting: Param | None,
+    ) -> tuple[str, ...]:
+        if parameter_setting is not None and parameter_setting.has_flag_overrides:
+            return self._flags_from_parameter_setting(
+                translated_name=translated_name,
+                param=param,
+                setting=parameter_setting,
+                taken_flags=taken_flags,
+            )
+
+        if translated_name in taken_flags:
+            raise ReservedFlagError(translated_name)
+
+        flags = get_arg_flags_for_parameter(
+            self.context.flag_strategy,
+            translated_name,
+            param,
+            taken_flags,
+            self.context.abbreviation_gen,
+            allocation_state=flag_allocation_state,
+        )
+        taken_flags.append(translated_name)
+
+        return flags
+
     def _argument_from_parameter(
         self,
         param: Parameter,
@@ -1413,6 +1565,7 @@ class ParserSchemaBuilder:
         settings: CommandBuildSettings | None = None,
         flag_allocation_state: FlagAllocationState | None = None,
         description_override: str | None = None,
+        parameter_setting: Param | None = None,
     ) -> list[Argument]:
         resolved_settings = settings or self._base_build_settings()
         annotation = resolve_type_alias(param.type)
@@ -1435,18 +1588,13 @@ class ParserSchemaBuilder:
                 )
 
         translated_name = self.context.flag_strategy.argument_translator.translate(param.name)
-        if translated_name in taken_flags:
-            raise ReservedFlagError(translated_name)
-
-        flags = get_arg_flags_for_parameter(
-            self.context.flag_strategy,
-            translated_name,
-            param,
-            taken_flags,
-            self.context.abbreviation_gen,
-            allocation_state=flag_allocation_state,
+        flags = self._flags_for_parameter(
+            translated_name=translated_name,
+            param=param,
+            taken_flags=taken_flags,
+            flag_allocation_state=flag_allocation_state,
+            parameter_setting=parameter_setting,
         )
-        taken_flags.append(translated_name)
 
         spec = ParamSpec(
             name=param.name,
@@ -1457,7 +1605,11 @@ class ParserSchemaBuilder:
             is_required=param.is_required,
             is_optional=param.is_optional,
             kind=param.kind,
-            description=param.description or description_override,
+            description=(
+                parameter_setting.help
+                if parameter_setting is not None and parameter_setting.help is not None
+                else param.description or description_override
+            ),
         )
 
         return [
@@ -1470,6 +1622,7 @@ class ParserSchemaBuilder:
                 allow_optional_union_list=True,
                 suppress_default=False,
                 settings=resolved_settings,
+                parameter_setting=parameter_setting,
             )
         ]
 
@@ -1688,6 +1841,7 @@ class ParserSchemaBuilder:
         parent_is_optional: bool = False,
         model_default: Any = MODEL_DEFAULT_UNSET,
         settings: CommandBuildSettings,
+        parameter_setting: Param | None = None,
     ) -> Argument:
         resolved_help_text = help_text if help_text is not None else spec.description
         state = self._initial_argument_state(spec)
@@ -1738,7 +1892,9 @@ class ParserSchemaBuilder:
             type=state.parsed_type,
             parser=state.parser_func,
             metavar=(
-                None
+                parameter_setting.metavar
+                if parameter_setting is not None and parameter_setting.metavar is not None
+                else None
                 if is_expanded_from is not None and spec.is_typed and spec.type is not bool
                 else self._metavar_for_spec(spec)
             ),
@@ -2044,6 +2200,7 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         """Build Command schema from a CommandGroup (manual construction)."""
         settings = self._merge_build_settings(
@@ -2068,7 +2225,11 @@ class ParserSchemaBuilder:
         initializer: list[Argument] = []
         group_args_source = self._get_group_args_source(group)
         if group_args_source is not None:
-            initializer = self._build_args_from_source(group_args_source, settings=settings)
+            initializer = self._build_args_from_source(
+                group_args_source,
+                settings=settings,
+                parameter_settings=parameter_settings,
+            )
         resolved_executable_flags = list(executable_flags or [])
         self._validate_executable_flags_against_tokens(
             resolved_executable_flags,
@@ -2137,6 +2298,7 @@ class ParserSchemaBuilder:
             is_leaf=False,
             parent_path=parent_path,
             metadata={"_interfacy_derived_epilog": bool(raw_epilog)},
+            parameter_settings=dict(parameter_settings or {}),
         )
         self._attach_command_build_settings(
             command,
@@ -2169,6 +2331,7 @@ class ParserSchemaBuilder:
         source: type | Callable[..., Any],
         *,
         settings: CommandBuildSettings,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> list[Argument]:
         """Build argument list from a class __init__ or callable signature."""
         obj = inspect(source, init=True)
@@ -2178,6 +2341,10 @@ class ParserSchemaBuilder:
         flag_state = FlagAllocationState()
 
         if isinstance(obj, Class) and obj.init_method:
+            effective_parameter_settings = merge_parameter_settings(
+                self._class_parameter_settings(obj),
+                parameter_settings,
+            )
             self._prepare_layout_for_params(obj.init_method.params)
 
             return [
@@ -2189,9 +2356,15 @@ class ParserSchemaBuilder:
                     set(),
                     settings=settings,
                     flag_allocation_state=flag_state,
+                    parameter_setting=self._settings_for_param(effective_parameter_settings, param),
                 )
             ]
+
         if isinstance(obj, Function):
+            effective_parameter_settings = merge_parameter_settings(
+                self._callable_parameter_settings(obj),
+                parameter_settings,
+            )
             self._prepare_layout_for_params(obj.params)
 
             return [
@@ -2203,6 +2376,7 @@ class ParserSchemaBuilder:
                     set(),
                     settings=settings,
                     flag_allocation_state=flag_state,
+                    parameter_setting=self._settings_for_param(effective_parameter_settings, param),
                 )
             ]
 
@@ -2248,6 +2422,7 @@ class ParserSchemaBuilder:
                 help_subcommand_sort=entry.help_subcommand_sort,
                 executable_flags=entry.executable_flags,
                 help_group=entry.help_group,
+                parameter_settings=entry.parameter_settings,
             )
 
         if isinstance(entry.obj, type):
@@ -2268,6 +2443,7 @@ class ParserSchemaBuilder:
                 help_subcommand_sort=entry.help_subcommand_sort,
                 executable_flags=entry.executable_flags,
                 help_group=entry.help_group,
+                parameter_settings=entry.parameter_settings,
             )
 
         obj = inspect(entry.obj)
@@ -2295,6 +2471,7 @@ class ParserSchemaBuilder:
                 help_option_sort=entry.help_option_sort,
                 help_subcommand_sort=entry.help_subcommand_sort,
                 help_group=entry.help_group,
+                parameter_settings=entry.parameter_settings,
             )
 
         raise InvalidCommandError(entry.name)
@@ -2318,6 +2495,7 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         """Build from a class instance - methods as commands, no __init__ args."""
         instance = entry.obj
@@ -2348,6 +2526,7 @@ class ParserSchemaBuilder:
                 cli_name_override=method_cli_name,
                 pipe_config=entry.pipe_targets,
                 settings=settings,
+                parameter_settings=parameter_settings,
             )
 
         cli_name = self.context.flag_strategy.command_translator.translate(entry.name)
@@ -2385,6 +2564,7 @@ class ParserSchemaBuilder:
             parent_path=parent_path,
             stored_instance=instance,
             metadata={"_interfacy_derived_epilog": bool(raw_epilog)},
+            parameter_settings=dict(parameter_settings or {}),
         )
         self._attach_command_build_settings(
             command,
@@ -2424,6 +2604,7 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
+        parameter_settings: dict[str, Param] | None = None,
     ) -> Command:
         """Build from a class - methods AND nested classes (recursive)."""
         from interfacy.group import CommandEntry
@@ -2455,6 +2636,10 @@ class ParserSchemaBuilder:
             cls.get_method("__init__").params if cls.has_init and not cls.is_initialized else []
         )
         init_pipe_config = self._pipe_config_for_params(entry.pipe_targets, init_params)
+        effective_parameter_settings = merge_parameter_settings(
+            self._class_parameter_settings(cls),
+            parameter_settings,
+        )
 
         if init_params:
             init_pipe_names = init_pipe_config.targeted_parameters() if init_pipe_config else set()
@@ -2468,6 +2653,7 @@ class ParserSchemaBuilder:
                     init_pipe_names,
                     settings=settings,
                     flag_allocation_state=init_flag_state,
+                    parameter_setting=self._settings_for_param(effective_parameter_settings, param),
                 )
             ]
 
@@ -2487,6 +2673,7 @@ class ParserSchemaBuilder:
                 cli_name_override=method_cli_name,
                 pipe_config=method_pipe_config,
                 settings=settings,
+                parameter_settings=parameter_settings,
             )
 
         for attr_name in dir(entry.obj):
@@ -2546,6 +2733,7 @@ class ParserSchemaBuilder:
             is_leaf=False,
             parent_path=parent_path,
             metadata={"_interfacy_derived_epilog": bool(raw_epilog)},
+            parameter_settings=dict(effective_parameter_settings),
         )
         self._attach_command_build_settings(
             command,

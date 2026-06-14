@@ -2,6 +2,7 @@ import inspect
 
 import pytest
 
+from interfacy import Param, params
 from interfacy.argparse_backend import Argparser
 from interfacy.naming import DefaultFlagStrategy
 from interfacy.schema.schema import ArgumentKind, ValueShape
@@ -23,6 +24,20 @@ def fn_optional_list_union(values: list[int] | None):
 
 def fn_union_list_and_scalar(values: list[int] | str | None):
     return values
+
+
+@params(alpha=Param(short=False), amount=Param(short=False), active=Param(short=False))
+def fn_long_only_flags(
+    alpha: bool = False,
+    amount: bool = False,
+    active: bool = False,
+    archive: str = "default",
+) -> tuple[str, bool, bool, bool]:
+    return archive, alpha, amount, active
+
+
+def fn_custom_output_format(output_format: str = "text") -> str:
+    return output_format
 
 
 def doc_summary(obj) -> str | None:
@@ -240,6 +255,46 @@ def test_keyword_only_strategy_keeps_argument_metadata():
 
     assert flags[0] == ("-b", "--base")
     assert flags[1] == ("-e", "--exponent")
+
+
+def test_param_short_false_keeps_later_short_flags_available(parser: Argparser) -> None:
+    parser.add_command(fn_long_only_flags)
+
+    schema = parser.build_parser_schema()
+    command = schema.commands["fn-long-only-flags"]
+    flags = {argument.name: argument.flags for argument in command.parameters}
+
+    assert flags["alpha"] == ("--alpha",)
+    assert flags["amount"] == ("--amount",)
+    assert flags["active"] == ("--active",)
+    assert flags["archive"] == ("-a", "--archive")
+
+
+def test_add_command_parameter_settings_can_override_flags(parser: Argparser) -> None:
+    parser.add_command(
+        fn_custom_output_format,
+        parameter_settings={"output_format": Param(long="style", short="s")},
+    )
+
+    schema = parser.build_parser_schema()
+    argument = schema.commands["fn-custom-output-format"].parameters[0]
+
+    assert argument.flags == ("-s", "--style")
+    assert parser.run(args=["--style", "json"]) == "json"
+
+
+def test_param_can_override_help_and_metavar(parser: Argparser) -> None:
+    parser.add_command(
+        fn_custom_output_format,
+        parameter_settings={
+            "output_format": Param(help="Output rendering format.", metavar="FORMAT"),
+        },
+    )
+
+    argument = parser.build_parser_schema().commands["fn-custom-output-format"].parameters[0]
+
+    assert argument.help == "Output rendering format."
+    assert argument.metavar == "FORMAT"
 
 
 def test_boolean_single_letter_flag_uses_long_form_for_negative_support(parser: Argparser):

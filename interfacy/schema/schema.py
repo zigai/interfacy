@@ -12,6 +12,7 @@ from objinspect import Class, Function, Method
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout
 from interfacy.executable_flag import ExecutableFlag
+from interfacy.parameters import Param
 from interfacy.pipe import PipeTargets
 from interfacy.schema.value_plan import ArgumentValue
 
@@ -144,6 +145,7 @@ class Command:
         is_instance (bool): Whether the command comes from a stored instance.
         parent_path (tuple[str, ...]): Command path for nested groups.
         stored_instance (object | None): Stored instance for instance commands.
+        parameter_settings (dict[str, Param]): Per-parameter CLI setting overrides.
     """
 
     obj: Class | Function | Method | None
@@ -178,6 +180,7 @@ class Command:
     help_option_sort_effective: list[HelpOptionSortRule] | None = None
     help_subcommand_sort_effective: list[HelpSubcommandSortRule] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    parameter_settings: dict[str, Param] = field(default_factory=dict)
 
     @cached_property
     def description(self) -> str | None:

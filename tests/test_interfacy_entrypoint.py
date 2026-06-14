@@ -1,9 +1,10 @@
 import inspect
+from typing import get_type_hints
 
 import pytest
 
 import interfacy
-from interfacy import Interfacy
+from interfacy import CommandGroup, Interfacy, Param
 from interfacy.argparse_backend import Argparser
 from interfacy.exceptions import ConfigurationError
 
@@ -46,6 +47,11 @@ def test_interfacy_exposes_public_parser_api() -> None:
         assert callable(getattr(parser, name))
 
 
+def test_public_parameter_settings_type_hints_resolve() -> None:
+    assert "parameter_settings" in get_type_hints(Interfacy.add_command)
+    assert "parameter_settings" in get_type_hints(CommandGroup.add_command)
+
+
 def test_interfacy_rejects_argparse_only_formatter_for_click_backend() -> None:
     with pytest.raises(ConfigurationError, match="formatter_class is only supported"):
         Interfacy(backend="click", formatter_class=object)
@@ -60,6 +66,62 @@ def test_interfacy_runs_with_selected_backend() -> None:
     assert parser.run(greet, args=["Ada"]) == "Hello, Ada!"
 
 
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_interfacy_add_command_accepts_parameter_settings(backend: str) -> None:
+    if backend == "click":
+        pytest.importorskip("click")
+
+    def choose(output_format: str = "text") -> str:
+        return output_format
+
+    parser = Interfacy(backend=backend, sys_exit_enabled=False)
+    parser.add_command(
+        choose,
+        parameter_settings={"output_format": Param(long="style", short="s")},
+    )
+
+    assert parser.run(args=["--style", "json"]) == "json"
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_interfacy_instance_method_accepts_parameter_settings(backend: str) -> None:
+    if backend == "click":
+        pytest.importorskip("click")
+
+    class Tool:
+        def render(self, output_format: str = "text") -> str:
+            return output_format
+
+    parser = Interfacy(backend=backend, sys_exit_enabled=False)
+    parser.add_command(
+        Tool(),
+        parameter_settings={"output_format": Param(long="style", short="s")},
+    )
+
+    assert parser.run(args=["render", "--style", "json"]) == "json"
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_command_group_instance_method_accepts_parameter_settings(backend: str) -> None:
+    if backend == "click":
+        pytest.importorskip("click")
+
+    class Tool:
+        def render(self, output_format: str = "text") -> str:
+            return output_format
+
+    group = CommandGroup("tools")
+    group.add_command(
+        Tool(),
+        name="tool",
+        parameter_settings={"output_format": Param(long="style", short="s")},
+    )
+    parser = Interfacy(backend=backend, sys_exit_enabled=False)
+    parser.add_command(group)
+
+    assert parser.run(args=["tools", "tool", "render", "--style", "json"]) == "json"
+
+
 def test_interfacy_rejects_unknown_backend() -> None:
     with pytest.raises(ConfigurationError, match="backend must be one of: argparse, click"):
         Interfacy(backend="unknown")
@@ -67,5 +129,7 @@ def test_interfacy_rejects_unknown_backend() -> None:
 
 def test_backend_classes_are_not_top_level_exports() -> None:
     assert "Interfacy" in interfacy.__all__
+    assert "Param" in interfacy.__all__
+    assert "params" in interfacy.__all__
     assert "Argparser" not in interfacy.__all__
     assert "ClickParser" not in interfacy.__all__

@@ -13,6 +13,7 @@ from interfacy.appearance.help_sort import (
 )
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
+from interfacy.parameters import Param, ParameterSettingsInput, normalize_parameter_settings
 from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.util import validate_help_group
 
@@ -102,6 +103,7 @@ class CommandEntry:
     help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
     help_group: str | None = None
     executable_flags: list[ExecutableFlag] | None = None
+    parameter_settings: dict[str, Param] | None = None
 
 
 @dataclass
@@ -157,6 +159,7 @@ class CommandGroup:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         executable_flags: list[ExecutableFlag] | None = None,
+        parameter_settings: ParameterSettingsInput | None = None,
     ) -> CommandGroup:
         """
         Add a command to this group.
@@ -180,6 +183,7 @@ class CommandGroup:
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only group heading for this command in help listings.
             executable_flags: Zero-argument executable flags registered on this command node.
+            parameter_settings: Per-parameter CLI settings keyed by parameter name.
         """
         resolved_abbreviation_scope = validate_abbreviation_scope(abbreviation_scope)
         resolved_help_option_sort = validate_help_option_sort(help_option_sort)
@@ -193,6 +197,7 @@ class CommandGroup:
             executable_flags,
             value_name="executable_flags",
         )
+        resolved_parameter_settings = normalize_parameter_settings(parameter_settings)
         resolved_pipe_targets = (
             build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
         )
@@ -238,6 +243,9 @@ class CommandGroup:
             else None,
             help_group=resolved_help_group,
             executable_flags=list(resolved_executable_flags) if resolved_executable_flags else None,
+            parameter_settings=(
+                dict(resolved_parameter_settings) if resolved_parameter_settings else None
+            ),
         )
         self._commands[cmd_name] = entry
 

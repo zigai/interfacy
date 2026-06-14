@@ -593,6 +593,7 @@ class Argparser(InterfacyParser):
 
         if arg.kind == ArgumentKind.OPTION:
             kwargs["required"] = arg.required
+            kwargs["dest"] = arg.name
 
         return kwargs
 
