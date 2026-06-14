@@ -525,31 +525,21 @@ def _resolve_plugins(value: Any) -> list[InterfacyPlugin] | None:
     return [_resolve_plugin(item) for item in value]
 
 
-def _resolve_help_option_sort(value: Any, _config_data: dict[str, Any]) -> Any:
-    return resolve_help_option_sort_rules(value, value_name="help_option_sort")
-
-
-def _resolve_help_subcommand_sort(value: Any, _config_data: dict[str, Any]) -> Any:
-    return resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
-
-
-def _resolve_flag_strategy_field(value: Any, config_data: dict[str, Any]) -> Any:
-    return _resolve_flag_strategy(value, config_data)
-
-
-def _resolve_abbreviation_gen_field(value: Any, config_data: dict[str, Any]) -> Any:
-    return _resolve_abbreviation_gen(value, config_data)
-
-
 _FIELD_RESOLVERS = {
-    "flag_strategy": _resolve_flag_strategy_field,
-    "abbreviation_gen": _resolve_abbreviation_gen_field,
+    "flag_strategy": _resolve_flag_strategy,
+    "abbreviation_gen": _resolve_abbreviation_gen,
     "abbreviation_max_generated_len": lambda value, _config: (
         _resolve_abbreviation_max_generated_len(value)
     ),
     "abbreviation_scope": lambda value, _config: _resolve_abbreviation_scope(value),
-    "help_option_sort": _resolve_help_option_sort,
-    "help_subcommand_sort": _resolve_help_subcommand_sort,
+    "help_option_sort": lambda value, _config: resolve_help_option_sort_rules(
+        value,
+        value_name="help_option_sort",
+    ),
+    "help_subcommand_sort": lambda value, _config: resolve_help_subcommand_sort_rules(
+        value,
+        value_name="help_subcommand_sort",
+    ),
     "backend": lambda value, _config: _resolve_backend(value),
     "model_expansion_max_depth": lambda value, _config: _resolve_model_expansion_max_depth(value),
     "parse_recovery_max_attempts": lambda value, _config: _resolve_parse_recovery_max_attempts(
