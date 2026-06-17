@@ -1,15 +1,15 @@
 # API Reference
 
-Reference for the public Interfacy API.
+Generated reference for public Interfacy API objects.
 
 ## Sections
 
 ```{toctree}
 :maxdepth: 1
 
-parsers
-appearance
-groups
-schema
-support
+Parsers <parsers>
+Appearance <appearance>
+Command groups <groups>
+Schema API <schema>
+Support types <support>
 ```

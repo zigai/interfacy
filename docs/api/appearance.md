@@ -98,62 +98,23 @@ lines inserted between help-group sections.
 .. automethod:: interfacy.appearance.layout.HelpLayout.should_render_description_before_usage
 ```
 
-```{eval-rst}
-.. list-table::
-   :header-rows: 1
-
-   * - Object
-     - Purpose
-   * - ``InterfacyColors``
-     - Base color-theme container for help rendering styles.
-   * - ``InterfacyLayout``
-     - Interfacy-branded layout preset built on ``HelpLayout``.
-```
+- `InterfacyColors`
+- `InterfacyLayout`
 
 ## Layouts
 
-These classes are layout presets built on top of `HelpLayout`.
-
-```{eval-rst}
-.. list-table::
-   :header-rows: 1
-
-   * - Object
-     - Purpose
-   * - ``StandardLayout``
-     - Default layout that follows standard ``argparse``-style help output.
-   * - ``SimpleLayout``
-     - Alias of ``StandardLayout``.
-   * - ``ArgparseLayout``
-     - Layout tuned to closely mirror ``argparse`` help formatting.
-   * - ``Aligned``
-     - Compact aligned layout with a dedicated default-value column.
-   * - ``AlignedTyped``
-     - ``Aligned`` variant that gives more emphasis to type information.
-   * - ``Modern``
-     - More spacious modern layout with stronger visual separation.
-   * - ``ClapLayout``
-     - Layout inspired by Rust ``clap`` output.
-```
+- `StandardLayout`
+- `ArgparseLayout`
+- `Aligned`
+- `AlignedTyped`
+- `Modern`
+- `ClapLayout`
 
 ## Color Themes
 
-Color presets expose configuration through their constructor fields and do not
-add a separate callable API.
-
-```{eval-rst}
-.. list-table::
-   :header-rows: 1
-
-   * - Object
-     - Purpose
-   * - ``NoColor``
-     - Monochrome theme with no accent colors.
-   * - ``Aurora``
-     - Theme inspired by aurora palettes.
-   * - ``ClapColors``
-     - Theme that mimics ``clap`` default styled output.
-```
+- `NoColor`
+- `Aurora`
+- `ClapColors`
 
 ## Help Sorting
 
@@ -206,9 +167,6 @@ add a separate callable API.
 ```
 
 ## Type Formatting
-
-`TypeStyleTheme` is the protocol consumed by `TypeHelpFormatter` when styling
-type tokens.
 
 ```{eval-rst}
 .. autoclass:: interfacy.appearance.type_help.TypeHelpFormatter

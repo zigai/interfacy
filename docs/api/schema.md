@@ -1,6 +1,6 @@
-# Schema
+# Schema API
 
-## Parser Schema
+## Parser schema
 
 ```{eval-rst}
 .. autodata:: interfacy.schema.schema.CommandType
@@ -48,7 +48,7 @@
    :exclude-members: __init__, __new__
 ```
 
-## Pipe Input
+## Pipe input
 
 ```{eval-rst}
 .. autodata:: interfacy.pipe.PipePriority

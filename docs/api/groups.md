@@ -1,7 +1,7 @@
 # Command Groups
 
-Use `CommandGroup` when you want to assemble a CLI tree explicitly instead of
-letting Interfacy derive the full shape from a single callable or class.
+`CommandGroup` assembles a CLI tree explicitly instead of letting Interfacy derive
+the full shape from a single callable or class.
 
 ## CommandGroup
 

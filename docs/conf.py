@@ -222,4 +222,4 @@ def setup(app: Sphinx) -> dict[str, bool]:
 
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
-html_js_files = ["copy_as_markdown.js"]
+html_js_files = ["copy_as_markdown.js", "compact_viewcode.js"]

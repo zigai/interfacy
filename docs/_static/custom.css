@@ -215,27 +215,47 @@ body[data-theme="dark"] .sidebar-drawer {
     min-width: 4.5rem;
 }
 
-:is(#configuration, #commands, #integrations, #rules) > section {
+:is(
+    #configuration,
+    #commands,
+    #integrations,
+    #rules,
+    #parsers,
+    #appearance,
+    #command-groups,
+    #schema,
+    #support-types
+) > section {
     border-top: 1px solid var(--color-background-border);
     margin-top: 2rem;
     padding-top: 1.5rem;
 }
 
-:is(#configuration, #commands, #integrations, #rules) > section > h2 {
+:is(
+    #configuration,
+    #commands,
+    #integrations,
+    #rules,
+    #parsers,
+    #appearance,
+    #command-groups,
+    #schema,
+    #support-types
+) > section > h2 {
     margin-top: 0;
 }
 
-#module-interfacy section > dl.py {
+article section > dl.py {
     border-top: 1px solid var(--color-background-border);
     margin-top: 2rem;
     padding-top: 1.5rem;
 }
 
-#module-interfacy section > dl.py > dt:first-child {
+article section > dl.py > dt:first-child {
     margin-top: 0;
 }
 
-#module-interfacy section > dl.py > dt.sig {
+article section > dl.py > dt.sig {
     background: #f6f8fa;
     border: 1px solid var(--color-background-border);
     border-radius: 0.45rem;
@@ -249,13 +269,13 @@ body[data-theme="dark"] .sidebar-drawer {
     width: 100%;
 }
 
-body[data-theme="dark"] #module-interfacy section > dl.py > dt.sig,
-body:not([data-theme="light"]) #module-interfacy section > dl.py > dt.sig {
+body[data-theme="dark"] article section > dl.py > dt.sig,
+body:not([data-theme="light"]) article section > dl.py > dt.sig {
     background: #080808;
     color: #eeffff;
 }
 
-#module-interfacy dl.py dl.py > dt.sig {
+article dl.py dl.py > dt.sig {
     background: transparent;
     border: 0;
     border-radius: 0;
@@ -266,66 +286,66 @@ body:not([data-theme="light"]) #module-interfacy section > dl.py > dt.sig {
     text-indent: 0;
 }
 
-body[data-theme="dark"] #module-interfacy dl.py dl.py > dt.sig,
-body:not([data-theme="light"]) #module-interfacy dl.py dl.py > dt.sig {
+body[data-theme="dark"] article dl.py dl.py > dt.sig,
+body:not([data-theme="light"]) article dl.py dl.py > dt.sig {
     background: transparent;
     color: #eeffff;
 }
 
-#module-interfacy dl.py dt.sig .property {
+article dl.py dt.sig .property {
     color: #cf222e;
 }
 
-#module-interfacy dl.py dt.sig .sig-prename {
+article dl.py dt.sig .sig-prename {
     color: #8250df;
 }
 
-#module-interfacy dl.py dt.sig .sig-name {
+article dl.py dt.sig .sig-name {
     color: #953800;
 }
 
-#module-interfacy dl.py dt.sig .sig-param .n {
+article dl.py dt.sig .sig-param .n {
     color: #0550ae;
 }
 
-#module-interfacy dl.py dt.sig .sig-param .o,
-#module-interfacy dl.py dt.sig .sig-paren {
+article dl.py dt.sig .sig-param .o,
+article dl.py dt.sig .sig-paren {
     color: #24292f;
 }
 
-#module-interfacy dl.py dt.sig .default_value {
+article dl.py dt.sig .default_value {
     color: #0a3069;
 }
 
-body[data-theme="dark"] #module-interfacy dl.py dt.sig .property,
-body:not([data-theme="light"]) #module-interfacy dl.py dt.sig .property {
+body[data-theme="dark"] article dl.py dt.sig .property,
+body:not([data-theme="light"]) article dl.py dt.sig .property {
     color: #569cd6;
 }
 
-body[data-theme="dark"] #module-interfacy dl.py dt.sig .sig-prename,
-body:not([data-theme="light"]) #module-interfacy dl.py dt.sig .sig-prename {
+body[data-theme="dark"] article dl.py dt.sig .sig-prename,
+body:not([data-theme="light"]) article dl.py dt.sig .sig-prename {
     color: #9cdcfe;
 }
 
-body[data-theme="dark"] #module-interfacy dl.py dt.sig .sig-name,
-body:not([data-theme="light"]) #module-interfacy dl.py dt.sig .sig-name {
+body[data-theme="dark"] article dl.py dt.sig .sig-name,
+body:not([data-theme="light"]) article dl.py dt.sig .sig-name {
     color: #dcdcaa;
 }
 
-body[data-theme="dark"] #module-interfacy dl.py dt.sig .sig-param .n,
-body:not([data-theme="light"]) #module-interfacy dl.py dt.sig .sig-param .n {
+body[data-theme="dark"] article dl.py dt.sig .sig-param .n,
+body:not([data-theme="light"]) article dl.py dt.sig .sig-param .n {
     color: #9cdcfe;
 }
 
-body[data-theme="dark"] #module-interfacy dl.py dt.sig .sig-param .o,
-body:not([data-theme="light"]) #module-interfacy dl.py dt.sig .sig-param .o,
-body[data-theme="dark"] #module-interfacy dl.py dt.sig .sig-paren,
-body:not([data-theme="light"]) #module-interfacy dl.py dt.sig .sig-paren {
+body[data-theme="dark"] article dl.py dt.sig .sig-param .o,
+body:not([data-theme="light"]) article dl.py dt.sig .sig-param .o,
+body[data-theme="dark"] article dl.py dt.sig .sig-paren,
+body:not([data-theme="light"]) article dl.py dt.sig .sig-paren {
     color: #d4d4d4;
 }
 
-body[data-theme="dark"] #module-interfacy dl.py dt.sig .default_value,
-body:not([data-theme="light"]) #module-interfacy dl.py dt.sig .default_value {
+body[data-theme="dark"] article dl.py dt.sig .default_value,
+body:not([data-theme="light"]) article dl.py dt.sig .default_value {
     color: #b5cea8;
 }
 
@@ -519,6 +539,27 @@ article:has(.rule-metadata) section#settings::after {
     line-height: 1.6;
 }
 
+article[role="main"] h1 {
+    font-size: 1.8rem;
+    line-height: 1.2;
+    margin-bottom: 0.75rem;
+    margin-top: 1.3rem;
+}
+
+article[role="main"] h2 {
+    font-size: 1.35rem;
+    margin-top: 1.45rem;
+}
+
+article[role="main"] h3 {
+    font-size: 1.15rem;
+    margin-top: 1.25rem;
+}
+
+article[role="main"] h4 {
+    font-size: 1.02rem;
+}
+
 div.repo-badges {
     margin-top: 12px;
     margin-bottom: 10px;
@@ -580,4 +621,14 @@ dl.class, dl.function {
 }
 dl.function, dl.attribute, dl.class, dl.method, dl.field-list, dl.data {
     margin-bottom: 15px;
+}
+
+.highlight .viewcode-block {
+    position: relative;
+}
+
+.highlight .viewcode-back {
+    float: none;
+    position: absolute;
+    right: 0;
 }
