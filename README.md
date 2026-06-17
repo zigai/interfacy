@@ -193,9 +193,9 @@ positional arguments:
   ...             Arguments passed through to the target command.
 
 options:
-  --help                        Show this help message and exit
-  --version                     show version and exit.
-  --config-paths                print config file search paths and exit.
+  --help                Show this help message and exit
+  --version             show version and exit.
+  --config-paths        print config file search paths and exit.
 
 Use 'interfacy TARGET --help' to display the help text for the target.
 ```

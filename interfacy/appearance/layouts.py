@@ -698,7 +698,7 @@ class StandardLayout(HelpLayout):
     default_label_for_help: str = ""
     clear_metavar: bool = True
 
-    help_position: int = 32
+    help_position: int = 24
     layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
 
     @staticmethod
@@ -853,7 +853,7 @@ class ArgparseLayout(HelpLayout):
     default_label_for_help: str = ""
     clear_metavar: bool = False
 
-    help_position: int = 32
+    help_position: int = 24
     layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
 
     @staticmethod

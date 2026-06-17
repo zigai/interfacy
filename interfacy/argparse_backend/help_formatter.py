@@ -29,6 +29,14 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         """
         self._interfacy_help_layout = help_layout
 
+    def add_argument(self, action: argparse.Action) -> None:
+        if action.help is not argparse.SUPPRESS and action.option_strings:
+            action_length = ansi_len(self._format_action_invocation(action)) + self._current_indent
+            current = getattr(self, "_interfacy_option_action_max_length", 0)
+            self._interfacy_option_action_max_length = max(current, action_length)
+
+        return super().add_argument(action)
+
     def start_section(self, heading: str | None) -> None:
         """
         Start a help section with optional layout styling.
@@ -153,6 +161,8 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
             invocations = [self._format_action_invocation(sub) for sub in subactions]
             max_name_len = max((len(name) for name in invocations), default=0)
+            if target_help_col is not None:
+                target_help_col = max(target_help_col, 2 + max_name_len + 2)
             lines: list[str] = []
             for subaction, invocation in zip(subactions, invocations, strict=False):
                 raw_help = getattr(subaction, "help", None)
@@ -209,8 +219,16 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
         previous_max_help_position = self._max_help_position
         previous_action_max_length = self._action_max_length
-        self._max_help_position = help_layout.help_position
-        self._action_max_length = max(self._action_max_length, help_layout.help_position - 2)
+        option_action_max_length = getattr(
+            self,
+            "_interfacy_option_action_max_length",
+            ansi_len(self._format_action_invocation(action)) + self._current_indent,
+        )
+        self._action_max_length = max(option_action_max_length, help_layout.help_position - 2)
+        self._max_help_position = max(
+            help_layout.help_position,
+            self._action_max_length + 2,
+        )
         try:
             return self._wrap_overwide_action_lines(super()._format_action(action))
         finally:

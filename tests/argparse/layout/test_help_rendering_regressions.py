@@ -1306,9 +1306,10 @@ def test_argparse_layout_does_not_duplicate_existing_default_sentence() -> None:
     parser = Argparser(help_layout=ArgparseLayout(), sys_exit_enabled=False, print_result=False)
     parser.add_command(c2p)
     help_text = parser.build_parser().format_help()
+    normalized_help = " ".join(help_text.split())
 
-    assert "Defaults to True.. Defaults to True." not in help_text
-    assert help_text.count("Defaults to True.") == 1
+    assert "Defaults to True.. Defaults to True." not in normalized_help
+    assert normalized_help.count("Defaults to True.") == 1
 
 
 def test_argparse_layout_collapses_terminal_double_period_before_default_sentence() -> None:
