@@ -4,7 +4,8 @@ from typing import get_type_hints
 import pytest
 
 import interfacy
-from interfacy import CommandGroup, Interfacy, Param
+from interfacy import CommandGroup, Interfacy, Param, appearance
+from interfacy.appearance import layouts as appearance_layouts
 from interfacy.argparse_backend import Argparser
 from interfacy.exceptions import ConfigurationError
 
@@ -139,3 +140,10 @@ def test_backend_classes_are_not_top_level_exports() -> None:
     assert "params" in interfacy.__all__
     assert "Argparser" not in interfacy.__all__
     assert "ClickParser" not in interfacy.__all__
+
+
+def test_appearance_does_not_export_simple_layout_alias() -> None:
+    assert "SimpleLayout" not in appearance.__all__
+    assert "SimpleLayout" not in appearance_layouts.__all__
+    assert not hasattr(appearance, "SimpleLayout")
+    assert not hasattr(appearance_layouts, "SimpleLayout")

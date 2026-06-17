@@ -1009,10 +1009,6 @@ class ArgparseLayout(HelpLayout):
         return self._with_choices_sentence(description, choices)
 
 
-# Backward compatibility alias.
-SimpleLayout = StandardLayout
-
-
 __all__ = [
     "Aligned",
     "AlignedTyped",
@@ -1020,6 +1016,5 @@ __all__ = [
     "ClapLayout",
     "InterfacyLayout",
     "Modern",
-    "SimpleLayout",
     "StandardLayout",
 ]
