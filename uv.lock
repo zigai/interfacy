@@ -491,7 +491,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
     { name = "pytest-mock", marker = "extra == 'dev'" },
     { name = "pytest-mock", marker = "extra == 'test'" },
-    { name = "rattle-lint", marker = "extra == 'dev'", specifier = ">=2.4.2" },
+    { name = "rattle-lint", marker = "extra == 'dev'", specifier = ">=2.5.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.16" },
     { name = "setproctitle", specifier = ">=1.3.7" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = "==8.0.2" },
@@ -1022,7 +1022,7 @@ wheels = [
 
 [[package]]
 name = "rattle-lint"
-version = "2.4.2"
+version = "2.5.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "interfacy" },
@@ -1034,9 +1034,9 @@ dependencies = [
     { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "trailrunner" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/df/27509b71a960e575e8526edfc5159339c94066261aa287985dd143a2007e/rattle_lint-2.4.2.tar.gz", hash = "sha256:e99688c0e46c75c6216642900ec2803178aada98ec28327fd50185d3058c1d23", size = 285153, upload-time = "2026-06-10T19:39:23.87Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/30/77af8fd1f66c6ede6227bc83129c424fab1becac65a42fd18323757c65e0/rattle_lint-2.5.2.tar.gz", hash = "sha256:6478a62fed55ace2513c848cb25e5b9f26911956cfcb217d7bec3486466acd91", size = 293886, upload-time = "2026-06-15T12:12:23.75Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/c9/34fe1017b021804acb87a17691ade5f612bb70f1acc3f9355812c1fb9d78/rattle_lint-2.4.2-py3-none-any.whl", hash = "sha256:8ff1c7a5496bc0403b94556629d7477fbf19d6181c889a1b0cb619740c349fa2", size = 205803, upload-time = "2026-06-10T19:39:22.538Z" },
+    { url = "https://files.pythonhosted.org/packages/23/01/50de68c077a272964f9fc526c33855c0d67c22531509c21c79be1e3cba54/rattle_lint-2.5.2-py3-none-any.whl", hash = "sha256:13cfd3ae18da306795e6d4dfbf033ef9a1db433b7c07a6115e9ba9b481fd5b0e", size = 213373, upload-time = "2026-06-15T12:12:22.485Z" },
 ]
 
 [[package]]
