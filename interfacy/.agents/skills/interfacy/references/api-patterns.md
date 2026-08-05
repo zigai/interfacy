@@ -14,6 +14,7 @@ from typing import Literal
 
 from interfacy import Interfacy
 
+
 def resize(
     image: Path,
     *,
@@ -36,6 +37,7 @@ def resize(
     # Do the work here.
     return output
 
+
 if __name__ == "__main__":
     Interfacy(print_result=True).run(resize)
 ```
@@ -48,6 +50,7 @@ Use a class when commands share configuration or naturally belong to one noun.
 
 ```python
 from interfacy import Interfacy
+
 
 class Project:
     def __init__(self, root: str = ".") -> None:
@@ -74,6 +77,7 @@ class Project:
             Cleanup result.
         """
         return "dry" if dry_run else "clean"
+
 
 if __name__ == "__main__":
     Interfacy(print_result=True).run(Project)
@@ -103,6 +107,7 @@ Use `CommandGroup` when you need an actual command namespace: commands come from
 ```python
 from interfacy import CommandGroup, Interfacy
 
+
 def clone(url: str) -> str:
     """Clone a repository.
 
@@ -113,6 +118,7 @@ def clone(url: str) -> str:
         Clone result.
     """
     return f"clone:{url}"
+
 
 ops = CommandGroup("ops", description="Operational commands")
 ops.add_command(clone, aliases=["c"])
@@ -169,6 +175,7 @@ from app_cli.projects.archive import project_archive
 from app_cli.projects.create import project_create
 from app_cli.projects.list import project_list
 
+
 def create_group() -> CommandGroup:
     """Create the project command group.
 
@@ -194,6 +201,7 @@ from app_cli.status import status
 WORKFLOW_COMMANDS = "Workflow Commands"
 REPORTING_COMMANDS = "Reporting Commands"
 
+
 def cli() -> None:
     """Run the application CLI."""
     parser = Interfacy(description="Application management CLI.")
@@ -214,6 +222,7 @@ from interfacy import Interfacy
 
 app = Interfacy(print_result=True)
 
+
 @app.command(aliases=["hi"])
 def greet(name: str) -> str:
     """Greet a person.
@@ -225,6 +234,7 @@ def greet(name: str) -> str:
         Greeting text.
     """
     return f"Hello, {name}!"
+
 
 if __name__ == "__main__":
     app.run()
@@ -271,10 +281,12 @@ from dataclasses import dataclass
 
 from interfacy import Interfacy
 
+
 @dataclass(frozen=True)
 class Repository:
     owner: str
     name: str
+
 
 def parse_repository(raw: str) -> Repository:
     """Parse an owner/name repository reference.
@@ -293,6 +305,7 @@ def parse_repository(raw: str) -> Repository:
         raise ValueError("Expected OWNER/NAME")
     return Repository(owner=owner, name=name)
 
+
 def clone(repo: Repository) -> str:
     """Clone a repository.
 
@@ -303,6 +316,7 @@ def clone(repo: Repository) -> str:
         Clone result.
     """
     return f"{repo.owner}/{repo.name}"
+
 
 app = Interfacy(print_result=True)
 app.add_type_parser(Repository, parse_repository)

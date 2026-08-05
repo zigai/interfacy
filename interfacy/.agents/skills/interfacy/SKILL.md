@@ -28,6 +28,7 @@ uv add interfacy
 ```python
 from interfacy import Interfacy
 
+
 def greet(name: str, times: int = 1) -> None:
     """Print a greeting.
 
@@ -36,6 +37,7 @@ def greet(name: str, times: int = 1) -> None:
         times: Number of greetings.
     """
     print(" ".join(f"Hello, {name}!" for _ in range(times)))
+
 
 if __name__ == "__main__":
     Interfacy().run(greet)

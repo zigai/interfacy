@@ -25,10 +25,12 @@ from dataclasses import dataclass
 
 from interfacy import Interfacy
 
+
 @dataclass
 class UserInput:
     name: str
     age: int
+
 
 def create_user(user: UserInput, *, active: bool = True) -> str:
     """Create a user.
@@ -41,6 +43,7 @@ def create_user(user: UserInput, *, active: bool = True) -> str:
         Created user name.
     """
     return user.name
+
 
 Interfacy(print_result=True).run(create_user)
 ```
