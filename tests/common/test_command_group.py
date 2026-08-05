@@ -505,6 +505,25 @@ class TestGroupErrors:
         assert parser.run(args=["root", "config", "build", "artifact"]) == "build:artifact"
 
 
+class TestGroupArguments:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
+    def test_group_arguments_parse_alongside_subcommands(self, parser: InterfacyParser) -> None:
+        def cloud_options(region: str = "us-east") -> None:
+            return None
+
+        def deploy(service: str) -> str:
+            return f"deploy:{service}"
+
+        cloud = CommandGroup("cloud").with_args(cloud_options)
+        cloud.add_command(deploy)
+        parser.add_command(cloud)
+
+        args = ["cloud", "--region", "eu-west", "deploy", "api"]
+
+        assert parser.parse_args(args)["cloud"]["region"] == "eu-west"
+        assert parser.run(args=args) == "deploy:api"
+
+
 class TestGroupAliases:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_group_with_aliases(self, parser: InterfacyParser):
