@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from interfacy.schema.schema import Argument
 
 
-@dataclass(frozen=True)
+@dataclass
 class ExecutableFlag:
     """Zero-argument executable CLI flag that short-circuits normal command execution."""
 
@@ -48,7 +48,7 @@ class ExecutableFlag:
         if signature.parameters:
             raise ConfigurationError("ExecutableFlag.handler must accept zero arguments")
 
-        object.__setattr__(self, "flags", flags)
+        self.flags = flags
 
 
 def _normalize_flag_tuple(value: tuple[str, ...] | Sequence[str] | str) -> tuple[str, ...]:
