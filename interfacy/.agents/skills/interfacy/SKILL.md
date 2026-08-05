@@ -73,6 +73,34 @@ from interfacy import Interfacy
 Interfacy(print_result=True).run(command)
 ```
 
+## Exit Behavior
+
+In a normal console entrypoint, keep `sys_exit_enabled=True` and let `run()` manage the
+process exit:
+
+```python
+def main() -> None:
+    Interfacy(print_result=True).run(command)
+```
+
+A command that returns normally is successful. Its return value is Python data, including
+when that value is an integer. Do not disable exits and reinterpret integer results:
+
+```python
+# Wrong: this turns a valid integer result into a process status.
+def main() -> int:
+    parser = Interfacy(sys_exit_enabled=False)
+    result = parser.run(command)
+    if isinstance(result, int):
+        return result
+    return 0
+```
+
+Use `sys_exit_enabled=False` only for tests or embedded execution that must inspect the
+result without terminating the host process. In that mode, `run()` returns the command's
+normal value on success and returns exception objects for parser exits, interrupts, or
+failures. Those values are inspection results, not exit codes.
+
 ## What Good Interfacy Code Looks Like
 
 - The command function can be called normally from Python tests.
@@ -91,6 +119,7 @@ Interfacy(print_result=True).run(command)
 - Do not add manual printing just to show a returned value.
 - Do not add thin wrappers around existing callables unless adapting names, validation, parser-specific inputs, or user-facing behavior actually requires it.
 - Do not wrap Interfacy entrypoints in `raise SystemExit(main())` patterns that reinterpret command results as exit codes.
+- Do not use `isinstance(result, int)` to infer a process status from `run()`.
 - Do not run `.run(...)` at import time; guard executable entrypoints with `if __name__ == "__main__":`.
 - Do not hide parse or runtime failures with broad `except Exception` or `except SystemExit` wrappers.
 - Do not hide CLI-only transformations in decorators or global state; put them in the callable body or a small adapter.

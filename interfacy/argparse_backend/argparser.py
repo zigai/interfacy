@@ -142,7 +142,9 @@ class Argparser(InterfacyParser):
         tab_completion (bool): Whether to enable tab completion.
         full_error_traceback (bool): Whether to print full tracebacks.
         allow_args_from_file (bool): Allow @file argument expansion.
-        sys_exit_enabled (bool): Whether to call sys.exit on completion.
+        sys_exit_enabled (bool): Whether to call sys.exit after completion or failure.
+            When disabled, run() returns command values and exception objects for inspection;
+            returned integers remain command data.
         flag_strategy (FlagStrategy | None): Flag naming and style strategy.
         abbreviation_gen (AbbreviationGenerator | None): Abbreviation generator.
         abbreviation_max_generated_len (int): Max generated short-flag length.

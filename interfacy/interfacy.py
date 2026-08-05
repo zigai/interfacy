@@ -63,7 +63,9 @@ class Interfacy:
         tab_completion: Install shell completion support when the backend supports it.
         full_error_traceback: Include full tracebacks for runtime errors.
         allow_args_from_file: Enable ``@file`` argument expansion.
-        sys_exit_enabled: Call ``sys.exit`` for parser exits instead of returning codes.
+        sys_exit_enabled: Call ``sys.exit`` after completion or failure. Disable only when
+            tests or embedding hosts need ``run()`` to return command values and exception
+            objects for inspection; returned integers remain command data.
         flag_strategy: Strategy for deriving option flags from Python names.
         abbreviation_gen: Generator used for short option flags.
         abbreviation_max_generated_len: Maximum generated short-flag length. Must be >= 1.
@@ -566,8 +568,10 @@ class Interfacy:
         """
         Register any command targets, parse arguments, and execute the selection.
 
-        Returns the command result unless execution exits through the configured
-        backend. If `args` is omitted, the current process arguments are used.
+        With the default exit behavior, this exits after completion or failure. When
+        ``sys_exit_enabled`` is disabled, it returns the command value on success or an
+        exception object on failure for inspection. Returned integers are command data,
+        not process exit codes. If `args` is omitted, the current process arguments are used.
         """
         return self._parser.run(*commands, args=args)
 

@@ -366,6 +366,30 @@ Choose one output style per command:
 - Print/log inside the command when streaming or side effects matter.
 - Return `None` when success is represented by side effects.
 
-Do not convert normal return values into exit codes unless the old CLI already did that.
+Normal return values always mean that the command completed successfully. Their type and
+value do not determine the process status. In particular, an integer return value is data,
+not an exit code.
+
+For a console entrypoint, use the default exit behavior:
+
+```python
+def main() -> None:
+    Interfacy(print_result=True).run(command)
+```
+
+Do not reconstruct process behavior around inspection mode:
+
+```python
+# Wrong: `result` may be legitimate integer data.
+def main() -> int:
+    parser = Interfacy(sys_exit_enabled=False)
+    result = parser.run(command)
+    if isinstance(result, int):
+        return result
+    return 0
+```
+
+Set `sys_exit_enabled=False` only in tests and embedded hosts that need `run()` to return
+normal values or exception objects for inspection without terminating the process.
 
 Avoid `raise SystemExit(main())` wrappers around Interfacy commands. Let Interfacy manage parser exits, and use normal exceptions for failures.
