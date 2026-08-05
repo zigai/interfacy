@@ -1,6 +1,8 @@
 ---
 name: interfacy
-description: Use when designing, building, reviewing, or refactoring Python CLIs with Interfacy.
+description: "Use when building, reviewing, or refactoring Interfacy-based Python CLIs."
+disable-model-invocation: false
+user-invocable: true
 ---
 
 # Interfacy
