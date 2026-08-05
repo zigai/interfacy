@@ -29,8 +29,7 @@ Literal choices also appear in help output.
 Choices work for required parameters too.
 
 ```python
-def render(format: Literal["json", "yaml"]):
-    ...
+def render(format: Literal["json", "yaml"]): ...
 ```
 
 With the default flag strategy, required non-boolean parameters are positional:
@@ -74,8 +73,7 @@ The callable receives `Color.RED`.
 Optional choices are supported with `T | None`.
 
 ```python
-def filter_status(status: Literal["open", "closed"] | None = None) -> None:
-    ...
+def filter_status(status: Literal["open", "closed"] | None = None) -> None: ...
 ```
 
 ```console

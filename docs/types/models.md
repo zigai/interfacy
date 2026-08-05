@@ -90,8 +90,7 @@ class Server:
         self.port = port
 
 
-def connect(server: Server) -> None:
-    ...
+def connect(server: Server) -> None: ...
 ```
 
 ```console

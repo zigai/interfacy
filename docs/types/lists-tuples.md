@@ -106,8 +106,7 @@ $ python app.py payments app.log db.log
 Keyword-only options can follow varargs:
 
 ```python
-def search(query: str, *paths: str, ignore_case: bool = False) -> None:
-    ...
+def search(query: str, *paths: str, ignore_case: bool = False) -> None: ...
 ```
 
 ```console

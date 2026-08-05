@@ -3,8 +3,7 @@
 Interfacy uses type annotations to convert command-line strings into Python values.
 
 ```python
-def report(path: str, limit: int = 10, ratio: float = 0.5) -> None:
-    ...
+def report(path: str, limit: int = 10, ratio: float = 0.5) -> None: ...
 ```
 
 ```console

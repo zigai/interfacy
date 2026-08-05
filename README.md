@@ -46,9 +46,11 @@ uv add "git+https://github.com/zigai/interfacy.git"
 ```python
 from interfacy import Interfacy
 
+
 def greet(name: str, times: int = 1) -> None:
     """Print a greeting."""
     print(" ".join([f"Hello, {name}!" for _ in range(times)]))
+
 
 if __name__ == "__main__":
     Interfacy().run(greet)
@@ -67,8 +69,7 @@ By default, required non-boolean parameters become positional arguments and opti
 Boolean flags follow the callable's name. Positive names keep paired toggle behavior, while negative-looking `bool = False` names become one-way flags:
 
 ```python
-def sync(disable_cache: bool = False, verbose: bool = False) -> None:
-    ...
+def sync(disable_cache: bool = False, verbose: bool = False) -> None: ...
 ```
 
 ```text
@@ -98,6 +99,7 @@ Classes become command namespaces. `__init__` parameters live at the command lev
 ```python
 from interfacy import Interfacy
 
+
 class Calculator:
     def __init__(self, precision: int = 2) -> None:
         self.precision = precision
@@ -107,6 +109,7 @@ class Calculator:
 
     def mul(self, a: float, b: float) -> float:
         return round(a * b, self.precision)
+
 
 if __name__ == "__main__":
     Interfacy(print_result=True).run(Calculator)
@@ -125,10 +128,12 @@ Dataclasses, Pydantic models, and plain classes with typed `__init__` parameters
 from dataclasses import dataclass
 from interfacy import Interfacy
 
+
 @dataclass
 class Address:
     city: str
     postal_code: int
+
 
 @dataclass
 class User:
@@ -136,8 +141,10 @@ class User:
     age: int
     address: Address | None = None
 
+
 def greet(user: User) -> str:
     return f"Hello {user.name}, age {user.age}"
+
 
 if __name__ == "__main__":
     Interfacy(print_result=True).run(greet)
@@ -155,12 +162,15 @@ Use `CommandGroup` when your command tree is not naturally rooted in one callabl
 ```python
 from interfacy import CommandGroup, Interfacy
 
+
 def clone(url: str) -> str:
     return f"clone:{url}"
+
 
 class Releases:
     def cut(self, version: str) -> str:
         return f"cut:{version}"
+
 
 ops = CommandGroup("ops", description="Operational commands")
 ops.add_command(clone)

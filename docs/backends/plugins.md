@@ -66,11 +66,7 @@ class DefaultsPlugin(InterfacyPlugin):
         if not failure.missing_arguments:
             return None
 
-        values = {
-            ref: "default"
-            for ref in failure.missing_arguments
-            if ref.argument.type is str
-        }
+        values = {ref: "default" for ref in failure.missing_arguments if ref.argument.type is str}
         return ProvideArgumentValues(values=values) if values else None
 ```
 

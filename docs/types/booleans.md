@@ -3,8 +3,7 @@
 Boolean parameters become flags.
 
 ```python
-def sync(verbose: bool = False, cache: bool = True) -> None:
-    ...
+def sync(verbose: bool = False, cache: bool = True) -> None: ...
 ```
 
 ```console
@@ -61,8 +60,7 @@ $ python app.py --no-enabled
 Some boolean names already sound negative:
 
 ```python
-def sync(disable_cache: bool = False) -> None:
-    ...
+def sync(disable_cache: bool = False) -> None: ...
 ```
 
 By default, Interfacy treats these as one-way flags:

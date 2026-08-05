@@ -30,6 +30,7 @@ $ interfacy package.cli:service
 ```python
 # app.py
 
+
 def greet(name: str, times: int = 1) -> None:
     """Print a greeting."""
     for _ in range(times):
@@ -46,6 +47,7 @@ Hello, Ada!
 
 ```python
 # app.py
+
 
 class Math:
     def add(self, left: int, right: int) -> int:

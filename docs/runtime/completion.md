@@ -36,8 +36,7 @@ Interfacy exposes completion metadata for:
 from typing import Literal
 
 
-def deploy(environment: Literal["dev", "staging", "prod"]) -> None:
-    ...
+def deploy(environment: Literal["dev", "staging", "prod"]) -> None: ...
 ```
 
 The environment values can be offered by the shell completion layer.
