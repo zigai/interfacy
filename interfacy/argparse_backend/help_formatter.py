@@ -144,6 +144,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         if is_bool:
             if hasattr(action, "positive_options"):
                 return ", ".join(action.option_strings)
+
             return ", ".join(self._primary_boolean_option_strings(action))
 
         if len(action.option_strings) == 1:

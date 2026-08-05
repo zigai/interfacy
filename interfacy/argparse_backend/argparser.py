@@ -293,6 +293,7 @@ class Argparser(InterfacyParser):
             raise ConfigurationError("Boolean negative flags require a positive long flag")
 
         name = long_flags[0][2:]
+
         return (f"--{inverted_bool_flag_name(name, prefix=self.bool_negative_prefix)}",)
 
     def parser_from_command(

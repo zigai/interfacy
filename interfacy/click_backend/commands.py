@@ -117,11 +117,13 @@ class InterfacyBooleanOption(InterfacyClickOption):
         super().__init__(param_decls, **kwargs)
         self.opts = list(self.positive_flags)
         self.secondary_opts = list(self.negative_flags)
+
         if default is True:
             self.default = True
 
     def add_to_parser(self, parser: InterfacyOptionParser, ctx: click.Context) -> None:
         del ctx
+
         if self.positive_flags:
             parser.add_option(
                 obj=self,
@@ -130,6 +132,7 @@ class InterfacyBooleanOption(InterfacyClickOption):
                 action="store_const",
                 const=True,
             )
+
         if self.negative_flags:
             parser.add_option(
                 obj=self,

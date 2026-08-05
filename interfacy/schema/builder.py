@@ -2021,9 +2021,11 @@ class ParserSchemaBuilder:
         )
         if not isinstance(requested_mode, BooleanMode):
             raise ConfigurationError(f"Boolean parameter '{spec.name}' has an invalid boolean mode")
+
         mode = self._resolve_boolean_mode(spec, requested_mode)
         positive_flags = flags if mode in {BooleanMode.POSITIVE_ONLY, BooleanMode.DUAL} else ()
         negative_flags: tuple[str, ...] = ()
+
         if mode is BooleanMode.NEGATIVE_ONLY:
             for flag in flags:
                 if flag.startswith("-") and not flag.startswith("--"):
