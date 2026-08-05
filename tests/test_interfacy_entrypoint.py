@@ -41,6 +41,10 @@ def test_interfacy_init_is_fully_typed_without_variadic_kwargs() -> None:
     assert inspect.Parameter.VAR_KEYWORD not in {param.kind for param in parameters}
 
 
+def test_interfacy_is_declared_final() -> None:
+    assert getattr(Interfacy, "__final__", False) is True
+
+
 def test_interfacy_facade_hides_backend_specific_parser_construction_helpers() -> None:
     parser = Interfacy(sys_exit_enabled=False)
 

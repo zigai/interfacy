@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
 
 from strto import StrToTypeParser
+from typing_extensions import final
 
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
@@ -40,6 +41,7 @@ CommandTarget = object
 F = TypeVar("F", bound=Callable[..., object])
 
 
+@final
 class Interfacy:
     """
     Build and run command-line interfaces from Python callables.
