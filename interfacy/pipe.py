@@ -95,7 +95,7 @@ def targets_to_list(value: str | Sequence[Any]) -> list[str]:
 def _replace_pipe_targets(
     config: PipeTargets,
     *,
-    delimiter: str | None | Any,
+    delimiter: str | Any | None,
     allow_partial: bool | None,
     priority: str | PipePriority | None,
 ) -> PipeTargets:
@@ -118,7 +118,7 @@ def _replace_pipe_targets(
 def _resolve_pipe_target_inputs(
     targets: TargetsInput,
     *,
-    delimiter: str | None | Any,
+    delimiter: str | Any | None,
     allow_partial: bool | None,
     priority: str | PipePriority | None,
 ) -> tuple[Any, bool, str | None, bool | None, str | PipePriority | None]:
@@ -167,7 +167,7 @@ def _resolve_pipe_target_inputs(
 def build_pipe_targets_config(
     targets: TargetsInput,
     *,
-    delimiter: str | None | Any = DELIMITER_UNSET,
+    delimiter: str | Any | None = DELIMITER_UNSET,
     allow_partial: bool | None = None,
     priority: str | PipePriority | None = None,
 ) -> PipeTargets:

@@ -64,7 +64,7 @@ class SchemaHelpRenderer:
         self,
         layout: HelpLayout,
         terminal_width: int | None = None,
-        help_argument: Argument | None | Any = _DEFAULT_HELP_ARGUMENT,
+        help_argument: Argument | Any | None = _DEFAULT_HELP_ARGUMENT,
     ) -> None:
         self.layout = layout
         self.terminal_width = terminal_width or get_terminal_width()

@@ -735,7 +735,7 @@ class InterfacyParser:
             build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
         )
         self._pipe_target_overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
-        self._pipe_buffer: str | None | Any = PIPE_UNSET
+        self._pipe_buffer: str | Any | None = PIPE_UNSET
         self.result_display_fn = print_result_func
         self.metadata: dict[str, Any] = {}
         self._ancestor_options = AncestorOptions()
