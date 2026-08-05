@@ -74,6 +74,23 @@ def test_interfacy_runs_with_selected_backend() -> None:
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_interfacy_print_result_preserves_return_value(
+    backend: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    if backend == "click":
+        pytest.importorskip("click")
+
+    def summarize(project: str) -> str:
+        return f"summary:{project}"
+
+    parser = Interfacy(backend=backend, sys_exit_enabled=False, print_result=True)
+
+    assert parser.run(summarize, args=["apollo"]) == "summary:apollo"
+    assert "summary:apollo" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
 def test_interfacy_add_command_accepts_parameter_settings(backend: str) -> None:
     if backend == "click":
         pytest.importorskip("click")
