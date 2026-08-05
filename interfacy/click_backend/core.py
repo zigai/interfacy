@@ -21,6 +21,7 @@ from strto import StrToTypeParser
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout, InterfacyColors
 from interfacy.click_backend.commands import (
+    InterfacyBooleanOption,
     InterfacyClickArgument,
     InterfacyClickCommand,
     InterfacyClickGroup,
@@ -30,14 +31,11 @@ from interfacy.click_backend.commands import (
 from interfacy.click_backend.types import ChoiceParamType, ClickFuncParamType
 from interfacy.core import (
     DEFAULT_HELP_FLAGS,
-    DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
     BooleanNegativePrefix,
     ExitCode,
     HelpFlags,
     InterfacyParser,
     InterspersedOptionValueError,
-    NegativeBoolNameMode,
-    NegativeBoolNamePrefixes,
     RunFailure,
 )
 from interfacy.exceptions import ConfigurationError
@@ -55,7 +53,6 @@ from interfacy.schema.model_argument_mapper import ExpandedModelValidationError
 from interfacy.schema.schema import (
     Argument,
     ArgumentKind,
-    BooleanMode,
     Command,
     ParserSchema,
     ValueShape,
@@ -111,8 +108,6 @@ class ClickParser(InterfacyParser):
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
-        negative_bool_name_mode: NegativeBoolNameMode = "flag_only",
-        negative_bool_name_prefixes: NegativeBoolNamePrefixes = DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
         help_flags: HelpFlags = DEFAULT_HELP_FLAGS,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: Sequence[str] | None = None,
@@ -150,8 +145,6 @@ class ClickParser(InterfacyParser):
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
-            negative_bool_name_mode=negative_bool_name_mode,
-            negative_bool_name_prefixes=negative_bool_name_prefixes,
             help_flags=help_flags,
             plugins=plugins,
             method_skips=method_skips,
@@ -425,30 +418,6 @@ class ClickParser(InterfacyParser):
 
         return InterfacyClickArgument((argument.display_name,), **attrs), suppress
 
-    def _flag_param_declarations(self, argument: Argument, param_name: str) -> list[str]:
-        param_decls: list[str] = [param_name]
-        long_flags = [flag for flag in argument.flags if flag.startswith("--")]
-        short_flags = [
-            flag for flag in argument.flags if flag.startswith("-") and not flag.startswith("--")
-        ]
-        boolean_behavior = argument.boolean_behavior
-        if boolean_behavior is not None and boolean_behavior.mode is BooleanMode.FLAG_ONLY:
-            param_decls.extend(argument.flags)
-            return param_decls
-
-        if boolean_behavior is not None and boolean_behavior.supports_negative and long_flags:
-            positive = long_flags[0]
-            negative = boolean_behavior.negative_form or ""
-            combined = f"{positive}/{negative}" if negative else positive
-            param_decls.extend(short_flags)
-            param_decls.append(combined)
-
-            return param_decls
-
-        param_decls.extend(argument.flags)
-
-        return param_decls
-
     def _build_flag_click_param(
         self,
         argument: Argument,
@@ -465,14 +434,20 @@ class ClickParser(InterfacyParser):
         attrs = self._common_param_attrs(argument, relaxed_parse=relaxed_parse)
         attrs["is_flag"] = True
 
-        if not boolean_behavior.supports_negative:
-            attrs["flag_value"] = True
-
         if not suppress and not argument.required:
             attrs["default"] = default
-        param_decls = self._flag_param_declarations(argument, param_name)
+        exposed_flags = (*boolean_behavior.positive_flags, *boolean_behavior.negative_flags)
+        param_decls = [param_name, *exposed_flags]
 
-        return InterfacyClickOption(param_decls, **attrs), suppress
+        return (
+            InterfacyBooleanOption(
+                param_decls,
+                positive_flags=boolean_behavior.positive_flags,
+                negative_flags=boolean_behavior.negative_flags,
+                **attrs,
+            ),
+            suppress,
+        )
 
     def _build_option_click_param(
         self,

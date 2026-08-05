@@ -1,7 +1,7 @@
 from typing import Any
 
 _EXPORTS = {
-    "BooleanMode": ("interfacy.schema", "BooleanMode"),
+    "BooleanMode": ("interfacy.parameters", "BooleanMode"),
     "CommandGroup": ("interfacy.group", "CommandGroup"),
     "ExecutableFlag": ("interfacy.executable_flag", "ExecutableFlag"),
     "Interfacy": ("interfacy.interfacy", "Interfacy"),

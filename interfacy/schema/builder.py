@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from inspect import Parameter as InspectParameter
 from inspect import _ParameterKind
+from types import NoneType
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter, inspect
@@ -146,9 +147,7 @@ class SchemaBuildContext:
     help_subcommand_sort: Any
     help_option_sort_effective: list[HelpOptionSortRule]
     help_subcommand_sort_effective: list[HelpSubcommandSortRule]
-    bool_negative_prefix: str | None
-    negative_bool_name_mode: str
-    negative_bool_name_prefixes: tuple[str, ...]
+    bool_negative_prefix: str
     help_flags: tuple[str, ...]
 
     @classmethod
@@ -189,10 +188,6 @@ class SchemaBuildContext:
                 )
             ),
             bool_negative_prefix=getattr(parser, "bool_negative_prefix", "no-"),
-            negative_bool_name_mode=getattr(parser, "negative_bool_name_mode", "flag_only"),
-            negative_bool_name_prefixes=tuple(
-                getattr(parser, "negative_bool_name_prefixes", ("no-", "disable-", "without-"))
-            ),
             help_flags=tuple(getattr(parser, "help_flags", ("--help",))),
         )
 
@@ -1548,6 +1543,20 @@ class ParserSchemaBuilder:
             if base_name in builtin_map:
                 annotation = builtin_map[base_name]
 
+        annotation_args = type_args(annotation)
+        if len(annotation_args) == 2 and set(annotation_args) == {bool, NoneType}:
+            annotation = bool
+
+        if parameter_setting is not None and annotation is not bool:
+            if parameter_setting.boolean_mode is not BooleanMode.AUTO:
+                raise ConfigurationError(
+                    f"Param.boolean_mode can only configure boolean parameter '{param.name}'"
+                )
+            if parameter_setting.negative_flags is not None:
+                raise ConfigurationError(
+                    f"Param.negative_flags can only configure boolean parameter '{param.name}'"
+                )
+
         if param.is_typed:
             model_type, is_optional_model = self.model_argument_mapper.unwrap_optional(annotation)
             if self._should_expand_model(model_type, settings=resolved_settings):
@@ -1739,7 +1748,7 @@ class ParserSchemaBuilder:
         spec: ParamSpec,
         translated_name: str,
         flags: tuple[str, ...],
-        taken_flags: list[str],  # noqa: ARG002 - retained for keyword compatibility
+        taken_flags: list[str],
         pipe_param_names: set[str] | None,
         allow_optional_union_list: bool,
         suppress_default: bool,
@@ -1762,10 +1771,11 @@ class ParserSchemaBuilder:
             self._configure_typed_argument_state(
                 spec=spec,
                 flags=flags,
-                translated_name=translated_name,
+                taken_flags=taken_flags,
                 allow_optional_union_list=allow_optional_union_list,
                 state=state,
                 settings=settings,
+                parameter_setting=parameter_setting,
             )
 
         if not spec.is_required and spec.is_typed and spec.type is not bool:
@@ -1866,10 +1876,11 @@ class ParserSchemaBuilder:
         *,
         spec: ParamSpec,
         flags: tuple[str, ...],
-        translated_name: str,
+        taken_flags: list[str],
         allow_optional_union_list: bool,
         state: ArgumentBuildState,
         settings: CommandBuildSettings,
+        parameter_setting: Param | None,
     ) -> None:
         if self._configure_list_state(spec, allow_optional_union_list, state, settings=settings):
             return
@@ -1877,7 +1888,13 @@ class ParserSchemaBuilder:
         if self._configure_fixed_tuple_state(spec, state, settings=settings):
             return
 
-        if self._configure_bool_state(spec, flags, translated_name, state):
+        if self._configure_bool_state(
+            spec,
+            flags,
+            taken_flags,
+            state,
+            parameter_setting,
+        ):
             return
 
         self._configure_scalar_parser_state(spec, state)
@@ -1986,44 +2003,104 @@ class ParserSchemaBuilder:
         self,
         spec: ParamSpec,
         flags: tuple[str, ...],
-        translated_name: str,
+        taken_flags: list[str],
         state: ArgumentBuildState,
+        parameter_setting: Param | None,
     ) -> bool:
         if spec.type is not bool:
             return False
 
+        if not any(flag.startswith("-") for flag in flags):
+            raise ConfigurationError(f"Boolean parameter '{spec.name}' must be an option")
+
         state.value_shape = ValueShape.FLAG
         state.value_plan = FlagValue()
-        supports_negative = any(flag.startswith("--") for flag in flags)
-        negative_form = None
-        mode = BooleanMode.DUAL
         state.default_value = spec.default if spec.has_default else False
-        long_flags = [flag for flag in flags if flag.startswith("--")]
-        primary_long_name = long_flags[0][2:] if long_flags else translated_name
-        if (
-            self.context.negative_bool_name_mode == "flag_only"
-            and state.default_value is False
-            and any(
-                primary_long_name.startswith(prefix)
-                for prefix in self.context.negative_bool_name_prefixes
-            )
-        ):
-            supports_negative = False
-            mode = BooleanMode.FLAG_ONLY
+        requested_mode = (
+            parameter_setting.boolean_mode if parameter_setting is not None else BooleanMode.AUTO
+        )
+        if not isinstance(requested_mode, BooleanMode):
+            raise ConfigurationError(f"Boolean parameter '{spec.name}' has an invalid boolean mode")
+        mode = self._resolve_boolean_mode(spec, requested_mode)
+        positive_flags = flags if mode in {BooleanMode.POSITIVE_ONLY, BooleanMode.DUAL} else ()
+        negative_flags: tuple[str, ...] = ()
+        if mode is BooleanMode.NEGATIVE_ONLY:
+            for flag in flags:
+                if flag.startswith("-") and not flag.startswith("--"):
+                    short_name = self._flag_token_key(flag)
+                    if short_name in taken_flags:
+                        taken_flags.remove(short_name)
 
-        if supports_negative:
-            prefix = self.context.bool_negative_prefix
-            if prefix is not None:
-                negative_form = f"--{inverted_bool_flag_name(primary_long_name, prefix=prefix)}"
+        configured_negative_flags = (
+            tuple(parameter_setting.negative_flags)
+            if parameter_setting is not None and parameter_setting.negative_flags is not None
+            else None
+        )
+        if mode is BooleanMode.POSITIVE_ONLY and configured_negative_flags is not None:
+            raise ConfigurationError(
+                f"Boolean parameter '{spec.name}' cannot define negative flags in positive_only mode"
+            )
+
+        if mode in {BooleanMode.NEGATIVE_ONLY, BooleanMode.DUAL}:
+            negative_flags = configured_negative_flags or self._generated_negative_flags(
+                spec,
+                flags,
+            )
+            self._reserve_parameter_flags(negative_flags, taken_flags)
 
         state.boolean_behavior = BooleanBehavior(
-            supports_negative=supports_negative,
-            negative_form=negative_form,
+            positive_flags=positive_flags,
+            negative_flags=negative_flags,
             default=state.default_value,
             mode=mode,
         )
 
         return True
+
+    @staticmethod
+    def _resolve_boolean_mode(spec: ParamSpec, requested_mode: BooleanMode) -> BooleanMode:
+        if requested_mode is BooleanMode.AUTO:
+            if spec.has_default and spec.default is False:
+                return BooleanMode.POSITIVE_ONLY
+            if spec.has_default and spec.default is True:
+                return BooleanMode.NEGATIVE_ONLY
+            return BooleanMode.DUAL
+
+        if requested_mode is BooleanMode.POSITIVE_ONLY and (
+            not spec.has_default or spec.default is not False
+        ):
+            raise ConfigurationError(
+                f"Boolean parameter '{spec.name}' uses positive_only mode but does not default "
+                "to False"
+            )
+        if requested_mode is BooleanMode.NEGATIVE_ONLY and (
+            not spec.has_default or spec.default is not True
+        ):
+            raise ConfigurationError(
+                f"Boolean parameter '{spec.name}' uses negative_only mode but does not default "
+                "to True"
+            )
+
+        return requested_mode
+
+    def _generated_negative_flags(
+        self,
+        spec: ParamSpec,
+        flags: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        long_flags = [flag for flag in flags if flag.startswith("--")]
+        if not long_flags:
+            raise ConfigurationError(
+                f"Boolean parameter '{spec.name}' requires Param.negative_flags because its "
+                "positive flags do not include a long option"
+            )
+
+        primary_long_name = long_flags[0][2:]
+        negative_name = inverted_bool_flag_name(
+            primary_long_name,
+            prefix=self.context.bool_negative_prefix,
+        )
+        return (f"--{negative_name}",)
 
     def _configure_scalar_parser_state(
         self,
@@ -2108,8 +2185,8 @@ class ParserSchemaBuilder:
         state.default_value = argparse.SUPPRESS
         if state.boolean_behavior is not None:
             state.boolean_behavior = BooleanBehavior(
-                supports_negative=state.boolean_behavior.supports_negative,
-                negative_form=state.boolean_behavior.negative_form,
+                positive_flags=state.boolean_behavior.positive_flags,
+                negative_flags=state.boolean_behavior.negative_flags,
                 default=argparse.SUPPRESS,
                 mode=state.boolean_behavior.mode,
             )

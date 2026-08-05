@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Literal, TypeAlias, TypeVar
 
 from interfacy.exceptions import ConfigurationError
@@ -13,7 +14,20 @@ ParamKind: TypeAlias = Literal["auto", "option", "positional"]
 F = TypeVar("F", bound=ParameterSettingsTarget)
 
 
-def _normalize_flag_tuple(value: Sequence[str] | str | None) -> tuple[str, ...] | None:
+class BooleanMode(str, Enum):
+    """Policy controlling which boolean flag polarities are exposed."""
+
+    AUTO = "auto"
+    DUAL = "dual"
+    POSITIVE_ONLY = "positive_only"
+    NEGATIVE_ONLY = "negative_only"
+
+
+def _normalize_flag_tuple(
+    value: Sequence[str] | str | None,
+    *,
+    field_name: str,
+) -> tuple[str, ...] | None:
     if value is None:
         return None
 
@@ -22,26 +36,28 @@ def _normalize_flag_tuple(value: Sequence[str] | str | None) -> tuple[str, ...] 
     elif isinstance(value, Sequence):
         flags = tuple(value)
     else:
-        raise ConfigurationError("Param.flags must be a flag string or sequence of flag strings")
+        raise ConfigurationError(
+            f"Param.{field_name} must be a flag string or sequence of flag strings"
+        )
 
     if not flags:
-        raise ConfigurationError("Param.flags must contain at least one flag")
+        raise ConfigurationError(f"Param.{field_name} must contain at least one flag")
 
     normalized: list[str] = []
     seen: set[str] = set()
 
     for flag in flags:
         if not isinstance(flag, str):
-            raise ConfigurationError("Param.flags values must be strings")
+            raise ConfigurationError(f"Param.{field_name} values must be strings")
 
         flag_value = flag.strip()
         if not flag_value or flag_value in {"-", "--"}:
-            raise ConfigurationError("Param.flags values must be non-empty flag strings")
+            raise ConfigurationError(f"Param.{field_name} values must be non-empty flag strings")
         if not flag_value.startswith("-"):
-            raise ConfigurationError("Param.flags values must start with '-' or '--'")
+            raise ConfigurationError(f"Param.{field_name} values must start with '-' or '--'")
 
         if flag_value in seen:
-            raise ConfigurationError(f"Duplicate Param.flags value: {flag_value}")
+            raise ConfigurationError(f"Duplicate Param.{field_name} value: {flag_value}")
 
         normalized.append(flag_value)
         seen.add(flag_value)
@@ -101,27 +117,47 @@ def _normalize_kind(value: str) -> ParamKind:
             raise ConfigurationError("Param.kind must be one of: 'auto', 'option', 'positional'")
 
 
+def _normalize_boolean_mode(value: BooleanMode | str) -> BooleanMode:
+    try:
+        return BooleanMode(value)
+    except ValueError:
+        allowed = ", ".join(repr(mode.value) for mode in BooleanMode)
+        raise ConfigurationError(f"Param.boolean_mode must be one of: {allowed}") from None
+
+
 @dataclass
 class Param:
     """Per-parameter CLI settings that keep the Python signature unchanged."""
 
     kind: ParamKind = "auto"
     flags: Sequence[str] | str | None = None
+    negative_flags: Sequence[str] | str | None = None
     long: str | None = None
     short: str | bool | None = None
     help: str | None = None
     metavar: str | None = None
+    boolean_mode: BooleanMode | str = BooleanMode.AUTO
 
     def __post_init__(self) -> None:
         kind = _normalize_kind(self.kind)
-        flags = _normalize_flag_tuple(self.flags)
+        flags = _normalize_flag_tuple(self.flags, field_name="flags")
+        negative_flags = _normalize_flag_tuple(
+            self.negative_flags,
+            field_name="negative_flags",
+        )
         long = _normalize_long_flag(self.long)
         short = _normalize_short_flag(self.short)
+        boolean_mode = _normalize_boolean_mode(self.boolean_mode)
 
-        if kind == "positional" and (flags is not None or long is not None or short is not None):
+        if kind == "positional" and (
+            flags is not None
+            or negative_flags is not None
+            or long is not None
+            or short is not None
+            or boolean_mode is not BooleanMode.AUTO
+        ):
             raise ConfigurationError(
-                "Param(kind='positional') cannot be combined with Param.flags, "
-                "Param.long, or Param.short"
+                "Param(kind='positional') cannot be combined with flag or boolean settings"
             )
         if flags is not None and (long is not None or short is not None):
             raise ConfigurationError(
@@ -134,8 +170,10 @@ class Param:
 
         self.kind = kind
         self.flags = flags
+        self.negative_flags = negative_flags
         self.long = long
         self.short = short
+        self.boolean_mode = boolean_mode
 
     @property
     def has_flag_overrides(self) -> bool:
@@ -206,6 +244,7 @@ def params(**parameter_settings: ParamInput) -> Callable[[F], F]:
 
 
 __all__ = [
+    "BooleanMode",
     "Param",
     "ParamKind",
     "ParameterSettingsInput",

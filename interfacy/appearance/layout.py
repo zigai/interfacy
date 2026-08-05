@@ -1532,35 +1532,17 @@ class HelpLayout:
         return arg.default is not None and arg.default is not argparse.SUPPRESS
 
     def _get_primary_boolean_flag_from_argument(self, arg: "Argument") -> str:
-        longs = [f for f in arg.flags if f.startswith("--")]
+        behavior = arg.boolean_behavior
+        exposed_flags = (
+            (*behavior.positive_flags, *behavior.negative_flags)
+            if behavior is not None
+            else arg.flags
+        )
+        longs = [flag for flag in exposed_flags if flag.startswith("--")]
         if not longs:
-            return arg.flags[0] if arg.flags else ""
+            return exposed_flags[0] if exposed_flags else ""
 
-        base_flag = None
-        no_flag = None
-        for flag in longs:
-            if flag.startswith("--no-"):
-                no_flag = flag
-            else:
-                base_flag = flag
-
-        if base_flag and not no_flag:
-            no_flag = f"--no-{base_flag[2:]}"
-
-        from interfacy.schema.schema import BooleanMode
-
-        if arg.boolean_behavior is not None and arg.boolean_behavior.mode is BooleanMode.FLAG_ONLY:
-            return longs[0]
-
-        if arg.boolean_behavior is not None:
-            default_value = arg.boolean_behavior.default
-        else:
-            default_value = arg.default if self._arg_has_default(arg) else False
-
-        if default_value is True and no_flag:
-            return no_flag
-
-        return base_flag or longs[0]
+        return longs[0]
 
     def get_primary_boolean_flag_for_argument(self, arg: "Argument") -> str:
         """
@@ -1572,8 +1554,14 @@ class HelpLayout:
         return self._get_primary_boolean_flag_from_argument(arg)
 
     def _build_flag_parts_from_argument(self, arg: "Argument") -> tuple[str, str, str, bool]:
-        shorts = [f for f in arg.flags if f.startswith("-") and not f.startswith("--")]
-        longs = [f for f in arg.flags if f.startswith("--")]
+        exposed_flags = arg.flags
+        if arg.boolean_behavior is not None:
+            exposed_flags = (
+                *arg.boolean_behavior.positive_flags,
+                *arg.boolean_behavior.negative_flags,
+            )
+        shorts = [f for f in exposed_flags if f.startswith("-") and not f.startswith("--")]
+        longs = [f for f in exposed_flags if f.startswith("--")]
         is_option = self._enum_matches(arg.kind, "OPTION")
 
         metavar = ""
@@ -1589,10 +1577,9 @@ class HelpLayout:
             return f"{flag} {metavar}" if metavar else flag
 
         if is_bool:
-            primary_flag = self._get_primary_boolean_flag_from_argument(arg)
-            flag_short = shorts[0] if shorts else ""
-            flag_long = primary_flag
-            joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
+            flag_short = ", ".join(shorts)
+            flag_long = ", ".join(longs)
+            joined = ", ".join(flag for flag in (flag_short, flag_long) if flag)
 
             return joined, flag_short, flag_long, is_option
 

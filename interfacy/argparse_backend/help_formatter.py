@@ -134,11 +134,16 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         default = self._get_default_metavar_for_optional(action)
         args_string = self._format_args(action, default)
 
-        is_bool = isinstance(action, argparse.BooleanOptionalAction)
+        is_bool = isinstance(action, argparse.BooleanOptionalAction) or hasattr(
+            action,
+            "positive_options",
+        )
         if not is_bool and _ARGPARSE_STORE_TRUE_ACTION is not None:
             is_bool = isinstance(action, _ARGPARSE_STORE_TRUE_ACTION)
 
         if is_bool:
+            if hasattr(action, "positive_options"):
+                return ", ".join(action.option_strings)
             return ", ".join(self._primary_boolean_option_strings(action))
 
         if len(action.option_strings) == 1:
@@ -356,7 +361,12 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
         elif usage is None and not actions:
             usage = f"{self._prog}"
         elif usage is None:
-            bool_actions = [a for a in actions if isinstance(a, argparse.BooleanOptionalAction)]
+            bool_actions = [
+                action
+                for action in actions
+                if isinstance(action, argparse.BooleanOptionalAction)
+                or hasattr(action, "positive_options")
+            ]
             original_option_strings: dict[argparse.Action, list[str]] = {}
             for bool_action in bool_actions:
                 original_option_strings[bool_action] = list(bool_action.option_strings)

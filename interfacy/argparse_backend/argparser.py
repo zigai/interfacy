@@ -23,13 +23,10 @@ from interfacy.argparse_backend.runner import ArgparseRunner
 from interfacy.console import warn
 from interfacy.core import (
     DEFAULT_HELP_FLAGS,
-    DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
     BooleanNegativePrefix,
     HelpFlags,
     InterfacyParser,
     InterspersedOptionValueError,
-    NegativeBoolNameMode,
-    NegativeBoolNamePrefixes,
 )
 from interfacy.exceptions import (
     ConfigurationError,
@@ -50,7 +47,6 @@ from interfacy.schema.schema import (
     Argument,
     ArgumentKind,
     BooleanBehavior,
-    BooleanMode,
     Command,
     ParserSchema,
     ValueShape,
@@ -60,6 +56,7 @@ from interfacy.util import (
     extract_optional_union_list,
     get_annotation_choices,
     get_param_choices,
+    inverted_bool_flag_name,
     is_list_or_list_alias,
     resolve_objinspect_annotations,
     resolve_type_alias,
@@ -100,8 +97,8 @@ class ExecutableFlagAction(argparse.Action):
         raise ExecutableFlagTriggeredError(self.executable_flag)
 
 
-class InterfacyBooleanOptionalAction(argparse.Action):
-    """Boolean optional action with a configurable negative option string."""
+class InterfacyBooleanAction(argparse.Action):
+    """Assign a boolean according to the polarity of the supplied option."""
 
     def __init__(
         self,
@@ -110,11 +107,8 @@ class InterfacyBooleanOptionalAction(argparse.Action):
         default: Any = None,
         **kwargs: Any,
     ) -> None:
-        negative_option = kwargs.pop("interfacy_negative_option", None)
-        if negative_option is not None:
-            option_strings = [*option_strings, negative_option]
-
-        self.interfacy_negative_option = negative_option
+        positive_options = kwargs.pop("interfacy_positive_options")
+        self.positive_options = frozenset(positive_options)
         super().__init__(
             option_strings=option_strings,
             dest=dest,
@@ -130,7 +124,7 @@ class InterfacyBooleanOptionalAction(argparse.Action):
         _values: Any,
         option_string: str | None = None,
     ) -> None:
-        setattr(namespace, self.dest, option_string != self.interfacy_negative_option)
+        setattr(namespace, self.dest, option_string in self.positive_options)
 
 
 class Argparser(InterfacyParser):
@@ -207,8 +201,6 @@ class Argparser(InterfacyParser):
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
-        negative_bool_name_mode: NegativeBoolNameMode = "flag_only",
-        negative_bool_name_prefixes: NegativeBoolNamePrefixes = DEFAULT_NEGATIVE_BOOL_NAME_PREFIXES,
         help_flags: HelpFlags = DEFAULT_HELP_FLAGS,
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: Sequence[str] | None = None,
@@ -248,8 +240,6 @@ class Argparser(InterfacyParser):
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             bool_negative_prefix=bool_negative_prefix,
-            negative_bool_name_mode=negative_bool_name_mode,
-            negative_bool_name_prefixes=negative_bool_name_prefixes,
             help_flags=help_flags,
             plugins=plugins,
             method_skips=method_skips,
@@ -289,13 +279,19 @@ class Argparser(InterfacyParser):
             allocation_state=allocation_state,
         )
         extra_args = self._extra_add_arg_params(param, flags)
-        add_flags = flags
-        if extra_args.get("action") is argparse.BooleanOptionalAction:
-            add_flags = self._normalize_boolean_optional_flags(flags)
+        add_flags = extra_args.pop("_interfacy_boolean_flags", flags)
 
         logger.info("Flags: %s, parser kwarg keys: %s", flags, sorted(extra_args))
 
         return parser.add_argument(*add_flags, **extra_args)
+
+    def _negative_flags_for_positive_flags(self, flags: tuple[str, ...]) -> tuple[str, ...]:
+        long_flags = [flag for flag in flags if flag.startswith("--")]
+        if not long_flags:
+            raise ConfigurationError("Boolean negative flags require a positive long flag")
+
+        name = long_flags[0][2:]
+        return (f"--{inverted_bool_flag_name(name, prefix=self.bool_negative_prefix)}",)
 
     def parser_from_command(
         self,
@@ -435,33 +431,6 @@ class Argparser(InterfacyParser):
 
         return text.replace("%", "%%")
 
-    @staticmethod
-    def _normalize_boolean_optional_flags(flags: tuple[str, ...]) -> tuple[str, ...]:
-        """
-        Normalize bool option strings for ``BooleanOptionalAction`` compatibility.
-
-        Python 3.14 rejects ``BooleanOptionalAction`` when all long flags already
-        start with ``--no-``. In that case, derive a positive base flag from the
-        first long option (e.g. ``--no-tokens`` -> ``--tokens``) and let argparse
-        generate the negative alias.
-        """
-        long_flags = [flag for flag in flags if flag.startswith("--")]
-        if not long_flags:
-            return flags
-        if any(not flag.startswith("--no-") for flag in long_flags):
-            return flags
-
-        normalized: list[str] = []
-        replaced = False
-        for flag in flags:
-            if not replaced and flag.startswith("--no-") and len(flag) > len("--no-"):
-                normalized.append(f"--{flag[len('--no-') :]}")
-                replaced = True
-            else:
-                normalized.append(flag)
-
-        return tuple(normalized)
-
     def _parameter_help(self, param: Parameter, flags: tuple[str, ...]) -> str:
         if self._uses_template_layout():
             return self.help_layout.get_help_for_parameter(param, None)
@@ -542,15 +511,21 @@ class Argparser(InterfacyParser):
             extra["required"] = param.is_required
 
         if is_bool_param:
-            if self._is_negative_bool_flag_only(param, flags):
+            default = param.default if param.has_default else None
+            if default is False:
                 extra["action"] = "store_true"
                 extra["default"] = False
                 extra.pop("_interfacy_flags", None)
 
                 return extra
 
-            extra["action"] = argparse.BooleanOptionalAction
-            extra["default"] = param.default if not param.is_required else False
+            negative_flags = self._negative_flags_for_positive_flags(flags)
+            positive_flags = flags if default is not True else ()
+            exposed_flags = (*positive_flags, *negative_flags)
+            extra["action"] = InterfacyBooleanAction
+            extra["interfacy_positive_options"] = positive_flags
+            extra["_interfacy_boolean_flags"] = exposed_flags
+            extra["default"] = default if param.has_default else False
             extra.pop("_interfacy_flags", None)
 
             return extra
@@ -561,24 +536,6 @@ class Argparser(InterfacyParser):
         extra.pop("_interfacy_flags", None)
 
         return extra
-
-    def _is_negative_bool_flag_only(self, param: Parameter, flags: tuple[str, ...]) -> bool:
-        if self.negative_bool_name_mode != "flag_only":
-            return False
-
-        default_value = param.default if param.has_default else False
-        if default_value is not False:
-            return False
-
-        long_flags = [flag for flag in flags if flag.startswith("--")]
-        if not long_flags:
-            return False
-
-        primary_long_name = long_flags[0][2:]
-
-        return any(
-            primary_long_name.startswith(prefix) for prefix in self.negative_bool_name_prefixes
-        )
 
     def _argument_kwargs(self, arg: Argument) -> dict[str, Any]:
         help_text = arg.help or ""
@@ -636,20 +593,14 @@ class Argparser(InterfacyParser):
 
     @staticmethod
     def _boolean_action_kwargs(arg: Argument) -> dict[str, Any]:
-        if arg.boolean_behavior is not None and arg.boolean_behavior.mode is BooleanMode.FLAG_ONLY:
-            return {"action": "store_true"}
+        behavior = arg.boolean_behavior
+        if behavior is None:
+            raise ConfigurationError("Boolean flag behavior is required for flag parameters")
 
-        if (
-            arg.boolean_behavior is not None
-            and arg.boolean_behavior.negative_form is not None
-            and not arg.boolean_behavior.negative_form.startswith("--no-")
-        ):
-            return {
-                "action": InterfacyBooleanOptionalAction,
-                "interfacy_negative_option": arg.boolean_behavior.negative_form,
-            }
-
-        return {"action": argparse.BooleanOptionalAction}
+        return {
+            "action": InterfacyBooleanAction,
+            "interfacy_positive_options": behavior.positive_flags,
+        }
 
     def _add_argument_from_schema(
         self,
@@ -664,8 +615,11 @@ class Argparser(InterfacyParser):
             else self._argument_kwargs(argument)
         )
         add_flags = argument.flags
-        if kwargs.get("action") is argparse.BooleanOptionalAction:
-            add_flags = self._normalize_boolean_optional_flags(argument.flags)
+        if argument.boolean_behavior is not None:
+            add_flags = (
+                *argument.boolean_behavior.positive_flags,
+                *argument.boolean_behavior.negative_flags,
+            )
         logger.info("Adding argument flags=%s, kwarg keys=%s", add_flags, sorted(kwargs))
         parser.add_argument(*add_flags, **kwargs)
 
@@ -1064,8 +1018,8 @@ class Argparser(InterfacyParser):
         boolean_behavior = argument.boolean_behavior
         if boolean_behavior is not None:
             boolean_behavior = BooleanBehavior(
-                supports_negative=boolean_behavior.supports_negative,
-                negative_form=boolean_behavior.negative_form,
+                positive_flags=boolean_behavior.positive_flags,
+                negative_flags=boolean_behavior.negative_flags,
                 default=argparse.SUPPRESS,
                 mode=boolean_behavior.mode,
             )

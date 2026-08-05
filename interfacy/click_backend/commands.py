@@ -100,6 +100,46 @@ class InterfacyClickOption(click.Option):
         return None
 
 
+class InterfacyBooleanOption(InterfacyClickOption):
+    """Click option backed by explicit positive and negative flag aliases."""
+
+    def __init__(
+        self,
+        param_decls: Sequence[str],
+        *,
+        positive_flags: Sequence[str],
+        negative_flags: Sequence[str],
+        **kwargs: Any,
+    ) -> None:
+        self.positive_flags = tuple(positive_flags)
+        self.negative_flags = tuple(negative_flags)
+        default = kwargs.get("default")
+        super().__init__(param_decls, **kwargs)
+        self.opts = list(self.positive_flags)
+        self.secondary_opts = list(self.negative_flags)
+        if default is True:
+            self.default = True
+
+    def add_to_parser(self, parser: InterfacyOptionParser, ctx: click.Context) -> None:
+        del ctx
+        if self.positive_flags:
+            parser.add_option(
+                obj=self,
+                opts=self.positive_flags,
+                dest=self.name,
+                action="store_const",
+                const=True,
+            )
+        if self.negative_flags:
+            parser.add_option(
+                obj=self,
+                opts=self.negative_flags,
+                dest=self.name,
+                action="store_const",
+                const=False,
+            )
+
+
 class InterfacyListOption(InterfacyClickOption):
     """Accept repeated values for list-like options while preserving None defaults."""
 
@@ -357,6 +397,7 @@ class InterfacyClickGroup(HelpMixin, click.Group):
 
 
 __all__ = [
+    "InterfacyBooleanOption",
     "InterfacyClickArgument",
     "InterfacyClickCommand",
     "InterfacyClickGroup",

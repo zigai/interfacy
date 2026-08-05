@@ -12,7 +12,7 @@ from objinspect import Class, Function, Method
 from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.appearance.layout import HelpLayout
 from interfacy.executable_flag import ExecutableFlag
-from interfacy.parameters import Param
+from interfacy.parameters import BooleanMode, Param
 from interfacy.pipe import PipeTargets
 from interfacy.schema.value_plan import ArgumentValue
 
@@ -36,28 +36,21 @@ class ValueShape(str, Enum):
     FLAG = "flag"
 
 
-class BooleanMode(str, Enum):
-    """How a boolean CLI flag should be exposed."""
-
-    DUAL = "dual"
-    FLAG_ONLY = "flag_only"
-
-
 @dataclass
 class BooleanBehavior:
     """
     Metadata for boolean flags and their defaults.
 
     Attributes:
-        supports_negative (bool): Whether a negative form is generated.
-        negative_form (str | None): Negative flag form (e.g., "--no-flag") if any.
+        positive_flags (tuple[str, ...]): Flags that set the value to true.
+        negative_flags (tuple[str, ...]): Flags that set the value to false.
         default (bool | str | None): Effective default value for the flag.
             Can be argparse.SUPPRESS (a str sentinel) to suppress the default.
         mode (BooleanMode): Whether the flag is dual-form or one-way.
     """
 
-    supports_negative: bool
-    negative_form: str | None
+    positive_flags: tuple[str, ...]
+    negative_flags: tuple[str, ...]
     default: bool | str | None
     mode: BooleanMode = BooleanMode.DUAL
 

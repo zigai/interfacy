@@ -17,6 +17,7 @@ from interfacy.appearance.renderer import (
 )
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.logger import get_logger
+from interfacy.parameters import BooleanMode
 from interfacy.schema.schema import Argument, ArgumentKind, BooleanBehavior, Command, ValueShape
 
 if TYPE_CHECKING:
@@ -684,14 +685,31 @@ class ArgumentParser(argparse.ArgumentParser):
 
         boolean_behavior: BooleanBehavior | None = None
         if value_shape == ValueShape.FLAG and action.option_strings:
-            negative_form = next(
-                (flag for flag in action.option_strings if flag.startswith("--no-")),
-                None,
-            )
+            option_strings = tuple(action.option_strings)
+            if isinstance(action, argparse._StoreFalseAction):  # type: ignore[private-member-access]
+                positive_flags = ()
+                negative_flags = option_strings
+            elif isinstance(action, argparse.BooleanOptionalAction):
+                negative_flags = tuple(flag for flag in option_strings if flag.startswith("--no-"))
+                positive_flags = tuple(
+                    flag for flag in option_strings if flag not in negative_flags
+                )
+            else:
+                positive_flags = option_strings
+                negative_flags = ()
+
+            if positive_flags and negative_flags:
+                mode = BooleanMode.DUAL
+            elif negative_flags:
+                mode = BooleanMode.NEGATIVE_ONLY
+            else:
+                mode = BooleanMode.POSITIVE_ONLY
+
             boolean_behavior = BooleanBehavior(
-                supports_negative=negative_form is not None,
-                negative_form=negative_form,
+                positive_flags=positive_flags,
+                negative_flags=negative_flags,
                 default=action.default,
+                mode=mode,
             )
 
         choices = tuple(action.choices) if action.choices is not None else None

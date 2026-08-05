@@ -109,6 +109,7 @@ def execute_executable_flag(
 
 def executable_flag_to_argument(flag: ExecutableFlag) -> Argument:
     """Return a synthetic schema argument for help rendering and option sorting."""
+    from interfacy.parameters import BooleanMode
     from interfacy.schema.schema import Argument, ArgumentKind, BooleanBehavior, ValueShape
 
     primary = next((token for token in flag.flags if token.startswith("--")), flag.flags[0])
@@ -125,9 +126,10 @@ def executable_flag_to_argument(flag: ExecutableFlag) -> Argument:
         type=None,
         parser=None,
         boolean_behavior=BooleanBehavior(
-            supports_negative=False,
-            negative_form=None,
+            positive_flags=tuple(flag.flags),
+            negative_flags=(),
             default=False,
+            mode=BooleanMode.POSITIVE_ONLY,
         ),
     )
 
