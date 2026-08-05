@@ -321,7 +321,11 @@ class TestMultipleCommands:
 
 
 class TestBooleanFlags:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize(
+        "parser",
+        ["argparse_req_pos", "argparse_kw_only", "click_req_pos", "click_kw_only"],
+        indirect=True,
+    )
     def test_bool_required(self, parser: InterfacyParser):
         """Verify parsing of required boolean flags."""
         parser.add_command(fn_bool_required)
@@ -331,20 +335,25 @@ class TestBooleanFlags:
         args = parser.parse_args(["--no-value"])
         assert args["value"] is False
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize(
+        "parser",
+        ["argparse_req_pos", "argparse_kw_only", "click_req_pos", "click_kw_only"],
+        indirect=True,
+    )
     def test_bool_default_true(self, parser: InterfacyParser):
         """Verify parsing of boolean flags defaulting to True."""
         parser.add_command(fn_bool_default_true)
         args = parser.parse_args([])
         assert args["value"] is True
 
-        args = parser.parse_args(["--value"])
-        assert args["value"] is True
-
         args = parser.parse_args(["--no-value"])
         assert args["value"] is False
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize(
+        "parser",
+        ["argparse_req_pos", "argparse_kw_only", "click_req_pos", "click_kw_only"],
+        indirect=True,
+    )
     def test_bool_false_by_default(self, parser: InterfacyParser):
         """Verify parsing of boolean flags defaulting to False."""
         parser.add_command(fn_bool_default_false)
@@ -354,9 +363,6 @@ class TestBooleanFlags:
 
         args = parser.parse_args(["--value"])
         assert args["value"] is True
-
-        args = parser.parse_args(["--no-value"])
-        assert args["value"] is False
 
     @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_negative_named_bool_is_one_way_flag(self, parser: InterfacyParser):

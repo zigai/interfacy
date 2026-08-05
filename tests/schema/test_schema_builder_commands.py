@@ -1,5 +1,6 @@
 from objinspect import Class, Function, Method
 
+from interfacy import Param
 from interfacy.naming import DefaultFlagStrategy
 from interfacy.naming.abbreviations import NoAbbreviations
 from interfacy.schema.builder import ParserSchemaBuilder
@@ -144,8 +145,7 @@ def test_builder_produces_schema_with_metadata_and_settings() -> None:
     assert "standalone" in schema.commands
 
 
-def test_boolean_flag_behaviors(builder_parser: FakeParser) -> None:
-    """Verify that boolean flag arguments are correctly configured with negative forms."""
+def test_false_default_boolean_uses_positive_only_mode(builder_parser: FakeParser) -> None:
     builder_parser.abbreviation_gen = NoAbbreviations()
     builder_parser.flag_strategy = DefaultFlagStrategy(
         style="keyword_only",
@@ -162,12 +162,13 @@ def test_boolean_flag_behaviors(builder_parser: FakeParser) -> None:
 
     assert argument.kind is ArgumentKind.OPTION
     assert argument.boolean_behavior is not None
-    assert argument.boolean_behavior.supports_negative is True
-    assert argument.boolean_behavior.negative_form == "--no-enable-logging"
+    assert argument.boolean_behavior.mode is BooleanMode.POSITIVE_ONLY
+    assert argument.boolean_behavior.positive_flags == ("--enable-logging",)
+    assert argument.boolean_behavior.negative_flags == ()
     assert argument.flags == ("--enable-logging",)
 
 
-def test_negative_named_boolean_defaults_to_flag_only(builder_parser: FakeParser) -> None:
+def test_negative_named_boolean_uses_default_based_mode(builder_parser: FakeParser) -> None:
     builder_parser.abbreviation_gen = NoAbbreviations()
     builder_parser.flag_strategy = DefaultFlagStrategy(
         style="keyword_only",
@@ -181,14 +182,13 @@ def test_negative_named_boolean_defaults_to_flag_only(builder_parser: FakeParser
     argument = builder._function_spec(Function(run), canonical_name="run").parameters[0]
 
     assert argument.boolean_behavior is not None
-    assert argument.boolean_behavior.mode is BooleanMode.FLAG_ONLY
-    assert argument.boolean_behavior.supports_negative is False
-    assert argument.boolean_behavior.negative_form is None
+    assert argument.boolean_behavior.mode is BooleanMode.POSITIVE_ONLY
+    assert argument.boolean_behavior.positive_flags == ("--no-stdio",)
+    assert argument.boolean_behavior.negative_flags == ()
     assert argument.flags == ("--no-stdio",)
 
 
-def test_negative_named_boolean_can_keep_dual_mode(builder_parser: FakeParser) -> None:
-    builder_parser.negative_bool_name_mode = "dual"
+def test_negative_named_boolean_can_use_explicit_dual_mode(builder_parser: FakeParser) -> None:
     builder_parser.abbreviation_gen = NoAbbreviations()
     builder_parser.flag_strategy = DefaultFlagStrategy(
         style="keyword_only",
@@ -199,12 +199,16 @@ def test_negative_named_boolean_can_keep_dual_mode(builder_parser: FakeParser) -
     def run(*, no_stdio: bool = False) -> bool:
         return no_stdio
 
-    argument = builder._function_spec(Function(run), canonical_name="run").parameters[0]
+    argument = builder._function_spec(
+        Function(run),
+        canonical_name="run",
+        parameter_settings={"no_stdio": Param(boolean_mode="dual")},
+    ).parameters[0]
 
     assert argument.boolean_behavior is not None
     assert argument.boolean_behavior.mode is BooleanMode.DUAL
-    assert argument.boolean_behavior.supports_negative is True
-    assert argument.boolean_behavior.negative_form == "--stdio"
+    assert argument.boolean_behavior.positive_flags == ("--no-stdio",)
+    assert argument.boolean_behavior.negative_flags == ("--stdio",)
 
 
 def test_list_parser_requests_element_type() -> None:

@@ -174,30 +174,40 @@ class TestMultipleCommands:
 
 
 class TestBooleanFlags:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize(
+        "parser",
+        ["argparse_req_pos", "argparse_kw_only", "click_req_pos", "click_kw_only"],
+        indirect=True,
+    )
     def test_bool_required(self, parser: InterfacyParser):
         """Verify execution with required boolean flags."""
         parser.add_command(fn_bool_required)
         assert parser.run(args=["--value"]) is True
         assert parser.run(args=["--no-value"]) is False
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize(
+        "parser",
+        ["argparse_req_pos", "argparse_kw_only", "click_req_pos", "click_kw_only"],
+        indirect=True,
+    )
     def test_bool_default_true(self, parser: InterfacyParser):
         """Verify execution with boolean flags defaulting to True."""
         parser.add_command(fn_bool_default_true)
 
         assert parser.run(args=[]) is True
-        assert parser.run(args=["--value"]) is True
         assert parser.run(args=["--no-value"]) is False
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    @pytest.mark.parametrize(
+        "parser",
+        ["argparse_req_pos", "argparse_kw_only", "click_req_pos", "click_kw_only"],
+        indirect=True,
+    )
     def test_bool_false_by_default(self, parser: InterfacyParser):
         """Verify execution with boolean flags defaulting to False."""
         parser.add_command(fn_bool_default_false)
 
         assert parser.run(args=[]) is False
         assert parser.run(args=["--value"]) is True
-        assert parser.run(args=["--no-value"]) is False
 
 
 class TestEnums:

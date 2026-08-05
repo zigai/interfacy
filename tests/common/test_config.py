@@ -29,8 +29,6 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
                 'help_option_sort = ["bool_last", "alphabetical"]',
                 'help_subcommand_sort = ["name_length_desc"]',
                 'bool_negative_prefix = "without-"',
-                'negative_bool_name_mode = "dual"',
-                'negative_bool_name_prefixes = ["no-", "skip-"]',
                 'help_flags = ["-?", "--help"]',
                 "",
                 "[abbreviations]",
@@ -81,8 +79,6 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
             "model_expansion_max_depth": None,
             "parse_recovery_max_attempts": None,
             "bool_negative_prefix": None,
-            "negative_bool_name_mode": None,
-            "negative_bool_name_prefixes": None,
             "help_flags": None,
             "backend": None,
         },
@@ -109,8 +105,6 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
     assert overrides["model_expansion_max_depth"] == 2
     assert overrides["parse_recovery_max_attempts"] == 4
     assert overrides["bool_negative_prefix"] == "without-"
-    assert overrides["negative_bool_name_mode"] == "dual"
-    assert overrides["negative_bool_name_prefixes"] == ("no-", "skip-")
     assert overrides["help_flags"] == ("-?", "--help")
 
 

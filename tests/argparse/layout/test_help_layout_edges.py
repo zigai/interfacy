@@ -4,6 +4,7 @@ import argparse
 import os
 from enum import Enum
 
+from interfacy import BooleanMode
 from interfacy.appearance.layouts import ArgparseLayout, HelpLayout, InterfacyLayout
 from interfacy.schema.schema import Argument, ArgumentKind, BooleanBehavior, ValueShape
 from interfacy.util import strip_ansi
@@ -86,9 +87,10 @@ def test_schema_argument_legacy_bool_adds_sentence_punctuation() -> None:
         help_text="Enable verbose mode",
         type_=None,
         boolean_behavior=BooleanBehavior(
-            supports_negative=True,
-            negative_form="--no-verbose",
+            positive_flags=("--verbose",),
+            negative_flags=("--no-verbose",),
             default=False,
+            mode=BooleanMode.DUAL,
         ),
     )
 
@@ -146,9 +148,10 @@ def test_schema_help_action_suppresses_bool_default() -> None:
         help_text="Show help.",
         type_=None,
         boolean_behavior=BooleanBehavior(
-            supports_negative=False,
-            negative_form=None,
+            positive_flags=("-h", "--help"),
+            negative_flags=(),
             default=argparse.SUPPRESS,
+            mode=BooleanMode.POSITIVE_ONLY,
         ),
         is_help_action=True,
     )

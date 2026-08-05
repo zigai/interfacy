@@ -107,9 +107,7 @@ class FakeParser:
     help_option_sort: list[str] | None = None
     help_subcommand_sort: list[str] | None = None
     abbreviation_max_generated_len: int = 1
-    bool_negative_prefix: str | None = "no-"
-    negative_bool_name_mode: str = "flag_only"
-    negative_bool_name_prefixes: tuple[str, ...] = ("no-", "disable-", "without-")
+    bool_negative_prefix: str = "no-"
     help_flags: tuple[str, ...] = ("--help",)
 
     def __post_init__(self) -> None:

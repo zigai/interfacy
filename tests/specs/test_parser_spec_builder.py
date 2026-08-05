@@ -2,7 +2,7 @@ import inspect
 
 import pytest
 
-from interfacy import Param, params
+from interfacy import BooleanMode, Param, params
 from interfacy.argparse_backend import Argparser
 from interfacy.naming import DefaultFlagStrategy
 from interfacy.schema.schema import ArgumentKind, ValueShape
@@ -148,8 +148,9 @@ def test_boolean_argument_annotated_with_boolean_behavior(parser: Argparser):
     assert argument.flags == ("-n", "--value")
     assert argument.value_shape is ValueShape.FLAG
     assert argument.boolean_behavior is not None
-    assert argument.boolean_behavior.supports_negative is True
-    assert argument.boolean_behavior.negative_form == "--no-value"
+    assert argument.boolean_behavior.positive_flags == ()
+    assert argument.boolean_behavior.negative_flags == ("--no-value",)
+    assert argument.boolean_behavior.mode is BooleanMode.NEGATIVE_ONLY
     assert argument.boolean_behavior.default is True
     assert argument.default is True
 
@@ -167,7 +168,7 @@ def test_boolean_negative_prefix_can_be_configured() -> None:
     argument = schema.commands["fn-bool-default-true"].parameters[0]
 
     assert argument.boolean_behavior is not None
-    assert argument.boolean_behavior.negative_form == "--without-value"
+    assert argument.boolean_behavior.negative_flags == ("--without-value",)
     assert parser.run(args=["--without-value"]) is False
 
 
@@ -347,8 +348,7 @@ def test_param_kind_option_makes_required_value_an_option(parser: Argparser) -> 
     assert argument.required is True
 
 
-def test_boolean_single_letter_flag_uses_long_form_for_negative_support(parser: Argparser):
-    """Single-letter booleans should still get a long flag so negative forms can exist."""
+def test_boolean_false_default_exposes_only_positive_long_form(parser: Argparser):
     parser.add_command(fn_bool_short_flag)
 
     schema = parser.build_parser_schema()
@@ -356,8 +356,9 @@ def test_boolean_single_letter_flag_uses_long_form_for_negative_support(parser: 
 
     assert argument.flags == ("--x",)
     assert argument.boolean_behavior is not None
-    assert argument.boolean_behavior.supports_negative is True
-    assert argument.boolean_behavior.negative_form == "--no-x"
+    assert argument.boolean_behavior.positive_flags == ("--x",)
+    assert argument.boolean_behavior.negative_flags == ()
+    assert argument.boolean_behavior.mode is BooleanMode.POSITIVE_ONLY
 
 
 def test_optional_list_argument_metadata(parser: Argparser):
