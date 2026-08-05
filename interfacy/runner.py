@@ -394,13 +394,8 @@ class SchemaRunner:
         if current_instance is None or parent_instance is None:
             return
 
-        instance_dict = getattr(current_instance, "__dict__", None)
-        if isinstance(instance_dict, dict):
-            instance_dict["_parent"] = parent_instance
-            return
-
         try:
-            object.__setattr__(current_instance, "_parent", parent_instance)
+            current_instance._parent = parent_instance
         except (AttributeError, TypeError):
             return
 
