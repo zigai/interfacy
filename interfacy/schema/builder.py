@@ -20,6 +20,7 @@ from interfacy.appearance.help_sort import (
     resolve_help_subcommand_sort_rules,
 )
 from interfacy.exceptions import (
+    ConfigurationError,
     DuplicateCommandError,
     InvalidCommandError,
     ReservedFlagError,
@@ -738,6 +739,49 @@ class ParserSchemaBuilder:
 
         return option_strings
 
+    @staticmethod
+    def _positional_arguments(arguments: Sequence[Argument]) -> list[Argument]:
+        return [argument for argument in arguments if argument.kind is ArgumentKind.POSITIONAL]
+
+    def _validate_positional_order(
+        self,
+        arguments: Sequence[Argument],
+        *,
+        owner: str,
+    ) -> None:
+        optional_argument: Argument | None = None
+        for argument in self._positional_arguments(arguments):
+            if optional_argument is not None and (
+                optional_argument.value_shape is ValueShape.LIST or argument.required
+            ):
+                raise ConfigurationError(
+                    f"Optional positional parameter '{optional_argument.display_name}' in "
+                    f"'{owner}' cannot appear before positional parameter "
+                    f"'{argument.display_name}'"
+                )
+
+            if not argument.required:
+                optional_argument = argument
+
+    def _validate_optional_initializer_positionals(
+        self,
+        *,
+        owner: str,
+        initializer: Sequence[Argument],
+        subcommands: dict[str, Command],
+    ) -> None:
+        if not subcommands:
+            return
+
+        for argument in self._positional_arguments(initializer):
+            if argument.required or argument.pipe_required:
+                continue
+
+            raise ConfigurationError(
+                f"Optional initializer positional parameter '{argument.display_name}' in "
+                f"'{owner}' is not allowed because the command has subcommands"
+            )
+
     def _command_option_strings(self, command: Command) -> set[str]:
         option_strings = self._argument_option_strings([*command.initializer, *command.parameters])
         option_strings.update(executable_flag_tokens(command.executable_flags))
@@ -975,6 +1019,7 @@ class ParserSchemaBuilder:
                 parameter_setting=self._settings_for_param(effective_parameter_settings, param),
             )
         ]
+        self._validate_positional_order(parameters, owner=canonical_name or function.name)
         raw_description = description or (function.description if function.has_docstring else None)
         cli_name = self._resolve_cli_name(
             override=cli_name_override,
@@ -1155,6 +1200,10 @@ class ParserSchemaBuilder:
                 parameter_setting=self._settings_for_param(method_parameter_settings, param),
             )
         ]
+        self._validate_positional_order(
+            [*initializer, *parameters],
+            owner=canonical_name or method.name,
+        )
 
         raw_description = description or (method.description if method.has_docstring else None)
         cli_name = self._resolve_cli_name(None, canonical_name, method.name)
@@ -1313,6 +1362,12 @@ class ParserSchemaBuilder:
 
         raw_description = description or (cls.description if cls.has_docstring else None)
         cli_name = self._resolve_cli_name(None, canonical_name, cls.name)
+        self._validate_positional_order(initializer, owner=cli_name)
+        self._validate_optional_initializer_positionals(
+            owner=cli_name,
+            initializer=initializer,
+            subcommands=subcommands,
+        )
         resolved_executable_flags = list(executable_flags or [])
         self._validate_executable_flags_against_tokens(
             resolved_executable_flags,
@@ -1434,6 +1489,22 @@ class ParserSchemaBuilder:
         flag_allocation_state: FlagAllocationState | None,
         parameter_setting: Param | None,
     ) -> tuple[str, ...]:
+        if parameter_setting is not None and parameter_setting.kind == "positional":
+            if translated_name in taken_flags:
+                raise ReservedFlagError(translated_name)
+
+            taken_flags.append(translated_name)
+
+            return (translated_name,)
+
+        if parameter_setting is not None and parameter_setting.kind == "option":
+            return self._flags_from_parameter_setting(
+                translated_name=translated_name,
+                param=param,
+                setting=parameter_setting,
+                taken_flags=taken_flags,
+            )
+
         if parameter_setting is not None and parameter_setting.has_flag_overrides:
             return self._flags_from_parameter_setting(
                 translated_name=translated_name,
@@ -1997,9 +2068,32 @@ class ParserSchemaBuilder:
             return False
 
         if allow_optional_union_list:
-            return False if state.is_optional_union_list else spec.is_required
+            required = False if state.is_optional_union_list else spec.is_required
+        else:
+            required = spec.is_required
 
-        return spec.is_required
+        if kind is ArgumentKind.POSITIONAL and not required:
+            self._configure_optional_positional_nargs(spec, state)
+
+        return required
+
+    @staticmethod
+    def _configure_optional_positional_nargs(
+        spec: ParamSpec,
+        state: ArgumentBuildState,
+    ) -> None:
+        if state.value_shape is ValueShape.SINGLE and state.nargs is None:
+            state.nargs = "?"
+            return
+
+        if state.value_shape is ValueShape.LIST:
+            state.nargs = "*"
+            return
+
+        if state.value_shape is ValueShape.TUPLE:
+            raise ConfigurationError(
+                f"Optional tuple positional parameter '{spec.name}' is not supported"
+            )
 
     def _apply_suppressed_default(
         self,
@@ -2119,6 +2213,13 @@ class ParserSchemaBuilder:
                 subcommands,
                 rules=settings.help_subcommand_sort,
             )
+
+        self._validate_positional_order(initializer, owner=cli_name)
+        self._validate_optional_initializer_positionals(
+            owner=cli_name,
+            initializer=initializer,
+            subcommands=subcommands,
+        )
 
         command = Command(
             obj=None,
@@ -2553,6 +2654,13 @@ class ParserSchemaBuilder:
                 subcommands,
                 rules=settings.help_subcommand_sort,
             )
+
+        self._validate_positional_order(initializer, owner=cli_name)
+        self._validate_optional_initializer_positionals(
+            owner=cli_name,
+            initializer=initializer,
+            subcommands=subcommands,
+        )
 
         command = Command(
             obj=cls,

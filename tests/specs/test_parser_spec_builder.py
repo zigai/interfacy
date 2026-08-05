@@ -40,6 +40,21 @@ def fn_custom_output_format(output_format: str = "text") -> str:
     return output_format
 
 
+@params(config=Param(kind="positional", metavar="CONFIG"))
+def fn_validate_config(config: str | None = None) -> str | None:
+    return config
+
+
+@params(values=Param(kind="positional"))
+def fn_optional_positional_values(values: list[int] | None = None) -> list[int]:
+    return values or []
+
+
+@params(value=Param(kind="option"))
+def fn_required_option(value: str) -> str:
+    return value
+
+
 def doc_summary(obj) -> str | None:
     doc = inspect.getdoc(obj)
     if not doc:
@@ -295,6 +310,41 @@ def test_param_can_override_help_and_metavar(parser: Argparser) -> None:
 
     assert argument.help == "Output rendering format."
     assert argument.metavar == "FORMAT"
+
+
+def test_param_kind_positional_makes_defaulted_scalar_positional(parser: Argparser) -> None:
+    parser.add_command(fn_validate_config, name="validate")
+
+    argument = parser.build_parser_schema().commands["validate"].parameters[0]
+
+    assert argument.name == "config"
+    assert argument.kind is ArgumentKind.POSITIONAL
+    assert argument.flags == ("config",)
+    assert argument.required is False
+    assert argument.default is None
+    assert argument.nargs == "?"
+    assert argument.metavar == "CONFIG"
+
+
+def test_param_kind_positional_makes_optional_list_positional(parser: Argparser) -> None:
+    parser.add_command(fn_optional_positional_values)
+
+    argument = parser.build_parser_schema().commands["fn-optional-positional-values"].parameters[0]
+
+    assert argument.kind is ArgumentKind.POSITIONAL
+    assert argument.value_shape is ValueShape.LIST
+    assert argument.required is False
+    assert argument.nargs == "*"
+
+
+def test_param_kind_option_makes_required_value_an_option(parser: Argparser) -> None:
+    parser.add_command(fn_required_option)
+
+    argument = parser.build_parser_schema().commands["fn-required-option"].parameters[0]
+
+    assert argument.kind is ArgumentKind.OPTION
+    assert argument.flags == ("-v", "--value")
+    assert argument.required is True
 
 
 def test_boolean_single_letter_flag_uses_long_form_for_negative_support(parser: Argparser):

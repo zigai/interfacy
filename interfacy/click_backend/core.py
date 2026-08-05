@@ -420,7 +420,7 @@ class ClickParser(InterfacyParser):
         if param_type is not None:
             attrs["type"] = param_type
 
-        if nargs != -1 and not suppress and not argument.required:
+        if not suppress and not argument.required:
             attrs["default"] = default
 
         return InterfacyClickArgument((argument.display_name,), **attrs), suppress

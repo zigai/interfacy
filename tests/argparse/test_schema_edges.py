@@ -5,6 +5,7 @@ import sys
 import pytest
 from objinspect import Function
 
+from interfacy import Param, params
 from interfacy.appearance.layouts import InterfacyLayout
 from interfacy.argparse_backend import Argparser
 from interfacy.exceptions import ConfigurationError
@@ -18,6 +19,12 @@ def alpha() -> str:
 
 def beta() -> str:
     return "beta"
+
+
+@params(config=Param(kind="positional", metavar="CONFIG"))
+def validate_config(config: str | None = None) -> str | None:
+    """Validate configuration."""
+    return config
 
 
 def test_build_parser_without_commands_raises_configuration_error() -> None:
@@ -63,6 +70,15 @@ def test_configured_help_alias_applies_to_subcommands(capsys) -> None:
     assert isinstance(result, SystemExit)
     assert result.code == 0
     assert "-h, --help" in capsys.readouterr().out
+
+
+def test_optional_positional_usage_shows_optional_metavar() -> None:
+    parser = Argparser(sys_exit_enabled=False)
+    parser.add_command(validate_config)
+
+    help_text = parser.build_parser().format_help()
+
+    assert "[CONFIG]" in help_text
 
 
 def test_install_tab_completion_warns_when_argcomplete_is_missing(

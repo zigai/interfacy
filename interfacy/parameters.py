@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeAlias, TypeVar
+from typing import Any, Literal, TypeAlias, TypeVar
 
 from interfacy.exceptions import ConfigurationError
 
 PARAMETER_SETTINGS_ATTR = "__interfacy_parameter_settings__"
 
 ParameterSettingsTarget: TypeAlias = Callable[..., Any] | type[Any]
+ParamKind: TypeAlias = Literal["auto", "option", "positional"]
 F = TypeVar("F", bound=ParameterSettingsTarget)
 
 
@@ -92,10 +93,19 @@ def _normalize_short_flag(value: str | bool | None) -> str | bool | None:
     return flag_value
 
 
-@dataclass(frozen=True)
+def _normalize_kind(value: str) -> ParamKind:
+    match value:
+        case "auto" | "option" | "positional":
+            return value
+        case _:
+            raise ConfigurationError("Param.kind must be one of: 'auto', 'option', 'positional'")
+
+
+@dataclass
 class Param:
     """Per-parameter CLI settings that keep the Python signature unchanged."""
 
+    kind: ParamKind = "auto"
     flags: Sequence[str] | str | None = None
     long: str | None = None
     short: str | bool | None = None
@@ -103,10 +113,16 @@ class Param:
     metavar: str | None = None
 
     def __post_init__(self) -> None:
+        kind = _normalize_kind(self.kind)
         flags = _normalize_flag_tuple(self.flags)
         long = _normalize_long_flag(self.long)
         short = _normalize_short_flag(self.short)
 
+        if kind == "positional" and (flags is not None or long is not None or short is not None):
+            raise ConfigurationError(
+                "Param(kind='positional') cannot be combined with Param.flags, "
+                "Param.long, or Param.short"
+            )
         if flags is not None and (long is not None or short is not None):
             raise ConfigurationError(
                 "Param.flags cannot be combined with Param.long or Param.short"
@@ -116,9 +132,10 @@ class Param:
         if self.metavar is not None and not isinstance(self.metavar, str):
             raise ConfigurationError("Param.metavar must be a string or None")
 
-        object.__setattr__(self, "flags", flags)
-        object.__setattr__(self, "long", long)
-        object.__setattr__(self, "short", short)
+        self.kind = kind
+        self.flags = flags
+        self.long = long
+        self.short = short
 
     @property
     def has_flag_overrides(self) -> bool:
@@ -190,6 +207,7 @@ def params(**parameter_settings: ParamInput) -> Callable[[F], F]:
 
 __all__ = [
     "Param",
+    "ParamKind",
     "ParameterSettingsInput",
     "get_parameter_settings",
     "merge_parameter_settings",
