@@ -17,7 +17,7 @@
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.schema.schema.BooleanMode
+.. autoclass:: interfacy.parameters.BooleanMode
    :members:
 ```
 

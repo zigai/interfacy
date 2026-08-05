@@ -1,19 +1,11 @@
 # Booleans
 
-Boolean parameters become flags.
-
-```python
-def sync(verbose: bool = False, cache: bool = True) -> None: ...
-```
-
-```console
-$ python app.py --verbose
-$ python app.py --no-cache
-```
+Boolean parameters become flags. Interfacy exposes only forms that can change a
+defaulted value, while required and tri-state booleans accept both forms.
 
 ## Default false
 
-A boolean with `False` as the default is enabled by passing the positive flag.
+A false-default boolean exposes its positive form.
 
 ```python
 def build(verbose: bool = False) -> bool:
@@ -21,13 +13,15 @@ def build(verbose: bool = False) -> bool:
 ```
 
 ```console
-$ python app.py
 $ python app.py --verbose
 ```
 
+Omitting the flag passes `False`; `--verbose` passes `True`. Interfacy does not
+generate a redundant `--no-verbose` form.
+
 ## Default true
 
-A boolean with `True` as the default can be disabled with a generated negative flag.
+A true-default boolean exposes its negative form.
 
 ```python
 def build(cache: bool = True) -> bool:
@@ -35,15 +29,15 @@ def build(cache: bool = True) -> bool:
 ```
 
 ```console
-$ python app.py
 $ python app.py --no-cache
 ```
 
-The negative prefix defaults to `no-`.
+Omitting the flag passes `True`; `--no-cache` passes `False`. The positive
+`--cache` form is omitted because it only restates the default.
 
-## Required booleans
+## Required and tri-state booleans
 
-A required boolean accepts both forms.
+A required boolean accepts both values explicitly.
 
 ```python
 def set_enabled(enabled: bool) -> bool:
@@ -55,46 +49,71 @@ $ python app.py --enabled
 $ python app.py --no-enabled
 ```
 
-## Negative-looking names
+A boolean with a `None` default is also dual-form. Omitting it preserves `None`,
+while its positive and negative forms pass `True` and `False` respectively.
 
-Some boolean names already sound negative:
+## Explicit modes
 
-```python
-def sync(disable_cache: bool = False) -> None: ...
-```
-
-By default, Interfacy treats these as one-way flags:
-
-```console
-$ python app.py --disable-cache
-```
-
-It does not generate a confusing inverse like `--cache` unless you opt into dual mode.
+Use `Param.boolean_mode` when the callable default does not express the desired
+CLI surface.
 
 ```python
-Interfacy(
-    negative_bool_name_mode="dual",
-).run(sync)
+from interfacy import Interfacy, Param
+
+
+def render(*, color: bool = False) -> bool:
+    return color
+
+
+parser = Interfacy()
+parser.add_command(
+    render,
+    parameter_settings={"color": Param(boolean_mode="dual")},
+)
+parser.run()
 ```
 
-Negative-looking prefixes default to:
+Available modes are:
 
-- `no-`
-- `disable-`
-- `without-`
+- `auto`: false defaults are positive-only, true defaults are negative-only,
+  and required or `None`-default booleans are dual-form.
+- `dual`: expose forms that set both `True` and `False`.
+- `positive_only`: expose only flags that set `True`; the parameter must default
+  to `False`.
+- `negative_only`: expose only flags that set `False`; the parameter must default
+  to `True`.
 
-Configure them with `negative_bool_name_prefixes=`.
+## Custom negative flags
 
-## Custom negative prefix
+Generated negative flags use the `no-` prefix. Supply `Param.negative_flags`
+when an explicit inverse reads better.
 
-`bool_negative_prefix` changes generated negative flag names.
+```python
+def sync(*, disable_cache: bool = False) -> bool:
+    return disable_cache
+
+
+parser.add_command(
+    sync,
+    parameter_settings={
+        "disable_cache": Param(
+            boolean_mode="dual",
+            negative_flags="--enable-cache",
+        )
+    },
+)
+```
+
+This exposes `--disable-cache` to pass `True` and `--enable-cache` to pass
+`False`.
+
+## Custom generated prefix
+
+`bool_negative_prefix` changes the parser-wide prefix used when a parameter does
+not define `negative_flags`.
 
 ```python
 Interfacy(bool_negative_prefix="without-").run(build)
 ```
 
-```console
-$ python app.py --without-cache
-```
-
-Set `bool_negative_prefix=None` to disable generated negative aliases.
+For the true-default `cache` example, this generates `--without-cache`.

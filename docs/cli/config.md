@@ -36,8 +36,6 @@ style = "required_positional"
 translation_mode = "kebab"
 help_flags = ["--help", "-h"]
 bool_negative_prefix = "no-"
-negative_bool_name_mode = "flag_only"
-negative_bool_name_prefixes = ["no-", "disable-", "without-"]
 help_option_sort = ["required_first", "short_first", "alphabetical"]
 help_subcommand_sort = ["insert_order"]
 
