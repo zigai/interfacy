@@ -25,6 +25,7 @@ from interfacy.argparse_backend import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.naming import DefaultFlagStrategy
 from interfacy.schema.schema import Command, ParserSchema
+from interfacy.util import strip_ansi
 
 
 @dataclass
@@ -219,6 +220,25 @@ def test_nested_manual_parser_uses_leaf_metavar_for_append_action() -> None:
 def test_argument_parser_defaults_to_standard_layout() -> None:
     parser = ArgumentParser(prog="manual")
     assert isinstance(parser._interfacy_help_layout, StandardLayout)
+
+
+def test_argument_parser_disables_argparse_usage_colors_when_python_colors_forced(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("PYTHON_COLORS", "1")
+    parser = ArgumentParser(prog="agentctl pi")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    for name in ("new", "send", "skill", "slash", "steer", "rename"):
+        subparsers.add_parser(name)
+
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["status"])
+
+    assert excinfo.value.code == 2
+    captured = capsys.readouterr()
+    assert "invalid choice: 'status'" in captured.err
+    assert captured.err == strip_ansi(captured.err)
 
 
 def test_manual_argument_parser_help_position_keeps_long_option_description_inline() -> None:

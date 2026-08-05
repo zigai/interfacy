@@ -264,6 +264,7 @@ class Argparser(InterfacyParser):
         return ArgumentParser(
             name,
             formatter_class=self.formatter_class,
+            fromfile_prefix_chars="@" if self.allow_args_from_file else None,
             help_layout=self.help_layout,
             help_flags=self.help_flags,
         )

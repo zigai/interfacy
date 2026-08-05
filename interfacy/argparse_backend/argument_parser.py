@@ -549,6 +549,10 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def _get_formatter(self) -> argparse.HelpFormatter:  # type: ignore[override]
         formatter = self.formatter_class(str(self.prog))
+        set_color = getattr(formatter, "_set_color", None)
+        if callable(set_color):
+            set_color(getattr(self, "color", False))
+
         set_help_layout = getattr(formatter, "set_help_layout", None)
         if callable(set_help_layout):
             try:
