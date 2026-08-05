@@ -61,6 +61,36 @@ def test_success_path_returns_value_and_emits_success_exit_code(backend: str) ->
     assert exit_calls == [ExitCode.SUCCESS]
 
 
+@pytest.mark.parametrize("value", [0, 1, 7])
+def test_integer_result_is_data_and_emits_success_exit_code(backend: str, value: int) -> None:
+    parser = _build_parser(backend=backend, sys_exit_enabled=False)
+    exit_calls = _capture_exit_calls(parser)
+
+    def count() -> int:
+        return value
+
+    result = parser.run(count, args=[])
+
+    assert result == value
+    assert exit_calls == [ExitCode.SUCCESS]
+
+
+def test_integer_result_is_printed_before_successful_process_exit(
+    backend: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parser = _build_parser(backend=backend, sys_exit_enabled=True, print_result=True)
+
+    def count() -> int:
+        return 7
+
+    with pytest.raises(SystemExit) as excinfo:
+        parser.run(count, args=[])
+
+    assert excinfo.value.code == ExitCode.SUCCESS
+    assert capsys.readouterr().out == "7\n"
+
+
 def test_duplicate_registration_maps_to_err_parsing_exit_code(backend: str) -> None:
     parser = _build_parser(backend=backend, sys_exit_enabled=False)
     exit_calls = _capture_exit_calls(parser)
