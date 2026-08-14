@@ -38,17 +38,14 @@ Interfacy(on_interrupt=handle_interrupt).run(main)
 
 Keep callbacks quick and safe. They run while the process is already being interrupted.
 
-## Reraising
+## Embedding
 
-`reraise_interrupt=True` passes the original interrupt to an embedding application or test harness.
+`invoke()` and `invoke_async()` propagate `KeyboardInterrupt` unchanged. They do not render
+an interrupt message or invoke process-boundary callbacks:
 
 ```python
-Interfacy(
-    on_interrupt=handle_interrupt,
-    reraise_interrupt=True,
-).run(main)
+result = Interfacy().invoke(main, args=[])
 ```
 
-## Signal handling
-
-Interfacy installs its runtime signal handling only when running on the main thread. Non-main-thread use avoids replacing process-wide signal handlers.
+Use `run()` when Interfacy owns the CLI process. At that boundary, `on_interrupt` runs,
+the configured interrupt message is rendered, and the process exits with code `130`.

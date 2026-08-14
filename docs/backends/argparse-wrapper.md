@@ -28,7 +28,7 @@ You still call `add_argument()` yourself. Interfacy changes the parser behavior 
 Pass `help_layout=` to style manual argparse help.
 
 ```python
-from interfacy.appearance import ClapLayout
+from interfacy.help import ClapLayout
 from interfacy.argparse_backend import ArgumentParser
 
 parser = ArgumentParser(

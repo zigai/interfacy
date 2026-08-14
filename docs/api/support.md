@@ -1,11 +1,5 @@
 # Support Types
 
-## Parser Base
-
-```{eval-rst}
-.. autoclass:: interfacy.core.InterfacyParser
-   :exclude-members: __init__, __new__
-```
 
 ## Naming
 

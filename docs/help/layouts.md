@@ -4,7 +4,7 @@ A layout controls how help output is rendered.
 
 ```python
 from interfacy import Interfacy
-from interfacy.appearance import ClapLayout
+from interfacy.help import ClapLayout
 
 Interfacy(help_layout=ClapLayout()).run(main)
 ```
@@ -22,7 +22,7 @@ The command behavior does not change. Only the help presentation changes.
 - `ClapLayout`
 
 ```python
-from interfacy.appearance import Aligned, Modern, StandardLayout
+from interfacy.help import Aligned, Modern, StandardLayout
 
 Interfacy(help_layout=Aligned()).run(main)
 Interfacy(help_layout=Modern()).run(main)
@@ -34,7 +34,7 @@ Interfacy(help_layout=StandardLayout()).run(main)
 Layouts expose formatting options as constructor keyword arguments.
 
 ```python
-from interfacy.appearance import Aligned
+from interfacy.help import Aligned
 
 layout = Aligned(
     help_position=32,
@@ -81,4 +81,4 @@ points. Private row, measurement, wrapping, and template helpers are implementat
 
 ## API reference
 
-See {doc}`../api/appearance` for the full layout API.
+See {doc}`../api/help` for the full layout API.

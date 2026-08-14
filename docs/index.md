@@ -24,6 +24,7 @@ Reference <reference/index>
 :maxdepth: 1
 
 Contributing <contributing>
+Architecture <architecture>
 License <license>
 PyPI <https://pypi.org/project/interfacy/>
 GitHub <https://github.com/zigai/interfacy>
@@ -84,3 +85,4 @@ Required non-boolean parameters become positionals. Optional parameters become f
 - [CLI](cli/index.md)
 - [Backends](backends/index.md)
 - [Reference](reference/index.md)
+- [Architecture](architecture.md)

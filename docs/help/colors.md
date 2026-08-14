@@ -4,8 +4,8 @@ Color themes style help output without changing command behavior.
 
 ```python
 from interfacy import Interfacy
-from interfacy.appearance import Modern
-from interfacy.appearance.colors import Aurora
+from interfacy.help import Modern
+from interfacy.help.colors import Aurora
 
 Interfacy(
     help_layout=Modern(style=Aurora()),
@@ -19,8 +19,8 @@ Interfacy(
 - `ClapColors`
 
 ```python
-from interfacy.appearance import ClapLayout
-from interfacy.appearance.colors import ClapColors, NoColor
+from interfacy.help import ClapLayout
+from interfacy.help.colors import ClapColors, NoColor
 
 Interfacy(help_layout=ClapLayout(style=ClapColors())).run(main)
 Interfacy(help_colors=NoColor()).run(main)
@@ -34,7 +34,7 @@ Color themes are configuration objects. You can override individual fields.
 
 ```python
 from stdl.st import TextStyle
-from interfacy.appearance.colors import Aurora
+from interfacy.help.colors import Aurora
 
 colors = Aurora(
     flag_long=TextStyle(color="light_green", style="bold"),
@@ -47,7 +47,7 @@ Custom colors affect terminal output, CI logs, and copied bug reports.
 ## Disable colors
 
 ```python
-from interfacy.appearance.colors import NoColor
+from interfacy.help.colors import NoColor
 
 Interfacy(help_colors=NoColor()).run(main)
 ```

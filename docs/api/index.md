@@ -8,7 +8,7 @@ Generated reference for public Interfacy API objects.
 :maxdepth: 1
 
 Parsers <parsers>
-Appearance <appearance>
+Help <help>
 Command groups <groups>
 Schema API <schema>
 Support types <support>

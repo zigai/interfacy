@@ -1,13 +1,15 @@
 # Parsers
 
-`Interfacy` is the programmatic entry point.
+`Interfacy` is the supported programmatic entry point.
 
-## Interfacy
+- `invoke()` executes synchronously without rendering or process exits.
+- `invoke_async()` executes and awaits asynchronous results inside an existing event loop.
+- `run()` is the CLI boundary; it renders results or failures and raises `SystemExit`.
 
 ```python
 from interfacy import Interfacy
 
-Interfacy().run(main)
+result = Interfacy().invoke(main, args=[])
 ```
 
 ```{eval-rst}

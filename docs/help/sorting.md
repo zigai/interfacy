@@ -66,7 +66,7 @@ This gives one command group a manual row order while the parser keeps its defau
 Layouts can define default sort rules. Explicit parser settings win over layout defaults.
 
 ```python
-from interfacy.appearance import Modern
+from interfacy.help import Modern
 
 layout = Modern(help_option_sort_default=["required_first", "alphabetical"])
 Interfacy(help_layout=layout).run(main)

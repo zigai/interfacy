@@ -75,7 +75,7 @@ Keep labels short. They are part of the help surface.
 Layouts expose `command_indent` and `command_group_spacing` for grouped command listings.
 
 ```python
-from interfacy.appearance import ArgparseLayout
+from interfacy.help import ArgparseLayout
 
 layout = ArgparseLayout(command_indent=4, command_group_spacing=1)
 Interfacy(help_layout=layout).run(main)
