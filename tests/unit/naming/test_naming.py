@@ -1,0 +1,196 @@
+import pytest
+from objinspect import Function
+from stdl.st import kebab_case
+
+from interfacy import Interfacy
+from interfacy.exceptions import DuplicateCommandError
+from interfacy.naming.abbreviations import DefaultAbbreviationGenerator, NoAbbreviations
+from interfacy.naming.command_naming import CommandNameRegistry
+from interfacy.naming.flag_strategy import DefaultFlagStrategy
+from interfacy.naming.name_mapping import NameMapping, reverse_translations
+from tests.fixtures.commands import fn_list_int, fn_list_str
+
+
+def test_command_name_registry_collisions():
+    """Verify that CommandNameRegistry correctly detects various naming collisions."""
+    registry = CommandNameRegistry(NameMapping(kebab_case))
+
+    registry.register(default_name="list_files")
+
+    with pytest.raises(DuplicateCommandError):  # Duplicate canonical name
+        registry.register(default_name="list_files")
+
+    with pytest.raises(DuplicateCommandError):  # Explicit name collision with existing canonical
+        registry.register(default_name="other", explicit_name="list-files")
+
+    with pytest.raises(DuplicateCommandError):  # Alias collision with existing canonical
+        registry.register(default_name="other", aliases=["list-files"])
+
+    registry.register(default_name="show_hidden", aliases=["sh"])
+
+    with pytest.raises(DuplicateCommandError):  # Canonical name collision with existing alias
+        registry.register(default_name="sh")
+
+    with pytest.raises(DuplicateCommandError):  # Alias collision with existing alias
+        registry.register(default_name="sort_by", aliases=["sh"])
+
+    with pytest.raises(DuplicateCommandError):  # Alias same as its own canonical
+        registry.register(default_name="filter", aliases=["filter"])
+
+    with pytest.raises(DuplicateCommandError):  # Duplicate alias in same registration
+        registry.register(default_name="format", aliases=["f", "f"])
+
+
+def test_command_name_registry_lookups():
+    """Verify canonical name lookups for primary names and aliases."""
+    registry = CommandNameRegistry(NameMapping(kebab_case))
+    registry.register(default_name="output_format", aliases=["of", "fmt"])
+
+    assert registry.canonical_for("output-format") == "output-format"
+    assert registry.canonical_for("of") == "output-format"
+    assert registry.canonical_for("fmt") == "output-format"
+    assert registry.canonical_for("unknown") is None
+
+
+def test_abbreviation_generator_logic():
+    """Verify DefaultAbbreviationGenerator fallback logic and conflict handling."""
+    gen = DefaultAbbreviationGenerator(max_generated_len=2)
+    taken: list[str] = []
+
+    # First char: "verbose" -> "v"
+    assert gen.generate("verbose", taken) == "v"
+    assert "v" in taken
+
+    # Conflict on first char -> initials: "version_check" -> "vc"
+    assert gen.generate("version_check", taken) == "vc"
+    assert "vc" in taken
+
+    # Conflict on first char and initials -> first 2 chars: "validate" -> "va"
+    taken = ["v", "vc"]
+    assert gen.generate("validate", taken) == "va"
+    assert "va" in taken
+
+    # Exhaustion: all fallbacks up to length 2 are taken
+    taken = ["v", "vc", "ve"]
+    assert gen.generate("version_check", taken) is None
+
+
+def test_abbreviation_generator_default_max_len_is_one():
+    """Verify default max generated length allows only one-character abbreviations."""
+    gen = DefaultAbbreviationGenerator()
+    taken: list[str] = []
+
+    assert gen.generate("verbose", taken) == "v"
+    assert gen.generate("version_check", taken) is None
+
+
+def test_name_mapping_roundtrip():
+    """Verify that NameMapping correctly handles forward and reverse translations."""
+    mapping = NameMapping(kebab_case)
+
+    assert mapping.translate("output_path") == "output-path"
+    assert mapping.reverse("output-path") == "output_path"
+    assert mapping.reverse("unknown") == "unknown"
+
+
+def test_reverse_translations_util():
+    """Verify that reverse_translations utility correctly maps dictionaries."""
+    mapping = NameMapping(kebab_case)
+    mapping.translate("user_id")
+    mapping.translate("is_active")
+
+    cli_args = {"user-id": 123, "is-active": True, "extra": "data"}
+    reversed_args = reverse_translations(cli_args, mapping)
+
+    assert reversed_args == {"user_id": 123, "is_active": True, "extra": "data"}
+
+
+def test_flag_strategy_boolean_inversion_short_flags():
+    """Verify DefaultFlagStrategy generates correct flags for inverted booleans."""
+    strategy = DefaultFlagStrategy(style="keyword_only")
+    gen = DefaultAbbreviationGenerator()
+    taken: list[str] = []
+
+    def fn_verbose(verbose: bool = True):
+        pass
+
+    param = Function(fn_verbose).params[0]
+    flags = strategy.get_arg_flags("verbose", param, taken, gen)
+
+    # Boolean with default=True generates --verbose with one-char short alias.
+    assert "--verbose" in flags
+    assert "-n" in flags
+
+
+def test_flag_strategy_positional_logic():
+    """Verify DefaultFlagStrategy distinguishes positional vs optional arguments."""
+    strategy = DefaultFlagStrategy(style="required_positional")
+    gen = NoAbbreviations()
+    taken: list[str] = []
+
+    def fn_path(path: str):
+        pass
+
+    param_req = Function(fn_path).params[0]
+    assert strategy.get_arg_flags("path", param_req, taken, gen) == ("path",)
+
+    def fn_timeout(timeout: int = 30):
+        pass
+
+    param_opt = Function(fn_timeout).params[0]
+    assert strategy.get_arg_flags("timeout", param_opt, taken, gen) == ("--timeout",)
+
+
+def test_required_list_positional_flag_generation_is_not_shared_across_commands():
+    """Each command should independently get positional flags for its first required list."""
+    parser = Interfacy(
+        backend="argparse",
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        help_layout=None,
+    )
+    parser.add_command(fn_list_int, name="ints")
+    parser.add_command(fn_list_str, name="strings")
+
+    schema = parser.build_parser_schema()
+
+    ints_arg = schema.commands["ints"].parameters[0]
+    strings_arg = schema.commands["strings"].parameters[0]
+
+    assert ints_arg.flags == ("values",)
+    assert strings_arg.flags == ("items",)
+
+
+def test_required_list_positional_flag_generation_is_stable_across_rebuilds():
+    """Rebuilding a parser schema should not mutate required list flag generation."""
+    parser = Interfacy(
+        backend="argparse",
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        help_layout=None,
+    )
+    parser.add_command(fn_list_int)
+
+    first_schema = parser.build_parser_schema()
+    second_schema = parser.build_parser_schema()
+
+    first_arg = first_schema.commands["fn-list-int"].parameters[0]
+    second_arg = second_schema.commands["fn-list-int"].parameters[0]
+
+    assert first_arg.flags == ("values",)
+    assert second_arg.flags == ("values",)
+
+
+def test_failed_command_registration_does_not_corrupt_reverse_mapping() -> None:
+    registry = CommandNameRegistry(NameMapping(lambda _name: "same"))
+    registry.register(default_name="first")
+
+    with pytest.raises(DuplicateCommandError):
+        registry.register(default_name="second")
+
+    assert registry.translator.reverse("same") == "first"
+
+
+def test_abbreviation_generator_handles_translated_kebab_names() -> None:
+    generator = DefaultAbbreviationGenerator(max_generated_len=2)
+    taken = ["v"]
+
+    assert generator.generate("verbose-mode", taken) == "vm"
