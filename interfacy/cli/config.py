@@ -9,15 +9,21 @@ from typing import Any, Literal, TypeGuard, TypeVar
 
 from stdl.fs import toml_load
 
-import interfacy.appearance.colors as appearance_colors  # noqa: F401
-import interfacy.appearance.layouts as appearance_layouts  # noqa: F401
-from interfacy.appearance.help_sort import (
-    resolve_help_option_sort_rules,
-    resolve_help_subcommand_sort_rules,
+import interfacy.help.colors as appearance_colors  # noqa: F401
+import interfacy.help.presets as appearance_layouts  # noqa: F401
+from interfacy.engine import UNSET
+from interfacy.engine.settings import (
+    AbbreviationScope,
+    validate_abbreviation_max_generated_len,
+    validate_abbreviation_scope,
+    validate_bool_negative_prefix,
+    validate_help_flags,
+    validate_method_skips,
+    validate_model_expansion_max_depth,
+    validate_parse_recovery_max_attempts,
 )
-from interfacy.appearance.layout import HelpLayout, InterfacyColors
-from interfacy.core import validate_model_expansion_max_depth, validate_parse_recovery_max_attempts
 from interfacy.exceptions import ConfigurationError
+from interfacy.help.layout import HelpLayout, InterfacyColors
 from interfacy.naming.abbreviations import (
     AbbreviationGenerator,
     DefaultAbbreviationGenerator,
@@ -30,13 +36,16 @@ from interfacy.naming.flag_strategy import (
     TranslationMode,
 )
 from interfacy.plugins import InterfacyPlugin
+from interfacy.schema.sorting import (
+    resolve_help_option_sort_rules,
+    resolve_help_subcommand_sort_rules,
+)
 
 _ComponentT = TypeVar("_ComponentT")
 _ResolverResultT = TypeVar("_ResolverResultT")
-_UNSET = object()
 Backend = Literal["argparse", "click"]
 
-_ABBREVIATION_SCOPE_LOOKUP: dict[str, str] = {
+_ABBREVIATION_SCOPE_LOOKUP: dict[str, AbbreviationScope] = {
     "topleveloptions": "top_level_options",
     "alloptions": "all_options",
 }
@@ -341,10 +350,9 @@ def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy |
 def _resolve_abbreviation_max_generated_len(value: Any) -> int | None:
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+    if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
-
-    return value
+    return validate_abbreviation_max_generated_len(value)
 
 
 def _resolve_abbreviation_gen(
@@ -384,10 +392,9 @@ def _resolve_abbreviation_gen(
     raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
 
 
-def _resolve_abbreviation_scope(value: Any) -> str | None:
+def _resolve_abbreviation_scope(value: Any) -> AbbreviationScope | None:
     if value is None:
         return None
-
     if not isinstance(value, str):
         raise ConfigurationError("abbreviation_scope must be a string")
 
@@ -396,8 +403,7 @@ def _resolve_abbreviation_scope(value: Any) -> str | None:
         raise ConfigurationError(
             "abbreviation_scope must be one of: top_level_options, all_options"
         )
-
-    return resolved
+    return validate_abbreviation_scope(resolved)
 
 
 def _resolve_backend(value: Any) -> Backend | None:
@@ -438,20 +444,7 @@ def _resolve_method_skips(value: Any) -> list[str] | None:
         return None
     if not isinstance(value, list):
         raise ConfigurationError("method_skips must be a list")
-
-    result: list[str] = []
-    seen: set[str] = set()
-    for item in value:
-        if not isinstance(item, str):
-            raise ConfigurationError("method_skips values must be strings")
-
-        if item in seen:
-            continue
-
-        result.append(item)
-        seen.add(item)
-
-    return result
+    return validate_method_skips(value)
 
 
 def _resolve_bool_negative_prefix(value: Any) -> str | None:
@@ -459,18 +452,12 @@ def _resolve_bool_negative_prefix(value: Any) -> str | None:
         return None
     if not isinstance(value, str):
         raise ConfigurationError("bool_negative_prefix must be a string")
-    if not value:
-        raise ConfigurationError("bool_negative_prefix must not be empty")
-
-    return value
+    return validate_bool_negative_prefix(value)
 
 
-def _resolve_help_flags(value: Any) -> tuple[str, ...]:
-    from interfacy.core import validate_help_flags
-
+def _resolve_help_flags(value: Any) -> Any:
     if value is None:
-        return _UNSET
-
+        return UNSET
     return validate_help_flags(value)
 
 
@@ -531,7 +518,7 @@ def _resolve_default_for_field(
     value: Any,
     config_data: dict[str, Any],
 ) -> Any:
-    resolved: Any = _UNSET
+    resolved: Any = UNSET
 
     if field_name == "help_layout":
         resolved = _resolve_named_component(
@@ -569,22 +556,21 @@ def apply_config_defaults(
     else:
         raise ConfigurationError(f"Unsupported config type: {type(config)}")
 
-    resolved = dict(overrides)
+    resolved = {field_name: value for field_name, value in overrides.items() if value is not UNSET}
 
     for config_field in fields(InterfacyConfig):
         field_name = config_field.name
-        if resolved.get(field_name) is not None:
+        if field_name in resolved:
             continue
 
         value = config_data.get(field_name)
         default_value = _resolve_default_for_field(field_name, value, config_data)
-        if default_value is not _UNSET:
+        if default_value is not UNSET:
             resolved[field_name] = default_value
             continue
 
-        if bool(config_field.metadata.get("passthrough", False)) and field_name in config_data:
+        if bool(config_field.metadata.get("passthrough", False)) and value is not None:
             resolved[field_name] = value
-
     return resolved
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
+import click
 import click.parser as click_parser
 
 
@@ -11,6 +12,7 @@ class OptionLike(Protocol):
 
 
 class ParsingStateLike(Protocol):
+    largs: list[str]
     rargs: list[str]
 
 
@@ -48,6 +50,39 @@ class InterfacyOptionParser(_BaseOptionParser):
                     return True
 
         return False
+
+    def _subcommand_index(self, args: list[str]) -> int | None:
+        command = self.ctx.command
+        if not isinstance(command, click.Group):
+            return None
+
+        required_values = 0
+        for argument in self._args:
+            parameter = argument.obj
+            if not parameter.required:
+                continue
+            required_values += max(parameter.nargs, 1)
+
+        for index, value in enumerate(args):
+            if index < required_values:
+                continue
+            if command.get_command(self.ctx, value) is not None:
+                return index
+
+        return None
+
+    def _process_args_for_args(self, state: ParsingStateLike) -> None:
+        args = [*state.largs, *state.rargs]
+        subcommand_index = self._subcommand_index(args)
+        if subcommand_index is None:
+            super()._process_args_for_args(state)
+            return
+
+        subcommand_args = args[subcommand_index:]
+        state.largs = args[:subcommand_index]
+        state.rargs = []
+        super()._process_args_for_args(state)
+        state.largs.extend(subcommand_args)
 
     def _get_value_from_state(
         self,

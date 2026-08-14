@@ -10,13 +10,14 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from interfacy.appearance.layout import HelpLayout
-from interfacy.appearance.layouts import StandardLayout
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
-from interfacy.console import warn
-from interfacy.core import ExitCode, InterfacyParser
+from interfacy.console import error, warn
+from interfacy.exceptions import UsageError
+from interfacy.help.layout import HelpLayout
+from interfacy.help.presets import StandardLayout
 from interfacy.interfacy import Interfacy
+from interfacy.runtime.exit_codes import ExitCode
 
 
 def _split_target(target: str) -> tuple[str, str]:
@@ -110,13 +111,13 @@ def resolve_target_with_module(target: str) -> tuple[ModuleType, Any]:
 def _is_supported_entrypoint_target(target: Any) -> bool:
     from interfacy.group import CommandGroup
 
-    if isinstance(target, (Interfacy, InterfacyParser, CommandGroup)):
+    if isinstance(target, (Interfacy, CommandGroup)):
         return False
 
     # Accept anything Interfacy can treat as a command target
     # (functions, classes, class instances, bound methods), while
     # still excluding Interfacy-specific orchestration objects above.
-    probe = Interfacy(sys_exit_enabled=False, print_result=False)
+    probe = Interfacy(print_result=False)
     try:
         probe.add_command(target)
     except Exception:  # noqa: BLE001 - type gate for user-provided target objects
@@ -127,37 +128,7 @@ def _is_supported_entrypoint_target(target: Any) -> bool:
 
 def resolve_entrypoint_settings() -> dict[str, Any]:
     """Return config-derived defaults for the CLI entrypoint."""
-    return apply_config_defaults(
-        load_config(),
-        {
-            "help_layout": None,
-            "help_colors": None,
-            "backend": None,
-            "flag_strategy": None,
-            "abbreviation_gen": None,
-            "abbreviation_max_generated_len": None,
-            "abbreviation_scope": None,
-            "help_option_sort": None,
-            "help_subcommand_sort": None,
-            "print_result": None,
-            "full_error_traceback": None,
-            "tab_completion": None,
-            "allow_args_from_file": None,
-            "include_inherited_methods": None,
-            "include_protected_methods": None,
-            "include_private_methods": None,
-            "include_staticmethods": None,
-            "include_classmethods": None,
-            "method_skips": None,
-            "silent_interrupt": None,
-            "expand_model_params": None,
-            "model_expansion_max_depth": None,
-            "parse_recovery_max_attempts": None,
-            "bool_negative_prefix": None,
-            "help_flags": None,
-            "plugins": None,
-        },
-    )
+    return apply_config_defaults(load_config(), {})
 
 
 def _resolve_help_layout(settings: dict[str, Any]) -> HelpLayout:
@@ -301,6 +272,22 @@ def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
     return None
 
 
+def _validate_entrypoint_target(target: object) -> None:
+    if _is_supported_entrypoint_target(target):
+        return
+
+    raise UsageError(
+        "Target must resolve to a function, class, or class instance. "
+        "Parser instances, command groups, and other object types are not supported."
+    )
+
+
+def _render_usage_error(parser: ArgumentParser, exc: UsageError) -> None:
+    usage = exc.usage or parser.format_usage()
+    print(usage.rstrip(), file=sys.stderr)
+    error(f"{parser.prog}: error: {exc}")
+
+
 def main(argv: Sequence[str] | None = None) -> ExitCode:
     """
     Run the Interfacy CLI entrypoint.
@@ -315,37 +302,23 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
 
     settings = resolve_entrypoint_settings()
     parser = build_parser(settings)
-    args = parser.parse_args(raw_args)
-
-    if not args.target:
-        parser.error("the following arguments are required: TARGET")
-        return ExitCode.ERR_INVALID_ARGS
-
     try:
+        args = parser.parse_args(raw_args)
         module, target = resolve_target_with_module(args.target)
-    except (AttributeError, FileNotFoundError, ImportError, OSError, ValueError) as exc:
-        parser.error(str(exc))
-        return ExitCode.ERR_INVALID_ARGS
+        _validate_entrypoint_target(target)
 
-    if not _is_supported_entrypoint_target(target):
-        parser.error(
-            "Target must resolve to a function, class, or class instance. "
-            "Parser instances, command groups, and other object types are not supported."
-        )
+        target_args = list(args.ARGS)
+        if target_args[:1] == ["--"]:
+            target_args = target_args[1:]
 
-        return ExitCode.ERR_INVALID_ARGS
-
-    target_args = list(args.ARGS)
-    if target_args[:1] == ["--"]:
-        target_args = target_args[1:]
-
-    runner = Interfacy(**build_runner_kwargs(settings))
-    try:
+        runner = Interfacy(**build_runner_kwargs(settings))
         configure_runner_from_module(runner, module)
-    except (AttributeError, TypeError, ValueError) as exc:
-        parser.error(str(exc))
-        return ExitCode.ERR_INVALID_ARGS
+    except UsageError as exc:
+        _render_usage_error(parser, exc)
+        return ExitCode.USAGE
+    except (AttributeError, FileNotFoundError, ImportError, OSError, TypeError, ValueError) as exc:
+        _render_usage_error(parser, UsageError(str(exc)))
+        return ExitCode.USAGE
 
     runner.run(target, args=target_args)
-
     return ExitCode.SUCCESS

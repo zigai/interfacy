@@ -1,23 +1,38 @@
+from __future__ import annotations
+
 import argparse
 import re
 import sys
 from argparse import Namespace
 from collections.abc import Callable, Sequence
 from copy import deepcopy
+from gettext import gettext
 from typing import TYPE_CHECKING, Any, Literal
 
 from objinspect.typing import type_name
 from typing_extensions import Never
 
-from interfacy.appearance.layouts import StandardLayout
-from interfacy.appearance.renderer import SchemaHelpRenderer
-from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
+from interfacy.exceptions import InterfacyExit, UsageError
+from interfacy.help.content import HelpRenderer
+from interfacy.help.presets import StandardLayout
+from interfacy.help.renderer import (
+    SchemaHelpRenderer,
+)
 from interfacy.logger import get_logger
 from interfacy.parameters import BooleanMode
-from interfacy.schema.schema import Argument, ArgumentKind, BooleanBehavior, Command, ValueShape
+from interfacy.schema.schema import (
+    Argument,
+    ArgumentDefault,
+    ArgumentKind,
+    BooleanBehavior,
+    Command,
+    ValueCardinality,
+    ValueShape,
+)
 
 if TYPE_CHECKING:
-    from interfacy.appearance.layout import HelpLayout
+    from interfacy.engine.backend import HelpPipeline
+    from interfacy.help.layout import HelpLayout
     from interfacy.schema.schema import ParserSchema
 
 logger = get_logger(__name__)
@@ -29,19 +44,8 @@ NargsPattern = Literal["?", "*", "+"]
 SUBCOMMANDS_KEY = "_subcommands"
 
 
-class ArgparseParseError(Exception):
+class ArgparseParseError(UsageError):
     """Internal recoverable argparse parse error."""
-
-
-def _uses_template_layout(layout: "HelpLayout | None") -> bool:
-    if layout is None:
-        return False
-
-    use_template_layout = getattr(layout, "_use_template_layout", None)
-    if not callable(use_template_layout):
-        return False
-
-    return bool(use_template_layout())
 
 
 def _callable_type_name(value: Any, *, fallback: str = "value") -> str:
@@ -99,7 +103,11 @@ def _action_to_help_argument(action: argparse.Action) -> Argument:
         value_shape=ValueShape.FLAG,
         flags=tuple(action.option_strings),
         required=False,
-        default=action.default,
+        cardinality=ValueCardinality(0, 0, 0),
+        argument_default=ArgumentDefault.present(
+            action.default,
+            suppress_help_default=True,
+        ),
         help=help_text,
         type=None,
         parser=None,
@@ -125,6 +133,21 @@ def _action_value_shape(action: argparse.Action) -> ValueShape:
     return ValueShape.SINGLE
 
 
+def _action_cardinality(action: argparse.Action) -> ValueCardinality:
+    nargs = action.nargs
+    if nargs == 0:
+        return ValueCardinality(0, 0, 0)
+    if nargs == "?":
+        return ValueCardinality(0, 1, 1)
+    if nargs == "*":
+        return ValueCardinality(0, None, 1)
+    if nargs == "+":
+        return ValueCardinality(1, None, 1)
+    if isinstance(nargs, int):
+        return ValueCardinality(nargs, nargs, nargs)
+    return ValueCardinality(1, 1, 1)
+
+
 class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[private-member-access]
     """
     Subparser action that supports nested destination paths.
@@ -139,7 +162,6 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         required (bool): Whether a subcommand is required.
         help (str | None): Help text for the action.
         metavar (str | None): Metavar for help output.
-        formatter_class (type[argparse.HelpFormatter] | None): Formatter class for children.
         help_layout (Any | None): Layout configuration passed to children.
     """
 
@@ -149,13 +171,13 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         prog: str,
         base_nest_path: list[str],
         nest_separator: str,
-        parser_class: type["ArgumentParser"] | None = None,
+        parser_class: type[ArgumentParser] | None = None,
         dest: str = argparse.SUPPRESS,
         required: bool = False,
         help: str | None = None,  # noqa: A002 - argparse API compatibility
         metavar: str | None = None,
-        formatter_class: type[argparse.HelpFormatter] | None = None,
-        help_layout: "HelpLayout | None" = None,
+        help_layout: HelpLayout | None = None,
+        help_renderer: HelpRenderer | None = None,
         help_flags: Sequence[str] = ("--help",),
     ) -> None:
         super().__init__(
@@ -170,8 +192,8 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
 
         self.base_nest_path_components = base_nest_path
         self.nest_separator = nest_separator
-        self._child_formatter_class = formatter_class or InterfacyHelpFormatter
         self._child_help_layout = help_layout
+        self._child_help_renderer = help_renderer
         self._child_help_flags = tuple(help_flags)
 
     def add_parser(  # type: ignore[override]
@@ -185,7 +207,6 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         description: str | None = None,
         epilog: str | None = None,
         parents: Sequence[argparse.ArgumentParser] = (),
-        formatter_class: type[argparse.HelpFormatter] | None = None,
         prefix_chars: str = "-",
         fromfile_prefix_chars: str | None = None,
         argument_default: Any = None,
@@ -195,7 +216,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         exit_on_error: bool = True,
         nest_dir: str | None = None,
         **kwargs: Any,
-    ) -> "ArgumentParser":
+    ) -> ArgumentParser:
         """
         Creates and returns a new parser for a subcommand with nesting support.
 
@@ -205,10 +226,9 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             aliases (Sequence[str], optional): Alternative names for the subcommand. Defaults to ().
             prog (str | None, optional): Program name. Defaults to None.
             usage (str | None, optional): Usage message. Defaults to None.
-            description (str | None, optional): Description of the subcommand. Defaults to None.
             epilog (str | None, optional): Text following the argument descriptions. Defaults to None.
+            description (str | None, optional): Description shown before the subparser's arguments. Defaults to None.
             parents (Sequence[ArgumentParser], optional): Parent parsers. Defaults to ().
-            formatter_class (Type[HelpFormatter], optional): Help message formatter. Defaults to HelpFormatter.
             prefix_chars (str, optional): Characters that prefix optional arguments. Defaults to "-".
             fromfile_prefix_chars (str | None, optional): Characters prefixing files with arguments. Defaults to None.
             argument_default (Any, optional): Default value for all arguments. Defaults to None.
@@ -223,6 +243,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             NestedArgumentParser: A new parser for the subcommand.
         """
         kwargs.setdefault("help_layout", self._child_help_layout)
+        kwargs.setdefault("help_renderer", self._child_help_renderer)
         nested_components = [*self.base_nest_path_components]
         if nested_components:
             nested_components.extend([SUBCOMMANDS_KEY, nest_dir or name])
@@ -238,7 +259,6 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             description=description,
             epilog=epilog,
             parents=parents,
-            formatter_class=formatter_class or self._child_formatter_class,
             prefix_chars=prefix_chars,
             fromfile_prefix_chars=fromfile_prefix_chars,
             argument_default=argument_default,
@@ -264,7 +284,6 @@ class ArgumentParser(argparse.ArgumentParser):
         description (str | None): Description text shown in help.
         epilog (str | None): Epilog text shown after help.
         parents (list[argparse.ArgumentParser] | None): Parent parsers to inherit args.
-        formatter_class (type[argparse.HelpFormatter]): Help formatter class.
         prefix_chars (str): Prefix characters for options.
         fromfile_prefix_chars (str | None): Prefix for args-from-file.
         argument_default (Any): Default value for all arguments.
@@ -287,7 +306,6 @@ class ArgumentParser(argparse.ArgumentParser):
         description: str | None = None,
         epilog: str | None = None,
         parents: list[argparse.ArgumentParser] | None = None,
-        formatter_class: type[argparse.HelpFormatter] = InterfacyHelpFormatter,
         prefix_chars: str = "-",
         fromfile_prefix_chars: str | None = None,
         argument_default: Any = None,
@@ -299,10 +317,11 @@ class ArgumentParser(argparse.ArgumentParser):
         nest_path: list[str] | None = None,
         exit_on_error: bool = True,
         *,
-        help_layout: "HelpLayout | None" = None,
+        help_layout: HelpLayout | None = None,
         help_position: int | None = None,
         help_flags: Sequence[str] = ("--help",),
         color: bool | None = None,
+        help_renderer: HelpRenderer | None = None,
     ) -> None:
         if parents is None:
             parents = []
@@ -318,7 +337,7 @@ class ArgumentParser(argparse.ArgumentParser):
             "description": description,
             "epilog": epilog,
             "parents": parents,
-            "formatter_class": formatter_class,
+            "formatter_class": argparse.HelpFormatter,
             "prefix_chars": prefix_chars,
             "fromfile_prefix_chars": fromfile_prefix_chars,
             "argument_default": argument_default,
@@ -344,13 +363,18 @@ class ArgumentParser(argparse.ArgumentParser):
             super().__init__(**base_init_kwargs)
 
         self._interfacy_help_layout = (
-            deepcopy(help_layout) if help_layout is not None else StandardLayout()
+            deepcopy(help_layout)
+            if help_layout is not None
+            else StandardLayout(include_metavar_in_flag_display=True)
         )
         if help_position is not None:
             self._interfacy_help_layout.help_position = help_position
 
         self._schema_command: Command | None = None
         self._schema: ParserSchema | None = None
+        self.help_renderer = help_renderer
+        self._help_pipeline: HelpPipeline | None = None
+        self._help_command_path: tuple[str, ...] = ()
         self._interfacy_raise_parse_errors = False
         self.add_help = add_help
         self.help_flags = tuple(help_flags)
@@ -368,34 +392,37 @@ class ArgumentParser(argparse.ArgumentParser):
                 *help_flags_to_add,
                 action="help",
                 default=argparse.SUPPRESS,
-                help=argparse._("Show this help message and exit"),
+                help=gettext("Show this help message and exit"),
             )
 
         self.register("action", "parsers", NestedSubParsersAction)
 
     def format_help(self) -> str:
-        """Render help text using schema-aware layout rendering when available."""
-        layout = self._interfacy_help_layout
-        if layout is None:
-            return super().format_help()
+        """Render all generated and manual help through the structured pipeline."""
+        if self._help_pipeline is not None:
+            return self._help_pipeline.render(self._help_command_path)
 
         renderer = SchemaHelpRenderer(
-            layout,
+            self._interfacy_help_layout,
             help_argument=self._get_help_argument_for_schema(),
-            prefer_short_usage_flags=True,
+            final_renderer=self.help_renderer,
         )
         if self._schema is not None:
             return renderer.render_parser_help(self._schema, self.prog)
-
         if self._schema_command is not None:
             return renderer.render_command_help(self._schema_command, self.prog)
-
-        if not _uses_template_layout(layout):
-            return super().format_help()
-
         return renderer.render_command_help(self._build_implicit_schema_command(), self.prog)
 
-    def set_schema_command(self, command: "Command | None") -> None:
+    def set_help_pipeline(
+        self,
+        pipeline: HelpPipeline,
+        command_path: tuple[str, ...],
+    ) -> None:
+        """Attach the engine-owned structured help pipeline."""
+        self._help_pipeline = pipeline
+        self._help_command_path = command_path
+
+    def set_schema_command(self, command: Command | None) -> None:
         """
         Store the active command schema for schema-aware help rendering.
 
@@ -403,10 +430,8 @@ class ArgumentParser(argparse.ArgumentParser):
             command (Command | None): Command schema tied to this parser.
         """
         self._schema_command = command
-        if command is not None:
-            self._schema = None
 
-    def set_schema(self, schema: "ParserSchema | None") -> None:
+    def set_schema(self, schema: ParserSchema | None) -> None:
         """
         Store the parser schema for schema-aware help rendering.
 
@@ -414,8 +439,6 @@ class ArgumentParser(argparse.ArgumentParser):
             schema (ParserSchema | None): Full parser schema tied to this parser.
         """
         self._schema = schema
-        if schema is not None:
-            self._schema_command = None
 
     def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
         """
@@ -435,9 +458,9 @@ class ArgumentParser(argparse.ArgumentParser):
             {
                 "base_nest_path": self.nest_path_components,
                 "nest_separator": self.nest_separator,
-                "formatter_class": self.formatter_class,
                 "help_layout": self._interfacy_help_layout,
                 "help_flags": self.help_flags,
+                "help_renderer": self.help_renderer,
             }
         )
 
@@ -499,16 +522,15 @@ class ArgumentParser(argparse.ArgumentParser):
 
         return value
 
+    def exit(self, status: int = 0, message: str | None = None) -> Never:
+        if status == 0:
+            raise InterfacyExit()
+
+        raise UsageError((message or "").strip(), usage=self.format_usage())
+
     def error(self, message: str) -> Never:
-        """
-        Override argparse's default error output for missing required subcommands.
-
-        By default, argparse prints only a short usage line on errors. For CLIs built
-        around subcommands, a missing subcommand is much more useful when the full help is displayed.
-        """
-        if self._interfacy_raise_parse_errors:
-            raise ArgparseParseError(message)
-
+        """Raise a structured usage failure without terminating the process."""
+        usage = self.format_usage()
         marker = "the following arguments are required:"
         if marker in message:
             subparser_actions = [
@@ -535,26 +557,17 @@ class ArgumentParser(argparse.ArgumentParser):
                 is_missing_subcommand = any(
                     name in denested_subparser_dests for name in denested_missing
                 ) or bool(brace_choices & subparser_choices)
-
                 if is_missing_subcommand:
-                    self.print_help(sys.stderr)
-                    raise SystemExit(2)
+                    usage = self.format_help()
 
-        super().error(message)
+        error_type = ArgparseParseError if self._interfacy_raise_parse_errors else UsageError
+        raise error_type(message, usage=usage)
 
     def _get_formatter(self) -> argparse.HelpFormatter:  # type: ignore[override]
-        formatter = self.formatter_class(str(self.prog))
+        formatter = super()._get_formatter()
         set_color = getattr(formatter, "_set_color", None)
         if callable(set_color):
             set_color(getattr(self, "color", False))
-
-        set_help_layout = getattr(formatter, "set_help_layout", None)
-        if callable(set_help_layout):
-            try:
-                set_help_layout(self._interfacy_help_layout)
-            except TypeError:
-                logger.debug("Formatter rejected help layout", exc_info=True)
-
         return formatter
 
     def _get_help_argument_for_schema(self) -> Argument | None:
@@ -590,7 +603,6 @@ class ArgumentParser(argparse.ArgumentParser):
             cli_name=command_name,
             aliases=(),
             raw_description=self.description,
-            help_layout=layout,
             parameters=parameters,
             subcommands=subcommands,
             raw_epilog=self.epilog,
@@ -598,7 +610,7 @@ class ArgumentParser(argparse.ArgumentParser):
         )
 
     def _command_name_for_schema(self) -> str:
-        prog = str(self.prog or "command").strip()
+        prog = (self.prog or "command").strip()
         if not prog:
             return "command"
 
@@ -620,9 +632,6 @@ class ArgumentParser(argparse.ArgumentParser):
         self,
         action: argparse._SubParsersAction,  # type: ignore[private-member-access]
     ) -> dict[str, Command] | None:
-        layout = self._interfacy_help_layout
-        if layout is None:
-            return None
 
         parser_names: dict[int, list[str]] = {}
         for name, parser in action.choices.items():
@@ -647,14 +656,17 @@ class ArgumentParser(argparse.ArgumentParser):
                 if isinstance(choice_action.help, str) and choice_action.help != argparse.SUPPRESS
                 else parser.description
             )
+            implicit = parser._build_implicit_schema_command()
             commands[choice_name] = Command(
                 obj=None,
                 canonical_name=choice_name,
                 cli_name=choice_name,
                 aliases=aliases,
                 raw_description=raw_description,
-                help_layout=parser._interfacy_help_layout or layout,
-                is_leaf=not parser._has_subcommands_action(),
+                parameters=implicit.parameters,
+                subcommands=implicit.subcommands,
+                raw_epilog=parser.epilog,
+                is_leaf=not bool(implicit.subcommands),
             )
 
         return commands or None
@@ -707,7 +719,11 @@ class ArgumentParser(argparse.ArgumentParser):
             )
 
         choices = tuple(action.choices) if action.choices is not None else None
-        nargs = action.nargs if isinstance(action.nargs, (str, int)) else None
+        argument_default = (
+            ArgumentDefault.absent()
+            if action.default is argparse.SUPPRESS
+            else ArgumentDefault.present(action.default)
+        )
 
         return Argument(
             name=dest_name,
@@ -716,48 +732,19 @@ class ArgumentParser(argparse.ArgumentParser):
             value_shape=value_shape,
             flags=tuple(action.option_strings) if action.option_strings else (display_name,),
             required=bool(getattr(action, "required", False)),
-            default=action.default,
+            cardinality=_action_cardinality(action),
+            argument_default=argument_default,
             help=action.help if isinstance(action.help, str) else None,
             type=arg_type,
             parser=parser,
             metavar=_action_metavar(action),
-            nargs=nargs,
             boolean_behavior=boolean_behavior,
             choices=choices,
         )
 
-    @classmethod
-    def _parent_copy_memo(
-        cls,
-        container: argparse._ActionsContainer,
-        seen: set[int] | None = None,
-    ) -> dict[int, Any]:
-        seen = set() if seen is None else seen
-        container_id = id(container)
-        if container_id in seen:
-            return {}
-
-        seen.add(container_id)
-        preserved: dict[int, Any] = {}
-        for value in cls._container_defaults(container).values():
-            preserved[id(value)] = value
-
-        for action in cls._iter_container_actions(container):
-            for value in (action.default, action.const, action.type):
-                preserved[id(value)] = value
-
-            if isinstance(action, argparse._SubParsersAction):  # type: ignore[private-member-access]
-                for subparser in action.choices.values():
-                    preserved.update(cls._parent_copy_memo(subparser, seen))
-            else:
-                preserved[id(action.choices)] = action.choices
-
-        return preserved
-
     def _add_container_actions(self, container: argparse._ActionsContainer) -> None:
-        copied_container = deepcopy(container, self._parent_copy_memo(container))
-        self._remap_container_destinations(copied_container)
-        return super()._add_container_actions(copied_container)
+        self._remap_container_destinations(container)
+        return super()._add_container_actions(container)
 
     def _get_positional_kwargs(self, dest: str, **kwargs: Any) -> dict[str, Any]:
         logger.debug("Getting positional kwargs for dest='%s'", dest)
@@ -779,10 +766,7 @@ class ArgumentParser(argparse.ArgumentParser):
         root = Namespace()
 
         for key, value in vars(namespace).items():
-            original_dest = self._original_destinations.get(key)
-            components = (
-                [*self.nest_path_components, original_dest] if original_dest is not None else [key]
-            )
+            components = key.split(self.nest_separator)
             current = root
 
             # Navigate through component hierarchy

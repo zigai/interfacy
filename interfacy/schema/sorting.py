@@ -5,6 +5,48 @@ from typing import Any, Literal, TypeVar
 
 from interfacy.exceptions import ConfigurationError
 
+HelpOptionSortRule = Literal[
+    "required_first",
+    "short_first",
+    "value_first",
+    "bool_last",
+    "no_default_first",
+    "choices_first",
+    "name_length",
+    "alias_count",
+    "alphabetical",
+]
+HelpSubcommandSortRule = Literal[
+    "insert_order",
+    "alphabetical",
+    "name_length_asc",
+    "name_length_desc",
+]
+
+HELP_OPTION_SORT_RULE_VALUES: tuple[HelpOptionSortRule, ...] = (
+    "required_first",
+    "short_first",
+    "value_first",
+    "bool_last",
+    "no_default_first",
+    "choices_first",
+    "name_length",
+    "alias_count",
+    "alphabetical",
+)
+DEFAULT_HELP_OPTION_SORT_RULES: tuple[HelpOptionSortRule, ...] = (
+    "required_first",
+    "short_first",
+    "bool_last",
+    "alphabetical",
+)
+HELP_SUBCOMMAND_SORT_RULE_VALUES: tuple[HelpSubcommandSortRule, ...] = (
+    "insert_order",
+    "alphabetical",
+    "name_length_asc",
+    "name_length_desc",
+)
+DEFAULT_HELP_SUBCOMMAND_SORT_RULES: tuple[HelpSubcommandSortRule, ...] = ("insert_order",)
 T = TypeVar("T", bound=str)
 
 
@@ -57,38 +99,6 @@ def resolve_sort_rules(
     return result
 
 
-HelpOptionSortRule = Literal[
-    "required_first",
-    "short_first",
-    "value_first",
-    "bool_last",
-    "no_default_first",
-    "choices_first",
-    "name_length",
-    "alias_count",
-    "alphabetical",
-]
-
-HELP_OPTION_SORT_RULE_VALUES: tuple[HelpOptionSortRule, ...] = (
-    "required_first",
-    "short_first",
-    "value_first",
-    "bool_last",
-    "no_default_first",
-    "choices_first",
-    "name_length",
-    "alias_count",
-    "alphabetical",
-)
-
-DEFAULT_HELP_OPTION_SORT_RULES: tuple[HelpOptionSortRule, ...] = (
-    "required_first",
-    "short_first",
-    "bool_last",
-    "alphabetical",
-)
-
-
 def resolve_help_option_sort_rules(
     value: Any,
     *,
@@ -109,23 +119,6 @@ def resolve_help_option_sort_rules(
 def default_help_option_sort_rules() -> list[HelpOptionSortRule]:
     """Return a mutable copy of the global default help option sort rules."""
     return list(DEFAULT_HELP_OPTION_SORT_RULES)
-
-
-HelpSubcommandSortRule = Literal[
-    "insert_order",
-    "alphabetical",
-    "name_length_asc",
-    "name_length_desc",
-]
-
-HELP_SUBCOMMAND_SORT_RULE_VALUES: tuple[HelpSubcommandSortRule, ...] = (
-    "insert_order",
-    "alphabetical",
-    "name_length_asc",
-    "name_length_desc",
-)
-
-DEFAULT_HELP_SUBCOMMAND_SORT_RULES: tuple[HelpSubcommandSortRule, ...] = ("insert_order",)
 
 
 def resolve_help_subcommand_sort_rules(

@@ -6,12 +6,31 @@ from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
-class TokenConsumption:
-    """How many CLI values are needed to build one Python value."""
+class ValueCardinality:
+    """Semantic number and grouping of CLI values consumed by an argument."""
 
     minimum_values: int
     maximum_values: int | None
     group_size: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.minimum_values, bool) or not isinstance(self.minimum_values, int):
+            raise TypeError("minimum_values must be an integer")
+        if self.minimum_values < 0:
+            raise ValueError("minimum_values must be nonnegative")
+        if self.maximum_values is not None:
+            if isinstance(self.maximum_values, bool) or not isinstance(self.maximum_values, int):
+                raise TypeError("maximum_values must be an integer or None")
+            if self.maximum_values < self.minimum_values:
+                raise ValueError("maximum_values must not be less than minimum_values")
+        if isinstance(self.group_size, bool) or not isinstance(self.group_size, int):
+            raise TypeError("group_size must be an integer")
+        if self.maximum_values == 0:
+            if self.group_size != 0:
+                raise ValueError("zero-value cardinality must have a zero group_size")
+            return
+        if self.group_size <= 0:
+            raise ValueError("value-taking cardinality must have a positive group_size")
 
     @property
     def is_fixed(self) -> bool:
@@ -21,16 +40,16 @@ class TokenConsumption:
 class ArgumentValue(Protocol):
     """Internal conversion plan for an argument value."""
 
-    def token_consumption(self, *, required: bool) -> TokenConsumption: ...
+    def token_consumption(self, *, required: bool) -> ValueCardinality: ...
 
     def convert(self, raw: Any, *, type_parser: Any) -> Any: ...
 
 
 @dataclass(frozen=True)
 class UntypedValue:
-    def token_consumption(self, *, required: bool) -> TokenConsumption:
+    def token_consumption(self, *, required: bool) -> ValueCardinality:
         minimum = 1 if required else 0
-        return TokenConsumption(minimum, 1, 1)
+        return ValueCardinality(minimum, 1, 1)
 
     def convert(self, raw: Any, *, type_parser: Any) -> Any:  # noqa: ARG002
         return raw
@@ -38,8 +57,8 @@ class UntypedValue:
 
 @dataclass(frozen=True)
 class FlagValue:
-    def token_consumption(self, *, required: bool) -> TokenConsumption:  # noqa: ARG002
-        return TokenConsumption(0, 0, 0)
+    def token_consumption(self, *, required: bool) -> ValueCardinality:  # noqa: ARG002
+        return ValueCardinality(0, 0, 0)
 
     def convert(self, raw: Any, *, type_parser: Any) -> Any:  # noqa: ARG002
         return raw
@@ -49,9 +68,9 @@ class FlagValue:
 class ScalarValue:
     annotation: Any
 
-    def token_consumption(self, *, required: bool) -> TokenConsumption:
+    def token_consumption(self, *, required: bool) -> ValueCardinality:
         minimum = 1 if required else 0
-        return TokenConsumption(minimum, 1, 1)
+        return ValueCardinality(minimum, 1, 1)
 
     def convert(self, raw: Any, *, type_parser: Any) -> Any:
         if raw is None:
@@ -66,10 +85,10 @@ class ScalarValue:
 class RepeatedValue:
     item: ArgumentValue
 
-    def token_consumption(self, *, required: bool) -> TokenConsumption:
+    def token_consumption(self, *, required: bool) -> ValueCardinality:
         item_consumption = self.item.token_consumption(required=True)
         minimum = item_consumption.group_size if required else 0
-        return TokenConsumption(minimum, None, item_consumption.group_size)
+        return ValueCardinality(minimum, None, item_consumption.group_size)
 
     def convert(self, raw: Any, *, type_parser: Any) -> Any:
         if raw is None:
@@ -95,10 +114,10 @@ class RepeatedValue:
 class FixedTupleValue:
     items: tuple[ArgumentValue, ...]
 
-    def token_consumption(self, *, required: bool) -> TokenConsumption:
+    def token_consumption(self, *, required: bool) -> ValueCardinality:
         total = sum(item.token_consumption(required=True).group_size for item in self.items)
         minimum = total if required else 0
-        return TokenConsumption(minimum, total, total)
+        return ValueCardinality(minimum, total, total)
 
     def convert(self, raw: Any, *, type_parser: Any) -> tuple[Any, ...]:
         values = _as_sequence(raw)
@@ -130,12 +149,12 @@ class ObjectValue:
     model_type: type[Any]
     fields: tuple[ObjectFieldValue, ...]
 
-    def token_consumption(self, *, required: bool) -> TokenConsumption:
+    def token_consumption(self, *, required: bool) -> ValueCardinality:
         total = sum(
             field.value.token_consumption(required=True).group_size for field in self.fields
         )
         minimum = total if required else 0
-        return TokenConsumption(minimum, total, total)
+        return ValueCardinality(minimum, total, total)
 
     def convert(self, raw: Any, *, type_parser: Any) -> Any:
         values = _as_sequence(raw)
@@ -181,24 +200,41 @@ def convert_with_value_plan(
     return value_plan.convert(raw, type_parser=type_parser)
 
 
+def _normalize_argument_value(
+    argument: Any,
+    bucket: dict[str, Any],
+    *,
+    type_parser: Any,
+) -> None:
+    if argument.name not in bucket or bucket[argument.name] is None:
+        return
+
+    value_plan = argument.value_plan
+    if isinstance(value_plan, RepeatedValue):
+        item_cardinality = value_plan.item.token_consumption(required=True)
+        if item_cardinality.group_size == 1:
+            bucket[argument.name] = list(_as_sequence(bucket[argument.name]))
+            return
+    if not plan_requires_post_conversion(value_plan, required=argument.required):
+        return
+
+    bucket[argument.name] = convert_with_value_plan(
+        value_plan,
+        bucket[argument.name],
+        type_parser=type_parser,
+    )
+
+
 def normalize_argument_values(command: Any, bucket: dict[str, Any], *, type_parser: Any) -> None:
     for argument in (*command.initializer, *command.parameters):
-        if argument.name not in bucket:
-            continue
-
-        if not plan_requires_post_conversion(argument.value_plan, required=argument.required):
-            continue
-
-        bucket[argument.name] = convert_with_value_plan(
-            argument.value_plan,
-            bucket[argument.name],
-            type_parser=type_parser,
-        )
+        _normalize_argument_value(argument, bucket, type_parser=type_parser)
 
     if not command.subcommands:
         return
 
     for sub_cmd in command.subcommands.values():
-        sub_bucket = bucket.get(sub_cmd.cli_name)
+        sub_bucket = bucket.get(sub_cmd.canonical_name)
+        if not isinstance(sub_bucket, dict):
+            sub_bucket = bucket.get(sub_cmd.cli_name)
         if isinstance(sub_bucket, dict):
             normalize_argument_values(sub_cmd, sub_bucket, type_parser=type_parser)

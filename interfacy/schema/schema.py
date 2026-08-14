@@ -4,20 +4,74 @@ import builtins
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from functools import cached_property
 from typing import Any, Literal
 
 from objinspect import Class, Function, Method
 
-from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
-from interfacy.appearance.layout import HelpLayout
 from interfacy.executable_flag import ExecutableFlag
 from interfacy.parameters import BooleanMode, Param
 from interfacy.pipe import PipeTargets
-from interfacy.schema.value_plan import ArgumentValue
+from interfacy.schema.sorting import HelpOptionSortRule, HelpSubcommandSortRule
+from interfacy.schema.value_plan import ArgumentValue, ValueCardinality
 
 CommandType = Literal["function", "method", "class", "group", "instance"]
 MODEL_DEFAULT_UNSET: Any = object()
+
+
+@dataclass(frozen=True)
+class ArgumentDefault:
+    """Effective argument default and its parse and help-display policies."""
+
+    is_set: bool
+    value: Any
+    suppress_parse_default: bool
+    suppress_help_default: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.is_set, bool):
+            raise TypeError("is_set must be a boolean")
+        if not isinstance(self.suppress_parse_default, bool):
+            raise TypeError("suppress_parse_default must be a boolean")
+        if not isinstance(self.suppress_help_default, bool):
+            raise TypeError("suppress_help_default must be a boolean")
+        if self.is_set:
+            return
+        if self.value is not None:
+            raise ValueError("an absent argument default cannot carry a value")
+        if not self.suppress_parse_default or not self.suppress_help_default:
+            raise ValueError("an absent argument default must be suppressed")
+
+    @classmethod
+    def absent(cls) -> ArgumentDefault:
+        return cls(
+            is_set=False,
+            value=None,
+            suppress_parse_default=True,
+            suppress_help_default=True,
+        )
+
+    @classmethod
+    def present(
+        cls,
+        value: Any,
+        *,
+        suppress_parse_default: bool = False,
+        suppress_help_default: bool = False,
+    ) -> ArgumentDefault:
+        return cls(
+            is_set=True,
+            value=value,
+            suppress_parse_default=suppress_parse_default,
+            suppress_help_default=suppress_help_default,
+        )
+
+    @property
+    def applies_during_parse(self) -> bool:
+        return self.is_set and not self.suppress_parse_default
+
+    @property
+    def appears_in_help(self) -> bool:
+        return self.is_set and not self.suppress_help_default
 
 
 class ArgumentKind(str, Enum):
@@ -38,16 +92,7 @@ class ValueShape(str, Enum):
 
 @dataclass
 class BooleanBehavior:
-    """
-    Metadata for boolean flags and their defaults.
-
-    Attributes:
-        positive_flags (tuple[str, ...]): Flags that set the value to true.
-        negative_flags (tuple[str, ...]): Flags that set the value to false.
-        default (bool | str | None): Effective default value for the flag.
-            Can be argparse.SUPPRESS (a str sentinel) to suppress the default.
-        mode (BooleanMode): Whether the flag is dual-form or one-way.
-    """
+    """Metadata for boolean flag spellings and mode."""
 
     positive_flags: tuple[str, ...]
     negative_flags: tuple[str, ...]
@@ -57,35 +102,7 @@ class BooleanBehavior:
 
 @dataclass
 class Argument:
-    """
-    Schema entry describing a single CLI argument.
-
-    Attributes:
-        name (str): Canonical parameter name.
-        display_name (str): CLI-facing name or path.
-        kind (ArgumentKind): Whether the argument is positional or optional.
-        value_shape (ValueShape): Expected value shape for parsing.
-        flags (tuple[str, ...]): CLI flags or positional name display.
-        required (bool): Whether the argument must be provided.
-        default (Any): Default value or argparse sentinel.
-        help (str | None): Help text for display.
-        type (type[Any] | None): Parsed element type when applicable.
-        parser (Callable[[str], Any] | None): Parser for converting raw strings.
-        metavar (str | None): Custom metavar for help display.
-        nargs (str | int | None): Argparse nargs specifier.
-        boolean_behavior (BooleanBehavior | None): Boolean flag behavior details.
-        choices (Sequence[Any] | None): Allowed values, if any.
-        accepts_stdin (bool): Whether stdin can supply this value.
-        pipe_required (bool): Whether stdin is required for this value.
-        tuple_element_parsers (tuple[Callable[[str], Any], ...] | None): Per-element parsers.
-        is_expanded_from (str | None): Root model field name if expanded.
-        expansion_path (tuple[str, ...]): Nested path for expanded model fields.
-        original_model_type (type | None): Model type expanded into flags.
-        parent_is_optional (bool): Whether an ancestor model is optional.
-        model_default (Any): Default model instance or sentinel.
-        is_help_action (bool): Whether this argument is the parser's built-in help action.
-        value_plan (ArgumentValue | None): Internal conversion plan for nested values.
-    """
+    """Backend-neutral schema entry describing a single CLI argument."""
 
     name: str
     display_name: str
@@ -93,12 +110,12 @@ class Argument:
     value_shape: ValueShape
     flags: tuple[str, ...]
     required: bool
-    default: Any
+    cardinality: ValueCardinality
+    argument_default: ArgumentDefault
     help: str | None
     type: type[Any] | None
     parser: Callable[[str], Any] | None
     metavar: str | None = None
-    nargs: str | int | None = None
     boolean_behavior: BooleanBehavior | None = None
     choices: Sequence[Any] | None = None
     accepts_stdin: bool = False
@@ -126,7 +143,6 @@ class Command:
         aliases (tuple[str, ...]): Alternative CLI names.
         raw_description (str | None): Raw docstring description.
         help_group (str | None): Optional help-only grouping label for command listings.
-        help_layout (HelpLayout | None): Help layout used for formatting.
         pipe_targets (PipeTargets | None): Pipe target configuration for stdin.
         parameters (list[Argument]): Argument specs for command parameters.
         initializer (list[Argument]): Argument specs for class initialization.
@@ -147,7 +163,6 @@ class Command:
     aliases: tuple[str, ...]
     raw_description: str | None
     help_group: str | None = None
-    help_layout: HelpLayout | None = None
     pipe_targets: PipeTargets | None = None
     parameters: list[Argument] = field(default_factory=list)
     initializer: list[Argument] = field(default_factory=list)
@@ -163,11 +178,12 @@ class Command:
     include_protected_methods: bool | None = None
     include_private_methods: bool | None = None
     include_staticmethods: bool | None = None
+    group_source: Any | None = None
     include_classmethods: bool | None = None
     method_skips: list[str] | None = None
     expand_model_params: bool | None = None
     model_expansion_max_depth: int | None = None
-    abbreviation_scope: Literal["top_level_options", "all_options"] | None = None
+    abbreviation_scope: str | None = None
     help_option_sort: list[HelpOptionSortRule] | None = None
     help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
     help_option_sort_effective: list[HelpOptionSortRule] | None = None
@@ -175,19 +191,12 @@ class Command:
     metadata: dict[str, Any] = field(default_factory=dict)
     parameter_settings: dict[str, Param] = field(default_factory=dict)
 
-    @cached_property
+    @property
     def description(self) -> str | None:
-        """Return the formatted description for help output."""
-        if self.raw_description is None:
-            return None
-        if self.help_layout is None:
-            return self.raw_description
+        return self.raw_description
 
-        return self.help_layout.format_description(self.raw_description)
-
-    @cached_property
+    @property
     def epilog(self) -> str | None:
-        """Return the formatted epilog for help output."""
         return self.raw_epilog
 
 
@@ -204,10 +213,10 @@ class ParserSchema:
         allow_args_from_file (bool): Whether args can be read from files.
         pipe_targets (PipeTargets | None): Default pipe target configuration.
         theme (HelpLayout): Help layout for formatting.
-        commands_help (str | None): Pre-rendered command listing help.
         metadata (dict[str, Any]): Additional parser metadata.
         executable_flags (list[ExecutableFlag]): Parser-root executable flags.
         help_option_sort_effective (list[HelpOptionSortRule] | None): Effective root option sort.
+        help_subcommand_sort_effective (list[HelpSubcommandSortRule] | None): Effective root subcommand sort.
         help_flags (tuple[str, ...]): Help flag aliases for synthetic help rows.
     """
 
@@ -217,28 +226,19 @@ class ParserSchema:
     command_key: str | None
     allow_args_from_file: bool
     pipe_targets: PipeTargets | None
-    theme: HelpLayout
-    commands_help: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     executable_flags: list[ExecutableFlag] = field(default_factory=list)
     help_option_sort_effective: list[HelpOptionSortRule] | None = None
+    help_subcommand_sort_effective: list[HelpSubcommandSortRule] | None = None
     help_flags: tuple[str, ...] = ("--help",)
 
-    @cached_property
+    @property
     def description(self) -> str | None:
-        """Return the formatted parser description."""
-        if self.raw_description is None:
-            return None
+        return self.raw_description
 
-        return self.theme.format_description(self.raw_description)
-
-    @cached_property
+    @property
     def epilog(self) -> str | None:
-        """Return the formatted parser epilog."""
-        if self.raw_epilog is None:
-            return None
-
-        return self.theme.format_description(self.raw_epilog)
+        return self.raw_epilog
 
     @property
     def is_multi_command(self) -> bool:
@@ -260,9 +260,61 @@ class ParserSchema:
         return tuple(self.commands.keys())
 
 
+def finalize_schema(schema: ParserSchema) -> ParserSchema:
+    """Validate a transformed schema at the boundary before backend compilation."""
+    if not isinstance(schema, ParserSchema):
+        raise TypeError("schema transformations must return a ParserSchema")
+
+    _validate_command_mapping(schema.commands, path=(), active_command_ids=set(), root=True)
+    return schema
+
+
+def _validate_command_mapping(
+    commands: dict[str, Command],
+    *,
+    path: tuple[str, ...],
+    active_command_ids: set[int],
+    root: bool,
+) -> None:
+    if not isinstance(commands, dict):
+        raise TypeError("schema command collections must be dictionaries")
+
+    for key, command in commands.items():
+        if not isinstance(key, str):
+            raise TypeError("schema command keys must be strings")
+        if not isinstance(command, Command):
+            command_path = " ".join((*path, key))
+            raise TypeError(f"schema command {command_path!r} must be a Command")
+        expected_key = command.canonical_name if root else command.cli_name
+        if key != expected_key:
+            command_path = " ".join((*path, key))
+            raise ValueError(
+                f"schema command key {command_path!r} does not match expected name {expected_key!r}"
+            )
+        if not command.cli_name:
+            command_path = " ".join((*path, key))
+            raise ValueError(f"schema command {command_path!r} must have a CLI name")
+        if command.subcommands is None:
+            continue
+
+        command_id = id(command)
+        if command_id in active_command_ids:
+            command_path = " ".join((*path, key))
+            raise ValueError(f"schema command {command_path!r} contains a cycle")
+        active_command_ids.add(command_id)
+        _validate_command_mapping(
+            command.subcommands,
+            path=(*path, key),
+            active_command_ids=active_command_ids,
+            root=False,
+        )
+        active_command_ids.remove(command_id)
+
+
 __all__ = [
     "MODEL_DEFAULT_UNSET",
     "Argument",
+    "ArgumentDefault",
     "ArgumentKind",
     "BooleanBehavior",
     "BooleanMode",
@@ -270,5 +322,7 @@ __all__ = [
     "CommandType",
     "ExecutableFlag",
     "ParserSchema",
+    "ValueCardinality",
     "ValueShape",
+    "finalize_schema",
 ]

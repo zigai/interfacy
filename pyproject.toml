@@ -84,7 +84,7 @@ Issues = "https://github.com/zigai/interfacy/issues"
 Homepage = "https://github.com/zigai/interfacy"
 
 [build-system]
-requires = ["uv_build>=0.11.25,<0.12.0"]
+requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -125,7 +125,7 @@ strict-callable-subtyping = false
 spec-compliant-overloads = false
 
 [tool.codespell]
-skip = '.git,uv.lock'
+skip = '.git,./docs/_build/**,uv.lock'
 
 [tool.rattle]
 root = true
@@ -164,9 +164,6 @@ excluded_class_name_patterns = [
     "*Schema",
     "*Settings",
     "*Table",
-    "Argparser",
-    "ClickParser",
-    "InterfacyParser",
 ]
 
 [tool.ruff]
@@ -243,10 +240,10 @@ exclude = ["build"]
 "docs/_ext/darker_modern_pygments.py" = ["RUF012"]
 "interfacy/argparse_backend/argument_parser.py" = ["C901"]
 "interfacy/argparse_backend/help_formatter.py" = ["C901"]
-"interfacy/appearance/layout.py" = ["RUF009"]
-"interfacy/appearance/colors.py" = ["RUF009"]
-"interfacy/appearance/layouts.py" = ["RUF009"]
-"tests/conftest.py" = ["UP006", "UP007", "UP035", "UP045"]
+"interfacy/help/layout.py" = ["RUF009"]
+"interfacy/help/colors.py" = ["RUF009"]
+"interfacy/help/presets.py" = ["RUF009"]
+"tests/fixtures/commands.py" = ["UP006", "UP007", "UP035", "UP045"]
 "**/tests/**/*.py" = [
     "S104",
     "S105",

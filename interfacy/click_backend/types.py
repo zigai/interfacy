@@ -1,29 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from os import get_terminal_size
 from typing import Any
 
 import click
-
-
-class ClickHelpFormatter(click.HelpFormatter):
-    """Set Click formatter width from the current terminal when available."""
-
-    def __init__(
-        self,
-        indent_increment: int = 2,
-        width: int | None = None,
-        max_width: int | None = None,  # noqa: ARG002 - click formatter signature
-    ) -> None:
-        try:
-            terminal_width = get_terminal_size()[0]
-        except OSError:
-            terminal_width = 80
-        super().__init__(indent_increment, width, terminal_width)
-
-
-click.Context.formatter_class = ClickHelpFormatter
 
 
 class ClickFuncParamType(click.types.FuncParamType):
@@ -85,4 +65,4 @@ class ChoiceParamType(click.ParamType):
         return converted
 
 
-__all__ = ["ChoiceParamType", "ClickFuncParamType", "ClickHelpFormatter"]
+__all__ = ["ChoiceParamType", "ClickFuncParamType"]

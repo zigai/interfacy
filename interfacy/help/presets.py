@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING, Any, Literal
 from objinspect import Parameter
 from stdl.st import TextStyle, ansi_len, colored, with_style
 
-from interfacy.appearance.colors import ClapColors, NoColor
-from interfacy.appearance.layout import HelpLayout, InterfacyColors, _HelpRow
-from interfacy.appearance.type_help import format_type_for_help
-from interfacy.util import format_default_for_help, strip_ansi
+from interfacy.help.colors import ClapColors, NoColor
+from interfacy.help.formatting import format_default_for_help, format_type_for_help
+from interfacy.help.layout import HelpLayout
+from interfacy.help.style import HelpStyle
+from interfacy.help.terminal import strip_ansi
+from interfacy.schema.typing import get_param_choices
 
 if TYPE_CHECKING:
     from interfacy.schema.schema import Argument
@@ -41,56 +43,95 @@ class InterfacyLayout(HelpLayout):
 
         return values
 
-    def _transform_help_row_values(
-        self,
-        values: dict[str, str],
-        row: _HelpRow,
-    ) -> dict[str, str]:
-        values = super()._transform_help_row_values(values, row)
-        return self._apply_interfacy_columns(values)
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        return self._apply_interfacy_columns(super()._build_values(param, flags))
 
-    def _build_extra_from_help_row(self, row: _HelpRow) -> str:
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        return self._apply_interfacy_columns(super()._build_values_from_argument(arg))
+
+    def _build_extra(self, param: Parameter) -> str:
         parts: list[str] = []
         default_added = False
-        if row.typed and not row.is_boolean:
-            if row.choices:
+
+        if param.is_typed and not self._param_is_bool(param):
+            if choices := get_param_choices(param, for_display=True):
                 param_info = self.prefix_choices + ", ".join(
-                    with_style(choice, self.style.string) for choice in row.choices
+                    [with_style(str(i), self.style.string) for i in choices]
                 )
-                if not row.required and row.has_default:
-                    param_info += (
-                        ", "
-                        + self.prefix_default
-                        + with_style(
-                            format_default_for_help(row.default_value),
-                            self.style.default,
-                        )
+                if not param.is_required:
+                    default_text = self.prefix_default + with_style(
+                        format_default_for_help(param.default), self.style.default
                     )
+                    param_info += ", " + default_text
                     default_added = True
                 parts.append(param_info)
             else:
-                if not row.required and row.has_default:
+                if param.is_optional and param.default is not None:
+                    parts.append(
+                        self.prefix_default
+                        + with_style(format_default_for_help(param.default), self.style.default)
+                    )
+                    default_added = True
+                type_str = format_type_for_help(param.type, self.style.type, theme=self.style)
+                parts.append(self.prefix_type + type_str)
+
+        if (
+            param.is_optional
+            and param.default is not None
+            and not self._param_is_bool(param)
+            and not default_added
+        ):
+            parts.append(
+                self.prefix_default
+                + with_style(format_default_for_help(param.default), self.style.default)
+            )
+
+        if not parts:
+            return ""
+
+        return f"[{', '.join(parts)}]"
+
+    def _build_extra_from_argument(self, arg: "Argument") -> str:
+        parts: list[str] = []
+        default_added = False
+        is_typed = arg.type is not None
+        is_bool = self._arg_is_bool(arg)
+
+        if is_typed and not is_bool:
+            if arg.choices:
+                param_info = self.prefix_choices + ", ".join(
+                    [
+                        with_style(self._format_argument_choice_for_help(arg, i), self.style.string)
+                        for i in arg.choices
+                    ]
+                )
+                if not arg.required and self._arg_has_default(arg):
+                    default_text = self.prefix_default + with_style(
+                        format_default_for_help(arg.argument_default.value), self.style.default
+                    )
+                    param_info += ", " + default_text
+                    default_added = True
+                parts.append(param_info)
+            else:
+                if not arg.required and self._arg_has_default(arg):
                     parts.append(
                         self.prefix_default
                         + with_style(
-                            format_default_for_help(row.default_value),
+                            format_default_for_help(arg.argument_default.value),
                             self.style.default,
                         )
                     )
                     default_added = True
                 type_str = format_type_for_help(
-                    row.help_type,
-                    self.style.type,
-                    theme=self.style,
+                    self._type_for_argument_help(arg), self.style.type, theme=self.style
                 )
                 parts.append(self.prefix_type + type_str)
 
-        if not row.required and row.has_default and not row.is_boolean and not default_added:
+        if not arg.required and self._arg_has_default(arg) and not is_bool and not default_added:
             parts.append(
                 self.prefix_default
                 + with_style(
-                    format_default_for_help(row.default_value),
-                    self.style.default,
+                    format_default_for_help(arg.argument_default.value), self.style.default
                 )
             )
 
@@ -101,8 +142,8 @@ class InterfacyLayout(HelpLayout):
 
 
 @dataclass(kw_only=True)
-class _AlignedLayoutBase(InterfacyLayout):
-    """Shared aligned-column policy for the public aligned presets."""
+class Aligned(InterfacyLayout):
+    """Layout with aligned default column and compact flag spacing."""
 
     short_flag_width: int = 6
     long_flag_width: int = 18
@@ -112,6 +153,10 @@ class _AlignedLayoutBase(InterfacyLayout):
     suppress_empty_default_brackets_for_help: bool = True
     keep_empty_default_slot_for_help: bool = True
 
+    format_option: str | None = (
+        "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
+    )
+    format_positional: str | None = "{flag_col}{description}{choices_block}"
     include_metavar_in_flag_display: bool = False
     layout_mode: Literal["auto", "adaptive", "template"] = "template"
 
@@ -177,38 +222,116 @@ class _AlignedLayoutBase(InterfacyLayout):
 
         return values
 
-    def _transform_help_row_values(
-        self,
-        values: dict[str, str],
-        row: _HelpRow,
-    ) -> dict[str, str]:
-        values = super()._transform_help_row_values(values, row)
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        values = super()._build_values(param, flags)
         values = self._ensure_default_slot_separator_for_overflow(values)
         return self._suppress_positive_false_boolean_default(
-            values,
-            is_boolean=row.is_boolean,
+            values, is_boolean=self._param_is_bool(param)
+        )
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        values = super()._build_values_from_argument(arg)
+        values = self._ensure_default_slot_separator_for_overflow(values)
+        return self._suppress_positive_false_boolean_default(
+            values, is_boolean=self._arg_is_bool(arg)
         )
 
 
 @dataclass(kw_only=True)
-class Aligned(_AlignedLayoutBase):
-    """Layout with aligned default column and compact flag spacing."""
-
-    format_option: str | None = (
-        "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
-    )
-    format_positional: str | None = "{flag_col}{description}{choices_block}"
-
-
-@dataclass(kw_only=True)
-class AlignedTyped(_AlignedLayoutBase):
+class AlignedTyped(InterfacyLayout):
     """Aligned layout that includes explicit type display."""
+
+    short_flag_width: int = 6
+    long_flag_width: int = 18
+    pos_flag_width: int = 24
+    default_field_width_max: int | None = 12
+    default_overflow_mode: Literal["inline", "newline"] = "inline"
+    suppress_empty_default_brackets_for_help: bool = True
+    keep_empty_default_slot_for_help: bool = True
 
     format_option: str | None = (
         "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]"
         "{choices_block}"
     )
     format_positional: str | None = "{flag_col}{description} [type: {type}]{choices_block}"
+    include_metavar_in_flag_display: bool = False
+    layout_mode: Literal["auto", "adaptive", "template"] = "template"
+
+    def get_commands_ljust(self, max_display_len: int) -> int:
+        term_cap = max(self.min_ljust, self._terminal_width() // 2)
+        base = min(max(self.min_ljust, max_display_len + 3), term_cap)
+        default_idx = self._get_template_token_index("default_padded")
+        if default_idx is not None:
+            return max(base, default_idx + 1)
+
+        prefix_len = self._get_commands_prefix_len()
+        if prefix_len is not None:
+            return max(base, prefix_len + 1)
+
+        return super().get_commands_ljust(max_display_len)
+
+    def keep_help_default_slot_for_arguments(self, arguments: list["Argument"]) -> bool:
+        non_help_args = [arg for arg in arguments if arg.name != "help"]
+        if not non_help_args:
+            return False
+
+        described = sum(1 for arg in non_help_args if self._has_user_facing_help(arg.help))
+        metadata_only = len(non_help_args) - described
+        return described >= metadata_only
+
+    @staticmethod
+    def _has_user_facing_help(text: str | None) -> bool:
+        if text is None:
+            return False
+
+        normalized = text.strip()
+        if not normalized:
+            return False
+
+        return normalized.lower() != "none"
+
+    def _suppress_positive_false_boolean_default(
+        self,
+        values: dict[str, str],
+        *,
+        is_boolean: bool,
+    ) -> dict[str, str]:
+        if not is_boolean:
+            return values
+
+        default_text = strip_ansi(values.get("default", "")).strip().lower()
+        long_flag = values.get("flag_long", "")
+        is_positive_boolean_flag = long_flag.startswith("--") and not long_flag.startswith("--no-")
+
+        if default_text == "false" and is_positive_boolean_flag:
+            values["default"] = ""
+            values["default_padded"] = " " * self.default_field_width
+
+        return values
+
+    def _ensure_default_slot_separator_for_overflow(self, values: dict[str, str]) -> dict[str, str]:
+        flag_long = values.get("flag_long", "")
+        if not flag_long:
+            return values
+
+        if ansi_len(strip_ansi(flag_long)) > self.long_flag_width:
+            values["flag_long_col"] = values.get("flag_long_col", "") + " "
+
+        return values
+
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        values = super()._build_values(param, flags)
+        values = self._ensure_default_slot_separator_for_overflow(values)
+        return self._suppress_positive_false_boolean_default(
+            values, is_boolean=self._param_is_bool(param)
+        )
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        values = super()._build_values_from_argument(arg)
+        values = self._ensure_default_slot_separator_for_overflow(values)
+        return self._suppress_positive_false_boolean_default(
+            values, is_boolean=self._arg_is_bool(arg)
+        )
 
 
 @dataclass(kw_only=True)
@@ -257,20 +380,20 @@ class Modern(InterfacyLayout):
 
         return values
 
-    def _transform_help_row_values(
-        self,
-        values: dict[str, str],
-        row: _HelpRow,
-    ) -> dict[str, str]:
-        values = super()._transform_help_row_values(values, row)
-        return self._with_details(values, row.description)
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        values = super()._build_values(param, flags)
+        return self._with_details(values, self._format_doc_text(param.description or ""))
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        values = super()._build_values_from_argument(arg)
+        return self._with_details(values, self._format_doc_text(arg.help or ""))
 
 
 @dataclass(kw_only=True)
 class ClapLayout(HelpLayout):
     """Layout that mimics clap's default help output."""
 
-    style: InterfacyColors = field(default_factory=ClapColors)
+    style: HelpStyle = field(default_factory=ClapColors)
 
     usage_prefix: str | None = "Usage: "
     section_title_map: dict[str, str] | None = field(
@@ -283,11 +406,6 @@ class ClapLayout(HelpLayout):
             "commands:": "Commands",
         }
     )
-    section_heading_style: TextStyle | None = TextStyle(color="light_green", style="bold")
-    usage_style: TextStyle | None = TextStyle(color="light_green", style="bold")
-    usage_text_style: TextStyle | None = TextStyle(color="cyan", style="bold")
-    placeholder_style: TextStyle = TextStyle(color="cyan", style="bold")
-    command_name_style: TextStyle = TextStyle(color="cyan", style="bold")
     help_option_description: str = "Print help"
     compact_options_usage: bool = True
     parser_command_usage_suffix: str = "[OPTIONS] [COMMAND]"
@@ -376,13 +494,14 @@ class ClapLayout(HelpLayout):
 
         return " " + " ".join(parts)
 
-    def _build_extra_from_help_row(self, row: _HelpRow) -> str:
+    def _build_extra(self, param: Parameter) -> str:
+        choices = get_param_choices(param, for_display=True) if param.is_typed else None
         return self._build_clap_extra(
-            is_bool=row.is_boolean,
-            is_required=row.required,
-            has_default=row.has_default,
-            default_value=row.default_value,
-            choices=row.choices,
+            is_bool=self._param_is_bool(param),
+            is_required=param.is_required,
+            has_default=param.default is not None,
+            default_value=param.default,
+            choices=choices,
         )
 
     def _style_flag_token(self, flag: str, style: TextStyle) -> str:
@@ -394,7 +513,8 @@ class ClapLayout(HelpLayout):
 
         head, tail = flag.split(" ", 1)
 
-        return f"{with_style(head, style)} {with_style(tail, self.placeholder_style)}"
+        placeholder_style = self.style.placeholder_style or self.style.flag_long
+        return f"{with_style(head, style)} {with_style(tail, placeholder_style)}"
 
     def _build_styled_columns(
         self, flag_short: str, flag_long: str, flag: str, is_option: bool
@@ -432,15 +552,19 @@ class ClapLayout(HelpLayout):
         else:
             styled_values["flag_long_col"] = " " * self.long_flag_width
 
-        active_pos_width = max(
-            self._get_pos_flag_width_base(),
-            self._active_pos_flag_width or self.pos_flag_width,
-        )
         if flag:
             fp = styled_values["flag_styled"]
+            active_pos_width = max(
+                self._get_pos_flag_width_base(),
+                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+            )
             pad = max(0, active_pos_width - ansi_len(fp))
             styled_values["flag_col"] = f"{fp}{' ' * pad}"
         else:
+            active_pos_width = max(
+                self._get_pos_flag_width_base(),
+                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+            )
             styled_values["flag_col"] = " " * active_pos_width
 
         return styled_values
@@ -467,12 +591,8 @@ class ClapLayout(HelpLayout):
 
         return values
 
-    def _transform_help_row_values(
-        self,
-        values: dict[str, str],
-        row: _HelpRow,
-    ) -> dict[str, str]:
-        values = super()._transform_help_row_values(values, row)
+    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
+        values = super()._build_values(param, flags)
         return self._apply_clap_spacing(values)
 
     def _build_clap_flag_parts(
@@ -535,6 +655,23 @@ class ClapLayout(HelpLayout):
             primary_bool_flag=self._get_primary_boolean_flag_from_argument(arg),
         )
 
+    def _build_extra_from_argument(self, arg: "Argument") -> str:
+        choices = (
+            tuple(self._format_argument_choice_for_help(arg, i) for i in arg.choices)
+            if arg.choices
+            else None
+        )
+        return self._build_clap_extra(
+            is_bool=self._arg_is_bool(arg),
+            is_required=arg.required,
+            has_default=self._arg_has_default(arg),
+            default_value=arg.argument_default.value,
+            choices=choices,
+        )
+
+    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
+        return self._apply_clap_spacing(super()._build_values_from_argument(arg))
+
     def _format_command_display_name(self, name: str, aliases: tuple[str, ...] = ()) -> str:
         if not aliases:
             return name
@@ -542,8 +679,8 @@ class ClapLayout(HelpLayout):
         return ", ".join((name, *aliases))
 
     def _format_commands_title(self) -> str:
-        if self.section_heading_style is not None:
-            return with_style(self.commands_title, self.section_heading_style)
+        if self.style.section_heading_style is not None:
+            return with_style(self.commands_title, self.style.section_heading_style)
 
         return self.commands_title
 
@@ -552,61 +689,19 @@ class ClapLayout(HelpLayout):
 
 
 @dataclass(kw_only=True)
-class _AdaptiveLayoutBase(HelpLayout):
-    """Shared schema adaptation for argparse-style prose layouts."""
+class StandardLayout(HelpLayout):
+    """Default layout that follows the standard ``argparse`` help output."""
 
-    style: InterfacyColors = field(default_factory=NoColor)
+    style: HelpStyle = field(default_factory=NoColor)
+
+    include_metavar_in_flag_display: bool = False
     required_indicator: str = ""
     enable_required_indicator: bool = False
     default_label_for_help: str = ""
+    clear_metavar: bool = True
+
     help_position: int | None = 24
     layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
-
-    def get_help_for_parameter(
-        self,
-        param: Parameter,
-        flags: tuple[str, ...] | None = None,
-    ) -> str:
-        resolved_flags = flags
-        if not resolved_flags and self._param_is_bool(param):
-            resolved_flags = (f"--{(param.name or 'value').replace('_', '-')}",)
-
-        row = self._help_row_from_parameter(param, resolved_flags or ())
-        return self._format_adaptive_help(row)
-
-    def format_argument(
-        self,
-        arg: "Argument",
-        indent: int = 2,  # noqa: ARG002 - API compatibility
-    ) -> str:
-        return self._format_adaptive_help(self._help_row_from_argument(arg))
-
-    def _format_adaptive_help(self, row: _HelpRow) -> str:
-        has_default = not row.required and row.has_default
-        if row.is_boolean:
-            has_default = bool(row.default_text)
-
-        description = self._with_adaptive_default(
-            row.description,
-            has_default,
-            row.default_value,
-        )
-        return self._with_adaptive_choices(description, row.choices)
-
-    def _with_adaptive_default(
-        self,
-        description: str,
-        has_default: bool,
-        default: Any,
-    ) -> str:
-        raise NotImplementedError
-
-    def _with_adaptive_choices(
-        self,
-        description: str,
-        choices: Sequence[Any] | None,
-    ) -> str:
-        raise NotImplementedError
 
     @staticmethod
     def _normalize_whitespace(text: str) -> str:
@@ -619,18 +714,11 @@ class _AdaptiveLayoutBase(HelpLayout):
 
         stripped = text.rstrip()
         trailing_ws = text[len(stripped) :]
+
         if stripped.endswith("..") and not stripped.endswith("..."):
             stripped = stripped[:-1]
 
         return stripped + trailing_ws
-
-
-@dataclass(kw_only=True)
-class StandardLayout(_AdaptiveLayoutBase):
-    """Default layout that follows the standard ``argparse`` help output."""
-
-    include_metavar_in_flag_display: bool = False
-    clear_metavar: bool = True
 
     @classmethod
     def _description_mentions_same_default(cls, description: str, default_text: str) -> bool:
@@ -694,28 +782,101 @@ class StandardLayout(_AdaptiveLayoutBase):
 
         return f"{description.rstrip()} {choices_block}"
 
-    def _with_adaptive_default(
+    def get_help_for_parameter(
         self,
-        description: str,
-        has_default: bool,
-        default: Any,
+        param: Parameter,
+        flags: tuple[str, ...] | None = None,
     ) -> str:
-        return self._with_default_sentence(description, has_default, default)
+        """
+        Return help text following argparse's default style.
 
-    def _with_adaptive_choices(
+        Args:
+            param (Parameter): Parameter metadata.
+            flags (tuple[str, ...] | None): CLI flags for display.
+        """
+        description = self.format_description(param.description or "")
+        has_default = param.has_default and param.default is not None and not param.is_required
+        default_value = param.default
+        if has_default and self._param_is_bool(param):
+            primary_flag = self._get_primary_boolean_flag(param, flags or ())
+            if not primary_flag:
+                primary_flag = f"--{(param.name or 'value').replace('_', '-')}"
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=primary_flag,
+                )
+            )
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = get_param_choices(param, for_display=True) if param.is_typed else None
+
+        return self._with_choices_block(description, choices)
+
+    def format_argument(
         self,
-        description: str,
-        choices: Sequence[Any] | None,
+        arg: "Argument",
+        indent: int = 2,  # noqa: ARG002 - API compatibility
     ) -> str:
+        description = self.format_description(arg.help or "")
+        has_default = (
+            not arg.required
+            and arg.argument_default.appears_in_help
+            and arg.argument_default.value is not None
+        )
+        default_value = arg.argument_default.value
+        if has_default and self._arg_is_bool(arg):
+            if arg.boolean_behavior is not None:
+                default_value = arg.boolean_behavior.default
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=self._get_primary_boolean_flag_from_argument(arg),
+                )
+            )
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = (
+            [self._format_argument_choice_for_help(arg, choice) for choice in arg.choices]
+            if arg.choices
+            else None
+        )
+
         return self._with_choices_block(description, choices)
 
 
 @dataclass(kw_only=True)
-class ArgparseLayout(_AdaptiveLayoutBase):
+class ArgparseLayout(HelpLayout):
     """Layout that follows the default ``argparse`` help output."""
 
+    style: HelpStyle = field(default_factory=NoColor)
+
     include_metavar_in_flag_display: bool = True
+    required_indicator: str = ""
+    enable_required_indicator: bool = False
+    default_label_for_help: str = ""
     clear_metavar: bool = False
+
+    help_position: int | None = 24
+    layout_mode: Literal["auto", "adaptive", "template"] = "adaptive"
+    parser_command_usage_suffix: str = "{command}"
+
+    @staticmethod
+    def _normalize_whitespace(text: str) -> str:
+        return re.sub(r"\s+", " ", text).strip()
+
+    @staticmethod
+    def _collapse_duplicate_terminal_period(text: str) -> str:
+        if not text:
+            return text
+
+        stripped = text.rstrip()
+        trailing_ws = text[len(stripped) :]
+
+        if stripped.endswith("..") and not stripped.endswith("..."):
+            stripped = stripped[:-1]
+
+        return stripped + trailing_ws
 
     @classmethod
     def _description_mentions_same_default(cls, description: str, default_text: str) -> bool:
@@ -792,19 +953,66 @@ class ArgparseLayout(_AdaptiveLayoutBase):
 
         return cls._append_sentence(description, f"Choices: {choices_text}")
 
-    def _with_adaptive_default(
+    def get_help_for_parameter(
         self,
-        description: str,
-        has_default: bool,
-        default: Any,
+        param: Parameter,
+        flags: tuple[str, ...] | None = None,
     ) -> str:
-        return self._with_default_sentence(description, has_default, default)
+        """
+        Return help text following argparse's default style.
 
-    def _with_adaptive_choices(
+        Args:
+            param (Parameter): Parameter metadata.
+            flags (tuple[str, ...] | None): CLI flags for display.
+        """
+        description = self.format_description(param.description or "")
+        has_default = param.has_default and param.default is not None and not param.is_required
+        default_value = param.default
+        if has_default and self._param_is_bool(param):
+            primary_flag = self._get_primary_boolean_flag(param, flags or ())
+            if not primary_flag:
+                primary_flag = f"--{(param.name or 'value').replace('_', '-')}"
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=primary_flag,
+                )
+            )
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = get_param_choices(param, for_display=True) if param.is_typed else None
+
+        return self._with_choices_sentence(description, choices)
+
+    def format_argument(
         self,
-        description: str,
-        choices: Sequence[Any] | None,
+        arg: "Argument",
+        indent: int = 2,  # noqa: ARG002 - API compatibility
     ) -> str:
+        description = self.format_description(arg.help or "")
+        has_default = (
+            not arg.required
+            and arg.argument_default.appears_in_help
+            and arg.argument_default.value is not None
+        )
+        default_value = arg.argument_default.value
+        if has_default and self._arg_is_bool(arg):
+            if arg.boolean_behavior is not None:
+                default_value = arg.boolean_behavior.default
+            rendered_default = self._format_bool_default_for_help(default_value)
+            has_default = bool(
+                self._suppress_false_default_for_positive_boolean_flag(
+                    rendered_default,
+                    long_flag=self._get_primary_boolean_flag_from_argument(arg),
+                )
+            )
+        description = self._with_default_sentence(description, has_default, default_value)
+        choices = (
+            [self._format_argument_choice_for_help(arg, choice) for choice in arg.choices]
+            if arg.choices
+            else None
+        )
+
         return self._with_choices_sentence(description, choices)
 
 

@@ -1,82 +1,27 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import click
-from click.formatting import iter_rows, measure_table, term_len, wrap_text
 
-from interfacy.appearance.layout import HelpLayout
-from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.click_backend.parser import InterfacyOptionParser
-
-if TYPE_CHECKING:
-    from interfacy.schema.schema import Argument, Command, ParserSchema
-
-
-def _uses_template_layout(layout: HelpLayout) -> bool:
-    layout_mode = layout.layout_mode
-    if layout_mode == "template":
-        return True
-    if layout_mode == "adaptive":
-        return False
-
-    return bool(layout.format_option or layout.format_positional)
-
-
-class InterfacyClickHelpFormatter(click.HelpFormatter):
-    """Click formatter that can pin help descriptions to an absolute column."""
-
-    def __init__(
-        self,
-        *,
-        help_position: int | None = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(**kwargs)
-
-        self.interfacy_help_position = help_position
-
-    def write_dl(
-        self,
-        rows: Sequence[tuple[str, str]],
-        col_max: int = 30,
-        col_spacing: int = 2,
-    ) -> None:
-        target = self.interfacy_help_position
-        if target is None:
-            super().write_dl(rows, col_max=col_max, col_spacing=col_spacing)
-            return
-
-        rows = list(rows)
-        widths = measure_table(rows)
-        if len(widths) != 2:
-            raise TypeError("Expected two columns for definition list")
-
-        first_col = max(col_spacing, target - self.current_indent)
-
-        for first, second in iter_rows(rows, len(widths)):
-            self.write(f"{'':>{self.current_indent}}{first}")
-            if not second:
-                self.write("\n")
-                continue
-
-            if term_len(first) <= first_col - col_spacing:
-                self.write(" " * (first_col - term_len(first)))
-            else:
-                self.write("\n")
-                self.write(" " * (first_col + self.current_indent))
-
-            text_width = max(self.width - first_col - 2, 10)
-            wrapped_text = wrap_text(second, text_width, preserve_paragraphs=True)
-            lines = wrapped_text.splitlines()
-
-            if lines:
-                self.write(f"{lines[0]}\n")
-                for line in lines[1:]:
-                    self.write(f"{'':>{first_col + self.current_indent}}{line}\n")
-            else:
-                self.write("\n")
+from interfacy.engine.backend import HelpPipeline
+from interfacy.help.content import HelpRenderer
+from interfacy.help.layout import HelpLayout
+from interfacy.help.presets import StandardLayout
+from interfacy.help.renderer import SchemaHelpRenderer
+from interfacy.parameters import BooleanMode
+from interfacy.schema.schema import (
+    Argument,
+    ArgumentDefault,
+    ArgumentKind,
+    BooleanBehavior,
+    Command,
+    ParserSchema,
+    ValueCardinality,
+    ValueShape,
+)
 
 
 class InterfacyClickOption(click.Option):
@@ -202,84 +147,169 @@ class HelpMixin:
     interfacy_schema: Command | None = None
     interfacy_parser_schema: ParserSchema | None = None
     interfacy_aliases: tuple[str, ...] = ()
-    interfacy_epilog: str | None = None
     interfacy_is_root: bool = False
     params: list[click.Parameter]
     interfacy_param_bindings: dict[str, str]
     interfacy_arg_specs: dict[str, Argument]
     interfacy_suppress_defaults: set[str]
-    interfacy_help_position: int | None = None
-    interfacy_help_position_explicit: bool = False
+    interfacy_help_layout: HelpLayout | None = None
+    interfacy_help_renderer: HelpRenderer | None = None
+    interfacy_help_pipeline: HelpPipeline | None = None
+    interfacy_help_command_path: tuple[str, ...] = ()
 
-    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        if isinstance(formatter, InterfacyClickHelpFormatter):
-            positional_rows = self._positionals_help_rows(ctx)
-            if positional_rows:
-                with formatter.section("Positionals"):
-                    formatter.write_dl(positional_rows)
+    def set_help_pipeline(
+        self,
+        pipeline: HelpPipeline,
+        command_path: tuple[str, ...],
+    ) -> None:
+        """Attach the engine-owned structured help pipeline."""
+        self.interfacy_help_pipeline = pipeline
+        self.interfacy_help_command_path = command_path
 
-        return super().format_options(ctx, formatter)
+    def get_help(self, ctx: click.Context) -> str:
+        """Render all generated and manual help through the structured pipeline."""
+        if not isinstance(self, click.Command):
+            raise TypeError("HelpMixin must be combined with click.Command")
+        if self.interfacy_help_pipeline is not None:
+            return self.interfacy_help_pipeline.render(
+                self.interfacy_help_command_path,
+                ctx.terminal_width,
+            )
 
-    def _resolve_fallback_help_position(self) -> int | None:
-        help_position = self.interfacy_help_position
-        if not self.interfacy_help_position_explicit or not isinstance(help_position, int):
-            return None
-
-        return help_position
-
-    def _render_click_help(self, ctx: click.Context) -> str:
-        formatter = InterfacyClickHelpFormatter(
-            width=ctx.terminal_width,
-            max_width=ctx.max_content_width,
-            help_position=self._resolve_fallback_help_position(),
+        layout = self.interfacy_help_layout or StandardLayout()
+        help_option = self.get_help_option(ctx)
+        help_argument = (
+            self._argument_from_click_parameter(help_option) if help_option is not None else None
         )
-        self.format_help(ctx, formatter)
-        return formatter.getvalue().rstrip("\n")
+        renderer = SchemaHelpRenderer(
+            layout,
+            terminal_width=ctx.terminal_width,
+            help_argument=help_argument,
+            final_renderer=self.interfacy_help_renderer,
+        )
+        schema = self.interfacy_parser_schema
+        if schema is not None:
+            return renderer.render_parser_help(schema, ctx.command_path)
+        command = self.interfacy_schema or self._build_implicit_schema_command(ctx)
+        return renderer.render_command_help(command, ctx.command_path)
 
-    def _positionals_help_rows(self, ctx: click.Context) -> list[tuple[str, str]]:
-        rows: list[tuple[str, str]] = []
-        for param in self.params:
-            if not isinstance(param, InterfacyClickArgument):
+    def _build_implicit_schema_command(self, ctx: click.Context) -> Command:
+        if not isinstance(self, click.Command):
+            raise TypeError("HelpMixin must be combined with click.Command")
+        parameters: list[Argument] = []
+        for parameter in self.get_params(ctx):
+            if isinstance(parameter, click.Option) and parameter.name == "help":
                 continue
+            parameters.append(self._argument_from_click_parameter(parameter))
 
-            help_record = param.get_help_record(ctx)
-            if help_record is None:
-                name = param.name or ""
-                rows.append((name, param.help or ""))
-                continue
+        subcommands: dict[str, Command] | None = None
+        if isinstance(self, click.Group):
+            subcommands = {}
+            for name, child in self.commands.items():
+                if isinstance(child, HelpMixin):
+                    child_context = click.Context(child, parent=ctx, info_name=name)
+                    child_schema = child.interfacy_schema or child._build_implicit_schema_command(
+                        child_context
+                    )
+                else:
+                    child_schema = Command(
+                        obj=None,
+                        canonical_name=name,
+                        cli_name=name,
+                        aliases=(),
+                        raw_description=child.help,
+                    )
+                subcommands[name] = child_schema
+            if not subcommands:
+                subcommands = None
 
-            rows.append(help_record)
+        name = self.name or ctx.info_name or "command"
+        return Command(
+            obj=None,
+            canonical_name=name,
+            cli_name=name,
+            aliases=self.interfacy_aliases,
+            raw_description=self.help,
+            parameters=parameters,
+            subcommands=subcommands,
+            raw_epilog=self.epilog,
+            command_type="group" if isinstance(self, click.Group) else "function",
+            is_leaf=not bool(subcommands),
+        )
 
-        return rows
-
-    def _augment_help(self, _ctx: click.Context, original_help: str) -> str:
-        if "Options:" in original_help:
-            description, opts = original_help.split("Options:", 1)
-            options = "\n\nOptions:" + opts
+    @staticmethod
+    def _argument_from_click_parameter(parameter: click.Parameter) -> Argument:
+        is_option = isinstance(parameter, click.Option)
+        is_flag = is_option and parameter.is_flag
+        nargs = parameter.nargs
+        is_multiple = bool(getattr(parameter, "multiple", False))
+        if is_flag:
+            value_shape = ValueShape.FLAG
+            cardinality = ValueCardinality(0, 0, 0)
+        elif is_multiple or nargs == -1:
+            value_shape = ValueShape.LIST
+            cardinality = ValueCardinality(0, None, 1)
+        elif nargs > 1:
+            value_shape = ValueShape.TUPLE
+            cardinality = ValueCardinality(nargs, nargs, nargs)
         else:
-            description = original_help
-            options = ""
+            value_shape = ValueShape.SINGLE
+            cardinality = ValueCardinality(1, 1, 1)
 
-        positional_lines = []
-        for param in self.params:
-            if isinstance(param, InterfacyClickArgument):
-                positional_name = f"{param.name}".ljust(16)
-                arg_help = f"  {positional_name} {param.help or ''}".rstrip()
-                positional_lines.append(arg_help)
-
-        extra_help = ""
-        if positional_lines:
-            extra_help = "Positionals:\n" + "\n".join(positional_lines) + "\n"
-
-        merged = description + extra_help + options
-        if self.interfacy_epilog:
-            merged = f"{merged.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
-
-        return merged
+        default = getattr(parameter, "default", None)
+        boolean_behavior: BooleanBehavior | None = None
+        flags = tuple(parameter.opts + parameter.secondary_opts) if is_option else ()
+        if is_flag:
+            boolean_behavior = BooleanBehavior(
+                positive_flags=tuple(parameter.opts),
+                negative_flags=tuple(parameter.secondary_opts),
+                default=default if isinstance(default, bool) else None,
+                mode=BooleanMode.DUAL,
+            )
+        help_text = (
+            parameter.help
+            if isinstance(parameter, click.Option)
+            else getattr(
+                parameter,
+                "help",
+                None,
+            )
+        )
+        choices = (
+            tuple(parameter.type.choices) if isinstance(parameter.type, click.Choice) else None
+        )
+        metavar = parameter.metavar if isinstance(parameter.metavar, str) else None
+        return Argument(
+            name=parameter.name or "value",
+            display_name=(parameter.name or "value").replace("_", "-"),
+            kind=ArgumentKind.OPTION if is_option else ArgumentKind.POSITIONAL,
+            value_shape=value_shape,
+            flags=flags,
+            required=parameter.required,
+            cardinality=cardinality,
+            argument_default=ArgumentDefault.present(default),
+            help=help_text,
+            type=None,
+            parser=None,
+            metavar=metavar,
+            boolean_behavior=boolean_behavior,
+            choices=choices,
+        )
 
 
 class InterfacyClickCommand(HelpMixin, click.Command):
     """Render command help with Interfacy schema-aware formatting."""
+
+    def __init__(
+        self,
+        *args: Any,
+        help_layout: HelpLayout | None = None,
+        help_renderer: HelpRenderer | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.interfacy_help_layout = help_layout
+        self.interfacy_help_renderer = help_renderer
 
     def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:
         """
@@ -294,39 +324,20 @@ class InterfacyClickCommand(HelpMixin, click.Command):
 
         return parser
 
-    def get_help(self, ctx: click.Context) -> str:
-        """
-        Render command help using schema-aware formatting when available.
-
-        Args:
-            ctx (click.Context): Active Click context.
-        """
-        schema = self.interfacy_parser_schema
-        if schema is not None:
-            renderer = SchemaHelpRenderer(schema.theme, terminal_width=ctx.terminal_width)
-            return renderer.render_parser_help(schema, ctx.command_path)
-
-        schema_command = self.interfacy_schema
-        if schema_command is not None and schema_command.help_layout is not None:
-            renderer = SchemaHelpRenderer(
-                schema_command.help_layout, terminal_width=ctx.terminal_width
-            )
-            return renderer.render_command_help(schema_command, ctx.command_path)
-
-        if self._resolve_fallback_help_position() is not None:
-            help_text = self._render_click_help(ctx)
-            if self.interfacy_epilog:
-                return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
-
-            return help_text
-
-        original_help = super().get_help(ctx)
-
-        return self._augment_help(ctx, original_help)
-
 
 class InterfacyClickGroup(HelpMixin, click.Group):
     """Resolve group aliases and render group help with schema metadata."""
+
+    def __init__(
+        self,
+        *args: Any,
+        help_layout: HelpLayout | None = None,
+        help_renderer: HelpRenderer | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.interfacy_help_layout = help_layout
+        self.interfacy_help_renderer = help_renderer
 
     def make_parser(self, ctx: click.Context) -> InterfacyOptionParser:
         """
@@ -341,15 +352,15 @@ class InterfacyClickGroup(HelpMixin, click.Group):
 
         return parser
 
-    def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         """
         Resolve a subcommand by canonical name first, then by Interfacy aliases.
 
         Args:
             ctx (click.Context): Active Click context.
-            name (str): Command token from CLI input.
+            cmd_name (str): Command token from CLI input.
         """
-        command = super().get_command(ctx, name)
+        command = super().get_command(ctx, cmd_name)
         if command is not None:
             return command
 
@@ -359,44 +370,15 @@ class InterfacyClickGroup(HelpMixin, click.Group):
                 if isinstance(sub_cmd, (InterfacyClickCommand, InterfacyClickGroup))
                 else ()
             )
-            if name in aliases:
+            if cmd_name in aliases:
                 return sub_cmd
 
         return None
 
-    def list_commands(self, _ctx: click.Context) -> list[str]:
+    def list_commands(self, ctx: click.Context) -> list[str]:
         """Return canonical subcommand names in insertion order."""
+        del ctx
         return list(self.commands.keys())
-
-    def get_help(self, ctx: click.Context) -> str:
-        """
-        Render group help using schema-aware formatting when available.
-
-        Args:
-            ctx (click.Context): Active Click context.
-        """
-        schema = self.interfacy_parser_schema
-        if schema is not None:
-            renderer = SchemaHelpRenderer(schema.theme, terminal_width=ctx.terminal_width)
-            return renderer.render_parser_help(schema, ctx.command_path)
-
-        schema_command = self.interfacy_schema
-        if schema_command is not None and schema_command.help_layout is not None:
-            renderer = SchemaHelpRenderer(
-                schema_command.help_layout, terminal_width=ctx.terminal_width
-            )
-            return renderer.render_command_help(schema_command, ctx.command_path)
-
-        if self._resolve_fallback_help_position() is not None:
-            help_text = self._render_click_help(ctx)
-            if self.interfacy_epilog:
-                return f"{help_text.rstrip()}\n\n{self.interfacy_epilog}".rstrip()
-
-            return help_text
-
-        original_help = super().get_help(ctx)
-
-        return self._augment_help(ctx, original_help)
 
 
 __all__ = [

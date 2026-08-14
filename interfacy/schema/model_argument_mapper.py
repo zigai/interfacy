@@ -10,7 +10,7 @@ from objinspect import Class
 from objinspect.typing import is_union_type, type_args
 
 from interfacy.schema.schema import MODEL_DEFAULT_UNSET, Argument
-from interfacy.util import resolve_type_alias
+from interfacy.schema.typing import resolve_type_alias
 
 OBJINSPECT_CLASS_ERRORS = (AttributeError, TypeError, ValueError)
 

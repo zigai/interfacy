@@ -1,40 +1,30 @@
 from __future__ import annotations
 
-import argparse
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar
+from typing import Any, Literal, NoReturn, TypeVar
 
 from strto import StrToTypeParser
 from typing_extensions import final
 
-from interfacy.appearance.help_sort import HelpOptionSortRule, HelpSubcommandSortRule
-from interfacy.appearance.layout import HelpLayout, InterfacyColors
-from interfacy.argparse_backend.argparser import Argparser
-from interfacy.argparse_backend.argument_parser import ArgumentParser
-from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
-from interfacy.core import (
+from interfacy.engine.composition import InterfacyEngine
+from interfacy.engine.settings import (
     DEFAULT_HELP_FLAGS,
+    UNSET,
     AbbreviationScope,
     BooleanNegativePrefix,
-    ExitCode,
+    EngineSettings,
     HelpFlags,
-    InterfacyParser,
 )
-from interfacy.exceptions import ConfigurationError
 from interfacy.executable_flag import ExecutableFlag
 from interfacy.group import CommandGroup
+from interfacy.help.content import HelpRenderer
+from interfacy.help.layout import HelpLayout, InterfacyColors
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.parameters import ParameterSettingsInput
 from interfacy.pipe import PipeTargets
 from interfacy.plugins import InterfacyPlugin
 from interfacy.schema.schema import Command, ParserSchema
-
-if TYPE_CHECKING:
-    import click
-
-    BackendParser: TypeAlias = ArgumentParser | click.Command
-else:
-    BackendParser: TypeAlias = ArgumentParser | object
+from interfacy.schema.sorting import HelpOptionSortRule, HelpSubcommandSortRule
 
 Backend = Literal["argparse", "click"]
 CommandTarget = object
@@ -58,14 +48,10 @@ class Interfacy:
         help_layout: Layout configuration for generated help output.
         backend: Parser implementation to use. Must be ``"argparse"`` or ``"click"``.
         help_colors: Color theme applied by the help layout.
-        run: Run backend setup immediately when supported by the selected backend.
         print_result: Print returned command values after execution.
         tab_completion: Install shell completion support when the backend supports it.
         full_error_traceback: Include full tracebacks for runtime errors.
         allow_args_from_file: Enable ``@file`` argument expansion.
-        sys_exit_enabled: Call ``sys.exit`` after completion or failure. Disable only when
-            tests or embedding hosts need ``run()`` to return command values and exception
-            objects for inspection; returned integers remain command data.
         flag_strategy: Strategy for deriving option flags from Python names.
         abbreviation_gen: Generator used for short option flags.
         abbreviation_max_generated_len: Maximum generated short-flag length. Must be >= 1.
@@ -83,7 +69,6 @@ class Interfacy:
         include_classmethods: Include class methods when registering classes.
         on_interrupt: Callback invoked for handled `KeyboardInterrupt` instances.
         silent_interrupt: Suppress interrupt log output.
-        reraise_interrupt: Raise handled interrupts after logging or callbacks.
         expand_model_params: Expand supported model parameters into nested CLI flags.
         model_expansion_max_depth: Maximum model expansion depth. Must be >= 1.
         bool_negative_prefix: Prefix used for generated negative boolean flags.
@@ -91,12 +76,6 @@ class Interfacy:
         plugins: Plugins to register during initialization.
         method_skips: Class method names to skip when registering class commands.
         parse_recovery_max_attempts: Maximum plugin recovery attempts. Must be >= 0.
-        formatter_class: Argparse help formatter class. Only valid with
-            ``backend="argparse"``.
-
-    Raises:
-        ConfigurationError: If ``backend`` is unsupported or ``formatter_class`` is used with
-            ``backend="click"``.
         ImportError: If ``backend="click"`` is requested without Click installed.
     """
 
@@ -109,12 +88,11 @@ class Interfacy:
         *,
         backend: Backend = "argparse",
         help_colors: InterfacyColors | None = None,
-        run: bool = False,
+        help_renderer: HelpRenderer | None = None,
         print_result: bool = False,
         tab_completion: bool = False,
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
-        sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
         abbreviation_max_generated_len: int = 1,
@@ -132,7 +110,6 @@ class Interfacy:
         include_classmethods: bool = False,
         on_interrupt: Callable[[KeyboardInterrupt], None] | None = None,
         silent_interrupt: bool = True,
-        reraise_interrupt: bool = False,
         expand_model_params: bool = True,
         model_expansion_max_depth: int = 3,
         bool_negative_prefix: BooleanNegativePrefix = "no-",
@@ -140,111 +117,54 @@ class Interfacy:
         plugins: Sequence[InterfacyPlugin] | None = None,
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int = 3,
-        formatter_class: type[argparse.HelpFormatter] | None = None,
     ) -> None:
-        self.backend: Backend = backend
-        formatter = formatter_class or InterfacyHelpFormatter
-        if backend == "argparse":
-            self._parser: InterfacyParser = Argparser(
-                description=description,
-                epilog=epilog,
-                type_parser=type_parser,
-                help_layout=help_layout,
-                help_colors=help_colors,
-                run=run,
-                print_result=print_result,
-                tab_completion=tab_completion,
-                full_error_traceback=full_error_traceback,
-                allow_args_from_file=allow_args_from_file,
-                sys_exit_enabled=sys_exit_enabled,
-                flag_strategy=flag_strategy,
-                abbreviation_gen=abbreviation_gen,
-                abbreviation_max_generated_len=abbreviation_max_generated_len,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_position=help_position,
-                executable_flags=executable_flags,
-                pipe_targets=pipe_targets,
-                print_result_func=print_result_func,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                on_interrupt=on_interrupt,
-                silent_interrupt=silent_interrupt,
-                reraise_interrupt=reraise_interrupt,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                bool_negative_prefix=bool_negative_prefix,
-                help_flags=help_flags,
-                plugins=plugins,
-                method_skips=method_skips,
-                parse_recovery_max_attempts=parse_recovery_max_attempts,
-                formatter_class=formatter,
-            )
-            self.metadata = self._parser.metadata
+        settings = EngineSettings(
+            description=description,
+            epilog=epilog,
+            type_parser=type_parser,
+            help_layout=help_layout,
+            help_colors=help_colors,
+            help_renderer=help_renderer,
+            print_result=print_result,
+            tab_completion=tab_completion,
+            full_error_traceback=full_error_traceback,
+            allow_args_from_file=allow_args_from_file,
+            flag_strategy=flag_strategy,
+            abbreviation_gen=abbreviation_gen,
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+            help_position=help_position,
+            executable_flags=executable_flags,
+            pipe_targets=pipe_targets,
+            print_result_func=print_result_func,
+            include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
+            include_classmethods=include_classmethods,
+            on_interrupt=on_interrupt,
+            silent_interrupt=silent_interrupt,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=model_expansion_max_depth,
+            bool_negative_prefix=bool_negative_prefix,
+            help_flags=help_flags,
+            plugins=plugins,
+            method_skips=method_skips,
+            parse_recovery_max_attempts=parse_recovery_max_attempts,
+        )
+        self._engine = InterfacyEngine(settings, backend=backend)
 
-            return
+    @property
+    def backend(self) -> Backend:
+        """Return the selected backend name."""
+        return self._engine.backend
 
-        if backend == "click":
-            if formatter_class is not None:
-                raise ConfigurationError(
-                    "formatter_class is only supported with backend='argparse'"
-                )
-
-            try:
-                from interfacy.click_backend.core import ClickParser
-            except ImportError as exc:  # pragma: no cover - optional dependency guard
-                raise ImportError(
-                    "Click is required to use Interfacy with backend='click'. Install it with "
-                    "\"pip install 'interfacy[click]'\" or \"uv add 'interfacy[click]'\"."
-                ) from exc
-
-            self._parser = ClickParser(
-                description=description,
-                epilog=epilog,
-                type_parser=type_parser,
-                help_layout=help_layout,
-                help_colors=help_colors,
-                run=run,
-                print_result=print_result,
-                tab_completion=tab_completion,
-                full_error_traceback=full_error_traceback,
-                allow_args_from_file=allow_args_from_file,
-                sys_exit_enabled=sys_exit_enabled,
-                flag_strategy=flag_strategy,
-                abbreviation_gen=abbreviation_gen,
-                abbreviation_max_generated_len=abbreviation_max_generated_len,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-                help_position=help_position,
-                executable_flags=executable_flags,
-                pipe_targets=pipe_targets,
-                print_result_func=print_result_func,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                on_interrupt=on_interrupt,
-                silent_interrupt=silent_interrupt,
-                reraise_interrupt=reraise_interrupt,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                bool_negative_prefix=bool_negative_prefix,
-                help_flags=help_flags,
-                plugins=plugins,
-                method_skips=method_skips,
-                parse_recovery_max_attempts=parse_recovery_max_attempts,
-            )
-            self.metadata = self._parser.metadata
-
-            return
-
-        raise ConfigurationError("backend must be one of: argparse, click")
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """Return the engine metadata dictionary by identity."""
+        return self._engine.metadata
 
     def add_plugin(self, plugin: InterfacyPlugin) -> InterfacyPlugin:
         """
@@ -253,7 +173,7 @@ class Interfacy:
         Raises:
             DuplicatePluginError: If another plugin with the same parser-local name exists.
         """
-        return self._parser.add_plugin(plugin)
+        return self._engine.add_plugin(plugin)
 
     def add_type_parser(
         self,
@@ -266,56 +186,59 @@ class Interfacy:
         The converter receives one raw CLI string and returns the value passed to
         the command callable.
         """
-        self._parser.add_type_parser(typ, parser)
+        self._engine.add_type_parser(typ, parser)
 
     @property
     def type_parser(self) -> StrToTypeParser:
         """Return the active type parser registry."""
-        return self._parser.type_parser
+        return self._engine.type_parser
 
     def apply_setup(
         self,
         *,
-        help_layout: HelpLayout | None = None,
-        help_colors: InterfacyColors | None = None,
-        type_parser: StrToTypeParser | None = None,
-        print_result: bool | None = None,
-        tab_completion: bool | None = None,
-        full_error_traceback: bool | None = None,
-        allow_args_from_file: bool | None = None,
-        flag_strategy: FlagStrategy | None = None,
-        abbreviation_gen: AbbreviationGenerator | None = None,
-        abbreviation_max_generated_len: int | None = None,
-        abbreviation_scope: AbbreviationScope | None = None,
-        help_option_sort: list[HelpOptionSortRule] | None = None,
-        help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
-        help_position: int | None = None,
-        include_inherited_methods: bool | None = None,
-        include_protected_methods: bool | None = None,
-        include_private_methods: bool | None = None,
-        include_staticmethods: bool | None = None,
-        include_classmethods: bool | None = None,
-        silent_interrupt: bool | None = None,
-        expand_model_params: bool | None = None,
-        model_expansion_max_depth: int | None = None,
-        bool_negative_prefix: BooleanNegativePrefix | None = None,
-        help_flags: HelpFlags | None = None,
-        plugins: Sequence[InterfacyPlugin] | None = None,
-        method_skips: Sequence[str] | None = None,
-        parse_recovery_max_attempts: int | None = None,
+        help_layout: Any = UNSET,
+        help_colors: Any = UNSET,
+        help_renderer: Any = UNSET,
+        type_parser: Any = UNSET,
+        print_result: Any = UNSET,
+        tab_completion: Any = UNSET,
+        full_error_traceback: Any = UNSET,
+        allow_args_from_file: Any = UNSET,
+        flag_strategy: Any = UNSET,
+        abbreviation_gen: Any = UNSET,
+        abbreviation_max_generated_len: Any = UNSET,
+        abbreviation_scope: Any = UNSET,
+        help_option_sort: Any = UNSET,
+        help_subcommand_sort: Any = UNSET,
+        help_position: Any = UNSET,
+        executable_flags: Any = UNSET,
+        include_inherited_methods: Any = UNSET,
+        include_protected_methods: Any = UNSET,
+        include_private_methods: Any = UNSET,
+        include_staticmethods: Any = UNSET,
+        include_classmethods: Any = UNSET,
+        silent_interrupt: Any = UNSET,
+        expand_model_params: Any = UNSET,
+        model_expansion_max_depth: Any = UNSET,
+        bool_negative_prefix: Any = UNSET,
+        help_flags: Any = UNSET,
+        plugins: Any = UNSET,
+        method_skips: Any = UNSET,
+        parse_recovery_max_attempts: Any = UNSET,
     ) -> None:
         """
         Update parser defaults used by later registrations and parser builds.
 
-        Arguments left as ``None`` keep their current value. Plugins supplied here
-        are registered immediately.
+        Omitted values retain their current setting. Explicit ``None`` resets only
+        resettable settings. Plugins are additive and cannot be ``None``.
 
         Raises:
             ConfigurationError: If an update is invalid for the current parser state.
         """
-        self._parser.apply_setup(
+        self._engine.apply_setup(
             help_layout=help_layout,
             help_colors=help_colors,
+            help_renderer=help_renderer,
             type_parser=type_parser,
             print_result=print_result,
             tab_completion=tab_completion,
@@ -328,6 +251,7 @@ class Interfacy:
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
             help_position=help_position,
+            executable_flags=executable_flags,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -378,7 +302,7 @@ class Interfacy:
             InvalidCommandError: If ``command`` cannot be converted to a CLI command.
             ConfigurationError: If an override is invalid.
         """
-        return self._parser.add_command(
+        return self._engine.add_command(
             command=command,
             name=name,
             description=description,
@@ -427,7 +351,7 @@ class Interfacy:
         Options passed to the decorator override parser defaults for the
         decorated target only. The decorated object is returned unchanged.
         """
-        return self._parser.command(
+        return self._engine.command(
             name=name,
             description=description,
             aliases=aliases,
@@ -481,7 +405,7 @@ class Interfacy:
             DuplicateCommandError: If the group name or alias already exists.
             ConfigurationError: If an override is invalid.
         """
-        return self._parser.add_group(
+        return self._engine.add_group(
             group=group,
             name=name,
             description=description,
@@ -504,7 +428,7 @@ class Interfacy:
 
     def get_commands(self) -> list[Command]:
         """Return registered command schemas in insertion order."""
-        return self._parser.get_commands()
+        return self._engine.get_commands()
 
     def get_command_by_cli_name(self, cli_name: str) -> Command:
         """
@@ -513,15 +437,11 @@ class Interfacy:
         Raises:
             InvalidCommandError: If `cli_name` does not resolve to a registered command.
         """
-        return self._parser.get_command_by_cli_name(cli_name)
+        return self._engine.get_command_by_cli_name(cli_name)
 
     def get_args(self) -> list[str]:
         """Read the current process arguments excluding the executable name."""
-        return self._parser.get_args()
-
-    def exit(self, code: ExitCode) -> ExitCode:
-        """Exit the process or return ``code``, depending on parser settings."""
-        return self._parser.exit(code)
+        return list(self._engine.resolve_args(None))
 
     def pipe_to(
         self,
@@ -541,7 +461,7 @@ class Interfacy:
         Raises:
             ConfigurationError: If the pipe target declaration is invalid.
         """
-        return self._parser.pipe_to(
+        return self._engine.pipe_to(
             targets,
             command=command,
             subcommand=subcommand,
@@ -550,11 +470,11 @@ class Interfacy:
 
     def read_piped_input(self) -> str | None:
         """Read stdin data when available."""
-        return self._parser.read_piped_input()
+        return self._engine.read_piped_input()
 
     def reset_piped_input(self) -> None:
         """Clear cached stdin data."""
-        self._parser.reset_piped_input()
+        self._engine.reset_piped_input()
 
     def parse_args(self, args: list[str] | None = None) -> dict[str, object]:
         """
@@ -562,54 +482,59 @@ class Interfacy:
 
         If `args` is omitted, the current process arguments are used.
         """
-        return self._parser.parse_args(args)
+        return self._engine.parse_args(args)
 
-    def run(self, *commands: CommandTarget, args: list[str] | None = None) -> Any:
-        """
-        Register any command targets, parse arguments, and execute the selection.
+    def invoke(self, *commands: CommandTarget, args: list[str] | None = None) -> Any:
+        """Invoke a command without rendering failures or terminating the process."""
+        return self._engine.invoke(*commands, args=args)
 
-        With the default exit behavior, this exits after completion or failure. When
-        ``sys_exit_enabled`` is disabled, it returns the command value on success or an
-        exception object on failure for inspection. Returned integers are command data,
-        not process exit codes. If `args` is omitted, the current process arguments are used.
-        """
-        return self._parser.run(*commands, args=args)
+    async def invoke_async(
+        self,
+        *commands: CommandTarget,
+        args: list[str] | None = None,
+    ) -> Any:
+        """Invoke a command and await asynchronous execution without blocking a live loop."""
+        return await self._engine.invoke_async(*commands, args=args)
 
-    def build_parser(self) -> BackendParser:
+    def run(self, *commands: CommandTarget, args: list[str] | None = None) -> NoReturn:
+        """Invoke a command, render its result or failure, and terminate the process."""
+        return self._engine.run(*commands, args=args)
+
+    def build_parser(self) -> object:
         """Build the backend parser for registered commands."""
-        return self._parser.build_parser()
+        return self._engine.build_parser()
 
     def build_parser_schema(self) -> ParserSchema:
         """Build the parser schema for registered commands."""
-        return self._parser.build_parser_schema()
+        return self._engine.build_parser_schema()
 
     def get_last_schema(self) -> ParserSchema | None:
         """Return the most recently built parser schema, if any."""
-        return self._parser.get_last_schema()
+        return self._engine.get_last_schema()
 
     def refresh_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
         """Recompute help option sort rules on the active backend parser."""
-        return self._parser.refresh_help_option_sort_rules()
+        return self._engine.refresh_help_option_sort_rules()
 
     def refresh_help_subcommand_sort_rules(self) -> list[HelpSubcommandSortRule]:
         """Recompute help subcommand sort rules on the active backend parser."""
-        return self._parser.refresh_help_subcommand_sort_rules()
+        return self._engine.refresh_help_subcommand_sort_rules()
 
     def log(self, message: str) -> None:
         """Write an informational parser log message."""
-        self._parser.log(message)
+        self._engine.log(message)
 
     def log_error(self, message: str) -> None:
         """Write an error parser log message."""
-        self._parser.log_error(message)
+        self._engine.log_error(message)
 
     def log_exception(self, e: BaseException) -> None:
         """Write an exception parser log message."""
-        self._parser.log_exception(e)
+        self._engine.log_exception(e)
 
     def log_interrupt(self) -> None:
         """Write the configured interrupt log message."""
-        self._parser.log_interrupt()
+        self._engine.log_interrupt()
 
 
 __all__ = ["Backend", "Interfacy"]

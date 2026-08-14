@@ -1,21 +1,18 @@
 import asyncio
 import inspect
-import threading
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 
-from interfacy.exceptions import ConfigurationError, InvalidCommandError
+from interfacy.exceptions import ConfigurationError, InvalidCommandError, UsageError
 from interfacy.logger import get_logger
 from interfacy.naming import reverse_translations
-from interfacy.pipe import apply_pipe_values, validate_required_pipe_targets
-from interfacy.schema.model_argument_mapper import ModelArgumentMapper
+from interfacy.runtime.context import ExecutionContext
+from interfacy.runtime.piping import apply_pipe_values, validate_required_pipe_targets
+from interfacy.schema.model_argument_mapper import ExpandedModelValidationError, ModelArgumentMapper
 from interfacy.schema.schema import Argument, Command
-
-if TYPE_CHECKING:
-    from interfacy.core import InterfacyParser
 
 logger = get_logger(__name__)
 
@@ -28,32 +25,33 @@ class SchemaRunner:
     Execute parsed CLI commands against inspected callables.
 
     Args:
-        namespace (dict[str, Any]): Parsed argument namespace.
-        builder (InterfacyParser): Parser instance that built the schema.
-        args (list[str]): Raw CLI arguments.
+        namespace: Parsed argument namespace.
+        context: Explicit command execution dependencies.
+        args: Raw CLI arguments.
     """
 
     def __init__(
         self,
         namespace: dict[str, Any],
-        builder: "InterfacyParser",
+        context: ExecutionContext,
         args: list[str],
     ) -> None:
         self.namespace = namespace
         self.args = args
-        self.builder = builder
-        self.COMMAND_KEY = self.builder.COMMAND_KEY
+        self.context = context
+        self.COMMAND_KEY = context.command_key
         self._instance_chain: list[Any] = []
         self.model_argument_mapper = ModelArgumentMapper()
+        self._async_mode = False
 
     def run(self) -> Any:
         """Execute commands based on the parsed namespace."""
-        commands = self.builder.commands
+        commands = self.context.commands
         if len(commands) == 0:
             raise ConfigurationError("No commands were provided")
 
         if len(commands) == 1:
-            command = self.builder.get_commands()[0]
+            command = self.context.get_commands()[0]
             if not command.is_leaf:
                 group_args = self.namespace.get(command.canonical_name, {})
                 return self._run_with_chain(command, group_args, depth=0)
@@ -61,6 +59,18 @@ class SchemaRunner:
             return self.run_command(command, self.namespace)
 
         return self.run_multiple(commands)
+
+    async def run_async(self) -> Any:
+        """Execute commands and await an asynchronous command result."""
+        self._async_mode = True
+        try:
+            result = self.run()
+            if inspect.isawaitable(result):
+                return await result
+
+            return result
+        finally:
+            self._async_mode = False
 
     def run_command(self, command: Command, args: dict[str, Any]) -> Any:
         """
@@ -96,7 +106,7 @@ class SchemaRunner:
             func (Function | Method): Callable to execute.
             args (dict): Parsed argument mapping.
         """
-        cli_args = reverse_translations(args, self.builder.flag_strategy.argument_translator)
+        cli_args = reverse_translations(args, self.context.argument_names)
         positional_args, keyword_args = self._build_call_args(func, cli_args)
 
         logger.info(
@@ -120,7 +130,7 @@ class SchemaRunner:
             method (Method): Method to execute.
             args (dict): Parsed argument mapping.
         """
-        cli_args = reverse_translations(args, self.builder.flag_strategy.argument_translator)
+        cli_args = reverse_translations(args, self.context.argument_names)
         instance = method.class_instance
         if instance is not None:
             method_args, method_kwargs = self._build_call_args(method, cli_args)
@@ -176,7 +186,7 @@ class SchemaRunner:
         args.pop(command_name, None)
         logger.info("Subcommand namespace keys: %s", sorted(command_args))
 
-        resolved_name = self.builder.flag_strategy.command_translator.reverse(command_name)
+        resolved_name = self.context.command_names.reverse(command_name)
         try:
             method = runtime_cls.get_method(command_name)
         except KeyError:
@@ -224,7 +234,7 @@ class SchemaRunner:
             commands (dict[str, Command]): Command mapping by canonical name.
         """
         command_name = self.namespace[self.COMMAND_KEY]
-        command = self.builder.get_command_by_cli_name(command_name)
+        command = self.context.get_command_by_cli_name(command_name)
         args = self.namespace.get(command.canonical_name, {})
 
         if not command.is_leaf:
@@ -233,10 +243,16 @@ class SchemaRunner:
         return self.run_command(command, args)
 
     def _run_awaitable(self, awaitable: Any) -> Any:
+        if self._async_mode:
+            return awaitable
+
         if isinstance(awaitable, asyncio.Future):
             loop = awaitable.get_loop()
             if loop.is_running():
-                return awaitable
+                raise RuntimeError(
+                    "invoke() cannot execute an async command inside a running event loop; "
+                    "use 'await invoke_async(...)'"
+                )
 
             return loop.run_until_complete(awaitable)
 
@@ -245,24 +261,12 @@ class SchemaRunner:
         except RuntimeError:
             return asyncio.run(awaitable)
 
-        result: Any | None = None
-        error: BaseException | None = None
-
-        def _runner() -> None:
-            nonlocal result, error
-            try:
-                result = asyncio.run(awaitable)
-            except BaseException as exc:  # noqa: BLE001 - propagate user/runtime errors
-                error = exc
-
-        thread = threading.Thread(target=_runner)
-        thread.start()
-        thread.join()
-
-        if error is not None:
-            raise error
-
-        return result
+        if inspect.iscoroutine(awaitable):
+            awaitable.close()
+        raise RuntimeError(
+            "invoke() cannot execute an async command inside a running event loop; "
+            "use 'await invoke_async(...)'"
+        )
 
     def _resolve_result(self, value: Any) -> Any:
         if not inspect.isawaitable(value):
@@ -277,15 +281,15 @@ class SchemaRunner:
         *,
         subcommand: str | None = None,
     ) -> dict[str, Any]:
-        config = self.builder.resolve_pipe_targets(command, subcommand=subcommand)
+        config = self.context.resolve_pipe_targets(command, subcommand)
         if config is None:
             return args
 
-        payload = self.builder.read_piped_input()
-        parameters = self.builder.get_parameters_for(command, subcommand=subcommand)
-        cli_supplied_parameters = self.builder.get_cli_supplied_parameters(
+        payload = self.context.read_piped_input()
+        parameters = self.context.parameters_for(command, subcommand)
+        cli_supplied_parameters = self.context.cli_supplied_parameters_for(
             command,
-            subcommand=subcommand,
+            subcommand,
         )
         if payload is None:
             return validate_required_pipe_targets(
@@ -300,7 +304,7 @@ class SchemaRunner:
             config=config,
             arguments=args,
             parameters=parameters,
-            type_parser=self.builder.type_parser,
+            type_parser=self.context.type_parser,
             cli_supplied_parameters=cli_supplied_parameters,
         )
 
@@ -605,10 +609,13 @@ class SchemaRunner:
         args: dict[str, Any],
         arguments: list[Argument],
     ) -> dict[str, Any]:
-        return self.model_argument_mapper.reconstruct_expanded_models(args, arguments)
+        try:
+            return self.model_argument_mapper.reconstruct_expanded_models(args, arguments)
+        except ExpandedModelValidationError as e:
+            raise UsageError(str(e)) from e
 
     def _schema_command_for(self, command: Command) -> Command | None:
-        schema = self.builder.get_last_schema()
+        schema = self.context.schema
         if schema is None:
             return None
 

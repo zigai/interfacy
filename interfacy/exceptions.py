@@ -2,6 +2,14 @@ class InterfacyError(Exception):
     """Base exception for Interfacy errors."""
 
 
+class InterfacyExit(BaseException):
+    """Request a normal non-process exit from an embedded invocation."""
+
+    def __init__(self, code: int = 0) -> None:
+        self.code = code
+        super().__init__(code)
+
+
 class UnsupportedParameterTypeError(InterfacyError):
     """Raise when a parameter type is unsupported by the parser."""
 
@@ -49,6 +57,14 @@ class ConfigurationError(InterfacyError):
         super().__init__(message)
 
 
+class UsageError(InterfacyError):
+    """Raise when command-line input cannot be parsed."""
+
+    def __init__(self, message: str, *, usage: str | None = None) -> None:
+        self.usage = usage
+        super().__init__(message)
+
+
 class PipeInputError(InterfacyError):
     """Raise when piped stdin cannot be applied to parameters."""
 
@@ -56,14 +72,6 @@ class PipeInputError(InterfacyError):
         self.parameter = parameter
         prefix = "stdin" if parameter == "stdin" else f"parameter '{parameter}'"
         super().__init__(f"Pipe input error for {prefix}: {message}")
-
-
-class InterfacyInterruptedError(InterfacyError):
-    """Raised when the CLI is interrupted by user (Ctrl+C from terminal)."""
-
-
-# Backward-compatible alias for older imports.
-InterfacyInterrupted = InterfacyInterruptedError
 
 
 class CliError(InterfacyError):
@@ -102,8 +110,7 @@ __all__ = [
     "DuplicateCommandError",
     "DuplicatePluginError",
     "InterfacyError",
-    "InterfacyInterrupted",
-    "InterfacyInterruptedError",
+    "InterfacyExit",
     "InvalidCommandError",
     "InvalidTargetSyntaxError",
     "PipeInputError",
@@ -111,4 +118,5 @@ __all__ = [
     "TargetImportError",
     "TargetNotFoundError",
     "UnsupportedParameterTypeError",
+    "UsageError",
 ]

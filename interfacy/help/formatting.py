@@ -1,10 +1,18 @@
+import ast
+import re
+from enum import Enum
+from pathlib import PurePath
 from types import NoneType
 from typing import Any, Protocol
 
 from objinspect.typing import is_union_type, type_args, type_origin
 from stdl.st import TextStyle, with_style
 
-from interfacy.util import resolve_type_alias, simplified_type_name
+from interfacy.schema.typing import resolve_type_alias, simplified_type_name
+
+_PATH_DEFAULT_REPR_RE = re.compile(
+    r"^(?:Path|PosixPath|WindowsPath|PurePath|PurePosixPath|PureWindowsPath)\((.+)\)$"
+)
 
 
 class TypeStyleTheme(Protocol):
@@ -237,4 +245,43 @@ class TypeHelpFormatter:
         return tokens
 
 
-__all__ = ["TypeHelpFormatter", "TypeStyleTheme", "format_type_for_help"]
+def format_default_for_help(value: Any) -> str:
+    """
+    Format a default value for display in help text.
+
+    Args:
+        value (Any): Default value to render.
+    """
+    if isinstance(value, Enum):
+        raw = value.value
+        if isinstance(raw, (str, int, float, bool)):
+            return str(raw)
+
+        return value.name
+
+    if isinstance(value, PurePath):
+        return repr(str(value))
+
+    if isinstance(value, str):
+        if value == "":
+            return '""'
+
+        match = _PATH_DEFAULT_REPR_RE.fullmatch(value.strip())
+        if match is not None:
+            try:
+                parsed = ast.literal_eval(match.group(1))
+            except (SyntaxError, ValueError):
+                parsed = None
+
+            if isinstance(parsed, str):
+                return repr(parsed)
+
+    return str(value)
+
+
+__all__ = [
+    "TypeHelpFormatter",
+    "TypeStyleTheme",
+    "format_default_for_help",
+    "format_type_for_help",
+]

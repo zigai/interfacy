@@ -2,12 +2,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from objinspect import Parameter
 from stdl.st import kebab_case, snake_case
 
 from interfacy.naming.abbreviations import AbbreviationGenerator
 from interfacy.naming.name_mapping import NameMapping
-from interfacy.util import is_list_or_list_alias
+from interfacy.schema.typing import is_list_or_list_alias
 
 FlagStyle = Literal["keyword_only", "required_positional"]
 TranslationMode = Literal["none", "kebab", "snake"]
@@ -38,6 +37,23 @@ def build_name_mapping(mode: TranslationMode) -> NameMapping:
     return NameMapping(NAME_TRANSLATORS[mode])
 
 
+class FlagParameter(Protocol):
+    @property
+    def is_required(self) -> bool: ...
+
+    @property
+    def is_typed(self) -> bool: ...
+
+    @property
+    def type(self) -> Any: ...
+
+    @property
+    def default(self) -> Any: ...
+
+    @property
+    def has_default(self) -> bool: ...
+
+
 class FlagStrategy(Protocol):
     argument_translator: NameMapping
     command_translator: NameMapping
@@ -47,7 +63,7 @@ class FlagStrategy(Protocol):
     def get_arg_flags(
         self,
         name: str,
-        param: Parameter,
+        param: FlagParameter,
         taken_flags: list[str],
         abbrev_gen: AbbreviationGenerator,
     ) -> tuple[str, ...]: ...
@@ -63,7 +79,7 @@ class FlagAllocationState:
 class FlagParamView:
     """Proxy parameter that overrides selected attributes without losing the original shape."""
 
-    def __init__(self, param: Parameter, **overrides: Any) -> None:
+    def __init__(self, param: FlagParameter, **overrides: Any) -> None:
         self._param = param
         self._overrides = overrides
 
@@ -73,8 +89,29 @@ class FlagParamView:
 
         return getattr(self._param, name)
 
+    @property
+    def is_required(self) -> bool:
+        value = self._overrides.get("is_required", self._param.is_required)
+        return bool(value)
 
-def _is_required_list_positional_candidate(strategy: FlagStrategy, param: Parameter) -> bool:
+    @property
+    def is_typed(self) -> bool:
+        return self._param.is_typed
+
+    @property
+    def type(self) -> Any:
+        return self._param.type
+
+    @property
+    def default(self) -> Any:
+        return self._param.default
+
+    @property
+    def has_default(self) -> bool:
+        return self._param.has_default
+
+
+def _is_required_list_positional_candidate(strategy: FlagStrategy, param: FlagParameter) -> bool:
     return (
         strategy.style == "required_positional"
         and param.is_required
@@ -86,7 +123,7 @@ def _is_required_list_positional_candidate(strategy: FlagStrategy, param: Parame
 def get_arg_flags_for_parameter(
     strategy: FlagStrategy,
     name: str,
-    param: Parameter,
+    param: FlagParameter,
     taken_flags: list[str],
     abbrev_gen: AbbreviationGenerator,
     *,
@@ -136,7 +173,7 @@ class DefaultFlagStrategy(FlagStrategy):
     def get_arg_flags(
         self,
         name: str,
-        param: Parameter,
+        param: FlagParameter,
         taken_flags: list[str],
         abbrev_gen: AbbreviationGenerator,
     ) -> tuple[str, ...]:

@@ -1,23 +1,17 @@
 import ast
 import functools
 import operator
-import os
 import re
-import sys
 import typing
 from collections.abc import Callable
 from enum import Enum
-from pathlib import PurePath, PurePosixPath
 from types import NoneType
 from typing import Any, Literal, Protocol
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices as objinspect_get_choices
 from objinspect.typing import get_literal_choices, is_union_type, type_args, type_origin
-from setproctitle import setproctitle
 from stdl.st import TextStyle
-
-from interfacy.exceptions import ConfigurationError
 
 
 class TypeStyleTheme(Protocol):
@@ -29,83 +23,6 @@ class TypeStyleTheme(Protocol):
 
 
 _MISSING = object()
-_PATH_DEFAULT_REPR_RE = re.compile(
-    r"^(?:Path|PosixPath|WindowsPath|PurePath|PurePosixPath|PureWindowsPath)\((.+)\)$"
-)
-_DEFAULT_PROCESS_TITLE = "interfacy"
-
-
-def validate_help_group(
-    value: Any,
-    *,
-    value_name: str = "help_group",
-    allow_none: bool = True,
-) -> str | None:
-    """Validate and normalize a help-group label."""
-    if value is None:
-        if allow_none:
-            return None
-
-        raise ConfigurationError(f"{value_name} must be a non-empty string")
-
-    if not isinstance(value, str):
-        raise ConfigurationError(f"{value_name} must be a non-empty string")
-
-    if not value.strip():
-        raise ConfigurationError(f"{value_name} must be a non-empty string")
-
-    return value
-
-
-def derive_process_title(argv0: str | None = None) -> str:
-    """
-    Derive a user-facing process title from argv[0].
-
-    Args:
-        argv0 (str | None): Executable path/name override. Defaults to sys.argv[0].
-    """
-    candidate = argv0
-    if candidate is None:
-        candidate = sys.argv[0] if sys.argv else ""
-    candidate = candidate.strip()
-    if not candidate:
-        return _DEFAULT_PROCESS_TITLE
-
-    normalized = candidate.replace("\\", "/")
-    title = PurePosixPath(normalized).name.removesuffix(".exe")
-    if not title:
-        return _DEFAULT_PROCESS_TITLE
-
-    return title
-
-
-def set_process_title(title: str) -> bool:
-    """
-    Set process title using best available mechanism.
-
-    Args:
-        title (str): Target process title.
-    """
-    normalized = title.strip()
-    if not normalized:
-        return False
-
-    try:
-        setproctitle(normalized)
-    except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
-        return False
-
-    return True
-
-
-def set_process_title_from_argv(argv0: str | None = None) -> bool:
-    """
-    Derive and apply process title from argv[0].
-
-    Args:
-        argv0 (str | None): Executable path/name override.
-    """
-    return set_process_title(derive_process_title(argv0))
 
 
 def simplified_type_name(name: str) -> str:
@@ -147,7 +64,7 @@ def simplified_type_name(name: str) -> str:
     return name
 
 
-def is_list_or_list_alias(t: type) -> bool:
+def is_list_or_list_alias(t: Any) -> bool:
     """
     Return True if the annotation represents a list type.
 
@@ -162,7 +79,7 @@ def is_list_or_list_alias(t: type) -> bool:
     return t_origin is list
 
 
-def is_fixed_tuple(t: type) -> bool:
+def is_fixed_tuple(t: Any) -> bool:
     """
     Check if the type annotation is a fixed-length tuple (e.g., tuple[str, str]).
 
@@ -182,7 +99,7 @@ def is_fixed_tuple(t: type) -> bool:
     return not (len(args) == 2 and args[1] is Ellipsis)  # Variable-length tuple: tuple[T, ...]
 
 
-def get_fixed_tuple_info(t: type) -> tuple[int, tuple[type, ...]] | None:
+def get_fixed_tuple_info(t: Any) -> tuple[int, tuple[Any, ...]] | None:
     """
     Extract information from a fixed-length tuple type annotation.
 
@@ -470,7 +387,7 @@ def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> lis
     return _objinspect_choices_from_annotation(resolved, for_display=for_display)
 
 
-def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[Any] | None:
+def get_param_choices(param: Any, *, for_display: bool = False) -> list[Any] | None:
     """Return choices for an objinspect Parameter, falling back to inferred Enum types."""
     choices = get_annotation_choices(param.type, for_display=for_display)
     if choices:
@@ -493,108 +410,16 @@ def get_param_choices(param: Parameter, *, for_display: bool = False) -> list[An
     return get_annotation_choices(inferred, for_display=for_display)
 
 
-def format_default_for_help(value: Any) -> str:
-    """
-    Format a default value for display in help text.
-
-    Args:
-        value (Any): Default value to render.
-    """
-    if isinstance(value, Enum):
-        raw = value.value
-        if isinstance(raw, (str, int, float, bool)):
-            return str(raw)
-
-        return value.name
-
-    if isinstance(value, PurePath):
-        return repr(str(value))
-
-    if isinstance(value, str):
-        if value == "":
-            return '""'
-
-        match = _PATH_DEFAULT_REPR_RE.fullmatch(value.strip())
-        if match is not None:
-            try:
-                parsed = ast.literal_eval(match.group(1))
-            except (SyntaxError, ValueError):
-                parsed = None
-
-            if isinstance(parsed, str):
-                return repr(parsed)
-
-    return str(value)
-
-
-def get_terminal_width(default: int = 80) -> int:
-    """
-    Return terminal width in columns with a safe fallback.
-
-    Args:
-        default (int): Width to return when terminal size cannot be detected.
-    """
-    try:
-        return os.get_terminal_size().columns
-    except (OSError, AttributeError):
-        return default
-
-
-def strip_ansi(text: str) -> str:
-    """Remove ANSI escape sequences from a string."""
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
-
-
-def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
-    """
-    Return the inverted boolean flag name with a prefix toggle.
-
-    Args:
-        name (str): Base flag name.
-        prefix (str): Prefix for the inverted form.
-    """
-    if name.startswith(prefix):
-        return name[len(prefix) :]
-
-    return prefix + name
-
-
-def format_type_for_help(
-    annotation: Any,
-    style: TextStyle,
-    theme: TypeStyleTheme | None = None,
-) -> str:
-    """
-    Return a styled, readable type string for CLI help.
-
-    Handles:
-    - string annotations (from postponed annotations)
-    - Optional unions (X | None or Optional[X]) as "X?"
-    - token-level styling when a theme provides dedicated type token styles
-    - falling back gracefully if coloring fails
-    """
-    from interfacy.appearance.type_help import (
-        format_type_for_help as type_help_format_type_for_help,
-    )
-
-    return type_help_format_type_for_help(annotation, style, theme=theme)
-
-
 __all__ = [
     "extract_optional_union_list",
-    "format_default_for_help",
-    "format_type_for_help",
+    "extract_optional_union_tuple",
+    "extract_union_list",
     "get_annotation_choices",
     "get_fixed_tuple_info",
     "get_param_choices",
-    "get_terminal_width",
-    "inverted_bool_flag_name",
     "is_fixed_tuple",
     "is_list_or_list_alias",
     "resolve_objinspect_annotations",
     "resolve_type_alias",
-    "set_process_title_from_argv",
     "simplified_type_name",
-    "strip_ansi",
-    "validate_help_group",
 ]

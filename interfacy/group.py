@@ -5,17 +5,17 @@ from dataclasses import dataclass
 from inspect import isroutine
 from typing import Any, Literal
 
-from interfacy.appearance.help_sort import (
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError
+from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
+from interfacy.parameters import Param, ParameterSettingsInput, normalize_parameter_settings
+from interfacy.pipe import PipeTargets, build_pipe_targets_config
+from interfacy.schema.sorting import (
     HelpOptionSortRule,
     HelpSubcommandSortRule,
     resolve_help_option_sort_rules,
     resolve_help_subcommand_sort_rules,
 )
-from interfacy.exceptions import ConfigurationError, DuplicateCommandError
-from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
-from interfacy.parameters import Param, ParameterSettingsInput, normalize_parameter_settings
-from interfacy.pipe import PipeTargets, build_pipe_targets_config
-from interfacy.util import validate_help_group
+from interfacy.schema.validation import validate_help_group
 
 AbbreviationScope = Literal["top_level_options", "all_options"]
 ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = ("top_level_options", "all_options")

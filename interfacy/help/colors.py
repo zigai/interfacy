@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from stdl.st import TextStyle
 
-from interfacy.appearance.layout import InterfacyColors
+from interfacy.help.layout import InterfacyColors
 
 
 @dataclass(kw_only=True)
@@ -62,6 +62,14 @@ class ClapColors(InterfacyColors):
     flag_short: TextStyle = TextStyle(color="cyan", style="bold")
     flag_long: TextStyle = TextStyle(color="cyan", style="bold")
     flag_positional: TextStyle = TextStyle(color="cyan", style="bold")
+    usage_style: TextStyle | None = TextStyle(color="light_green", style="bold")
+    usage_text_style: TextStyle | None = TextStyle(color="cyan", style="bold")
+    section_heading_style: TextStyle | None = TextStyle(
+        color="light_green",
+        style="bold",
+    )
+    placeholder_style: TextStyle | None = TextStyle(color="cyan", style="bold")
+    command_name_style: TextStyle | None = TextStyle(color="cyan", style="bold")
 
 
 __all__ = [
