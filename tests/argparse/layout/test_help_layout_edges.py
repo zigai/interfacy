@@ -4,9 +4,12 @@ import argparse
 import os
 from enum import Enum
 
+from objinspect import Function
+
 from interfacy import BooleanMode
 from interfacy.appearance.layouts import ArgparseLayout, HelpLayout, InterfacyLayout
-from interfacy.schema.schema import Argument, ArgumentKind, BooleanBehavior, ValueShape
+from interfacy.appearance.renderer import SchemaHelpRenderer
+from interfacy.schema.schema import Argument, ArgumentKind, BooleanBehavior, Command, ValueShape
 from interfacy.util import strip_ansi
 
 
@@ -95,6 +98,84 @@ def test_schema_argument_legacy_bool_adds_sentence_punctuation() -> None:
     )
 
     assert strip_ansi(layout.format_argument(arg)).endswith("Enable verbose mode.")
+
+
+def test_default_only_extra_metadata_has_no_leading_separator() -> None:
+    layout = HelpLayout(format_option="{extra}", layout_mode="template")
+    arg = make_argument(
+        name="count",
+        flags=("--count",),
+        default=3,
+        type_=None,
+    )
+
+    assert strip_ansi(layout.format_argument(arg)) == "[default=3]"
+
+
+def test_parameter_and_argument_share_semantic_row_rendering() -> None:
+    def command(mode: str = "safe") -> None:
+        """Run a command.
+
+        Args:
+            mode: Execution mode.
+        """
+
+    param = Function(command).params[0]
+    arg = make_argument(
+        name="mode",
+        flags=("--mode",),
+        default="safe",
+        help_text="Execution mode.",
+        type_=str,
+    )
+    layout = InterfacyLayout()
+
+    parameter_help = strip_ansi(layout.format_parameter(param, ("--mode",)))
+    argument_help = strip_ansi(layout.format_argument(arg))
+
+    assert parameter_help == argument_help
+
+
+def test_render_metrics_are_scoped_and_terminal_width_is_authoritative(monkeypatch) -> None:
+    monkeypatch.setattr(
+        os,
+        "get_terminal_size",
+        lambda *args, **kwargs: os.terminal_size((120, 24)),
+    )
+    arg = make_argument(
+        name="output_directory",
+        flags=("--output-directory",),
+        default="a-very-long-default-directory",
+        help_text="Directory used for generated reports and intermediate output files.",
+    )
+    command = Command(
+        obj=None,
+        canonical_name="report",
+        cli_name="report",
+        aliases=(),
+        raw_description="Generate a report with configurable output handling.",
+        parameters=[arg],
+    )
+    layout = InterfacyLayout()
+    initial_state = (
+        layout.default_field_width,
+        layout.keep_empty_default_slot_for_help,
+        layout._active_pos_flag_width,
+        layout._render_terminal_width,
+    )
+    renderer = SchemaHelpRenderer(layout, terminal_width=40)
+
+    first = strip_ansi(renderer.render_command_help(command, "report"))
+    second = strip_ansi(renderer.render_command_help(command, "report"))
+
+    assert first == second
+    assert all(len(line) <= 40 for line in first.splitlines())
+    assert (
+        layout.default_field_width,
+        layout.keep_empty_default_slot_for_help,
+        layout._active_pos_flag_width,
+        layout._render_terminal_width,
+    ) == initial_state
 
 
 def test_schema_argument_choices_with_default_render_once() -> None:

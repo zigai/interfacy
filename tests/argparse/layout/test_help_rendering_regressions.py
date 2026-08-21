@@ -21,8 +21,10 @@ from interfacy.appearance.layouts import (
     Modern,
     StandardLayout,
 )
+from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.argparse_backend import Argparser
 from interfacy.argparse_backend.argument_parser import ArgumentParser
+from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.naming import DefaultFlagStrategy
 from interfacy.schema.schema import Command, ParserSchema
 from interfacy.util import strip_ansi
@@ -40,6 +42,52 @@ def run_with_expandable_settings(
     settings: ExpandableSettings = DEFAULT_EXPANDABLE_SETTINGS,
 ) -> None:
     return None
+
+
+def test_boolean_usage_restores_action_options_when_formatting_fails(monkeypatch) -> None:
+    parser = ArgumentParser(
+        prog="demo",
+        help_layout=ArgparseLayout(),
+        add_help=False,
+    )
+    action = parser.add_argument(
+        "--feature",
+        action=argparse.BooleanOptionalAction,
+    )
+    original_options = list(action.option_strings)
+
+    def fail_usage(*_args: object, **_kwargs: object) -> str:
+        raise RuntimeError("usage formatting failed")
+
+    monkeypatch.setattr(
+        InterfacyHelpFormatter,
+        "_compat_format_actions_usage",
+        fail_usage,
+    )
+
+    with pytest.raises(RuntimeError, match="usage formatting failed"):
+        parser.format_usage()
+
+    assert action.option_strings == original_options
+
+
+def test_schema_less_adaptive_parser_keeps_native_argparse_fallback(monkeypatch) -> None:
+    parser = ArgumentParser(
+        prog="manual",
+        help_layout=StandardLayout(),
+    )
+    parser.add_argument("--count", type=int, default=1, help="Number of runs.")
+
+    def fail_schema_render(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("schema renderer should not run")
+
+    monkeypatch.setattr(SchemaHelpRenderer, "render_command_help", fail_schema_render)
+
+    help_text = parser.format_help()
+
+    assert "usage: manual" in help_text
+    assert "--count" in help_text
+    assert "Number of runs." in help_text
 
 
 def test_layout_constructor_accepts_inline_kwargs() -> None:
@@ -1183,7 +1231,8 @@ def test_template_usage_wrapping_preserves_command_choice_tokens(monkeypatch) ->
     parser.add_command(short)
     help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
 
-    assert "reall\ny" not in help_text
+    broken_word = "really"[:5] + "\n" + "really"[5:]
+    assert broken_word not in help_text
     assert "command-with-a-really-really-long-name" in help_text
 
 
