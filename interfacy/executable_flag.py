@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
-from collections.abc import Callable, Sequence
+import threading
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -94,13 +96,53 @@ def executable_flag_tokens(flags: Sequence[ExecutableFlag]) -> set[str]:
     return {token for flag in flags for token in flag.flags}
 
 
+async def _await_handler_result(value: Awaitable[Any]) -> Any:
+    return await value
+
+
+def _resolve_handler_result(value: Any) -> Any:
+    if not inspect.isawaitable(value):
+        return value
+
+    if isinstance(value, asyncio.Future):
+        loop = value.get_loop()
+        if loop.is_running():
+            return value
+
+        return loop.run_until_complete(value)
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_await_handler_result(value))
+
+    result: Any | None = None
+    error: BaseException | None = None
+
+    def run_handler() -> None:
+        nonlocal result, error
+        try:
+            result = asyncio.run(_await_handler_result(value))
+        except BaseException as e:  # noqa: BLE001 - propagate handler/runtime errors
+            error = e
+
+    thread = threading.Thread(target=run_handler)
+    thread.start()
+    thread.join()
+
+    if error is not None:
+        raise error
+
+    return result
+
+
 def execute_executable_flag(
     flag: ExecutableFlag,
     *,
     display_result_fn: Callable[[Any], Any],
 ) -> int:
     """Execute a flag handler and display its result when configured."""
-    result = flag.handler()
+    result = _resolve_handler_result(flag.handler())
     if result is not None and flag.display_result:
         display_result_fn(result)
 

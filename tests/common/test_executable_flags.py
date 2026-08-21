@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from interfacy import CommandGroup, ExecutableFlag
+from interfacy.core import InterfacyParser
 from interfacy.exceptions import ReservedFlagError
+from interfacy.executable_flag import execute_executable_flag
 from tests.conftest import greet, pow
 
 
@@ -117,3 +121,40 @@ def test_root_executable_flag_cannot_reuse_native_help() -> None:
 
     with pytest.raises(ReservedFlagError):
         Argparser(executable_flags=[ExecutableFlag(("--help",), lambda: None)])
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_async_executable_flag_is_awaited(
+    parser: InterfacyParser,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def version() -> str:
+        return "interfacy async-version"
+
+    def command() -> None:
+        pytest.fail("the command must be short-circuited")
+
+    parser.executable_flags = [ExecutableFlag("--version", version)]
+    parser.add_command(command)
+
+    result = parser.run(args=["--version"])
+
+    assert isinstance(result, SystemExit)
+    assert result.code == 0
+    assert "interfacy async-version" in capsys.readouterr().out
+
+
+def test_async_executable_flag_is_awaited_inside_running_event_loop() -> None:
+    displayed: list[str] = []
+
+    async def version() -> str:
+        return "async-loop-version"
+
+    async def invoke() -> int:
+        return execute_executable_flag(
+            ExecutableFlag("--version", version),
+            display_result_fn=displayed.append,
+        )
+
+    assert asyncio.run(invoke()) == 0
+    assert displayed == ["async-loop-version"]
