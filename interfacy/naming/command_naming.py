@@ -50,8 +50,14 @@ class CommandNameRegistry:
         else:
             alias_tuple = tuple(aliases or ())
 
+        translations = dict(self._translator.translations)
         canonical = explicit_name or self._translator.translate(default_name)
-        self._ensure_unique(canonical, alias_tuple)
+        try:
+            self._ensure_unique(canonical, alias_tuple)
+        except DuplicateCommandError:
+            self._translator.translations.clear()
+            self._translator.translations.update(translations)
+            raise
         self._canonical.add(canonical)
         for alias in alias_tuple:
             self._alias_to_canonical[alias] = canonical

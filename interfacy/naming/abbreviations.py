@@ -56,7 +56,7 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
         if value in taken:
             raise ValueError(f"'{value}' is already an abbreviation")
 
-        name_split = value.split("_")
+        name_split = value.replace("-", "_").split("_")
         if not name_split:
             return None
 

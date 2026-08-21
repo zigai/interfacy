@@ -177,3 +177,20 @@ def test_required_list_positional_flag_generation_is_stable_across_rebuilds():
 
     assert first_arg.flags == ("values",)
     assert second_arg.flags == ("values",)
+
+
+def test_failed_command_registration_does_not_corrupt_reverse_mapping() -> None:
+    registry = CommandNameRegistry(NameMapping(lambda _name: "same"))
+    registry.register(default_name="first")
+
+    with pytest.raises(DuplicateCommandError):
+        registry.register(default_name="second")
+
+    assert registry.translator.reverse("same") == "first"
+
+
+def test_abbreviation_generator_handles_translated_kebab_names() -> None:
+    generator = DefaultAbbreviationGenerator(max_generated_len=2)
+    taken = ["v"]
+
+    assert generator.generate("verbose-mode", taken) == "vm"
