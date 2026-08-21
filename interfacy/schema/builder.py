@@ -2203,6 +2203,7 @@ class ParserSchemaBuilder:
         parent_path: tuple[str, ...] = (),
         canonical_name: str | None = None,
         parent_settings: CommandBuildSettings | None = None,
+        pipe_config: PipeTargets | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -2240,12 +2241,18 @@ class ParserSchemaBuilder:
 
         initializer: list[Argument] = []
         group_args_source = self._get_group_args_source(group)
+        group_params: Sequence[Parameter] = ()
         if group_args_source is not None:
+            group_params = self._params_from_group_args_source(group_args_source)
+            group_pipe_config = self._pipe_config_for_params(pipe_config, group_params)
             initializer = self._build_args_from_source(
                 group_args_source,
                 settings=settings,
                 parameter_settings=parameter_settings,
+                pipe_config=group_pipe_config,
             )
+        else:
+            group_pipe_config = None
         resolved_executable_flags = list(executable_flags or [])
         self._validate_executable_flags_against_tokens(
             resolved_executable_flags,
@@ -2277,6 +2284,7 @@ class ParserSchemaBuilder:
                 subgroup_entry.group,
                 current_path,
                 parent_settings=settings,
+                pipe_config=pipe_config,
                 executable_flags=subgroup_entry.executable_flags,
                 help_group=subgroup_entry.help_group,
             )
@@ -2288,6 +2296,7 @@ class ParserSchemaBuilder:
                 entry,
                 current_path,
                 parent_settings=settings,
+                pipe_config=pipe_config,
             )
 
         raw_epilog = None
@@ -2316,6 +2325,7 @@ class ParserSchemaBuilder:
             subcommands=subcommands or None,
             executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
+            pipe_targets=group_pipe_config,
             help_layout=self.context.help_layout,
             command_type="group",
             is_leaf=False,
@@ -2349,17 +2359,31 @@ class ParserSchemaBuilder:
 
         return getattr(group, "_group_args_source", None)
 
+    @staticmethod
+    def _params_from_group_args_source(
+        source: type | Callable[..., Any],
+    ) -> Sequence[Parameter]:
+        obj = inspect(source, init=True)
+        resolve_objinspect_annotations(obj)
+        if isinstance(obj, Class) and obj.init_method:
+            return obj.init_method.params
+        if isinstance(obj, Function):
+            return obj.params
+        return ()
+
     def _build_args_from_source(
         self,
         source: type | Callable[..., Any],
         *,
         settings: CommandBuildSettings,
         parameter_settings: dict[str, Param] | None = None,
+        pipe_config: PipeTargets | None = None,
     ) -> list[Argument]:
         """Build argument list from a class __init__ or callable signature."""
         obj = inspect(source, init=True)
         resolve_objinspect_annotations(obj)
 
+        pipe_param_names = pipe_config.targeted_parameters() if pipe_config else set()
         taken_flags = [*self.context.reserved_flags]
         flag_state = FlagAllocationState()
 
@@ -2376,7 +2400,7 @@ class ParserSchemaBuilder:
                 for arg in self._argument_from_parameter(
                     param,
                     taken_flags,
-                    set(),
+                    pipe_param_names,
                     settings=settings,
                     flag_allocation_state=flag_state,
                     parameter_setting=self._settings_for_param(effective_parameter_settings, param),
@@ -2396,7 +2420,7 @@ class ParserSchemaBuilder:
                 for arg in self._argument_from_parameter(
                     param,
                     taken_flags,
-                    set(),
+                    pipe_param_names,
                     settings=settings,
                     flag_allocation_state=flag_state,
                     parameter_setting=self._settings_for_param(effective_parameter_settings, param),
@@ -2411,6 +2435,7 @@ class ParserSchemaBuilder:
         parent_path: tuple[str, ...],
         *,
         parent_settings: CommandBuildSettings,
+        pipe_config: PipeTargets | None = None,
     ) -> Command:
         """Build Command from a CommandEntry (function/class/instance)."""
         settings = self._merge_build_settings(
@@ -2427,11 +2452,15 @@ class ParserSchemaBuilder:
             help_option_sort=entry.help_option_sort,
             help_subcommand_sort=entry.help_subcommand_sort,
         )
+        effective_pipe_config = (
+            entry.pipe_targets if entry.pipe_targets is not None else pipe_config
+        )
         if entry.is_instance:
             return self._build_from_instance(
                 entry,
                 parent_path,
                 settings=settings,
+                pipe_config=effective_pipe_config,
                 include_inherited_methods=entry.include_inherited_methods,
                 include_protected_methods=entry.include_protected_methods,
                 include_private_methods=entry.include_private_methods,
@@ -2453,6 +2482,7 @@ class ParserSchemaBuilder:
                 entry,
                 parent_path,
                 settings=settings,
+                pipe_config=effective_pipe_config,
                 include_inherited_methods=entry.include_inherited_methods,
                 include_protected_methods=entry.include_protected_methods,
                 include_private_methods=entry.include_private_methods,
@@ -2479,7 +2509,7 @@ class ParserSchemaBuilder:
                 canonical_name=cli_name,
                 description=entry.description,
                 aliases=entry.aliases,
-                pipe_config=entry.pipe_targets,
+                pipe_config=self._pipe_config_for_params(effective_pipe_config, obj.params),
                 settings=settings,
                 include_inherited_methods=entry.include_inherited_methods,
                 include_protected_methods=entry.include_protected_methods,
@@ -2505,6 +2535,7 @@ class ParserSchemaBuilder:
         parent_path: tuple[str, ...],
         *,
         settings: CommandBuildSettings,
+        pipe_config: PipeTargets | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -2547,7 +2578,7 @@ class ParserSchemaBuilder:
                 description=None,
                 aliases=(),
                 cli_name_override=method_cli_name,
-                pipe_config=entry.pipe_targets,
+                pipe_config=self._pipe_config_for_params(pipe_config, method.params),
                 settings=settings,
                 parameter_settings=parameter_settings,
             )
@@ -2579,7 +2610,7 @@ class ParserSchemaBuilder:
             subcommands=subcommands or None,
             executable_flags=resolved_executable_flags,
             raw_epilog=raw_epilog,
-            pipe_targets=entry.pipe_targets,
+            pipe_targets=None,
             help_layout=self.context.help_layout,
             command_type="instance",
             is_leaf=False,
@@ -2614,6 +2645,7 @@ class ParserSchemaBuilder:
         parent_path: tuple[str, ...],
         *,
         settings: CommandBuildSettings,
+        pipe_config: PipeTargets | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -2658,7 +2690,7 @@ class ParserSchemaBuilder:
         init_params = (
             cls.get_method("__init__").params if cls.has_init and not cls.is_initialized else []
         )
-        init_pipe_config = self._pipe_config_for_params(entry.pipe_targets, init_params)
+        init_pipe_config = self._pipe_config_for_params(pipe_config, init_params)
         effective_parameter_settings = merge_parameter_settings(
             self._class_parameter_settings(cls),
             parameter_settings,
@@ -2687,7 +2719,7 @@ class ParserSchemaBuilder:
                 continue
 
             method_cli_name = self.context.flag_strategy.command_translator.translate(method.name)
-            method_pipe_config = self._pipe_config_for_params(entry.pipe_targets, method.params)
+            method_pipe_config = self._pipe_config_for_params(pipe_config, method.params)
             subcommands[method_cli_name] = self._function_spec(
                 method,
                 canonical_name=None,
@@ -2722,6 +2754,7 @@ class ParserSchemaBuilder:
                     nested_entry,
                     current_path,
                     settings=settings,
+                    pipe_config=pipe_config,
                 )
 
         raw_description = entry.description or (cls.description if cls.has_docstring else None)

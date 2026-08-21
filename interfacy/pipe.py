@@ -92,6 +92,13 @@ def targets_to_list(value: str | Sequence[Any]) -> list[str]:
     return result
 
 
+def _normalize_allow_partial(value: bool | None) -> bool | None:
+    if value is not None and not isinstance(value, bool):
+        raise ConfigurationError("Pipe allow_partial must be a bool")
+
+    return value
+
+
 def _replace_pipe_targets(
     config: PipeTargets,
     *,
@@ -99,15 +106,24 @@ def _replace_pipe_targets(
     allow_partial: bool | None,
     priority: str | PipePriority | None,
 ) -> PipeTargets:
-    updated = config
+    if config.delimiter is not None and not isinstance(config.delimiter, str):
+        raise ConfigurationError("Pipe delimiter must be a string or None")
+
+    updated = replace(
+        config,
+        targets=tuple(targets_to_list(config.targets)),
+        priority=parse_priority(config.priority),
+        allow_partial=_normalize_allow_partial(config.allow_partial) or False,
+    )
     if delimiter is not DELIMITER_UNSET:
         if delimiter is not None and not isinstance(delimiter, str):
             raise ConfigurationError("Pipe delimiter must be a string or None")
 
         updated = replace(updated, delimiter=delimiter)
 
-    if allow_partial is not None:
-        updated = replace(updated, allow_partial=allow_partial)
+    normalized_allow_partial = _normalize_allow_partial(allow_partial)
+    if normalized_allow_partial is not None:
+        updated = replace(updated, allow_partial=normalized_allow_partial)
 
     if priority is not None:
         updated = replace(updated, priority=parse_priority(priority))
@@ -131,7 +147,7 @@ def _resolve_pipe_target_inputs(
         final_delimiter = delimiter
     else:
         raise ConfigurationError("Pipe delimiter must be a string or None")
-    resolved_allow_partial = allow_partial
+    resolved_allow_partial = _normalize_allow_partial(allow_partial)
     resolved_priority = priority
 
     if isinstance(targets, dict):
@@ -150,7 +166,7 @@ def _resolve_pipe_target_inputs(
             final_delimiter = delimiter_value
 
         if resolved_allow_partial is None and "allow_partial" in targets:
-            resolved_allow_partial = bool(targets["allow_partial"])
+            resolved_allow_partial = _normalize_allow_partial(targets["allow_partial"])
 
         if resolved_priority is None and "priority" in targets:
             resolved_priority = targets["priority"]
@@ -215,7 +231,7 @@ def build_pipe_targets_config(
         targets=tuple(names),
         delimiter=final_delimiter,
         priority=parse_priority(priority) if priority is not None else "cli",
-        allow_partial=bool(allow_partial) if allow_partial is not None else False,
+        allow_partial=allow_partial if allow_partial is not None else False,
     )
 
     return config

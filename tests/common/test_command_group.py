@@ -595,3 +595,73 @@ class TestGroupMixedWithDirectCommands:
         assert parser.run(args=["cli", "attach", "web"]) == "Attached to web"
         assert parser.run(args=["math", "pow", "2", "-e", "2"]) == 4
         assert parser.run(args=["pow", "2", "-e", "3"]) == 8
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_add_command_group_pipe_targets_reach_nested_function(
+    parser: InterfacyParser,
+    mocker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def echo(message: str) -> str:
+        return message
+
+    nested = CommandGroup("nested")
+    nested.add_command(echo)
+    tools = CommandGroup("tools")
+    tools.add_group(nested)
+
+    parser.add_command(tools, pipe_targets="message")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    mocker.patch("interfacy.core.read_piped", return_value="from-stdin")
+
+    assert parser.run(args=["tools", "nested", "echo"]) == "from-stdin"
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_group_pipe_targets_are_filtered_for_group_and_class_initializers(
+    parser: InterfacyParser,
+) -> None:
+    def group_options(workspace: str) -> None:
+        return None
+
+    class Tool:
+        def __init__(self, prefix: str) -> None:
+            self.prefix = prefix
+
+        def echo(self, message: str) -> str:
+            return f"{self.prefix}{message}"
+
+    tools = CommandGroup("tools").with_args(group_options)
+    tools.add_command(Tool, name="tool")
+
+    parser.add_command(tools, pipe_targets=("workspace", "prefix", "message"))
+    schema = parser.build_parser_schema()
+    tools_command = schema.commands["tools"]
+    tool_command = (tools_command.subcommands or {})["tool"]
+    echo_command = (tool_command.subcommands or {})["echo"]
+
+    assert tools_command.pipe_targets is not None
+    assert tools_command.pipe_targets.targets == ("workspace",)
+    assert tool_command.pipe_targets is not None
+    assert tool_command.pipe_targets.targets == ("prefix",)
+    assert echo_command.pipe_targets is not None
+    assert echo_command.pipe_targets.targets == ("message",)
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_group_command_pipe_targets_override_inherited_group_config(
+    parser: InterfacyParser,
+) -> None:
+    def combine(inherited: str, explicit: str) -> tuple[str, str]:
+        return inherited, explicit
+
+    tools = CommandGroup("tools")
+    tools.add_command(combine, pipe_targets="explicit")
+
+    parser.add_command(tools, pipe_targets="inherited")
+    schema = parser.build_parser_schema()
+    combine_command = (schema.commands["tools"].subcommands or {})["combine"]
+
+    assert combine_command.pipe_targets is not None
+    assert combine_command.pipe_targets.targets == ("explicit",)

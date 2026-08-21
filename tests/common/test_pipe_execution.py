@@ -1,9 +1,11 @@
 import sys
+from typing import Any
 
 import pytest
 
 from interfacy.core import InterfacyParser
-from interfacy.exceptions import PipeInputError
+from interfacy.exceptions import ConfigurationError, PipeInputError
+from interfacy.pipe import PipeTargets, build_pipe_targets_config
 
 
 # We define dummy functions here to use as command targets
@@ -249,3 +251,23 @@ class TestPipedListInput:
 
         result = parser.run(args=[])
         assert result == [1, 2, 3]
+
+
+@pytest.mark.parametrize("value", ["false", 0, 1, [], object()])
+def test_pipe_allow_partial_rejects_non_boolean_values(value: Any) -> None:
+    with pytest.raises(ConfigurationError, match="allow_partial must be a bool"):
+        build_pipe_targets_config({"bindings": ("first", "second"), "allow_partial": value})
+
+
+def test_existing_pipe_targets_rejects_non_boolean_allow_partial() -> None:
+    invalid = PipeTargets(targets=("first", "second"), allow_partial="false")  # type: ignore[arg-type]
+
+    with pytest.raises(ConfigurationError, match="allow_partial must be a bool"):
+        build_pipe_targets_config(invalid)
+
+
+def test_existing_pipe_targets_rejects_invalid_delimiter() -> None:
+    invalid = PipeTargets(targets=("value",), delimiter=1)  # type: ignore[arg-type]
+
+    with pytest.raises(ConfigurationError, match="delimiter must be a string or None"):
+        build_pipe_targets_config(invalid)
