@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 from stdl.st import ansi_len, with_style
 
+from interfacy.appearance.wrapping import expand_usage_parts
+
 if TYPE_CHECKING:
     from interfacy.appearance.layout import HelpLayout
 
@@ -383,7 +385,14 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
                     positionals.append(usage_action)
 
             format_actions = self._compat_format_actions_usage
-            action_usage = format_actions(optionals + positionals, groups)
+            try:
+                action_usage = format_actions(optionals + positionals, groups)
+                opt_usage = format_actions(optionals, groups)
+                pos_usage = format_actions(positionals, groups)
+            finally:
+                for restored_action, option_strings in original_option_strings.items():
+                    restored_action.option_strings = option_strings
+
             usage = " ".join([s for s in [prog, action_usage] if s])
             usage = re.sub(r"(?<=\S)\s+\]", "]", usage)
 
@@ -391,8 +400,6 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
             prefix_len = ansi_len(prefix)
             if prefix_len + len(usage) > text_width:
                 part_regexp = r"\(.*?\)+(?=\s|$)|\[.*?\]+(?=\s|$)|\S+"
-                opt_usage = format_actions(optionals, groups)
-                pos_usage = format_actions(positionals, groups)
                 opt_parts = re.findall(part_regexp, opt_usage)
                 pos_parts = re.findall(part_regexp, pos_usage)
 
@@ -443,9 +450,6 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
                 usage = "\n".join(lines)
 
-            for restored_action, option_strings in original_option_strings.items():
-                restored_action.option_strings = option_strings
-
         usage_text_style = None
         if layout is not None:
             custom_prefix = layout.usage_prefix
@@ -465,34 +469,7 @@ class InterfacyHelpFormatter(argparse.HelpFormatter):
 
     @staticmethod
     def _expand_usage_parts(parts: list[str], available_width: int) -> list[str]:
-        expanded: list[str] = []
-        for part in parts:
-            if ansi_len(part) <= available_width:
-                expanded.append(part)
-                continue
-
-            bracket_prefix = ""
-            bracket_suffix = ""
-            body = part
-            if part.startswith("[") and part.endswith("]"):
-                bracket_prefix = "["
-                bracket_suffix = "]"
-                body = part[1:-1]
-
-            if body.startswith("{") and body.endswith("}") and "," in body:
-                choices = body[1:-1].split(",")
-                for idx, choice in enumerate(choices):
-                    prefix = bracket_prefix + ("{" if idx == 0 else "")
-                    suffix = ("}" if idx == len(choices) - 1 else ",") + (
-                        bracket_suffix if idx == len(choices) - 1 else ""
-                    )
-                    expanded.append(f"{prefix}{choice}{suffix}")
-
-                continue
-
-            expanded.append(part)
-
-        return expanded
+        return expand_usage_parts(parts, available_width)
 
 
 __all__ = ["InterfacyHelpFormatter"]

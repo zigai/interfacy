@@ -943,13 +943,13 @@ class Argparser(InterfacyParser):
                 parser.epilog = schema.commands_help
         else:
             cmd = next(iter(schema.commands.values()))
-            parser.set_schema(None)
             self._apply_command_schema(
                 parser,
                 cmd,
                 extra_executable_flags=schema.executable_flags,
                 relaxed_parse=relaxed_parse,
             )
+            parser.set_schema(schema)
 
             if self._should_set_epilog(cmd.epilog) and not parser.epilog:
                 parser.epilog = cmd.epilog

@@ -10,11 +10,7 @@ from objinspect.typing import type_name
 from typing_extensions import Never
 
 from interfacy.appearance.layouts import StandardLayout
-from interfacy.appearance.renderer import (
-    SchemaHelpRenderer,
-    command_has_grouped_subcommands,
-    has_grouped_commands,
-)
+from interfacy.appearance.renderer import SchemaHelpRenderer
 from interfacy.argparse_backend.help_formatter import InterfacyHelpFormatter
 from interfacy.logger import get_logger
 from interfacy.parameters import BooleanMode
@@ -383,27 +379,21 @@ class ArgumentParser(argparse.ArgumentParser):
         if layout is None:
             return super().format_help()
 
-        has_grouped_help = False
-        if self._schema is not None:
-            has_grouped_help = has_grouped_commands(self._schema.commands)
-        elif self._schema_command is not None:
-            has_grouped_help = command_has_grouped_subcommands(self._schema_command)
-
-        if not _uses_template_layout(layout) and not has_grouped_help:
-            return super().format_help()
-
-        renderer = SchemaHelpRenderer(layout, help_argument=self._get_help_argument_for_schema())
-
+        renderer = SchemaHelpRenderer(
+            layout,
+            help_argument=self._get_help_argument_for_schema(),
+            prefer_short_usage_flags=True,
+        )
         if self._schema is not None:
             return renderer.render_parser_help(self._schema, self.prog)
 
         if self._schema_command is not None:
             return renderer.render_command_help(self._schema_command, self.prog)
 
-        if _uses_template_layout(layout):
-            return renderer.render_command_help(self._build_implicit_schema_command(), self.prog)
+        if not _uses_template_layout(layout):
+            return super().format_help()
 
-        return super().format_help()
+        return renderer.render_command_help(self._build_implicit_schema_command(), self.prog)
 
     def set_schema_command(self, command: "Command | None") -> None:
         """
@@ -413,6 +403,8 @@ class ArgumentParser(argparse.ArgumentParser):
             command (Command | None): Command schema tied to this parser.
         """
         self._schema_command = command
+        if command is not None:
+            self._schema = None
 
     def set_schema(self, schema: "ParserSchema | None") -> None:
         """
@@ -422,6 +414,8 @@ class ArgumentParser(argparse.ArgumentParser):
             schema (ParserSchema | None): Full parser schema tied to this parser.
         """
         self._schema = schema
+        if schema is not None:
+            self._schema_command = None
 
     def add_subparsers(self, **kwargs: Any) -> NestedSubParsersAction:
         """
