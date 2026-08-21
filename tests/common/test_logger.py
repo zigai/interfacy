@@ -8,6 +8,10 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
+from interfacy.console import log_exception
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -264,3 +268,19 @@ def test_clickable_formatter_keeps_external_logger_name() -> None:
     ClickableFormatter("%(short_name)s").format(record)
 
     assert record.short_name == "external.module"
+
+
+def test_log_exception_formats_the_supplied_exception_traceback(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    try:
+        raise ValueError("boom")  # noqa: TRY301 - capture this exact traceback for the API test
+    except ValueError as e:
+        error = e
+
+    log_exception("test", error, full_traceback=True)
+
+    stderr = capsys.readouterr().err
+    assert "test_log_exception_formats_the_supplied_exception_traceback" in stderr
+    assert "ValueError: boom" in stderr
+    assert "NoneType: None" not in stderr
