@@ -66,6 +66,19 @@ Interfacy(
 
 This sets one column width without creating a custom layout subclass.
 
+## Rendering behavior
+
+Schema-backed argparse and Click commands use the same help renderer. Layout measurements are
+scoped to each render, so one layout instance can be reused across commands without carrying
+column widths or terminal dimensions from an earlier help screen. An explicit backend terminal
+width takes precedence over the process terminal size.
+
+Manually constructed schema-less `ArgumentParser` objects continue to use native argparse help
+formatting with the selected adaptive layout settings.
+
+Custom layouts should use the documented `HelpLayout` methods and constructor fields as extension
+points. Private row, measurement, wrapping, and template helpers are implementation details.
+
 ## API reference
 
 See {doc}`../api/appearance` for the full layout API.
