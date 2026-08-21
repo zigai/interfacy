@@ -17,6 +17,7 @@ from interfacy.click_backend.commands import (
     InterfacyClickOption,
 )
 from interfacy.group import CommandGroup
+from interfacy.naming import DefaultFlagStrategy
 from tests.conftest import (
     Math,
     fn_bool_default_false,
@@ -439,3 +440,25 @@ class TestClickModelExpansion:
         assert isinstance(result, User)
         assert result.name == "Alice"
         assert result.age == 30
+
+
+@dataclass
+class Settings:
+    value: str
+
+
+def test_expanded_option_does_not_overwrite_similarly_named_positional() -> None:
+    def command(settings_value: str, *, settings: Settings) -> tuple[str, Settings]:
+        return settings_value, settings
+
+    parser = ClickParser(
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        sys_exit_enabled=False,
+        full_error_traceback=True,
+    )
+    parser.add_command(command)
+
+    assert parser.run(args=["outer", "--settings.value", "inner"]) == (
+        "outer",
+        Settings(value="inner"),
+    )

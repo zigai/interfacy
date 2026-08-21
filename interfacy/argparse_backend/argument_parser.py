@@ -726,9 +726,38 @@ class ArgumentParser(argparse.ArgumentParser):
             choices=choices,
         )
 
+    @classmethod
+    def _parent_copy_memo(
+        cls,
+        container: argparse._ActionsContainer,
+        seen: set[int] | None = None,
+    ) -> dict[int, Any]:
+        seen = set() if seen is None else seen
+        container_id = id(container)
+        if container_id in seen:
+            return {}
+
+        seen.add(container_id)
+        preserved: dict[int, Any] = {}
+        for value in cls._container_defaults(container).values():
+            preserved[id(value)] = value
+
+        for action in cls._iter_container_actions(container):
+            for value in (action.default, action.const, action.type):
+                preserved[id(value)] = value
+
+            if isinstance(action, argparse._SubParsersAction):  # type: ignore[private-member-access]
+                for subparser in action.choices.values():
+                    preserved.update(cls._parent_copy_memo(subparser, seen))
+            else:
+                preserved[id(action.choices)] = action.choices
+
+        return preserved
+
     def _add_container_actions(self, container: argparse._ActionsContainer) -> None:
-        self._remap_container_destinations(container)
-        return super()._add_container_actions(container)
+        copied_container = deepcopy(container, self._parent_copy_memo(container))
+        self._remap_container_destinations(copied_container)
+        return super()._add_container_actions(copied_container)
 
     def _get_positional_kwargs(self, dest: str, **kwargs: Any) -> dict[str, Any]:
         logger.debug("Getting positional kwargs for dest='%s'", dest)
@@ -750,7 +779,10 @@ class ArgumentParser(argparse.ArgumentParser):
         root = Namespace()
 
         for key, value in vars(namespace).items():
-            components = key.split(self.nest_separator)
+            original_dest = self._original_destinations.get(key)
+            components = (
+                [*self.nest_path_components, original_dest] if original_dest is not None else [key]
+            )
             current = root
 
             # Navigate through component hierarchy

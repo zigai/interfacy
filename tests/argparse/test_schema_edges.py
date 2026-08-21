@@ -7,9 +7,11 @@ from objinspect import Function
 
 from interfacy import Param, params
 from interfacy.appearance.layouts import InterfacyLayout
-from interfacy.argparse_backend import Argparser
+from interfacy.argparse_backend import Argparser, ArgumentParser
+from interfacy.argparse_backend.argument_parser import namespace_to_dict
 from interfacy.exceptions import ConfigurationError
 from interfacy.executable_flag import ExecutableFlag
+from interfacy.naming import DefaultFlagStrategy
 from interfacy.schema.schema import Command, ParserSchema
 
 
@@ -163,3 +165,32 @@ def test_multi_command_schema_registers_aliases_and_executable_flags() -> None:
     assert "--version" in help_text
     assert "alpha" in help_text
     assert "beta" in help_text
+
+
+def test_argument_name_containing_nest_separator_is_not_split() -> None:
+    def show(*, foo__bar: str = "default") -> str:
+        return foo__bar
+
+    parser = Argparser(
+        flag_strategy=DefaultFlagStrategy(style="keyword_only"),
+        print_result=False,
+        sys_exit_enabled=False,
+    )
+
+    assert parser.run(show, args=["--foo-bar", "supplied"]) == "supplied"
+
+
+def test_subparser_parent_does_not_mutate_reusable_parent_parser() -> None:
+    default = object()
+    parent = ArgumentParser(add_help=False)
+    parent.add_argument("--value", default=default)
+    root = ArgumentParser()
+    subparsers = root.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("run", parents=[parent])
+
+    assert namespace_to_dict(root.parse_args(["run", "--value", "child"])) == {
+        "command": "run",
+        "run": {"value": "child"},
+    }
+    assert namespace_to_dict(root.parse_args(["run"]))["run"]["value"] is default
+    assert namespace_to_dict(parent.parse_args(["--value", "parent"])) == {"value": "parent"}

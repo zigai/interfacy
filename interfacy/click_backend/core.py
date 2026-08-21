@@ -546,6 +546,9 @@ class ClickParser(InterfacyParser):
                 used_names,
                 relaxed_parse=relaxed_parse,
             )
+            if param.name is not None:
+                used_names.add(param.name)
+
             params.append(param)
 
             if param.name is not None:
