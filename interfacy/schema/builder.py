@@ -258,7 +258,7 @@ class ModelExpansionBuilder:
                         path=new_path,
                         depth=depth + 1,
                         parent_optional=parent_optional or is_optional_model,
-                        parent_has_default=parent_has_default,
+                        parent_has_default=parent_has_default or not field.required,
                         original_model_type=original_model_type,
                         model_default=model_default,
                     )
@@ -1710,7 +1710,11 @@ class ParserSchemaBuilder:
             if not field.required:
                 continue
 
-            field_plan = self._argument_value_plan(field.annotation, settings=settings)
+            field_plan = (
+                ScalarValue(bool)
+                if field.annotation is bool
+                else self._argument_value_plan(field.annotation, settings=settings)
+            )
             if not self._value_plan_is_fixed(field_plan):
                 return None
 

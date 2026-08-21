@@ -182,6 +182,9 @@ class ModelArgumentMapper:
         result: list[ModelField] = []
 
         for field_info in fields(model_type):
+            if not field_info.init:
+                continue
+
             required = field_info.default is MISSING and field_info.default_factory is MISSING
             default = None
             if field_info.default is not MISSING:
@@ -607,6 +610,7 @@ class ModelArgumentMapper:
                     required=field.default is MISSING and field.default_factory is MISSING,  # type: ignore[comparison-overlap]
                 )
                 for field in fields(model_type)
+                if field.init
             ]
         if hasattr(model_type, "model_fields"):
             return self._pydantic_v2_model_fields(model_type)
@@ -677,10 +681,9 @@ class ModelArgumentMapper:
             resolved_hints = self._resolved_type_hints(model_type)
             kwargs: dict[str, Any] = {}
             for field in fields(model_type):
-                if field.name in values:
+                if field.init and field.name in values:
                     annotation = resolved_hints.get(field.name, field.type)
                     kwargs[field.name] = self._coerce_model_value(annotation, values[field.name])
-
             return model_type(**kwargs)
 
         if hasattr(model_type, "model_fields"):

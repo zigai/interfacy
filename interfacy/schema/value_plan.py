@@ -163,12 +163,10 @@ def _as_sequence(raw: Any) -> Sequence[Any]:
 
 
 def plan_requires_post_conversion(value_plan: ArgumentValue | None, *, required: bool) -> bool:
-    if value_plan is None:
-        return False
+    if isinstance(value_plan, RepeatedValue):
+        return plan_requires_post_conversion(value_plan.item, required=required)
 
-    consumption = value_plan.token_consumption(required=required)
-
-    return consumption.group_size > 1
+    return isinstance(value_plan, (FixedTupleValue, ObjectValue))
 
 
 def convert_with_value_plan(
