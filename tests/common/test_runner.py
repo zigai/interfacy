@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 import pytest
+from objinspect import Method
 
 from interfacy.core import InterfacyParser
 from interfacy.plugins import InterfacyPlugin
@@ -382,3 +385,31 @@ def test_class_runner_does_not_mutate_parsed_namespace() -> None:
     assert SchemaRunner(namespace, parser._parser, ["show"]).run() == 1
     assert namespace == before
     assert SchemaRunner(namespace, parser._parser, ["show"]).run() == 1
+
+
+class _IdentityTranslator:
+    def reverse(self, value: str) -> str:
+        return value
+
+
+class _FalseyService:
+    def __init__(self, prefix: str = "new") -> None:
+        self.prefix = prefix
+
+    def __bool__(self) -> bool:
+        return False
+
+    def greet(self, name: str) -> str:
+        return f"{self.prefix}:{name}"
+
+
+def test_bound_method_uses_falsey_bound_instance() -> None:
+    service = _FalseyService("bound")
+    method = Method(service.greet, _FalseyService)
+    builder = SimpleNamespace(
+        COMMAND_KEY="command",
+        flag_strategy=SimpleNamespace(argument_translator=_IdentityTranslator()),
+    )
+    runner = SchemaRunner({}, builder, [])
+
+    assert runner.run_method(method, {"name": "Ada"}) == "bound:Ada"

@@ -122,7 +122,7 @@ class SchemaRunner:
         """
         cli_args = reverse_translations(args, self.builder.flag_strategy.argument_translator)
         instance = method.class_instance
-        if instance:
+        if instance is not None:
             method_args, method_kwargs = self._build_call_args(method, cli_args)
             result = method.call(*method_args, **method_kwargs)
             return self._resolve_result(result)
