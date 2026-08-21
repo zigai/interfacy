@@ -113,8 +113,8 @@ logger = get_logger(__name__)
 
 
 def validate_abbreviation_max_generated_len(value: int) -> int:
-    if value < 1:
-        raise ConfigurationError("abbreviation_max_generated_len must be >= 1")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
 
     return value
 
@@ -137,8 +137,8 @@ def validate_help_subcommand_sort(value: Any) -> HelpSubcommandSort:
 
 
 def validate_model_expansion_max_depth(value: int) -> int:
-    if value < 1:
-        raise ConfigurationError("model_expansion_max_depth must be >= 1")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ConfigurationError("model_expansion_max_depth must be an integer >= 1")
 
     return value
 
@@ -825,11 +825,32 @@ class InterfacyParser:
         self,
         *,
         flag_strategy: FlagStrategy | None,
+        abbreviation_max_generated_len: int | None,
+        abbreviation_scope: AbbreviationScope | None,
+        help_option_sort: list[HelpOptionSortRule] | None,
+        help_subcommand_sort: list[HelpSubcommandSortRule] | None,
+        model_expansion_max_depth: int | None,
+        bool_negative_prefix: BooleanNegativePrefix | None,
+        help_flags: HelpFlags | None,
+        method_skips: MethodSkips,
+        parse_recovery_max_attempts: int | None,
     ) -> None:
         if flag_strategy is not None and self.commands:
             raise ConfigurationError(
                 "flag_strategy cannot be changed after commands have been registered"
             )
+
+        self._validate_optional(
+            abbreviation_max_generated_len, validate_abbreviation_max_generated_len
+        )
+        self._validate_optional(abbreviation_scope, validate_abbreviation_scope)
+        self._validate_optional(help_option_sort, validate_help_option_sort)
+        self._validate_optional(help_subcommand_sort, validate_help_subcommand_sort)
+        self._validate_optional(model_expansion_max_depth, validate_model_expansion_max_depth)
+        self._validate_optional(bool_negative_prefix, validate_bool_negative_prefix)
+        self._validate_optional(help_flags, validate_help_flags)
+        self._validate_optional(method_skips, validate_method_skips)
+        self._validate_optional(parse_recovery_max_attempts, validate_parse_recovery_max_attempts)
 
     def _apply_layout_setup(
         self,
@@ -1008,7 +1029,18 @@ class InterfacyParser:
         parse_recovery_max_attempts: int | None = None,
     ) -> None:
         """Apply parser-level setup after construction."""
-        self._validate_apply_setup_request(flag_strategy=flag_strategy)
+        self._validate_apply_setup_request(
+            flag_strategy=flag_strategy,
+            abbreviation_max_generated_len=abbreviation_max_generated_len,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+            model_expansion_max_depth=model_expansion_max_depth,
+            bool_negative_prefix=bool_negative_prefix,
+            help_flags=help_flags,
+            method_skips=method_skips,
+            parse_recovery_max_attempts=parse_recovery_max_attempts,
+        )
         self._apply_layout_setup(
             help_layout=help_layout,
             help_colors=help_colors,
@@ -1772,6 +1804,10 @@ class InterfacyParser:
             model_expansion_max_depth=model_expansion_max_depth,
             help_group=help_group,
         )
+        resolved_method_skips = (
+            validate_method_skips(method_skips) if method_skips is not None else None
+        )
+        resolved_parameter_settings = normalize_parameter_settings(parameter_settings)
 
         if isinstance(command, CommandGroup):
             return self.add_group(
@@ -1779,16 +1815,20 @@ class InterfacyParser:
                 name=name,
                 description=description,
                 aliases=aliases,
+                pipe_targets=pipe_targets,
                 include_inherited_methods=include_inherited_methods,
                 include_protected_methods=include_protected_methods,
                 include_private_methods=include_private_methods,
                 include_staticmethods=include_staticmethods,
                 include_classmethods=include_classmethods,
                 expand_model_params=expand_model_params,
-                method_skips=method_skips,
-                parameter_settings=parameter_settings,
+                method_skips=resolved_method_skips,
+                parameter_settings=resolved_parameter_settings,
                 **resolved_settings,
             )
+        resolved_pipe_targets = (
+            build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
+        )
 
         obj = inspect(
             command,
@@ -1831,9 +1871,8 @@ class InterfacyParser:
         if canonical_name in self.commands:
             raise DuplicateCommandError(canonical_name)
 
-        if pipe_targets is not None:
-            config = build_pipe_targets_config(pipe_targets)
-            self._pipe_target_overrides[(canonical_name, None)] = config
+        if resolved_pipe_targets is not None:
+            self._pipe_target_overrides[(canonical_name, None)] = resolved_pipe_targets
 
         raw_description = (
             description
@@ -1862,8 +1901,8 @@ class InterfacyParser:
             include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
-            method_skips=method_skips,
-            parameter_settings=parameter_settings,
+            method_skips=resolved_method_skips,
+            parameter_settings=resolved_parameter_settings,
             **resolved_settings,
         )
         self.commands[canonical_name] = command
@@ -1969,6 +2008,7 @@ class InterfacyParser:
         help_group: str | None = None,
         method_skips: MethodSkips = None,
         parameter_settings: ParameterSettingsInput | None = None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
     ) -> "Command":
         """
         Add a CommandGroup to the parser for deeply nested CLI structures.
@@ -1992,6 +2032,7 @@ class InterfacyParser:
             help_group: Optional help-only command group heading.
             method_skips: Override class method skip list.
             parameter_settings: Per-parameter CLI settings for group-level arguments.
+            pipe_targets: Configure stdin piping for the group's initializers and descendants.
 
         Returns:
             The Command schema for the group
@@ -2000,16 +2041,6 @@ class InterfacyParser:
         for alias in group.aliases:
             if alias not in combined_aliases:
                 combined_aliases.append(alias)
-
-        canonical_name, command_aliases = self.name_registry.register(
-            default_name=group.name,
-            explicit_name=name,
-            aliases=combined_aliases or None,
-        )
-
-        if canonical_name in self.commands:
-            raise DuplicateCommandError(canonical_name)
-
         resolved_settings = self._resolve_command_settings(
             abbreviation_scope=abbreviation_scope,
             executable_flags=executable_flags,
@@ -2018,23 +2049,44 @@ class InterfacyParser:
             model_expansion_max_depth=model_expansion_max_depth,
             help_group=help_group,
         )
-
-        resolved_parameter_settings = normalize_parameter_settings(parameter_settings)
-
-        builder = ParserSchemaBuilder(self)
-        command = builder.build_from_group(
-            group,
-            canonical_name=canonical_name,
-            include_inherited_methods=include_inherited_methods,
-            include_protected_methods=include_protected_methods,
-            include_private_methods=include_private_methods,
-            include_staticmethods=include_staticmethods,
-            include_classmethods=include_classmethods,
-            expand_model_params=expand_model_params,
-            method_skips=method_skips,
-            parameter_settings=resolved_parameter_settings,
-            **resolved_settings,
+        resolved_method_skips = (
+            validate_method_skips(method_skips) if method_skips is not None else None
         )
+        resolved_parameter_settings = normalize_parameter_settings(parameter_settings)
+        resolved_pipe_targets = (
+            build_pipe_targets_config(pipe_targets) if pipe_targets is not None else None
+        )
+
+        name_registry_snapshot = self.name_registry.snapshot()
+        canonical_name, command_aliases = self.name_registry.register(
+            default_name=group.name,
+            explicit_name=name,
+            aliases=combined_aliases or None,
+        )
+
+        if canonical_name in self.commands:
+            self.name_registry.restore(name_registry_snapshot)
+            raise DuplicateCommandError(canonical_name)
+
+        try:
+            builder = ParserSchemaBuilder(self)
+            command = builder.build_from_group(
+                group,
+                canonical_name=canonical_name,
+                pipe_config=resolved_pipe_targets,
+                include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
+                include_classmethods=include_classmethods,
+                expand_model_params=expand_model_params,
+                method_skips=resolved_method_skips,
+                parameter_settings=resolved_parameter_settings,
+                **resolved_settings,
+            )
+        except Exception:
+            self.name_registry.restore(name_registry_snapshot)
+            raise
 
         if description is not None:
             command.raw_description = description
@@ -2048,7 +2100,7 @@ class InterfacyParser:
             include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
             expand_model_params=expand_model_params,
-            method_skips=method_skips,
+            method_skips=resolved_method_skips,
             parameter_settings=resolved_parameter_settings,
             **resolved_settings,
         )

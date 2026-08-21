@@ -1,5 +1,6 @@
 import pytest
 
+from interfacy import CommandGroup, Interfacy
 from interfacy.core import InterfacyParser
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from tests.conftest import (
@@ -503,3 +504,78 @@ class TestPipeTargets:
 
         assert parser.run(args=["greet", "Ada"]) == "Hello, Ada!"
         assert parser.run(args=["pow", "-e", "2"]) == 16
+
+
+def test_invalid_command_settings_do_not_reserve_command_name() -> None:
+    def convert(value: int) -> int:
+        return value
+
+    cli = Interfacy(sys_exit_enabled=False)
+
+    with pytest.raises(ConfigurationError, match="method_skips must be a sequence"):
+        cli.add_command(convert, method_skips="invalid")  # type: ignore[arg-type]
+
+    cli.add_command(convert)
+
+    assert cli.run(args=["7"]) == 7
+
+
+def test_invalid_parameter_settings_do_not_reserve_command_name() -> None:
+    def convert(value: int) -> int:
+        return value
+
+    cli = Interfacy(sys_exit_enabled=False)
+
+    with pytest.raises(ConfigurationError, match="parameter_settings must be a mapping"):
+        cli.add_command(convert, parameter_settings="invalid")  # type: ignore[arg-type]
+
+    cli.add_command(convert)
+
+    assert cli.run(args=["7"]) == 7
+
+
+def test_invalid_pipe_targets_do_not_reserve_command_name() -> None:
+    def convert(value: int) -> int:
+        return value
+
+    cli = Interfacy(sys_exit_enabled=False)
+
+    with pytest.raises(ConfigurationError, match="Pipe targets must be"):
+        cli.add_command(convert, pipe_targets=42)  # type: ignore[arg-type]
+
+    cli.add_command(convert)
+
+    assert cli.run(args=["7"]) == 7
+
+
+def test_invalid_group_settings_do_not_reserve_group_name() -> None:
+    cli = Interfacy(sys_exit_enabled=False)
+    group = CommandGroup("tools")
+
+    with pytest.raises(ConfigurationError, match="method_skips must be a sequence"):
+        cli.add_group(group, method_skips="invalid")  # type: ignore[arg-type]
+
+    registered = cli.add_group(group)
+
+    assert registered.canonical_name == "tools"
+
+
+def test_failed_group_build_does_not_reserve_group_name() -> None:
+    def first() -> None:
+        pass
+
+    def second() -> None:
+        pass
+
+    invalid_group = CommandGroup("tools")
+    invalid_group.add_command(first, name="same_name")
+    invalid_group.add_command(second, name="same-name")
+    cli = Interfacy(sys_exit_enabled=False)
+
+    with pytest.raises(DuplicateCommandError, match="Duplicate command 'same-name'"):
+        cli.add_group(invalid_group)
+
+    valid_group = CommandGroup("tools")
+    valid_group.add_command(first)
+
+    assert cli.add_group(valid_group).canonical_name == "tools"

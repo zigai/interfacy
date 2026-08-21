@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from interfacy import Interfacy
 from interfacy.appearance.colors import Aurora
 from interfacy.appearance.layouts import InterfacyLayout, Modern
 from interfacy.cli.config import apply_config_defaults, load_config
@@ -329,3 +330,31 @@ def test_load_config_rejects_non_plugin_symbol(
     config = load_config(config_path)
     with pytest.raises(ConfigurationError, match="Plugin symbol must resolve"):
         apply_config_defaults(config, {"plugins": None})
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("abbreviation_max_generated_len", True),
+        ("abbreviation_max_generated_len", 1.5),
+        ("abbreviation_max_generated_len", "1"),
+        ("model_expansion_max_depth", True),
+        ("model_expansion_max_depth", 1.5),
+        ("model_expansion_max_depth", "1"),
+    ],
+)
+def test_numeric_parser_settings_reject_non_integer_values(setting: str, value: object) -> None:
+    with pytest.raises(ConfigurationError, match=rf"{setting} must be an integer >= 1"):
+        Interfacy(**{setting: value})  # type: ignore[arg-type]
+
+
+def test_apply_setup_validates_request_before_mutating_parser() -> None:
+    cli = Interfacy()
+    original_layout = cli._parser.help_layout
+
+    with pytest.raises(
+        ConfigurationError, match="model_expansion_max_depth must be an integer >= 1"
+    ):
+        cli.apply_setup(help_layout=Modern(), model_expansion_max_depth=0)
+
+    assert cli._parser.help_layout is original_layout
