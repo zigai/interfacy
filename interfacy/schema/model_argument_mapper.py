@@ -681,9 +681,17 @@ class ModelArgumentMapper:
             resolved_hints = self._resolved_type_hints(model_type)
             kwargs: dict[str, Any] = {}
             for field in fields(model_type):
-                if field.init and field.name in values:
-                    annotation = resolved_hints.get(field.name, field.type)
+                if not field.init:
+                    continue
+
+                annotation = resolved_hints.get(field.name, field.type)
+                if field.name in values:
                     kwargs[field.name] = self._coerce_model_value(annotation, values[field.name])
+                elif field.default is MISSING and field.default_factory is MISSING:
+                    inner, is_opt = self.unwrap_optional(annotation)
+                    if not is_opt and self.is_model_type(inner):
+                        kwargs[field.name] = self._build_model_instance(inner, {})
+
             return model_type(**kwargs)
 
         if hasattr(model_type, "model_fields"):
@@ -695,11 +703,16 @@ class ModelArgumentMapper:
             return model_type(**kwargs)
 
         if self.is_plain_class_model(model_type):
-            annotations = self._plain_class_param_annotations(model_type)
+            fields_meta = {f.name: f for f in self._plain_class_model_fields(model_type)}
             kwargs = {}
-            for key, value in values.items():
-                ann = annotations.get(key)
-                kwargs[key] = self._coerce_model_value(ann, value)
+            for key, meta in fields_meta.items():
+                ann = meta.annotation
+                if key in values:
+                    kwargs[key] = self._coerce_model_value(ann, values[key])
+                elif meta.required and ann is not None:
+                    inner, is_opt = self.unwrap_optional(ann)
+                    if not is_opt and self.is_model_type(inner):
+                        kwargs[key] = self._build_model_instance(inner, {})
 
             return model_type(**kwargs)
 
@@ -707,18 +720,16 @@ class ModelArgumentMapper:
 
     def _coerce_pydantic_values(self, model_type: type, values: dict[str, Any]) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}
-        field_map = getattr(model_type, "model_fields", None) or getattr(
-            model_type, "__fields__", {}
-        )
-        for name, info in field_map.items():
-            if name not in values:
-                continue
+        fields_meta = {f.name: f for f in self._model_fields(model_type)}
+        for name, meta in fields_meta.items():
+            annotation = meta.annotation
 
-            annotation = getattr(info, "annotation", None)
-            if annotation is None:
-                annotation = getattr(info, "outer_type_", None) or getattr(info, "type_", None)
-
-            kwargs[name] = self._coerce_model_value(annotation, values[name])
+            if name in values:
+                kwargs[name] = self._coerce_model_value(annotation, values[name])
+            elif meta.required and annotation is not None:
+                inner, is_opt = self.unwrap_optional(annotation)
+                if not is_opt and self.is_model_type(inner):
+                    kwargs[name] = self._build_model_instance(inner, {})
 
         return kwargs
 
