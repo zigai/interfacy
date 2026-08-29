@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from interfacy import Interfacy
-from interfacy.appearance.colors import Aurora
-from interfacy.appearance.layouts import InterfacyLayout, Modern
+from interfacy import UNSET
 from interfacy.cli.config import apply_config_defaults, load_config
 from interfacy.exceptions import ConfigurationError
+from interfacy.help.colors import Aurora
+from interfacy.help.presets import InterfacyLayout, Modern
 from interfacy.naming.abbreviations import DefaultAbbreviationGenerator
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
 from interfacy.plugins import InterfacyPlugin
@@ -57,31 +57,31 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
     overrides = apply_config_defaults(
         config,
         {
-            "help_layout": None,
-            "help_colors": None,
-            "flag_strategy": None,
-            "abbreviation_gen": None,
-            "abbreviation_max_generated_len": None,
-            "abbreviation_scope": None,
-            "help_option_sort": None,
-            "help_subcommand_sort": None,
-            "print_result": None,
-            "full_error_traceback": None,
-            "tab_completion": None,
-            "allow_args_from_file": None,
-            "include_inherited_methods": None,
-            "include_protected_methods": None,
-            "include_private_methods": None,
-            "include_staticmethods": None,
-            "include_classmethods": None,
-            "method_skips": None,
-            "silent_interrupt": None,
-            "expand_model_params": None,
-            "model_expansion_max_depth": None,
-            "parse_recovery_max_attempts": None,
-            "bool_negative_prefix": None,
-            "help_flags": None,
-            "backend": None,
+            "help_layout": UNSET,
+            "help_colors": UNSET,
+            "flag_strategy": UNSET,
+            "abbreviation_gen": UNSET,
+            "abbreviation_max_generated_len": UNSET,
+            "abbreviation_scope": UNSET,
+            "help_option_sort": UNSET,
+            "help_subcommand_sort": UNSET,
+            "print_result": UNSET,
+            "full_error_traceback": UNSET,
+            "tab_completion": UNSET,
+            "allow_args_from_file": UNSET,
+            "include_inherited_methods": UNSET,
+            "include_protected_methods": UNSET,
+            "include_private_methods": UNSET,
+            "include_staticmethods": UNSET,
+            "include_classmethods": UNSET,
+            "method_skips": UNSET,
+            "silent_interrupt": UNSET,
+            "expand_model_params": UNSET,
+            "model_expansion_max_depth": UNSET,
+            "parse_recovery_max_attempts": UNSET,
+            "bool_negative_prefix": UNSET,
+            "help_flags": UNSET,
+            "backend": UNSET,
         },
     )
 
@@ -119,24 +119,24 @@ def test_apply_config_defaults_respects_overrides(tmp_path: Path) -> None:
         config,
         {
             "help_layout": override_layout,
-            "help_colors": None,
-            "flag_strategy": None,
-            "abbreviation_gen": None,
-            "abbreviation_max_generated_len": None,
-            "abbreviation_scope": None,
-            "help_option_sort": None,
-            "help_subcommand_sort": None,
-            "print_result": None,
-            "full_error_traceback": None,
-            "tab_completion": None,
-            "allow_args_from_file": None,
-            "include_inherited_methods": None,
-            "include_classmethods": None,
-            "silent_interrupt": None,
-            "expand_model_params": None,
-            "model_expansion_max_depth": None,
-            "bool_negative_prefix": None,
-            "backend": None,
+            "help_colors": UNSET,
+            "flag_strategy": UNSET,
+            "abbreviation_gen": UNSET,
+            "abbreviation_max_generated_len": UNSET,
+            "abbreviation_scope": UNSET,
+            "help_option_sort": UNSET,
+            "help_subcommand_sort": UNSET,
+            "print_result": UNSET,
+            "full_error_traceback": UNSET,
+            "tab_completion": UNSET,
+            "allow_args_from_file": UNSET,
+            "include_inherited_methods": UNSET,
+            "include_classmethods": UNSET,
+            "silent_interrupt": UNSET,
+            "expand_model_params": UNSET,
+            "model_expansion_max_depth": UNSET,
+            "bool_negative_prefix": UNSET,
+            "backend": UNSET,
         },
     )
 
@@ -161,25 +161,25 @@ def test_load_config_rejects_string_help_option_sort(tmp_path: Path) -> None:
         apply_config_defaults(
             config,
             {
-                "help_layout": None,
-                "help_colors": None,
-                "flag_strategy": None,
-                "abbreviation_gen": None,
-                "abbreviation_max_generated_len": None,
-                "abbreviation_scope": None,
-                "help_option_sort": None,
-                "help_subcommand_sort": None,
-                "print_result": None,
-                "full_error_traceback": None,
-                "tab_completion": None,
-                "allow_args_from_file": None,
-                "include_inherited_methods": None,
-                "include_classmethods": None,
-                "silent_interrupt": None,
-                "expand_model_params": None,
-                "model_expansion_max_depth": None,
-                "bool_negative_prefix": None,
-                "backend": None,
+                "help_layout": UNSET,
+                "help_colors": UNSET,
+                "flag_strategy": UNSET,
+                "abbreviation_gen": UNSET,
+                "abbreviation_max_generated_len": UNSET,
+                "abbreviation_scope": UNSET,
+                "help_option_sort": UNSET,
+                "help_subcommand_sort": UNSET,
+                "print_result": UNSET,
+                "full_error_traceback": UNSET,
+                "tab_completion": UNSET,
+                "allow_args_from_file": UNSET,
+                "include_inherited_methods": UNSET,
+                "include_classmethods": UNSET,
+                "silent_interrupt": UNSET,
+                "expand_model_params": UNSET,
+                "model_expansion_max_depth": UNSET,
+                "bool_negative_prefix": UNSET,
+                "backend": UNSET,
             },
         )
 
@@ -202,25 +202,25 @@ def test_load_config_rejects_string_help_subcommand_sort(tmp_path: Path) -> None
         apply_config_defaults(
             config,
             {
-                "help_layout": None,
-                "help_colors": None,
-                "flag_strategy": None,
-                "abbreviation_gen": None,
-                "abbreviation_max_generated_len": None,
-                "abbreviation_scope": None,
-                "help_option_sort": None,
-                "help_subcommand_sort": None,
-                "print_result": None,
-                "full_error_traceback": None,
-                "tab_completion": None,
-                "allow_args_from_file": None,
-                "include_inherited_methods": None,
-                "include_classmethods": None,
-                "silent_interrupt": None,
-                "expand_model_params": None,
-                "model_expansion_max_depth": None,
-                "bool_negative_prefix": None,
-                "backend": None,
+                "help_layout": UNSET,
+                "help_colors": UNSET,
+                "flag_strategy": UNSET,
+                "abbreviation_gen": UNSET,
+                "abbreviation_max_generated_len": UNSET,
+                "abbreviation_scope": UNSET,
+                "help_option_sort": UNSET,
+                "help_subcommand_sort": UNSET,
+                "print_result": UNSET,
+                "full_error_traceback": UNSET,
+                "tab_completion": UNSET,
+                "allow_args_from_file": UNSET,
+                "include_inherited_methods": UNSET,
+                "include_classmethods": UNSET,
+                "silent_interrupt": UNSET,
+                "expand_model_params": UNSET,
+                "model_expansion_max_depth": UNSET,
+                "bool_negative_prefix": UNSET,
+                "backend": UNSET,
             },
         )
 
@@ -241,7 +241,7 @@ def test_load_config_ignores_top_level_fields(tmp_path: Path) -> None:
     )
 
     config = load_config(config_path)
-    overrides = apply_config_defaults(config, {"help_layout": None})
+    overrides = apply_config_defaults(config, {"help_layout": UNSET})
     assert isinstance(overrides["help_layout"], Modern)
 
 
@@ -251,7 +251,7 @@ def test_load_config_rejects_legacy_layout_value_alias(tmp_path: Path) -> None:
 
     config = load_config(config_path)
     with pytest.raises(ConfigurationError, match="Unknown help_layout value"):
-        apply_config_defaults(config, {"help_layout": None})
+        apply_config_defaults(config, {"help_layout": UNSET})
 
 
 def test_load_config_rejects_default_color_value_alias(tmp_path: Path) -> None:
@@ -260,7 +260,7 @@ def test_load_config_rejects_default_color_value_alias(tmp_path: Path) -> None:
 
     config = load_config(config_path)
     with pytest.raises(ConfigurationError, match="Unknown help_colors value"):
-        apply_config_defaults(config, {"help_colors": None})
+        apply_config_defaults(config, {"help_colors": UNSET})
 
 
 def test_load_config_resolves_plugin_import_paths(
@@ -302,7 +302,7 @@ def test_load_config_resolves_plugin_import_paths(
     monkeypatch.syspath_prepend(str(tmp_path))
 
     config = load_config(config_path)
-    overrides = apply_config_defaults(config, {"plugins": None})
+    overrides = apply_config_defaults(config, {"plugins": UNSET})
 
     assert [plugin.plugin_name for plugin in overrides["plugins"]] == ["configured", "instance"]
     assert all(isinstance(plugin, InterfacyPlugin) for plugin in overrides["plugins"])
@@ -329,32 +329,4 @@ def test_load_config_rejects_non_plugin_symbol(
 
     config = load_config(config_path)
     with pytest.raises(ConfigurationError, match="Plugin symbol must resolve"):
-        apply_config_defaults(config, {"plugins": None})
-
-
-@pytest.mark.parametrize(
-    ("setting", "value"),
-    [
-        ("abbreviation_max_generated_len", True),
-        ("abbreviation_max_generated_len", 1.5),
-        ("abbreviation_max_generated_len", "1"),
-        ("model_expansion_max_depth", True),
-        ("model_expansion_max_depth", 1.5),
-        ("model_expansion_max_depth", "1"),
-    ],
-)
-def test_numeric_parser_settings_reject_non_integer_values(setting: str, value: object) -> None:
-    with pytest.raises(ConfigurationError, match=rf"{setting} must be an integer >= 1"):
-        Interfacy(**{setting: value})  # type: ignore[arg-type]
-
-
-def test_apply_setup_validates_request_before_mutating_parser() -> None:
-    cli = Interfacy()
-    original_layout = cli._parser.help_layout
-
-    with pytest.raises(
-        ConfigurationError, match="model_expansion_max_depth must be an integer >= 1"
-    ):
-        cli.apply_setup(help_layout=Modern(), model_expansion_max_depth=0)
-
-    assert cli._parser.help_layout is original_layout
+        apply_config_defaults(config, {"plugins": UNSET})

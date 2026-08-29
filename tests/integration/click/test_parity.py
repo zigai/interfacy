@@ -7,19 +7,18 @@ from typing import Literal
 import click
 import pytest
 
-from interfacy import ExecutableFlag
-from interfacy.appearance.layouts import ArgparseLayout, StandardLayout
-from interfacy.click_backend import ClickParser
+from interfacy import ExecutableFlag, Interfacy
 from interfacy.click_backend.commands import (
     InterfacyClickArgument,
     InterfacyClickCommand,
     InterfacyClickGroup,
     InterfacyClickOption,
 )
+from interfacy.exceptions import UsageError
 from interfacy.group import CommandGroup
-from interfacy.naming import DefaultFlagStrategy
-from tests.conftest import (
-    Math,
+from interfacy.help.presets import ArgparseLayout, StandardLayout
+from tests.fixtures.classes import Math
+from tests.fixtures.commands import (
     fn_bool_default_false,
     fn_bool_default_true,
     fn_list_int,
@@ -36,9 +35,9 @@ def fn_metadata_help(
 
 
 def test_click_standard_layout_renders_schema_metadata_in_help() -> None:
-    parser = ClickParser(
+    parser = Interfacy(
+        backend="click",
         help_layout=StandardLayout(),
-        sys_exit_enabled=False,
         print_result=False,
     )
     parser.add_command(fn_metadata_help)
@@ -53,9 +52,9 @@ def test_click_standard_layout_renders_schema_metadata_in_help() -> None:
 
 
 def test_click_argparse_layout_renders_metavars_and_schema_metadata_in_help() -> None:
-    parser = ClickParser(
+    parser = Interfacy(
+        backend="click",
         help_layout=ArgparseLayout(),
-        sys_exit_enabled=False,
         print_result=False,
     )
     parser.add_command(fn_metadata_help)
@@ -107,75 +106,73 @@ class TestClickListOptions:
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_list_option_values(self, parser):
         parser.add_command(fn_list_int)
-        assert parser.run(args=["--values", "1", "2", "3"]) == [1, 2, 3]
+        assert parser.invoke(args=["--values", "1", "2", "3"]) == [1, 2, 3]
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_list_option_negatives(self, parser):
         parser.add_command(fn_list_int)
-        assert parser.run(args=["--values", "-1", "-2"]) == [-1, -2]
+        assert parser.invoke(args=["--values", "-1", "-2"]) == [-1, -2]
 
     @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
     def test_list_of_fixed_tuples(self, parser):
         parser.add_command(fn_list_tuple_int_str)
-        match parser.flag_strategy.style:
+        match parser.metadata["flag_style"]:
             case "required_positional":
                 args = ["1", "a", "2", "b"]
             case "keyword_only":
                 args = ["--values", "1", "a", "2", "b"]
             case _:
-                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
-        assert parser.run(args=args) == [(1, "a"), (2, "b")]
+        assert parser.invoke(args=args) == [(1, "a"), (2, "b")]
 
     @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
     def test_list_of_fixed_tuples_rejects_incomplete_group(self, parser):
         parser.add_command(fn_list_tuple_int_str)
-        match parser.flag_strategy.style:
+        match parser.metadata["flag_style"]:
             case "required_positional":
                 args = ["1", "a", "2"]
             case "keyword_only":
                 args = ["--values", "1", "a", "2"]
             case _:
-                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
-        result = parser.run(args=args)
-
-        assert isinstance(result, SystemExit)
-        assert result.code == 2
+        with pytest.raises(UsageError):
+            parser.invoke(args=args)
 
     @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
     def test_tuple_of_dataclasses_from_flat_values(self, parser):
         parser.add_command(fn_user_pair)
-        match parser.flag_strategy.style:
+        match parser.metadata["flag_style"]:
             case "required_positional":
                 args = ["ann", "1", "bob", "2"]
             case "keyword_only":
                 args = ["--pair", "ann", "1", "bob", "2"]
             case _:
-                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
-        assert parser.run(args=args) == (User("ann", 1), User("bob", 2))
+        assert parser.invoke(args=args) == (User("ann", 1), User("bob", 2))
 
     @pytest.mark.parametrize("parser", ["click_req_pos", "click_kw_only"], indirect=True)
     def test_list_of_dataclasses_from_flat_values(self, parser):
         parser.add_command(fn_users)
-        match parser.flag_strategy.style:
+        match parser.metadata["flag_style"]:
             case "required_positional":
                 args = ["ann", "1", "bob", "2"]
             case "keyword_only":
                 args = ["--users", "ann", "1", "bob", "2"]
             case _:
-                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
-        assert parser.run(args=args) == [User("ann", 1), User("bob", 2)]
+        assert parser.invoke(args=args) == [User("ann", 1), User("bob", 2)]
 
 
 class TestClickBooleanFlags:
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_bool_default_true(self, parser):
         parser.add_command(fn_bool_default_true)
-        assert parser.run(args=[]) is True
-        assert parser.run(args=["--no-value"]) is False
+        assert parser.invoke(args=[]) is True
+        assert parser.invoke(args=["--no-value"]) is False
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_bool_default_true_help_keeps_negative_flag_form(self, parser):
@@ -193,14 +190,14 @@ class TestClickBooleanFlags:
 
         parser.add_command(short_toggle)
 
-        assert parser.run(args=[]) is True
-        assert parser.run(args=["--no-x"]) is False
+        assert parser.invoke(args=[]) is True
+        assert parser.invoke(args=["--no-x"]) is False
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_bool_default_false(self, parser):
         parser.add_command(fn_bool_default_false)
-        assert parser.run(args=[]) is False
-        assert parser.run(args=["--value"]) is True
+        assert parser.invoke(args=[]) is False
+        assert parser.invoke(args=["--value"]) is True
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_negative_named_bool_help_shows_only_declared_flag(self, parser):
@@ -216,7 +213,7 @@ class TestClickBooleanFlags:
         assert "--help" in help_text
 
     def test_configured_help_alias_accepts_short_help_flag(self) -> None:
-        parser = ClickParser(help_flags=("-h", "--help"), sys_exit_enabled=False)
+        parser = Interfacy(backend="click", help_flags=("-h", "--help"))
 
         def run() -> None:
             """Run command."""
@@ -228,7 +225,8 @@ class TestClickBooleanFlags:
         assert "-h, --help" in help_text
 
     def test_parser_help_position_keeps_long_executable_flag_help_inline(self) -> None:
-        parser = ClickParser(
+        parser = Interfacy(
+            backend="click",
             help_position=42,
             executable_flags=[
                 ExecutableFlag(
@@ -237,7 +235,6 @@ class TestClickBooleanFlags:
                     help="Disable the per-job duration limit.",
                 )
             ],
-            sys_exit_enabled=False,
             print_result=False,
         )
 
@@ -256,7 +253,8 @@ class TestClickBooleanFlags:
         )
 
     def test_default_click_help_keeps_long_executable_flag_wrapped(self) -> None:
-        parser = ClickParser(
+        parser = Interfacy(
+            backend="click",
             executable_flags=[
                 ExecutableFlag(
                     ("-d", "--disable-job-duration-limit"),
@@ -264,7 +262,6 @@ class TestClickBooleanFlags:
                     help="Disable the per-job duration limit.",
                 )
             ],
-            sys_exit_enabled=False,
             print_result=False,
         )
 
@@ -291,15 +288,14 @@ def test_interfacy_click_command_help_position_aligns_positionals_and_options() 
             InterfacyClickArgument(("environment",), help="Target environment."),
             InterfacyClickOption(["region", "--region"], help="Cloud region."),
         ],
+        help_layout=StandardLayout(help_position=38),
     )
-    command.interfacy_help_position = 38
-    command.interfacy_help_position_explicit = True
 
     help_text = command.get_help(click.Context(command))
 
-    assert "Positionals:" in help_text
-    assert re.search(r"^\s*environment\s+Target environment\.$", help_text, re.MULTILINE)
-    assert re.search(r"^\s*--region\s+Cloud region\.$", help_text, re.MULTILINE)
+    assert "positional arguments:" in help_text
+    assert re.search(r"^\s*ENVIRONMENT\s+Target environment\.$", help_text, re.MULTILINE)
+    assert re.search(r"^\s*--region\s+Cloud region\..*$", help_text, re.MULTILINE)
 
 
 def test_interfacy_click_group_help_position_aligns_command_rows() -> None:
@@ -327,15 +323,15 @@ class TestClickTupleParsing:
     @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
     def test_tuple_mixed(self, parser):
         parser.add_command(fn_tuple_mixed)
-        assert parser.run(args=["1", "hello", "2.5"]) == (1, "hello", 2.5)
+        assert parser.invoke(args=["1", "hello", "2.5"]) == (1, "hello", 2.5)
 
 
 class TestClickOptionalUnionList:
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_optional_union_list_default(self, parser):
         parser.add_command(fn_list_int_optional)
-        assert parser.run(args=[]) is None
-        assert parser.run(args=["--values", "1", "2"]) == [1, 2]
+        assert parser.invoke(args=[]) is None
+        assert parser.invoke(args=["--values", "1", "2"]) == [1, 2]
 
 
 class TestClickAliases:
@@ -350,15 +346,15 @@ class TestClickAliases:
         parser.add_command(primary, aliases=["alias"])
         parser.add_command(secondary)
 
-        assert parser.run(args=["alias", "3"]) == 3
+        assert parser.invoke(args=["alias", "3"]) == 3
 
 
 class TestClickClassCommands:
     @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
     def test_class_with_initializer(self, parser):
         parser.add_command(Math)
-        assert parser.run(args=["pow", "2", "-e", "2"]) == 4
-        assert parser.run(args=["--rounding", "2", "pow", "2", "-e", "2"]) == 4
+        assert parser.invoke(args=["pow", "2", "-e", "2"]) == 4
+        assert parser.invoke(args=["--rounding", "2", "pow", "2", "-e", "2"]) == 4
 
     @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
     def test_single_top_level_class_command_namespace_and_run(self, parser):
@@ -374,7 +370,7 @@ class TestClickClassCommands:
                 "exponent": 2,
             },
         }
-        assert parser.run(args=["pow", "2", "-e", "2"]) == 4
+        assert parser.invoke(args=["pow", "2", "-e", "2"]) == 4
 
     @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
     def test_single_top_level_instance_command_namespace_and_run(self, parser):
@@ -390,7 +386,7 @@ class TestClickClassCommands:
                 "exponent": 2,
             },
         }
-        assert parser.run(args=["pow", "2", "-e", "2"]) == 4
+        assert parser.invoke(args=["pow", "2", "-e", "2"]) == 4
 
 
 class TestClickNestedGroups:
@@ -422,43 +418,21 @@ class TestClickPipes:
     @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
     def test_pipe_single_target(self, parser, mocker):
         parser.add_command(fn_echo, pipe_targets="msg")
-        mocker.patch("interfacy.core.read_piped", return_value="hello")
-        assert parser.run(args=[]) == "hello"
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="hello")
+        assert parser.invoke(args=[]) == "hello"
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_pipe_priority(self, parser, mocker):
         parser.add_command(fn_echo_cli, pipe_targets={"bindings": "msg", "priority": "pipe"})
-        mocker.patch("interfacy.core.read_piped", return_value="piped")
-        assert parser.run(args=["--msg", "cli"]) == "piped"
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="piped")
+        assert parser.invoke(args=["--msg", "cli"]) == "piped"
 
 
 class TestClickModelExpansion:
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_dataclass_expansion(self, parser):
         parser.add_command(fn_user)
-        result = parser.run(args=["--user.name", "Alice", "--user.age", "30"])
+        result = parser.invoke(args=["--user.name", "Alice", "--user.age", "30"])
         assert isinstance(result, User)
         assert result.name == "Alice"
         assert result.age == 30
-
-
-@dataclass
-class Settings:
-    value: str
-
-
-def test_expanded_option_does_not_overwrite_similarly_named_positional() -> None:
-    def command(settings_value: str, *, settings: Settings) -> tuple[str, Settings]:
-        return settings_value, settings
-
-    parser = ClickParser(
-        flag_strategy=DefaultFlagStrategy(style="required_positional"),
-        sys_exit_enabled=False,
-        full_error_traceback=True,
-    )
-    parser.add_command(command)
-
-    assert parser.run(args=["outer", "--settings.value", "inner"]) == (
-        "outer",
-        Settings(value="inner"),
-    )

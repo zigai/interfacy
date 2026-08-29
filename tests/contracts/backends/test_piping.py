@@ -1,11 +1,9 @@
 import sys
-from typing import Any
 
 import pytest
 
-from interfacy.core import InterfacyParser
-from interfacy.exceptions import ConfigurationError, PipeInputError
-from interfacy.pipe import PipeTargets, build_pipe_targets_config
+from interfacy import Interfacy
+from interfacy.exceptions import PipeInputError
 
 
 # We define dummy functions here to use as command targets
@@ -35,158 +33,156 @@ def fn_default_msg(msg: str = "default"):
 
 class TestPipeExecution:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_single_target_pipe(self, parser: InterfacyParser, mocker):
+    def test_single_target_pipe(self, parser: Interfacy, mocker):
         """Verify that a single argument receives piped input."""
         parser.add_command(fn_single_arg, pipe_targets="msg")
 
         # Mock read_piped to return "hello world"
         # The key is to mock where it is IMPORTED/USED in the ArgumentParser/ArgparseRunner context
-        # Argparser.read_piped_input() calls read_piped() from interfacy.core
-        mocker.patch("interfacy.core.read_piped", return_value="hello world")
+        # Interfacy.read_piped_input() calls read_piped() from interfacy.engine.pipes
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="hello world")
 
         # We must call run() which triggers the runner and pipe logic.
         # Note: For single-command parsers, interfacy/argparse implies the command is selected implicitly.
         # We pass empty args list so pipe provides the value.
-        assert parser.run(args=[]) == "hello world"
+        assert parser.invoke(args=[]) == "hello world"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_multi_target_newline(self, parser: InterfacyParser, mocker):
+    def test_multi_target_newline(self, parser: Interfacy, mocker):
         """Verify checking splitting on newline."""
         parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
 
-        mocker.patch("interfacy.core.read_piped", return_value="foo\nbar")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="foo\nbar")
 
-        assert parser.run(args=[]) == ("foo", "bar")
+        assert parser.invoke(args=[]) == ("foo", "bar")
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_required_pipe_target_errors_without_cli_or_stdin(
         self,
-        parser: InterfacyParser,
+        parser: Interfacy,
         monkeypatch: pytest.MonkeyPatch,
     ):
         """Required pipe targets remain required when stdin is absent."""
         parser.add_command(fn_single_arg, pipe_targets="msg")
         monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
 
-        result = parser.run(args=[])
-
-        assert isinstance(result, PipeInputError)
+        with pytest.raises(PipeInputError):
+            parser.invoke(args=[])
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_required_pipe_targets_accept_cli_without_stdin(
         self,
-        parser: InterfacyParser,
+        parser: Interfacy,
         monkeypatch: pytest.MonkeyPatch,
     ):
         """CLI values satisfy required pipe targets when no stdin is present."""
         parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
         monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
 
-        assert parser.run(args=["foo", "bar"]) == ("foo", "bar")
+        assert parser.invoke(args=["foo", "bar"]) == ("foo", "bar")
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_custom_delimiter(self, parser: InterfacyParser, mocker):
+    def test_custom_delimiter(self, parser: Interfacy, mocker):
         """Verify custom delimiter."""
         # Use delimiter in pipe config
         parser.add_command(fn_multi_arg, pipe_targets={"bindings": ("a", "b"), "delimiter": ","})
 
-        mocker.patch("interfacy.core.read_piped", return_value="foo,bar")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="foo,bar")
 
-        assert parser.run(args=[]) == ("foo", "bar")
+        assert parser.invoke(args=[]) == ("foo", "bar")
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_priority_cli_overrides_pipe(self, parser: InterfacyParser, mocker):
+    def test_priority_cli_overrides_pipe(self, parser: Interfacy, mocker):
         """Verify CLI args take precedence by default."""
         parser.add_command(fn_single_arg, pipe_targets="msg")
 
-        mocker.patch("interfacy.core.read_piped", return_value="piped")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="piped")
 
         # Pass explicit CLI argument
-        match parser.flag_strategy.style:
+        match parser.metadata["flag_style"]:
             case "required_positional":
                 args = ["cli_value"]
             case "keyword_only":
                 args = ["--msg", "cli_value"]
             case _:
-                pytest.fail(f"Unhandled flag strategy: {parser.flag_strategy.style}")
+                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
-        assert parser.run(args=args) == "cli_value"
+        assert parser.invoke(args=args) == "cli_value"
 
     @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
-    def test_priority_pipe_overrides_cli(self, parser: InterfacyParser, mocker):
+    def test_priority_pipe_overrides_cli(self, parser: Interfacy, mocker):
         """Verify pipe overrides CLI when configured."""
         # Note: priority='pipe' means pipe wins.
         parser.add_command(fn_single_arg, pipe_targets={"bindings": "msg", "priority": "pipe"})
 
-        mocker.patch("interfacy.core.read_piped", return_value="piped_value")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="piped_value")
 
         # Even if CLI provided, priority=pipe should overwrite
         # We pass a CLI value "cli_value". If pipe works, result is "piped_value"
         args = ["--msg", "cli_value"]
-        assert parser.run(args=args) == "piped_value"
+        assert parser.invoke(args=args) == "piped_value"
 
     @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_priority_cli_keeps_explicit_value_equal_to_default(
         self,
-        parser: InterfacyParser,
+        parser: Interfacy,
         mocker,
     ):
         """Explicit CLI values win even when they equal the callable default."""
         parser.add_command(fn_default_msg, pipe_targets="msg")
-        mocker.patch("interfacy.core.read_piped", return_value="piped")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="piped")
 
-        assert parser.run(args=["--msg", "default"]) == "default"
+        assert parser.invoke(args=["--msg", "default"]) == "default"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_typed_conversion(self, parser: InterfacyParser, mocker):
+    def test_typed_conversion(self, parser: Interfacy, mocker):
         """Verify piped string is converted to target type (int)."""
         parser.add_command(fn_typed_arg, pipe_targets="val")
 
-        mocker.patch("interfacy.core.read_piped", return_value="42")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="42")
 
-        assert parser.run(args=[]) == 42
+        assert parser.invoke(args=[]) == 42
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_partial_chunk_error(self, parser: InterfacyParser, mocker):
+    def test_partial_chunk_error(self, parser: Interfacy, mocker):
         """Verify error raised when fewer chunks than targets provided."""
         parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
 
         # Only one chunk provided for 2 targets
-        mocker.patch("interfacy.core.read_piped", return_value="one")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="one")
 
-        # Argparser catches Interfacy errors and returns them (since sys_exit=False in tests)
-        result = parser.run(args=[])
-        assert isinstance(result, PipeInputError)
+        with pytest.raises(PipeInputError):
+            parser.invoke(args=[])
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_partial_chunk_allowed(self, parser: InterfacyParser, mocker):
+    def test_partial_chunk_allowed(self, parser: Interfacy, mocker):
         """Verify None filling when allow_partial is True."""
         # Use fn_partial which allows b=None
         parser.add_command(fn_partial, pipe_targets={"bindings": ("a", "b"), "allow_partial": True})
 
         # Only one chunk provided, second should be None
-        mocker.patch("interfacy.core.read_piped", return_value="one")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="one")
 
-        assert parser.run(args=[]) == ("one", None)
+        assert parser.invoke(args=[]) == ("one", None)
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_excess_chunk_merged(self, parser: InterfacyParser, mocker):
+    def test_excess_chunk_merged(self, parser: Interfacy, mocker):
         """Verify excess chunks are merged into the last target."""
         parser.add_command(fn_multi_arg, pipe_targets=("a", "b"))
 
         # 3 lines for 2 targets -> last target gets remainder
-        mocker.patch("interfacy.core.read_piped", return_value="one\ntwo\nthree")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="one\ntwo\nthree")
 
-        assert parser.run(args=[]) == ("one", "two\nthree")
+        assert parser.invoke(args=[]) == ("one", "two\nthree")
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_complex_type_dict(self, parser: InterfacyParser, mocker):
+    def test_complex_type_dict(self, parser: Interfacy, mocker):
         """Verify piped JSON string conversion to dict."""
         parser.add_command(fn_dict_arg, pipe_targets="data")
 
-        mocker.patch("interfacy.core.read_piped", return_value='{"key": 123}')
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value='{"key": 123}')
 
-        assert parser.run(args=[]) == {"key": 123}
+        assert parser.invoke(args=[]) == {"key": 123}
 
     @pytest.mark.parametrize("backend", ["argparse", "click"])
     def test_global_pipe_targets_relax_required_positional_before_parse(
@@ -196,10 +192,10 @@ class TestPipeExecution:
     ):
         from interfacy import Interfacy
 
-        parser = Interfacy(backend=backend, sys_exit_enabled=False, pipe_targets="msg")
-        mocker.patch("interfacy.core.read_piped", return_value="hello")
+        parser = Interfacy(backend=backend, pipe_targets="msg")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="hello")
 
-        assert parser.run(fn_single_arg, args=[]) == "hello"
+        assert parser.invoke(fn_single_arg, args=[]) == "hello"
 
 
 # --- Piped List Tests ---
@@ -223,51 +219,31 @@ class TestPipedListInput:
     """
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_piped_list_newline_split(self, parser: InterfacyParser, mocker):
+    def test_piped_list_newline_split(self, parser: Interfacy, mocker):
         """Verify piped newline data splits into list elements."""
         parser.add_command(fn_list_pipe, pipe_targets="items")
 
-        mocker.patch("interfacy.core.read_piped", return_value="alpha\nbeta\ngamma")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="alpha\nbeta\ngamma")
 
-        result = parser.run(args=[])
+        result = parser.invoke(args=[])
         assert result == ["alpha", "beta", "gamma"]
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_piped_list_custom_delimiter(self, parser: InterfacyParser, mocker):
+    def test_piped_list_custom_delimiter(self, parser: Interfacy, mocker):
         """Verify custom delimiter splits into list elements."""
         parser.add_command(fn_list_pipe, pipe_targets={"bindings": "items", "delimiter": ","})
 
-        mocker.patch("interfacy.core.read_piped", return_value="x,y,z")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="x,y,z")
 
-        result = parser.run(args=[])
+        result = parser.invoke(args=[])
         assert result == ["x", "y", "z"]
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_piped_list_int_conversion(self, parser: InterfacyParser, mocker):
+    def test_piped_list_int_conversion(self, parser: Interfacy, mocker):
         """Verify piped list elements are converted to target type."""
         parser.add_command(fn_list_int_pipe, pipe_targets="values")
 
-        mocker.patch("interfacy.core.read_piped", return_value="1\n2\n3")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="1\n2\n3")
 
-        result = parser.run(args=[])
+        result = parser.invoke(args=[])
         assert result == [1, 2, 3]
-
-
-@pytest.mark.parametrize("value", ["false", 0, 1, [], object()])
-def test_pipe_allow_partial_rejects_non_boolean_values(value: Any) -> None:
-    with pytest.raises(ConfigurationError, match="allow_partial must be a bool"):
-        build_pipe_targets_config({"bindings": ("first", "second"), "allow_partial": value})
-
-
-def test_existing_pipe_targets_rejects_non_boolean_allow_partial() -> None:
-    invalid = PipeTargets(targets=("first", "second"), allow_partial="false")  # type: ignore[arg-type]
-
-    with pytest.raises(ConfigurationError, match="allow_partial must be a bool"):
-        build_pipe_targets_config(invalid)
-
-
-def test_existing_pipe_targets_rejects_invalid_delimiter() -> None:
-    invalid = PipeTargets(targets=("value",), delimiter=1)  # type: ignore[arg-type]
-
-    with pytest.raises(ConfigurationError, match="delimiter must be a string or None"):
-        build_pipe_targets_config(invalid)

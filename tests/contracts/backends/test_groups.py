@@ -2,20 +2,10 @@ import sys
 
 import pytest
 
-from interfacy import CommandGroup
-from interfacy.core import InterfacyParser
-from interfacy.exceptions import ConfigurationError, DuplicateCommandError
-from tests.conftest import (
-    Container,
-    Database,
-    DerivedOperation,
-    Math,
-    TextTools,
-    attach,
-    detach,
-    greet,
-    pow,
-)
+from interfacy import CommandGroup, Interfacy
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError, UsageError
+from tests.fixtures.classes import Container, Database, DerivedOperation, Math, TextTools
+from tests.fixtures.commands import attach, detach, greet, pow
 
 
 class TestBasicGroupConstruction:
@@ -61,7 +51,7 @@ class TestBasicGroupConstruction:
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_add_command_with_callable_instance_behaves_like_instance_group(
-        self, parser: InterfacyParser
+        self, parser: Interfacy
     ) -> None:
         """Callable instances added to groups should behave like instance subcommand groups."""
 
@@ -77,7 +67,7 @@ class TestBasicGroupConstruction:
 
         parser.add_command(group)
 
-        assert parser.run(args=["cli", "tool", "extra", "Ada"]) == "extra Ada"
+        assert parser.invoke(args=["cli", "tool", "extra", "Ada"]) == "extra Ada"
 
     def test_add_group_for_nesting(self):
         """Verify subgroups can be added."""
@@ -160,7 +150,7 @@ class TestGroupKeyCollisions:
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_translated_group_child_name_collision_raises_duplicate_command_error(
-        self, parser: InterfacyParser
+        self, parser: Interfacy
     ) -> None:
         """Translated child names that collapse to the same CLI name should be rejected."""
 
@@ -178,7 +168,7 @@ class TestGroupKeyCollisions:
             parser.add_command(group)
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_command_key_cannot_match_same_name_subgroup(self, parser: InterfacyParser) -> None:
+    def test_command_key_cannot_match_same_name_subgroup(self, parser: Interfacy) -> None:
         """Command/subgroup key collisions should be rejected."""
         workspace = CommandGroup("workspace")
         subgroup = CommandGroup("task")
@@ -191,18 +181,18 @@ class TestGroupKeyCollisions:
 
 class TestGroupWithFunctions:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_single_group_with_one_function(self, parser: InterfacyParser):
+    def test_single_group_with_one_function(self, parser: Interfacy):
         """Verify single group with one function can be executed."""
         cli = CommandGroup("cli")
         cli.add_command(greet)
 
         parser.add_command(cli)
-        assert parser.run(args=["cli", "greet", "Ada"]) == "Hello, Ada!"
+        assert parser.invoke(args=["cli", "greet", "Ada"]) == "Hello, Ada!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_group_function_command_accepts_pipe_targets(
         self,
-        parser: InterfacyParser,
+        parser: Interfacy,
         mocker,
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -211,23 +201,23 @@ class TestGroupWithFunctions:
         cli.add_command(greet, pipe_targets="name")
         parser.add_command(cli)
         monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-        mocker.patch("interfacy.core.read_piped", return_value="Ada")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="Ada")
 
-        assert parser.run(args=["cli", "greet"]) == "Hello, Ada!"
+        assert parser.invoke(args=["cli", "greet"]) == "Hello, Ada!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_single_group_with_multiple_functions(self, parser: InterfacyParser):
+    def test_single_group_with_multiple_functions(self, parser: Interfacy):
         """Verify single group with multiple functions works."""
         cli = CommandGroup("cli")
         cli.add_command(attach)
         cli.add_command(detach)
 
         parser.add_command(cli)
-        assert parser.run(args=["cli", "attach", "web"]) == "Attached to web"
-        assert parser.run(args=["cli", "detach", "web"]) == "Detached from web"
+        assert parser.invoke(args=["cli", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["cli", "detach", "web"]) == "Detached from web"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_nested_groups_with_function_three_levels(self, parser: InterfacyParser):
+    def test_nested_groups_with_function_three_levels(self, parser: Interfacy):
         """Verify nested groups work (3 levels: workspace → module → attach)."""
         workspace = CommandGroup("workspace")
         module = CommandGroup("module")
@@ -235,52 +225,52 @@ class TestGroupWithFunctions:
         module.add_command(attach)
 
         parser.add_command(workspace)
-        assert parser.run(args=["workspace", "module", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["workspace", "module", "attach", "web"]) == "Attached to web"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_function_with_custom_name(self, parser: InterfacyParser):
+    def test_function_with_custom_name(self, parser: Interfacy):
         """Verify function can have custom name in group."""
         cli = CommandGroup("cli")
         cli.add_command(attach, name="connect")
 
         parser.add_command(cli)
-        assert parser.run(args=["cli", "connect", "web"]) == "Attached to web"
+        assert parser.invoke(args=["cli", "connect", "web"]) == "Attached to web"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_function_with_custom_description(self, parser: InterfacyParser):
+    def test_function_with_custom_description(self, parser: Interfacy):
         """Verify function can have custom description."""
         cli = CommandGroup("cli")
         cli.add_command(attach, description="Connect to container")
 
         parser.add_command(cli)
-        assert parser.run(args=["cli", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["cli", "attach", "web"]) == "Attached to web"
 
 
 class TestGroupWithClasses:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_class_in_group_methods_become_subcommands(self, parser: InterfacyParser):
+    def test_class_in_group_methods_become_subcommands(self, parser: Interfacy):
         """Verify class methods become subcommands when class is added to group."""
         workspace = CommandGroup("workspace")
         workspace.add_command(Container)
 
         parser.add_command(workspace)
-        result = parser.run(args=["workspace", "container", "run", "nginx"])
+        result = parser.invoke(args=["workspace", "container", "run", "nginx"])
         assert result == "Running nginx with format table"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_class_init_args_become_group_flags(self, parser: InterfacyParser):
+    def test_class_init_args_become_group_flags(self, parser: Interfacy):
         """Verify class __init__ args become flags at group level."""
         workspace = CommandGroup("workspace")
         workspace.add_command(Container)
 
         parser.add_command(workspace)
-        result = parser.run(args=["workspace", "container", "--format", "json", "run", "nginx"])
+        result = parser.invoke(args=["workspace", "container", "--format", "json", "run", "nginx"])
         assert result == "Running nginx with format json"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_class_pipe_targets_apply_to_initializer(
         self,
-        parser: InterfacyParser,
+        parser: Interfacy,
         mocker,
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -297,28 +287,28 @@ class TestGroupWithClasses:
         workspace.add_command(PrefixTool, name="tool", pipe_targets="prefix")
         parser.add_command(workspace)
         monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-        mocker.patch("interfacy.core.read_piped", return_value="pre-")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="pre-")
 
-        assert parser.run(args=["workspace", "tool", "run"]) == "pre-x"
+        assert parser.invoke(args=["workspace", "tool", "run"]) == "pre-x"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_class_multiple_methods(self, parser: InterfacyParser):
+    def test_class_multiple_methods(self, parser: Interfacy):
         """Verify multiple class methods are accessible."""
         workspace = CommandGroup("workspace")
         workspace.add_command(Container)
 
         parser.add_command(workspace)
         assert (
-            parser.run(args=["workspace", "container", "run", "nginx"])
+            parser.invoke(args=["workspace", "container", "run", "nginx"])
             == "Running nginx with format table"
         )
         assert (
-            parser.run(args=["workspace", "container", "stop", "mycontainer"])
+            parser.invoke(args=["workspace", "container", "stop", "mycontainer"])
             == "Stopped mycontainer"
         )
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_classmethod_override_applies_to_group_entry(self, parser: InterfacyParser):
+    def test_classmethod_override_applies_to_group_entry(self, parser: Interfacy):
         """Verify group entry can enable classmethods via per-command override."""
         workspace = CommandGroup("workspace")
         workspace.add_command(TextTools, name="tools", include_classmethods=True)
@@ -333,41 +323,41 @@ class TestGroupWithClasses:
         assert "tool-name" in subcommands
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_inherited_override_applies_to_group_entry(self, parser: InterfacyParser):
+    def test_inherited_override_applies_to_group_entry(self, parser: Interfacy):
         """Verify group entry can include inherited methods via per-command override."""
         workspace = CommandGroup("workspace")
         workspace.add_command(DerivedOperation, name="ops", include_inherited_methods=True)
 
         parser.add_command(workspace)
-        result = parser.run(args=["workspace", "ops", "describe"])
+        result = parser.invoke(args=["workspace", "ops", "describe"])
         assert result == "base"
 
 
 class TestGroupWithInstances:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_instance_methods_become_subcommands(self, parser: InterfacyParser):
+    def test_instance_methods_become_subcommands(self, parser: Interfacy):
         """Verify instance methods become subcommands."""
         db = Database(host="localhost", port=5432)
         workspace = CommandGroup("workspace")
         workspace.add_command(db, name="db")
 
         parser.add_command(workspace)
-        result = parser.run(args=["workspace", "db", "query", "SELECT 1"])
+        result = parser.invoke(args=["workspace", "db", "query", "SELECT 1"])
         assert result == "Query on localhost:5432: SELECT 1"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_instance_no_init_args_in_cli(self, parser: InterfacyParser):
+    def test_instance_no_init_args_in_cli(self, parser: Interfacy):
         """Verify instance has no __init__ args exposed in CLI."""
         db = Database(host="localhost", port=5432)
         workspace = CommandGroup("workspace")
         workspace.add_command(db, name="db")
 
         parser.add_command(workspace)
-        result = parser.run(args=["workspace", "db", "ping"])
+        result = parser.invoke(args=["workspace", "db", "ping"])
         assert result == "Pong from localhost:5432"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_multiple_instances_same_class(self, parser: InterfacyParser):
+    def test_multiple_instances_same_class(self, parser: Interfacy):
         """Verify multiple instances of same class can have different names."""
         local_db = Database(host="localhost", port=5432)
         prod_db = Database(host="prod.example.com", port=5432)
@@ -377,15 +367,16 @@ class TestGroupWithInstances:
         workspace.add_command(prod_db, name="db-prod")
 
         parser.add_command(workspace)
-        assert parser.run(args=["workspace", "db-local", "ping"]) == "Pong from localhost:5432"
+        assert parser.invoke(args=["workspace", "db-local", "ping"]) == "Pong from localhost:5432"
         assert (
-            parser.run(args=["workspace", "db-prod", "ping"]) == "Pong from prod.example.com:5432"
+            parser.invoke(args=["workspace", "db-prod", "ping"])
+            == "Pong from prod.example.com:5432"
         )
 
 
 class TestDeeplyNestedGroups:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_three_levels_deep(self, parser: InterfacyParser):
+    def test_three_levels_deep(self, parser: Interfacy):
         """Verify 3 levels of nesting works."""
         level1 = CommandGroup("level1")
         level2 = CommandGroup("level2")
@@ -393,10 +384,10 @@ class TestDeeplyNestedGroups:
         level2.add_command(greet)
 
         parser.add_command(level1)
-        assert parser.run(args=["level1", "level2", "greet", "Ada"]) == "Hello, Ada!"
+        assert parser.invoke(args=["level1", "level2", "greet", "Ada"]) == "Hello, Ada!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_four_levels_deep(self, parser: InterfacyParser):
+    def test_four_levels_deep(self, parser: Interfacy):
         """Verify 4 levels of nesting works."""
         level1 = CommandGroup("level1")
         level2 = CommandGroup("level2")
@@ -406,10 +397,10 @@ class TestDeeplyNestedGroups:
         level3.add_command(greet)
 
         parser.add_command(level1)
-        assert parser.run(args=["level1", "level2", "level3", "greet", "Ada"]) == "Hello, Ada!"
+        assert parser.invoke(args=["level1", "level2", "level3", "greet", "Ada"]) == "Hello, Ada!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_mixed_nesting_groups_and_classes(self, parser: InterfacyParser):
+    def test_mixed_nesting_groups_and_classes(self, parser: Interfacy):
         """Verify mixing groups and classes in nesting works."""
         workspace = CommandGroup("workspace")
         module = CommandGroup("module")
@@ -418,14 +409,14 @@ class TestDeeplyNestedGroups:
         workspace.add_command(Container)
 
         parser.add_command(workspace)
-        assert parser.run(args=["workspace", "module", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["workspace", "module", "attach", "web"]) == "Attached to web"
         assert (
-            parser.run(args=["workspace", "container", "run", "nginx"])
+            parser.invoke(args=["workspace", "container", "run", "nginx"])
             == "Running nginx with format table"
         )
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_mixed_nesting_groups_functions_instances(self, parser: InterfacyParser):
+    def test_mixed_nesting_groups_functions_instances(self, parser: Interfacy):
         """Verify mixing groups, functions, and instances."""
         workspace = CommandGroup("workspace")
         module = CommandGroup("module")
@@ -436,21 +427,21 @@ class TestDeeplyNestedGroups:
         module.add_command(attach)
 
         parser.add_command(workspace)
-        assert parser.run(args=["workspace", "module", "attach", "web"]) == "Attached to web"
-        assert parser.run(args=["workspace", "db", "ping"]) == "Pong from localhost:5432"
+        assert parser.invoke(args=["workspace", "module", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["workspace", "db", "ping"]) == "Pong from localhost:5432"
 
 
 class TestGroupErrors:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_empty_group_error(self, parser: InterfacyParser):
+    def test_empty_group_error(self, parser: Interfacy):
         """Verify empty group raises error on run."""
         cli = CommandGroup("cli")
         parser.add_command(cli)
-        result = parser.run(args=["cli"])
-        assert isinstance(result, (ConfigurationError, SystemExit))
+        with pytest.raises(ConfigurationError):
+            parser.invoke(args=["cli"])
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_missing_subcommand_error(self, parser: InterfacyParser):
+    def test_missing_subcommand_error(self, parser: Interfacy):
         """Verify missing subcommand produces error."""
         workspace = CommandGroup("workspace")
         module = CommandGroup("module")
@@ -458,11 +449,11 @@ class TestGroupErrors:
         module.add_command(attach)
 
         parser.add_command(workspace)
-        result = parser.run(args=["workspace", "module"])
-        assert isinstance(result, SystemExit)
+        with pytest.raises(UsageError):
+            parser.invoke(args=["workspace", "module"])
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_missing_subcommand_exits_with_parse_error_code(self, parser: InterfacyParser):
+    def test_missing_subcommand_exits_with_parse_error_code(self, parser: Interfacy):
         """Missing nested subcommands should exit with argparse's parse error status."""
         workspace = CommandGroup("workspace")
         module = CommandGroup("module")
@@ -470,24 +461,22 @@ class TestGroupErrors:
         module.add_command(attach)
 
         parser.add_command(workspace)
-        result = parser.run(args=["workspace", "module"])
-
-        assert isinstance(result, SystemExit)
-        assert result.code == 2
+        with pytest.raises(UsageError):
+            parser.invoke(args=["workspace", "module"])
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_invalid_subcommand_error(self, parser: InterfacyParser):
+    def test_invalid_subcommand_error(self, parser: Interfacy):
         """Verify invalid subcommand produces error."""
         cli = CommandGroup("cli")
         cli.add_command(attach)
 
         parser.add_command(cli)
-        result = parser.run(args=["cli", "nonexistent"])
-        assert isinstance(result, SystemExit)
+        with pytest.raises(UsageError):
+            parser.invoke(args=["cli", "nonexistent"])
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
     def test_parent_argument_name_can_match_subcommand_name_without_namespace_conflict(
-        self, parser: InterfacyParser
+        self, parser: Interfacy
     ) -> None:
         """Parent args and subcommand names should not collide in nested namespaces."""
 
@@ -502,12 +491,12 @@ class TestGroupErrors:
 
         parser.add_command(root)
 
-        assert parser.run(args=["root", "config", "build", "artifact"]) == "build:artifact"
+        assert parser.invoke(args=["root", "config", "build", "artifact"]) == "build:artifact"
 
 
 class TestGroupArguments:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
-    def test_group_arguments_parse_alongside_subcommands(self, parser: InterfacyParser) -> None:
+    def test_group_arguments_parse_alongside_subcommands(self, parser: Interfacy) -> None:
         def cloud_options(region: str = "us-east") -> None:
             return None
 
@@ -521,44 +510,44 @@ class TestGroupArguments:
         args = ["cloud", "--region", "eu-west", "deploy", "api"]
 
         assert parser.parse_args(args)["cloud"]["region"] == "eu-west"
-        assert parser.run(args=args) == "deploy:api"
+        assert parser.invoke(args=args) == "deploy:api"
 
 
 class TestGroupAliases:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_group_with_aliases(self, parser: InterfacyParser):
+    def test_group_with_aliases(self, parser: Interfacy):
         """Verify group can be invoked via aliases."""
         workspace = CommandGroup("workspace", aliases=["ws"])
         workspace.add_command(attach)
 
         parser.add_command(workspace)
-        assert parser.run(args=["ws", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["ws", "attach", "web"]) == "Attached to web"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_command_in_group_with_aliases(self, parser: InterfacyParser):
+    def test_command_in_group_with_aliases(self, parser: Interfacy):
         """Verify command within group can have aliases."""
         workspace = CommandGroup("workspace")
         workspace.add_command(attach, aliases=["a", "conn"])
 
         parser.add_command(workspace)
-        assert parser.run(args=["workspace", "a", "web"]) == "Attached to web"
-        assert parser.run(args=["workspace", "conn", "web"]) == "Attached to web"
+        assert parser.invoke(args=["workspace", "a", "web"]) == "Attached to web"
+        assert parser.invoke(args=["workspace", "conn", "web"]) == "Attached to web"
 
 
 class TestGroupMixedWithDirectCommands:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_group_alongside_standalone_function(self, parser: InterfacyParser):
+    def test_group_alongside_standalone_function(self, parser: Interfacy):
         """Verify group can coexist with standalone function."""
         cli = CommandGroup("cli")
         cli.add_command(attach)
         parser.add_command(cli)
         parser.add_command(greet)
 
-        assert parser.run(args=["cli", "attach", "web"]) == "Attached to web"
-        assert parser.run(args=["greet", "Ada"]) == "Hello, Ada!"
+        assert parser.invoke(args=["cli", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["greet", "Ada"]) == "Hello, Ada!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_group_alongside_class(self, parser: InterfacyParser):
+    def test_group_alongside_class(self, parser: Interfacy):
         """Verify group can coexist with class command."""
         cli = CommandGroup("cli")
         cli.add_command(attach)
@@ -566,11 +555,11 @@ class TestGroupMixedWithDirectCommands:
         parser.add_command(cli)
         parser.add_command(Math)
 
-        assert parser.run(args=["cli", "attach", "web"]) == "Attached to web"
-        assert parser.run(args=["math", "pow", "2", "-e", "3"]) == 8
+        assert parser.invoke(args=["cli", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["math", "pow", "2", "-e", "3"]) == 8
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_multiple_groups_in_parser(self, parser: InterfacyParser):
+    def test_multiple_groups_in_parser(self, parser: Interfacy):
         """Verify multiple groups can be added to same parser."""
         workspace = CommandGroup("workspace")
         task = CommandGroup("task")
@@ -579,11 +568,11 @@ class TestGroupMixedWithDirectCommands:
         parser.add_command(workspace)
         parser.add_command(task)
 
-        assert parser.run(args=["workspace", "attach", "web"]) == "Attached to web"
-        assert parser.run(args=["task", "greet", "Ada"]) == "Hello, Ada!"
+        assert parser.invoke(args=["workspace", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["task", "greet", "Ada"]) == "Hello, Ada!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_group_class_function_all_together(self, parser: InterfacyParser):
+    def test_group_class_function_all_together(self, parser: Interfacy):
         """Verify group, class, and function all work together."""
         cli = CommandGroup("cli")
         cli.add_command(attach)
@@ -592,76 +581,6 @@ class TestGroupMixedWithDirectCommands:
         parser.add_command(Math)
         parser.add_command(pow)
 
-        assert parser.run(args=["cli", "attach", "web"]) == "Attached to web"
-        assert parser.run(args=["math", "pow", "2", "-e", "2"]) == 4
-        assert parser.run(args=["pow", "2", "-e", "3"]) == 8
-
-
-@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-def test_add_command_group_pipe_targets_reach_nested_function(
-    parser: InterfacyParser,
-    mocker,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def echo(message: str) -> str:
-        return message
-
-    nested = CommandGroup("nested")
-    nested.add_command(echo)
-    tools = CommandGroup("tools")
-    tools.add_group(nested)
-
-    parser.add_command(tools, pipe_targets="message")
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-    mocker.patch("interfacy.core.read_piped", return_value="from-stdin")
-
-    assert parser.run(args=["tools", "nested", "echo"]) == "from-stdin"
-
-
-@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-def test_group_pipe_targets_are_filtered_for_group_and_class_initializers(
-    parser: InterfacyParser,
-) -> None:
-    def group_options(workspace: str) -> None:
-        return None
-
-    class Tool:
-        def __init__(self, prefix: str) -> None:
-            self.prefix = prefix
-
-        def echo(self, message: str) -> str:
-            return f"{self.prefix}{message}"
-
-    tools = CommandGroup("tools").with_args(group_options)
-    tools.add_command(Tool, name="tool")
-
-    parser.add_command(tools, pipe_targets=("workspace", "prefix", "message"))
-    schema = parser.build_parser_schema()
-    tools_command = schema.commands["tools"]
-    tool_command = (tools_command.subcommands or {})["tool"]
-    echo_command = (tool_command.subcommands or {})["echo"]
-
-    assert tools_command.pipe_targets is not None
-    assert tools_command.pipe_targets.targets == ("workspace",)
-    assert tool_command.pipe_targets is not None
-    assert tool_command.pipe_targets.targets == ("prefix",)
-    assert echo_command.pipe_targets is not None
-    assert echo_command.pipe_targets.targets == ("message",)
-
-
-@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-def test_group_command_pipe_targets_override_inherited_group_config(
-    parser: InterfacyParser,
-) -> None:
-    def combine(inherited: str, explicit: str) -> tuple[str, str]:
-        return inherited, explicit
-
-    tools = CommandGroup("tools")
-    tools.add_command(combine, pipe_targets="explicit")
-
-    parser.add_command(tools, pipe_targets="inherited")
-    schema = parser.build_parser_schema()
-    combine_command = (schema.commands["tools"].subcommands or {})["combine"]
-
-    assert combine_command.pipe_targets is not None
-    assert combine_command.pipe_targets.targets == ("explicit",)
+        assert parser.invoke(args=["cli", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["math", "pow", "2", "-e", "2"]) == 4
+        assert parser.invoke(args=["pow", "2", "-e", "3"]) == 8

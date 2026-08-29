@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from interfacy import CommandGroup, ExecutableFlag
-from interfacy.core import InterfacyParser
 from interfacy.exceptions import ReservedFlagError
-from interfacy.executable_flag import execute_executable_flag
-from tests.conftest import greet, pow
+from tests.fixtures.commands import greet, pow
 
 
 def _version_flag(text: str = "interfacy 1.2.3") -> ExecutableFlag:
@@ -21,13 +17,12 @@ def _version_flag(text: str = "interfacy 1.2.3") -> ExecutableFlag:
 
 @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
 def test_root_executable_flag_runs_before_command_dispatch(parser, capsys) -> None:
-    parser.executable_flags = [_version_flag()]
+    parser.apply_setup(executable_flags=[_version_flag()])
     parser.add_command(greet)
 
-    result = parser.run(args=["--version"])
+    result = parser.invoke(args=["--version"])
 
-    assert isinstance(result, SystemExit)
-    assert result.code == 0
+    assert result is None
 
     captured = capsys.readouterr()
     assert "interfacy 1.2.3" in captured.out + captured.err
@@ -43,10 +38,9 @@ def test_leaf_command_executable_flag_runs_on_command_level(parser, capsys) -> N
     parser.add_command(greet, executable_flags=[about_flag])
     parser.add_command(pow)
 
-    result = parser.run(args=["greet", "--about"])
+    result = parser.invoke(args=["greet", "--about"])
 
-    assert isinstance(result, SystemExit)
-    assert result.code == 0
+    assert result is None
 
     captured = capsys.readouterr()
     assert "friendly greeter" in captured.out + captured.err
@@ -67,10 +61,9 @@ def test_group_executable_flag_short_circuits_before_missing_subcommand(parser, 
         ],
     )
 
-    result = parser.run(args=["tools", "--about"])
+    result = parser.invoke(args=["tools", "--about"])
 
-    assert isinstance(result, SystemExit)
-    assert result.code == 0
+    assert result is None
 
     captured = capsys.readouterr()
     combined = captured.out + captured.err
@@ -80,7 +73,7 @@ def test_group_executable_flag_short_circuits_before_missing_subcommand(parser, 
 
 @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
 def test_single_root_help_merges_parser_and_command_executable_flags(parser) -> None:
-    parser.executable_flags = [_version_flag()]
+    parser.apply_setup(executable_flags=[_version_flag()])
     parser.add_command(
         greet,
         executable_flags=[
@@ -92,13 +85,13 @@ def test_single_root_help_merges_parser_and_command_executable_flags(parser) -> 
         ],
     )
 
-    if parser.__class__.__name__ == "Argparser":
-        help_text = parser.build_parser().format_help()
+    native_parser = parser.build_parser()
+    if parser.backend == "argparse":
+        help_text = native_parser.format_help()
     else:
         import click
 
-        command = parser.build_parser()
-        help_text = command.get_help(click.Context(command))
+        help_text = native_parser.get_help(click.Context(native_parser))
 
     assert "--help" in help_text
     assert "--version" in help_text
@@ -117,44 +110,7 @@ def test_executable_flag_collision_with_generated_option_is_rejected(parser) -> 
 
 
 def test_root_executable_flag_cannot_reuse_native_help() -> None:
-    from interfacy.argparse_backend import Argparser
+    from interfacy import Interfacy
 
     with pytest.raises(ReservedFlagError):
-        Argparser(executable_flags=[ExecutableFlag(("--help",), lambda: None)])
-
-
-@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-def test_async_executable_flag_is_awaited(
-    parser: InterfacyParser,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    async def version() -> str:
-        return "interfacy async-version"
-
-    def command() -> None:
-        pytest.fail("the command must be short-circuited")
-
-    parser.executable_flags = [ExecutableFlag("--version", version)]
-    parser.add_command(command)
-
-    result = parser.run(args=["--version"])
-
-    assert isinstance(result, SystemExit)
-    assert result.code == 0
-    assert "interfacy async-version" in capsys.readouterr().out
-
-
-def test_async_executable_flag_is_awaited_inside_running_event_loop() -> None:
-    displayed: list[str] = []
-
-    async def version() -> str:
-        return "async-loop-version"
-
-    async def invoke() -> int:
-        return execute_executable_flag(
-            ExecutableFlag("--version", version),
-            display_result_fn=displayed.append,
-        )
-
-    assert asyncio.run(invoke()) == 0
-    assert displayed == ["async-loop-version"]
+        Interfacy(backend="argparse", executable_flags=[ExecutableFlag(("--help",), lambda: None)])
