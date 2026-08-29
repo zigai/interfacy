@@ -7,6 +7,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Literal, TypeGuard, TypeVar
 
+from platformdirs import user_config_path
 from stdl.fs import toml_load
 
 import interfacy.help.colors as appearance_colors  # noqa: F401
@@ -173,7 +174,7 @@ def get_default_config_paths() -> list[Path]:
     if env_path:
         paths.append(Path(env_path))
 
-    paths.append(Path.home() / ".config" / "interfacy" / "config.toml")
+    paths.append(user_config_path("interfacy", appauthor=False) / "config.toml")
 
     return paths
 

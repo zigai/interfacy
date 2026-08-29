@@ -133,8 +133,8 @@ def test_main_config_paths_output(
 ) -> None:
     env_path = tmp_path / "custom.toml"
     monkeypatch.setenv("INTERFACY_CONFIG", str(env_path))
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    config_home = tmp_path / "config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
 
     result = main(["--config-paths"])
     assert result == ExitCode.SUCCESS
@@ -143,7 +143,7 @@ def test_main_config_paths_output(
     lines = [line.strip() for line in captured.out.splitlines() if line.strip()]
     assert lines == [
         str(env_path),
-        str(tmp_path / "home" / ".config" / "interfacy" / "config.toml"),
+        str(config_home / "interfacy" / "config.toml"),
     ]
 
 

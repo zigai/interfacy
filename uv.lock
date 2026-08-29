@@ -433,6 +433,7 @@ version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "objinspect" },
+    { name = "platformdirs" },
     { name = "setproctitle" },
     { name = "stdl" },
     { name = "strto" },
@@ -514,6 +515,7 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'docs'", specifier = "==3.1.6" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = "==4.0.1" },
     { name = "objinspect", specifier = ">=0.4.3" },
+    { name = "platformdirs", specifier = ">=4.3.8" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.6.0" },
     { name = "pyrefly", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
