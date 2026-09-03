@@ -705,7 +705,7 @@ class StandardLayout(HelpLayout):
 
     @staticmethod
     def _normalize_whitespace(text: str) -> str:
-        return re.sub(r"\s+", " ", text).strip()
+        return " ".join(text.split())
 
     @staticmethod
     def _collapse_duplicate_terminal_period(text: str) -> str:

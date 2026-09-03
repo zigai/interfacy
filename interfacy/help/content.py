@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -79,12 +78,8 @@ def render_help_content(
     return normalize_help_text(final_renderer(context, content))
 
 
-HelpContentTransform = Callable[[HelpContext, HelpContent], HelpContent]
-
-
 __all__ = [
     "HelpContent",
-    "HelpContentTransform",
     "HelpContext",
     "HelpRenderer",
     "HelpResult",

@@ -28,6 +28,7 @@ from interfacy.schema.schema import (
 )
 
 _DEFAULT_HELP_ARGUMENT = object()
+_USAGE_PREFIX_RE = re.compile(r"^(?:\x1b\[[0-9;]*m)*\s*usage:\s*", flags=re.IGNORECASE)
 
 
 def _make_help_argument(
@@ -581,12 +582,7 @@ class SchemaHelpRenderer:
         return prefix
 
     def _normalize_prog(self, prog: str) -> str:
-        return re.sub(
-            r"^(?:\x1b\[[0-9;]*m)*\s*usage:\s*",
-            "",
-            prog,
-            flags=re.IGNORECASE,
-        ).strip()
+        return _USAGE_PREFIX_RE.sub("", prog).strip()
 
     def _style_usage_text(self, text: str) -> str:
         if self.layout.style.usage_text_style is not None:

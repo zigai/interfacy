@@ -165,7 +165,6 @@ class HelpLayout:
     )
 
     layout_mode: Literal["auto", "adaptive", "template"] = "auto"
-    subcommand_usage_token: str | None = None
 
     # "bold":  remove backticks in docstring and make text bold
     # "strip": remove backticks in docstring and leave plain text
@@ -333,10 +332,6 @@ class HelpLayout:
 
     def get_subcommand_usage_token(self) -> str:
         """Return the subcommand placeholder token used in usage lines."""
-        legacy_placeholder = self.subcommand_usage_token
-        if isinstance(legacy_placeholder, str):
-            return legacy_placeholder
-
         return self.subcommand_usage_placeholder
 
     def should_render_description_before_usage(self) -> bool:
