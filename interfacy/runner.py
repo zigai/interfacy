@@ -40,7 +40,6 @@ class SchemaRunner:
         self.args = args
         self.context = context
         self.COMMAND_KEY = context.command_key
-        self._instance_chain: list[Any] = []
         self.model_argument_mapper = ModelArgumentMapper()
         self._async_mode = False
 

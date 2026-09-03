@@ -35,19 +35,6 @@ class PluginManager:
     def generation(self) -> int:
         return self._generation
 
-    @property
-    def has_help_transformers(self) -> bool:
-        return any(
-            type(plugin).transform_help is not InterfacyPlugin.transform_help
-            for plugin in self.plugins
-        )
-
-    @property
-    def has_help_renderers(self) -> bool:
-        return any(
-            type(plugin).render_help is not InterfacyPlugin.render_help for plugin in self.plugins
-        )
-
     def validate_additions(
         self,
         plugins: Sequence[InterfacyPlugin],

@@ -139,47 +139,6 @@ class EngineSettings:
         )
         self.plugins = tuple(self.plugins) if self.plugins is not None else None
 
-    def parser_kwargs(self) -> dict[str, Any]:
-        return {
-            "description": self.description,
-            "epilog": self.epilog,
-            "type_parser": self.type_parser,
-            "help_layout": self.help_layout,
-            "help_colors": self.help_colors,
-            "print_result": self.print_result,
-            "tab_completion": self.tab_completion,
-            "full_error_traceback": self.full_error_traceback,
-            "allow_args_from_file": self.allow_args_from_file,
-            "flag_strategy": self.flag_strategy,
-            "abbreviation_gen": self.abbreviation_gen,
-            "abbreviation_max_generated_len": self.abbreviation_max_generated_len,
-            "abbreviation_scope": self.abbreviation_scope,
-            "help_option_sort": (
-                list(self.help_option_sort) if self.help_option_sort is not None else None
-            ),
-            "help_subcommand_sort": (
-                list(self.help_subcommand_sort) if self.help_subcommand_sort is not None else None
-            ),
-            "help_position": self.help_position,
-            "executable_flags": self.executable_flags,
-            "pipe_targets": self.pipe_targets,
-            "print_result_func": self.print_result_func,
-            "include_inherited_methods": self.include_inherited_methods,
-            "include_protected_methods": self.include_protected_methods,
-            "include_private_methods": self.include_private_methods,
-            "include_staticmethods": self.include_staticmethods,
-            "include_classmethods": self.include_classmethods,
-            "on_interrupt": self.on_interrupt,
-            "silent_interrupt": self.silent_interrupt,
-            "expand_model_params": self.expand_model_params,
-            "model_expansion_max_depth": self.model_expansion_max_depth,
-            "bool_negative_prefix": self.bool_negative_prefix,
-            "help_flags": self.help_flags,
-            "plugins": self.plugins,
-            "method_skips": self.method_skips,
-            "parse_recovery_max_attempts": self.parse_recovery_max_attempts,
-        }
-
 
 @dataclass(frozen=True, kw_only=True)
 class _EngineSettingsUpdate:

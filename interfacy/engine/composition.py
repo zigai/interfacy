@@ -170,9 +170,11 @@ class InterfacyEngine(InvocationOperations):
         self.help_layout.help_subcommand_sort_rules = list(self.help_subcommand_sort_effective)
         self.registry = CommandRegistry(self.flag_strategy.command_translator)
         self.help_layout.name_registry = self.registry.names
-        default_pipes = self.settings.pipe_targets
-        if default_pipes is not None and not isinstance(default_pipes, PipeTargets):
-            raise RuntimeError("EngineSettings.pipe_targets was not normalized")
+        default_pipes = (
+            self.settings.pipe_targets
+            if isinstance(self.settings.pipe_targets, PipeTargets)
+            else None
+        )
         self.pipes = PipeState(self.flag_strategy.command_translator, default_pipes)
         self.plugin_manager = PluginManager()
         self.runtime_policy = RuntimePolicy(
@@ -319,13 +321,6 @@ class InterfacyEngine(InvocationOperations):
         layout.help_option_sort_rules = list(effective_options)
         layout.help_subcommand_sort_rules = list(effective_subcommands)
         layout.name_registry = self.registry.names
-        BackendConfig(
-            help_flags=tuple(candidate.help_flags),
-            tab_completion=candidate.tab_completion,
-            allow_args_from_file=candidate.allow_args_from_file,
-            help_layout=layout,
-            type_parser=type_parser,
-        )
 
         additions = self.plugin_manager.validate_additions(
             prepared.plugin_additions,

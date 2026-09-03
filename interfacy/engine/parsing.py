@@ -104,15 +104,6 @@ class AncestorOptions:
 
         return namespace
 
-    def required_option_flags(self) -> set[str]:
-        return {
-            flag
-            for _command_path, argument, _raw_values in self._pending_values
-            if argument.required
-            for flag in argument.flags
-            if flag.startswith("-")
-        }
-
     @staticmethod
     def _single_command_without_root_selection(schema: ParserSchema) -> Command | None:
         if len(schema.commands) != 1:
