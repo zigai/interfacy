@@ -3,9 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from platformdirs import user_config_path
 
 from interfacy import UNSET
-from interfacy.cli.config import apply_config_defaults, load_config
+from interfacy.cli.config import (
+    apply_config_defaults,
+    get_default_config_paths,
+    load_config,
+)
 from interfacy.exceptions import ConfigurationError
 from interfacy.help.colors import Aurora
 from interfacy.help.presets import InterfacyLayout, Modern
@@ -301,3 +306,48 @@ def test_load_config_rejects_non_plugin_symbol(
     config = load_config(config_path)
     with pytest.raises(ConfigurationError, match="Plugin symbol must resolve"):
         apply_config_defaults(config, {"plugins": UNSET})
+
+
+def test_get_default_config_paths_with_env_and_xdg(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    custom_path = tmp_path / "custom.toml"
+    xdg_dir = tmp_path / "xdg"
+    monkeypatch.setenv("INTERFACY_CONFIG", str(custom_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_dir))
+
+    paths = get_default_config_paths()
+    assert paths == [
+        custom_path,
+        xdg_dir / "interfacy" / "config.toml",
+    ]
+
+
+def test_get_default_config_paths_macos_defaults_to_dot_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("INTERFACY_CONFIG", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr("sys.platform", "darwin")
+    fake_home = tmp_path / "user_home"
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+    paths = get_default_config_paths()
+    assert paths == [
+        fake_home / ".config" / "interfacy" / "config.toml",
+    ]
+
+
+def test_get_default_config_paths_windows_defaults_to_platformdirs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("INTERFACY_CONFIG", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setattr("sys.platform", "win32")
+
+    paths = get_default_config_paths()
+    assert paths == [
+        user_config_path("interfacy", appauthor=False) / "config.toml",
+    ]

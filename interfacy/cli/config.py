@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import asdict, dataclass, field, fields
 from functools import cache
 from importlib import import_module
@@ -174,7 +175,13 @@ def get_default_config_paths() -> list[Path]:
     if env_path:
         paths.append(Path(env_path))
 
-    paths.append(user_config_path("interfacy", appauthor=False) / "config.toml")
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    if xdg_config_home:
+        paths.append(Path(xdg_config_home) / "interfacy" / "config.toml")
+    elif sys.platform != "win32":
+        paths.append(Path.home() / ".config" / "interfacy" / "config.toml")
+    else:
+        paths.append(user_config_path("interfacy", appauthor=False) / "config.toml")
 
     return paths
 

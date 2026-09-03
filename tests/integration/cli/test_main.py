@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from platformdirs import user_config_path
 
 from interfacy.cli.main import ExitCode, _split_target, build_parser, main, resolve_target
 
@@ -145,6 +146,25 @@ def test_main_config_paths_output(
         str(env_path),
         str(config_home / "interfacy" / "config.toml"),
     ]
+
+
+def test_main_config_paths_default_without_xdg(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("INTERFACY_CONFIG", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+    if sys.platform != "win32":
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        expected_path = tmp_path / "home" / ".config" / "interfacy" / "config.toml"
+    else:
+        expected_path = user_config_path("interfacy", appauthor=False) / "config.toml"
+
+    assert main(["--config-paths"]) == ExitCode.SUCCESS
+    lines = [line.strip() for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert lines == [str(expected_path)]
 
 
 def test_main_special_flags_bypass_invalid_config(
