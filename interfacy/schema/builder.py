@@ -172,6 +172,7 @@ class ParserSchemaBuilder:
     def _resolve_effective_command_settings(
         self,
         parent: EffectiveCommandSettings | None,
+        overrides: CommandOverrides | None = None,
         *,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
@@ -185,28 +186,30 @@ class ParserSchemaBuilder:
         help_option_sort: list[HelpOptionSortRule] | None = None,
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
     ) -> EffectiveCommandSettings:
-        return resolve_command_settings(
-            parent or self._base_build_settings(),
-            CommandOverrides(
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                method_skips=list(method_skips) if method_skips is not None else None,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
-            ),
+        base = parent or self._base_build_settings()
+        if overrides is not None:
+            return resolve_command_settings(base, overrides)
+        resolved_overrides = CommandOverrides(
+            include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
+            include_classmethods=include_classmethods,
+            method_skips=list(method_skips) if method_skips is not None else None,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=model_expansion_max_depth,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
         )
+        return resolve_command_settings(base, resolved_overrides)
 
     @staticmethod
     def _attach_command_build_settings(
         command: Command,
         *,
         settings: EffectiveCommandSettings,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -220,18 +223,41 @@ class ParserSchemaBuilder:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
     ) -> None:
-        command.include_inherited_methods = include_inherited_methods
-        command.include_protected_methods = include_protected_methods
-        command.include_private_methods = include_private_methods
-        command.include_staticmethods = include_staticmethods
-        command.include_classmethods = include_classmethods
-        command.method_skips = list(method_skips) if method_skips is not None else None
-        command.expand_model_params = expand_model_params
-        command.model_expansion_max_depth = model_expansion_max_depth
-        command.abbreviation_scope = abbreviation_scope
-        command.help_option_sort = list(help_option_sort) if help_option_sort is not None else None
+        effective_overrides = overrides or CommandOverrides(
+            include_inherited_methods=include_inherited_methods,
+            include_protected_methods=include_protected_methods,
+            include_private_methods=include_private_methods,
+            include_staticmethods=include_staticmethods,
+            include_classmethods=include_classmethods,
+            method_skips=list(method_skips) if method_skips is not None else None,
+            expand_model_params=expand_model_params,
+            model_expansion_max_depth=model_expansion_max_depth,
+            abbreviation_scope=abbreviation_scope,
+            help_option_sort=help_option_sort,
+            help_subcommand_sort=help_subcommand_sort,
+        )
+        command.include_inherited_methods = effective_overrides.include_inherited_methods
+        command.include_protected_methods = effective_overrides.include_protected_methods
+        command.include_private_methods = effective_overrides.include_private_methods
+        command.include_staticmethods = effective_overrides.include_staticmethods
+        command.include_classmethods = effective_overrides.include_classmethods
+        command.method_skips = (
+            list(effective_overrides.method_skips)
+            if effective_overrides.method_skips is not None
+            else None
+        )
+        command.expand_model_params = effective_overrides.expand_model_params
+        command.model_expansion_max_depth = effective_overrides.model_expansion_max_depth
+        command.abbreviation_scope = effective_overrides.abbreviation_scope
+        command.help_option_sort = (
+            list(effective_overrides.help_option_sort)
+            if effective_overrides.help_option_sort is not None
+            else None
+        )
         command.help_subcommand_sort = (
-            list(help_subcommand_sort) if help_subcommand_sort is not None else None
+            list(effective_overrides.help_subcommand_sort)
+            if effective_overrides.help_subcommand_sort is not None
+            else None
         )
         command.help_group = help_group
         command.help_option_sort_effective = list(settings.help_option_sort)
@@ -245,17 +271,7 @@ class ParserSchemaBuilder:
                 rebuilt_group = self.build_from_group(
                     command.group_source,
                     canonical_name=command.canonical_name,
-                    include_inherited_methods=command.include_inherited_methods,
-                    include_protected_methods=command.include_protected_methods,
-                    include_private_methods=command.include_private_methods,
-                    include_staticmethods=command.include_staticmethods,
-                    include_classmethods=command.include_classmethods,
-                    method_skips=command.method_skips,
-                    expand_model_params=command.expand_model_params,
-                    model_expansion_max_depth=command.model_expansion_max_depth,
-                    abbreviation_scope=command.abbreviation_scope,
-                    help_option_sort=command.help_option_sort,
-                    help_subcommand_sort=command.help_subcommand_sort,
+                    overrides=command.overrides,
                     help_group=command.help_group,
                     executable_flags=command.executable_flags,
                     parameter_settings=command.parameter_settings,
@@ -280,17 +296,7 @@ class ParserSchemaBuilder:
                 aliases=command.aliases,
                 executable_flags=command.executable_flags,
                 parent_settings=None,
-                include_inherited_methods=command.include_inherited_methods,
-                include_protected_methods=command.include_protected_methods,
-                include_private_methods=command.include_private_methods,
-                include_staticmethods=command.include_staticmethods,
-                include_classmethods=command.include_classmethods,
-                method_skips=command.method_skips,
-                expand_model_params=command.expand_model_params,
-                model_expansion_max_depth=command.model_expansion_max_depth,
-                abbreviation_scope=command.abbreviation_scope,
-                help_option_sort=command.help_option_sort,
-                help_subcommand_sort=command.help_subcommand_sort,
+                overrides=command.overrides,
                 help_group=command.help_group,
                 parameter_settings=command.parameter_settings,
             )
@@ -473,6 +479,7 @@ class ParserSchemaBuilder:
         aliases: tuple[str, ...] = (),
         executable_flags: list[ExecutableFlag] | None = None,
         parent_settings: EffectiveCommandSettings | None = None,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -497,6 +504,7 @@ class ParserSchemaBuilder:
             aliases (tuple[str, ...]): Alternate command names.
             executable_flags (list[ExecutableFlag] | None): Zero-argument executable flags.
             parent_settings (EffectiveCommandSettings | None): Parent effective settings.
+            overrides (CommandOverrides | None): Optional command settings override.
             include_inherited_methods (bool | None): Per-command inherited-method override.
             include_protected_methods (bool | None): Per-command protected-method override.
             include_private_methods (bool | None): Per-command private-method override.
@@ -512,19 +520,22 @@ class ParserSchemaBuilder:
             help_group (str | None): Optional help-only command group heading.
             parameter_settings (dict[str, Param] | None): Per-parameter settings.
         """
-        settings = self._resolve_effective_command_settings(
-            parent_settings,
+        effective_overrides = overrides or CommandOverrides(
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
             include_staticmethods=include_staticmethods,
             include_classmethods=include_classmethods,
-            method_skips=method_skips,
+            method_skips=list(method_skips) if method_skips is not None else None,
             expand_model_params=expand_model_params,
             model_expansion_max_depth=model_expansion_max_depth,
             abbreviation_scope=abbreviation_scope,
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
+        )
+        settings = self._resolve_effective_command_settings(
+            parent_settings,
+            overrides=effective_overrides,
         )
         resolve_objinspect_annotations(obj)
 
@@ -536,17 +547,7 @@ class ParserSchemaBuilder:
                 aliases=aliases,
                 executable_flags=executable_flags,
                 settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                method_skips=method_skips,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
+                overrides=effective_overrides,
                 help_group=help_group,
                 parameter_settings=parameter_settings,
             )
@@ -558,17 +559,7 @@ class ParserSchemaBuilder:
                 aliases=aliases,
                 executable_flags=executable_flags,
                 settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                method_skips=method_skips,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
+                overrides=effective_overrides,
                 help_group=help_group,
                 parameter_settings=parameter_settings,
             )
@@ -580,17 +571,7 @@ class ParserSchemaBuilder:
                 aliases=aliases,
                 executable_flags=executable_flags,
                 settings=settings,
-                include_inherited_methods=include_inherited_methods,
-                include_protected_methods=include_protected_methods,
-                include_private_methods=include_private_methods,
-                include_staticmethods=include_staticmethods,
-                include_classmethods=include_classmethods,
-                method_skips=method_skips,
-                expand_model_params=expand_model_params,
-                model_expansion_max_depth=model_expansion_max_depth,
-                abbreviation_scope=abbreviation_scope,
-                help_option_sort=help_option_sort,
-                help_subcommand_sort=help_subcommand_sort,
+                overrides=effective_overrides,
                 help_group=help_group,
                 parameter_settings=parameter_settings,
             )
@@ -608,6 +589,7 @@ class ParserSchemaBuilder:
         pipe_config: PipeTargets | None = None,
         executable_flags: list[ExecutableFlag] | None = None,
         settings: EffectiveCommandSettings | None = None,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -683,6 +665,7 @@ class ParserSchemaBuilder:
         self._attach_command_build_settings(
             command,
             settings=resolved_settings,
+            overrides=overrides,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -749,6 +732,7 @@ class ParserSchemaBuilder:
         aliases: tuple[str, ...] = (),
         executable_flags: list[ExecutableFlag] | None = None,
         settings: EffectiveCommandSettings | None = None,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -859,6 +843,7 @@ class ParserSchemaBuilder:
         self._attach_command_build_settings(
             command,
             settings=resolved_settings,
+            overrides=overrides,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -884,6 +869,7 @@ class ParserSchemaBuilder:
         aliases: tuple[str, ...] = (),
         executable_flags: list[ExecutableFlag] | None = None,
         settings: EffectiveCommandSettings | None = None,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -1022,6 +1008,7 @@ class ParserSchemaBuilder:
         self._attach_command_build_settings(
             command,
             settings=resolved_settings,
+            overrides=overrides,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -1803,6 +1790,7 @@ class ParserSchemaBuilder:
         parent_path: tuple[str, ...] = (),
         canonical_name: str | None = None,
         parent_settings: EffectiveCommandSettings | None = None,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -1821,6 +1809,7 @@ class ParserSchemaBuilder:
         """Build Command schema from a CommandGroup (manual construction)."""
         settings = self._resolve_effective_command_settings(
             parent_settings,
+            overrides=overrides,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -1920,6 +1909,7 @@ class ParserSchemaBuilder:
         self._attach_command_build_settings(
             command,
             settings=settings,
+            overrides=overrides,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -2005,36 +1995,14 @@ class ParserSchemaBuilder:
         parent_settings: EffectiveCommandSettings,
     ) -> Command:
         """Build Command from a CommandEntry (function/class/instance)."""
-        settings = self._resolve_effective_command_settings(
-            parent_settings,
-            include_inherited_methods=entry.include_inherited_methods,
-            include_protected_methods=entry.include_protected_methods,
-            include_private_methods=entry.include_private_methods,
-            include_staticmethods=entry.include_staticmethods,
-            include_classmethods=entry.include_classmethods,
-            method_skips=entry.method_skips,
-            expand_model_params=entry.expand_model_params,
-            model_expansion_max_depth=entry.model_expansion_max_depth,
-            abbreviation_scope=entry.abbreviation_scope,
-            help_option_sort=entry.help_option_sort,
-            help_subcommand_sort=entry.help_subcommand_sort,
-        )
+        overrides = entry.overrides
+        settings = self._resolve_effective_command_settings(parent_settings, overrides)
         if entry.is_instance:
             return self._build_from_instance(
                 entry,
                 parent_path,
                 settings=settings,
-                include_inherited_methods=entry.include_inherited_methods,
-                include_protected_methods=entry.include_protected_methods,
-                include_private_methods=entry.include_private_methods,
-                include_staticmethods=entry.include_staticmethods,
-                include_classmethods=entry.include_classmethods,
-                method_skips=entry.method_skips,
-                expand_model_params=entry.expand_model_params,
-                model_expansion_max_depth=entry.model_expansion_max_depth,
-                abbreviation_scope=entry.abbreviation_scope,
-                help_option_sort=entry.help_option_sort,
-                help_subcommand_sort=entry.help_subcommand_sort,
+                overrides=overrides,
                 executable_flags=entry.executable_flags,
                 help_group=entry.help_group,
                 parameter_settings=entry.parameter_settings,
@@ -2045,17 +2013,7 @@ class ParserSchemaBuilder:
                 entry,
                 parent_path,
                 settings=settings,
-                include_inherited_methods=entry.include_inherited_methods,
-                include_protected_methods=entry.include_protected_methods,
-                include_private_methods=entry.include_private_methods,
-                include_staticmethods=entry.include_staticmethods,
-                include_classmethods=entry.include_classmethods,
-                method_skips=entry.method_skips,
-                expand_model_params=entry.expand_model_params,
-                model_expansion_max_depth=entry.model_expansion_max_depth,
-                abbreviation_scope=entry.abbreviation_scope,
-                help_option_sort=entry.help_option_sort,
-                help_subcommand_sort=entry.help_subcommand_sort,
+                overrides=overrides,
                 executable_flags=entry.executable_flags,
                 help_group=entry.help_group,
                 parameter_settings=entry.parameter_settings,
@@ -2073,18 +2031,8 @@ class ParserSchemaBuilder:
                 aliases=entry.aliases,
                 pipe_config=entry.pipe_targets,
                 settings=settings,
-                include_inherited_methods=entry.include_inherited_methods,
-                include_protected_methods=entry.include_protected_methods,
-                include_private_methods=entry.include_private_methods,
-                include_staticmethods=entry.include_staticmethods,
-                include_classmethods=entry.include_classmethods,
-                method_skips=entry.method_skips,
-                expand_model_params=entry.expand_model_params,
-                model_expansion_max_depth=entry.model_expansion_max_depth,
-                abbreviation_scope=entry.abbreviation_scope,
+                overrides=overrides,
                 executable_flags=entry.executable_flags,
-                help_option_sort=entry.help_option_sort,
-                help_subcommand_sort=entry.help_subcommand_sort,
                 help_group=entry.help_group,
                 parameter_settings=entry.parameter_settings,
             )
@@ -2097,6 +2045,7 @@ class ParserSchemaBuilder:
         parent_path: tuple[str, ...],
         *,
         settings: EffectiveCommandSettings,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -2178,6 +2127,7 @@ class ParserSchemaBuilder:
         self._attach_command_build_settings(
             command,
             settings=settings,
+            overrides=overrides,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,
@@ -2200,6 +2150,7 @@ class ParserSchemaBuilder:
         parent_path: tuple[str, ...],
         *,
         settings: EffectiveCommandSettings,
+        overrides: CommandOverrides | None = None,
         include_inherited_methods: bool | None = None,
         include_protected_methods: bool | None = None,
         include_private_methods: bool | None = None,
@@ -2347,6 +2298,7 @@ class ParserSchemaBuilder:
         self._attach_command_build_settings(
             command,
             settings=settings,
+            overrides=overrides,
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
             include_private_methods=include_private_methods,

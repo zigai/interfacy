@@ -518,7 +518,7 @@ class ModelArgumentMapper:
         group: list[Argument],
     ) -> list[str]:
         missing: list[str] = []
-        for field in self._model_fields(model_type):
+        for field in self.model_fields_for_expansion(model_type):
             field_path = (*path, field.name)
             if field.name not in values:
                 if field.required:
@@ -555,7 +555,7 @@ class ModelArgumentMapper:
             return []
 
         flags: list[str] = []
-        for field in self._model_fields(inner):
+        for field in self.model_fields_for_expansion(inner):
             if field.required:
                 flags.extend(
                     self._required_leaf_flags(field.annotation, (*path, field.name), group)
@@ -590,82 +590,6 @@ class ModelArgumentMapper:
     @staticmethod
     def _dedupe_preserving_order(values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
-
-    def _model_fields(self, model_type: type) -> list[ModelField]:
-        if is_dataclass(model_type):
-            resolved_hints = self._resolved_type_hints(model_type)
-            return [
-                ModelField(
-                    name=field.name,
-                    annotation=resolved_hints.get(field.name, field.type),
-                    required=field.default is MISSING and field.default_factory is MISSING,  # type: ignore[comparison-overlap]
-                )
-                for field in fields(model_type)
-                if field.init
-            ]
-        if hasattr(model_type, "model_fields"):
-            return self._pydantic_v2_model_fields(model_type)
-        if hasattr(model_type, "__fields__"):
-            return self._pydantic_v1_model_fields(model_type)
-        if self.is_plain_class_model(model_type):
-            return self._plain_class_model_fields(model_type)
-
-        return []
-
-    @staticmethod
-    def _pydantic_v2_model_fields(model_type: type) -> list[ModelField]:
-        result: list[ModelField] = []
-        for name, info in (getattr(model_type, "model_fields", {}) or {}).items():
-            annotation = getattr(info, "annotation", None)
-            is_required = getattr(info, "is_required", None)
-            required = bool(is_required()) if callable(is_required) else False
-            result.append(ModelField(name=name, annotation=annotation, required=required))
-
-        return result
-
-    @staticmethod
-    def _pydantic_v1_model_fields(model_type: type) -> list[ModelField]:
-        result: list[ModelField] = []
-        for name, info in (getattr(model_type, "__fields__", {}) or {}).items():
-            annotation = getattr(info, "outer_type_", None) or getattr(info, "type_", None)
-            required = bool(getattr(info, "required", False))
-            result.append(ModelField(name=name, annotation=annotation, required=required))
-
-        return result
-
-    def _plain_class_model_fields(self, model_type: type) -> list[ModelField]:
-        try:
-            cls_info = Class(
-                model_type,
-                init=True,
-                public=True,
-                inherited=True,
-                static_methods=True,
-                protected=False,
-                private=False,
-                classmethod=True,
-            )
-        except OBJINSPECT_CLASS_ERRORS:
-            return []
-
-        init_method = cls_info.init_method
-        if init_method is None:
-            return []
-
-        result: list[ModelField] = []
-        for param in init_method.params:
-            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
-                continue
-
-            result.append(
-                ModelField(
-                    name=param.name,
-                    annotation=param.type if param.is_typed else None,
-                    required=not param.has_default,
-                )
-            )
-
-        return result
 
     def _build_model_instance(self, model_type: type, values: dict[str, Any]) -> Any:
         if is_dataclass(model_type):

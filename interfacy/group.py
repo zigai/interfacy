@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from inspect import cleandoc, isroutine
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from interfacy.schema.arguments import CommandOverrides
 
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
@@ -104,6 +107,24 @@ class CommandEntry:
     help_group: str | None = None
     executable_flags: list[ExecutableFlag] | None = None
     parameter_settings: dict[str, Param] | None = None
+
+    @property
+    def overrides(self) -> CommandOverrides:
+        from interfacy.schema.arguments import CommandOverrides
+
+        return CommandOverrides(
+            include_inherited_methods=self.include_inherited_methods,
+            include_protected_methods=self.include_protected_methods,
+            include_private_methods=self.include_private_methods,
+            include_staticmethods=self.include_staticmethods,
+            include_classmethods=self.include_classmethods,
+            method_skips=self.method_skips,
+            expand_model_params=self.expand_model_params,
+            model_expansion_max_depth=self.model_expansion_max_depth,
+            abbreviation_scope=self.abbreviation_scope,
+            help_option_sort=self.help_option_sort,
+            help_subcommand_sort=self.help_subcommand_sort,
+        )
 
 
 @dataclass

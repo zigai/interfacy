@@ -4,7 +4,10 @@ import builtins
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from interfacy.schema.arguments import CommandOverrides
 
 from objinspect import Class, Function, Method
 
@@ -199,6 +202,24 @@ class Command:
     def epilog(self) -> str | None:
         return self.raw_epilog
 
+    @property
+    def overrides(self) -> CommandOverrides:
+        from interfacy.schema.arguments import CommandOverrides
+
+        return CommandOverrides(
+            include_inherited_methods=self.include_inherited_methods,
+            include_protected_methods=self.include_protected_methods,
+            include_private_methods=self.include_private_methods,
+            include_staticmethods=self.include_staticmethods,
+            include_classmethods=self.include_classmethods,
+            method_skips=self.method_skips,
+            expand_model_params=self.expand_model_params,
+            model_expansion_max_depth=self.model_expansion_max_depth,
+            abbreviation_scope=self.abbreviation_scope,
+            help_option_sort=self.help_option_sort,
+            help_subcommand_sort=self.help_subcommand_sort,
+        )
+
 
 @dataclass
 class ParserSchema:
@@ -258,6 +279,18 @@ class ParserSchema:
     def canonical_names(self) -> Sequence[str]:
         """Return the canonical command names in schema order."""
         return tuple(self.commands.keys())
+
+
+def find_command(
+    commands: Sequence[Command] | dict[str, Command],
+    name_or_alias: str,
+) -> Command | None:
+    """Find a command matching canonical name, cli_name, or any registered alias."""
+    candidates = commands.values() if isinstance(commands, dict) else commands
+    for cmd in candidates:
+        if name_or_alias in (cmd.canonical_name, cmd.cli_name, *cmd.aliases):
+            return cmd
+    return None
 
 
 def finalize_schema(schema: ParserSchema) -> ParserSchema:
@@ -325,4 +358,5 @@ __all__ = [
     "ValueCardinality",
     "ValueShape",
     "finalize_schema",
+    "find_command",
 ]

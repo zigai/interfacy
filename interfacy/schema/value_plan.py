@@ -14,17 +14,10 @@ class ValueCardinality:
     group_size: int
 
     def __post_init__(self) -> None:
-        if isinstance(self.minimum_values, bool) or not isinstance(self.minimum_values, int):
-            raise TypeError("minimum_values must be an integer")
         if self.minimum_values < 0:
             raise ValueError("minimum_values must be nonnegative")
-        if self.maximum_values is not None:
-            if isinstance(self.maximum_values, bool) or not isinstance(self.maximum_values, int):
-                raise TypeError("maximum_values must be an integer or None")
-            if self.maximum_values < self.minimum_values:
-                raise ValueError("maximum_values must not be less than minimum_values")
-        if isinstance(self.group_size, bool) or not isinstance(self.group_size, int):
-            raise TypeError("group_size must be an integer")
+        if self.maximum_values is not None and self.maximum_values < self.minimum_values:
+            raise ValueError("maximum_values must not be less than minimum_values")
         if self.maximum_values == 0:
             if self.group_size != 0:
                 raise ValueError("zero-value cardinality must have a zero group_size")

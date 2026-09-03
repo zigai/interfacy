@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, fields, replace
 from inspect import _ParameterKind
 from typing import Any
@@ -57,7 +57,7 @@ class CommandOverrides:
     include_private_methods: bool | None = None
     include_staticmethods: bool | None = None
     include_classmethods: bool | None = None
-    method_skips: list[str] | None = None
+    method_skips: Sequence[str] | None = None
     expand_model_params: bool | None = None
     model_expansion_max_depth: int | None = None
     abbreviation_scope: str | None = None
@@ -73,7 +73,10 @@ def resolve_command_settings(
     for f in fields(overrides):
         val = getattr(overrides, f.name)
         if val is not None:
-            updates[f.name] = list(val) if isinstance(val, list) else val
+            if f.name == "method_skips":
+                updates[f.name] = list(val)
+            else:
+                updates[f.name] = list(val) if isinstance(val, list) else val
     return replace(base, **updates)
 
 
