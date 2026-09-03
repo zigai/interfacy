@@ -77,10 +77,7 @@ class ClickSession(BackendSession[click.Command]):
             raise InterfacyExit(e.exit_code) from e
         except click.UsageError as e:
             partial = self._partial_namespace(request.args)
-            usage = e.ctx.get_usage() if e.ctx is not None else ""
             message = e.format_message()
-            if usage:
-                message = f"{message}"
             return BackendParseFailure(
                 request=request,
                 presentation=NativePresentation(

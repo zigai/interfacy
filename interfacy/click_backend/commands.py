@@ -58,13 +58,9 @@ class InterfacyBooleanOption(InterfacyClickOption):
     ) -> None:
         self.positive_flags = tuple(positive_flags)
         self.negative_flags = tuple(negative_flags)
-        default = kwargs.get("default")
         super().__init__(param_decls, **kwargs)
         self.opts = list(self.positive_flags)
         self.secondary_opts = list(self.negative_flags)
-
-        if default is True:
-            self.default = True
 
     def add_to_parser(self, parser: InterfacyOptionParser, ctx: click.Context) -> None:
         del ctx

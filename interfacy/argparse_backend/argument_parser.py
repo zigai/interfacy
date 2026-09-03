@@ -4,10 +4,10 @@ import argparse
 import re
 import sys
 from argparse import Namespace
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from copy import deepcopy
 from gettext import gettext
-from typing import TYPE_CHECKING, Any, Literal, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from objinspect.typing import type_name
 
@@ -38,8 +38,6 @@ logger = get_logger(__name__)
 
 
 DEST_KEY = "dest"
-ActionType = Callable[[str], Any] | type[Any] | str | None
-NargsPattern = Literal["?", "*", "+"]
 SUBCOMMANDS_KEY = "_subcommands"
 
 
@@ -670,12 +668,6 @@ class ArgumentParser(argparse.ArgumentParser):
 
         return commands or None
 
-    def _has_subcommands_action(self) -> bool:
-        return any(
-            isinstance(action, argparse._SubParsersAction)  # type: ignore[private-member-access]
-            for action in self._actions
-        )
-
     def _argument_from_action(self, action: argparse.Action) -> Argument:
         value_shape = _action_value_shape(action)
         dest_name = self._original_dest_name(action.dest)
@@ -924,10 +916,8 @@ class ArgumentParser(argparse.ArgumentParser):
 
 __all__ = [
     "DEST_KEY",
-    "ActionType",
     "ArgparseParseError",
     "ArgumentParser",
-    "NargsPattern",
     "NestedSubParsersAction",
     "namespace_to_dict",
 ]
