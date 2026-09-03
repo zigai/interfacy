@@ -208,37 +208,53 @@ class HelpLayout:
         return max(base_width, width)
 
     def _compute_default_field_width_from_lengths(self, lengths: list[int]) -> int:
-        base_width = self._get_default_field_width_base()
         if not lengths:
-            return base_width
+            return self._get_default_field_width_base()
+        return self._compute_default_field_width_for_len(max(lengths))
 
-        try:
-            term_width = os.get_terminal_size().columns
-        except (OSError, AttributeError):
-            term_width = 80
+    def _parameter_to_argument(
+        self,
+        param: Parameter,
+        flags: tuple[str, ...],
+    ) -> "Argument":
+        from inspect import Parameter as StdParameter
 
-        ratio = max(1, self.default_field_width_term_ratio)
-        term_cap = max(base_width, term_width // ratio)
-        soft_ratio = max(1, self.default_field_width_soft_ratio)
-        soft_cap = max(base_width, term_width // soft_ratio)
-        effective_cap = min(term_cap, soft_cap)
-        if self.default_field_width_max is not None:
-            effective_cap = min(effective_cap, self.default_field_width_max)
+        from interfacy.schema.schema import Argument, ArgumentDefault, ArgumentKind, ValueShape
+        from interfacy.schema.value_plan import ValueCardinality
 
-        candidates = [length for length in lengths if length <= effective_cap]
-        if not candidates:
-            return base_width
-
-        candidates.sort()
-        count = len(candidates)
-        if count <= self.default_field_width_small_sample_size:
-            width = max(candidates)
-        else:
-            percentile = min(max(self.default_field_width_percentile, 0.0), 1.0)
-            idx = max(0, min(count - 1, int((percentile * count + 0.999999) - 1)))
-            width = candidates[idx]
-
-        return max(base_width, width)
+        is_option = any(f.startswith("-") for f in flags)
+        is_bool = self._param_is_bool(param)
+        value_shape = (
+            ValueShape.FLAG
+            if is_bool
+            else ValueShape.LIST
+            if param.kind == StdParameter.VAR_POSITIONAL
+            else ValueShape.SINGLE
+        )
+        cardinality = (
+            ValueCardinality(0, 0, 0)
+            if value_shape is ValueShape.FLAG
+            else ValueCardinality(1 if param.is_required else 0, 1, 1)
+        )
+        param_type = param.type if isinstance(param.type, type) else None
+        return Argument(
+            name=param.name,
+            display_name=param.name,
+            kind=ArgumentKind.OPTION if is_option else ArgumentKind.POSITIONAL,
+            value_shape=value_shape,
+            flags=flags,
+            required=param.is_required and param.kind != StdParameter.VAR_POSITIONAL,
+            cardinality=cardinality,
+            argument_default=ArgumentDefault(
+                is_set=param.has_default,
+                value=param.default if param.has_default else None,
+                suppress_parse_default=False,
+                suppress_help_default=False,
+            ),
+            help=param.description,
+            type=param_type,
+            parser=None,
+        )
 
     def prepare_default_field_width_for_params(self, params: list[Parameter]) -> None:
         """
@@ -247,23 +263,8 @@ class HelpLayout:
         Args:
             params (list[Parameter]): Parameters to inspect.
         """
-        if not self._use_template_layout():
-            return
-
-        template = self.format_option or self.format_positional or ""
-        if "{default_padded}" not in template:
-            return
-
-        defaults: list[str] = []
-        for param in params:
-            if self._param_is_bool(param):
-                val = param.default if param.has_default else False
-                defaults.append(self._format_bool_default_for_help(val))
-            elif not param.is_required and param.default is not None:
-                defaults.append(format_default_for_help(param.default))
-
-        lengths = [len(d) for d in defaults if d]
-        self.default_field_width = self._compute_default_field_width_from_lengths(lengths)
+        args = [self._parameter_to_argument(p, ()) for p in params]
+        self.prepare_default_field_width_for_arguments(args)
 
     def _param_is_bool(self, param: Parameter) -> bool:
         if param.type is bool:
@@ -915,24 +916,8 @@ class HelpLayout:
             param (Parameter): Parameter metadata.
             flags (tuple[str, ...]): CLI flags for the parameter.
         """
-        _, _, _, is_option = self._build_flag_parts(param, flags)
-        template = self.format_option if is_option else self.format_positional
-        if not template:
-            return HelpLayout.get_help_for_parameter(self, param, None)
-
-        values = self._build_values(param, flags)
-        raw_description = self._format_doc_text(param.description or "")
-        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
-        is_required = param.is_required and not is_varargs
-
-        return self._format_templated_help_line(
-            template=template,
-            values=values,
-            raw_description=raw_description,
-            indent=2,  # argparse adds a fixed two-space indent for each help line
-            is_required=is_required,
-            is_help_option=values.get("flag_long", "") == "--help",
-        )
+        arg = self._parameter_to_argument(param, flags)
+        return self.format_argument(arg, indent=2)
 
     def get_help_for_multiple_commands(
         self,
@@ -1433,64 +1418,8 @@ class HelpLayout:
         return styled_values
 
     def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
-        flag, flag_short, flag_long, is_option = self._build_flag_parts(param, flags)
-
-        description = self._format_doc_text(param.description or "")
-        if description and not description.endswith((".", "?", "!")) and self._param_is_bool(param):
-            description += "."
-
-        description = with_style(description, self.style.description)
-
-        default_raw = ""
-        if self._param_is_bool(param):
-            val = param.default if param.has_default else False
-            default_raw = self._format_bool_default_for_help(val)
-            default_raw = self._suppress_false_default_for_positive_boolean_flag(
-                default_raw,
-                long_flag=flag_long,
-            )
-        elif not param.is_required and param.default is not None:
-            default_raw = format_default_for_help(param.default)
-
-        styled_default = with_style(default_raw, self.style.default) if default_raw else ""
-        pad = max(0, self.default_field_width - ansi_len(styled_default))
-        default_padded = f"{' ' * pad}{styled_default}"
-        default = styled_default
-
-        choices = get_param_choices(param, for_display=True) if param.is_typed else None
-        choices_str = ""
-        if choices:
-            choices_str = ", ".join([with_style(str(i), self.style.string) for i in choices])
-        choices_label = "choices:" if choices_str else ""
-        choices_block = " [" + choices_label + " " + choices_str + "]" if choices_str else ""
-
-        if param.is_typed and not self._param_is_bool(param) and not choices:
-            type_str = format_type_for_help(param.type, self.style.type, theme=self.style)
-        else:
-            type_str = ""
-
-        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
-        is_required = param.is_required and not is_varargs
-
-        values: dict[str, str] = {
-            "flag": flag,
-            "flag_short": flag_short,
-            "flag_long": flag_long,
-            "description": description,
-            "type": type_str,
-            "default": default,
-            "default_padded": default_padded,
-            "choices": choices_str,
-            "choices_label": choices_label,
-            "choices_block": choices_block,
-            "extra": self._build_extra(param),
-            "required": self.required_indicator if is_required else "",
-            "metavar": (param.name or "value").upper(),
-        }
-
-        values.update(self._build_styled_columns(flag_short, flag_long, flag, is_option))
-
-        return values
+        arg = self._parameter_to_argument(param, flags)
+        return self._build_values_from_argument(arg)
 
     def _arg_is_bool(self, arg: "Argument") -> bool:
         return self._enum_matches(arg.value_shape, "FLAG")

@@ -17,6 +17,7 @@ from interfacy.help.content import (
 )
 from interfacy.help.layout import HelpLayout
 from interfacy.help.terminal import get_terminal_width
+from interfacy.help.wrapping import wrap_usage_parts
 from interfacy.schema.schema import (
     Argument,
     ArgumentDefault,
@@ -93,27 +94,6 @@ class SchemaHelpRenderer:
             schema (ParserSchema): Parser schema to render.
             prog (str): Program name or invocation prefix.
         """
-        if len(schema.commands) == 1:
-            cmd = next(iter(schema.commands.values()))
-            previous_help_argument = self._help_argument
-            if previous_help_argument is _DEFAULT_HELP_ARGUMENT:
-                self._help_argument = _make_help_argument(
-                    self.layout.help_option_description,
-                    flags=schema.help_flags,
-                )
-
-            try:
-                return self.render_command_help(
-                    cmd,
-                    prog,
-                    parser_description=schema.description,
-                    parser_epilog=schema.epilog,
-                    parser_executable_flags=schema.executable_flags,
-                    parser_schema=schema,
-                )
-            finally:
-                self._help_argument = previous_help_argument
-
         previous_help_argument = self._help_argument
         if previous_help_argument is _DEFAULT_HELP_ARGUMENT:
             self._help_argument = _make_help_argument(
@@ -122,6 +102,16 @@ class SchemaHelpRenderer:
             )
 
         try:
+            if len(schema.commands) == 1:
+                cmd = next(iter(schema.commands.values()))
+                return self.render_command_help(
+                    cmd,
+                    prog,
+                    parser_description=schema.description,
+                    parser_epilog=schema.epilog,
+                    parser_executable_flags=schema.executable_flags,
+                    parser_schema=schema,
+                )
             return self._render_multi_command_help(schema, prog)
         finally:
             self._help_argument = previous_help_argument
@@ -306,11 +296,11 @@ class SchemaHelpRenderer:
         usage_text = f"{usage_prog} {usage_suffix}"
         usage_prefix_len = ansi_len(usage_prefix)
         if usage_prefix_len + ansi_len(usage_text) > self.terminal_width:
-            wrapped_usage = self._wrap_usage_parts(
+            wrapped_usage = wrap_usage_parts(
                 [usage_prog, usage_suffix],
-                self.terminal_width,
-                usage_prefix_len,
-                " " * usage_prefix_len,
+                width=self.terminal_width,
+                prefix_width=usage_prefix_len,
+                indent=" " * usage_prefix_len,
             )
             usage = f"{usage_prefix}{wrapped_usage}"
         else:
@@ -433,7 +423,9 @@ class SchemaHelpRenderer:
         prefix_len = ansi_len(usage_prefix)
         if prefix_len + ansi_len(usage_text) > text_width:
             indent = " " * prefix_len
-            wrapped = self._wrap_usage_parts(parts, text_width, prefix_len, indent)
+            wrapped = wrap_usage_parts(
+                parts, width=text_width, prefix_width=prefix_len, indent=indent
+            )
             return f"{usage_prefix}{wrapped}"
 
         return f"{usage_prefix}{usage_text}"
@@ -522,57 +514,6 @@ class SchemaHelpRenderer:
         token = f"{primary_flag} {value_token}"
 
         return token if arg.required else f"[{token}]"
-
-    def _wrap_usage_parts(
-        self,
-        parts: list[str],
-        text_width: int,
-        prefix_len: int,
-        indent: str,
-    ) -> str:
-        lines: list[str] = []
-        current_line: list[str] = []
-        current_len = prefix_len
-
-        for part in self._expand_usage_parts(parts, max(10, text_width - len(indent))):
-            part_len = ansi_len(part)
-            if current_line and current_len + 1 + part_len > text_width:
-                lines.append(" ".join(current_line))
-                current_line = [part]
-                current_len = len(indent) + part_len
-            else:
-                current_line.append(part)
-
-                current_len += part_len + (1 if len(current_line) > 1 else 0)
-
-        if current_line:
-            lines.append(" ".join(current_line))
-
-        if len(lines) <= 1:
-            return lines[0] if lines else ""
-
-        return lines[0] + "\n" + "\n".join(indent + line for line in lines[1:])
-
-    @staticmethod
-    def _expand_usage_parts(parts: list[str], available_width: int) -> list[str]:
-        expanded: list[str] = []
-        for part in parts:
-            if ansi_len(part) <= available_width:
-                expanded.append(part)
-                continue
-
-            if part.startswith("{") and part.endswith("}") and "," in part:
-                choices = part[1:-1].split(",")
-                for idx, choice in enumerate(choices):
-                    prefix = "{" if idx == 0 else ""
-                    suffix = "}" if idx == len(choices) - 1 else ","
-                    expanded.append(f"{prefix}{choice}{suffix}")
-
-                continue
-
-            expanded.append(part)
-
-        return expanded
 
     def _get_usage_prefix(self) -> str:
         layout = self.layout
