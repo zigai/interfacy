@@ -31,6 +31,7 @@ from interfacy.schema.schema import (
     Command,
     ParserSchema,
     ValueShape,
+    find_command,
 )
 from interfacy.schema.value_plan import normalize_argument_values
 
@@ -397,14 +398,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         selected = namespace.get(_COMMAND_KEY)
         if not isinstance(selected, str):
             return
-        command = next(
-            (
-                item
-                for item in commands
-                if selected in (item.canonical_name, item.cli_name, *item.aliases)
-            ),
-            None,
-        )
+        command = find_command(commands, selected)
         if command is None:
             return
         namespace[_COMMAND_KEY] = command.canonical_name
@@ -425,14 +419,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         selected = namespace.get(_COMMAND_KEY)
         if not isinstance(selected, str):
             return
-        child = next(
-            (
-                item
-                for item in command.subcommands.values()
-                if selected in (item.canonical_name, item.cli_name, *item.aliases)
-            ),
-            None,
-        )
+        child = find_command(command.subcommands, selected)
         if child is None:
             return
         namespace[_COMMAND_KEY] = child.canonical_name

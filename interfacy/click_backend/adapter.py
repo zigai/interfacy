@@ -377,23 +377,10 @@ class ClickSession(BackendSession[click.Command]):
         if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
             raise ConfigurationError(f"Unexpected Click root: {type(root)!r}")
         if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
-            remaining = self._remaining(context)
-            if not remaining and partial:
-                return {}, []
-            name, command, command_args = root.resolve_command(context, remaining)
-            if command is None or not isinstance(
-                command, (InterfacyClickCommand, InterfacyClickGroup)
-            ):
-                return {}, remaining
-            resolved = name or command.name or ""
-            child_context = command.make_context(
-                resolved,
-                command_args,
-                parent=context,
-                resilient_parsing=partial,
-            )
-            schema_command = command.interfacy_schema
-            key = schema_command.canonical_name if schema_command is not None else resolved
+            child_info = self._resolve_child_context(context, root, partial=partial)
+            if child_info is None:
+                return {}, self._remaining(context)
+            key, command, child_context = child_info
             namespace = {
                 _COMMAND_KEY: key,
                 key: self._context_namespace(
@@ -413,6 +400,30 @@ class ClickSession(BackendSession[click.Command]):
             include_defaults=include_defaults,
         )
         return namespace, self._remaining(context)
+
+    def _resolve_child_context(
+        self,
+        context: click.Context,
+        group: InterfacyClickGroup,
+        *,
+        partial: bool,
+    ) -> tuple[str, InterfacyClickCommand | InterfacyClickGroup, click.Context] | None:
+        remaining = self._remaining(context)
+        if not remaining and partial:
+            return None
+        name, command, command_args = group.resolve_command(context, remaining)
+        if command is None or not isinstance(command, (InterfacyClickCommand, InterfacyClickGroup)):
+            return None
+        resolved = name or command.name or ""
+        child_context = command.make_context(
+            resolved,
+            command_args,
+            parent=context,
+            resilient_parsing=partial,
+        )
+        schema_cmd = command.interfacy_schema
+        key = schema_cmd.canonical_name if schema_cmd is not None else resolved
+        return key, command, child_context
 
     def _context_namespace(
         self,
@@ -434,21 +445,10 @@ class ClickSession(BackendSession[click.Command]):
             namespace[schema_name] = value
         if not isinstance(native, InterfacyClickGroup) or not native.commands:
             return namespace
-        remaining = self._remaining(context)
-        if not remaining and partial:
+        child_info = self._resolve_child_context(context, native, partial=partial)
+        if child_info is None:
             return namespace
-        name, child, child_args = native.resolve_command(context, remaining)
-        if child is None or not isinstance(child, (InterfacyClickCommand, InterfacyClickGroup)):
-            return namespace
-        resolved = name or child.name or ""
-        child_context = child.make_context(
-            resolved,
-            child_args,
-            parent=context,
-            resilient_parsing=partial,
-        )
-        schema_child = child.interfacy_schema
-        key = schema_child.canonical_name if schema_child is not None else resolved
+        key, child, child_context = child_info
         destination = f"{_COMMAND_KEY}_{depth}" if depth else _COMMAND_KEY
         namespace[destination] = key
         namespace[key] = self._context_namespace(
