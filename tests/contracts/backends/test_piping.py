@@ -91,21 +91,19 @@ class TestPipeExecution:
 
         assert parser.invoke(args=[]) == ("foo", "bar")
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_priority_cli_overrides_pipe(self, parser: Interfacy, mocker):
+    @pytest.mark.parametrize(
+        ("parser", "args"),
+        [
+            ("argparse_req_pos", ["cli_value"]),
+            ("argparse_kw_only", ["--msg", "cli_value"]),
+        ],
+        indirect=["parser"],
+    )
+    def test_priority_cli_overrides_pipe(self, parser: Interfacy, args: list[str], mocker):
         """Verify CLI args take precedence by default."""
         parser.add_command(fn_single_arg, pipe_targets="msg")
 
         mocker.patch("interfacy.engine.pipes.read_piped", return_value="piped")
-
-        # Pass explicit CLI argument
-        match parser.metadata["flag_style"]:
-            case "required_positional":
-                args = ["cli_value"]
-            case "keyword_only":
-                args = ["--msg", "cli_value"]
-            case _:
-                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
         assert parser.invoke(args=args) == "cli_value"
 

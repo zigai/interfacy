@@ -539,12 +539,10 @@ class TestStressRegressionParsing:
         self,
         parser: Interfacy,
     ):
-        namespace: dict[str, object] = {}
-        exec("def command(XMLHttpRequestID: str):\n    return XMLHttpRequestID\n", namespace)
-        command = namespace["command"]
+        def command(XMLHttpRequestID: str) -> str:  # noqa: N803
+            return XMLHttpRequestID
 
         parser.add_command(command)
-
         assert parser.invoke(args=["ABC"]) == "ABC"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
@@ -552,10 +550,8 @@ class TestStressRegressionParsing:
         self,
         parser: Interfacy,
     ):
-        namespace: dict[str, object] = {}
-        exec('def command(déjàVu: str = "seen"):\n    return déjàVu\n', namespace)
-        command = namespace["command"]
+        def command(déjàVu: str = "seen") -> str:  # noqa: N803, PLC2401
+            return déjàVu
 
         parser.add_command(command)
-
         assert parser.invoke(args=["--dé-jà-vu", "D"]) == "D"
