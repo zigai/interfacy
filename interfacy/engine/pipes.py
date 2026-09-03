@@ -57,12 +57,13 @@ class PipeState:
         *,
         subcommand: str | None = None,
     ) -> PipeTargets | None:
-        names: list[str] = []
-        for name in (command.canonical_name, command.cli_name, *(command.aliases or ())):
-            if name and name not in names:
-                names.append(name)
-        if command.obj is not None and command.obj.name not in names:
-            names.append(command.obj.name)
+        raw_names = (
+            command.canonical_name,
+            command.cli_name,
+            *(command.aliases or ()),
+            command.obj.name if command.obj is not None else None,
+        )
+        names = list(dict.fromkeys(name for name in raw_names if name))
         for key in self._override_keys(names, subcommand):
             target = self._overrides.get(key)
             if target is not None:

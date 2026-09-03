@@ -1,7 +1,6 @@
-from typing import Any
+from typing import Any, get_args, get_origin
 
 from objinspect import Parameter
-from objinspect.typing import type_args
 from strto import StrToTypeParser
 
 from interfacy.exceptions import ConfigurationError, PipeInputError
@@ -68,13 +67,13 @@ def is_cli_supplied(
 
 def _is_empty_collection_from_argparse(value: Any, param_type: Any) -> bool:
     """Check if value is an empty collection from argparse nargs='*'."""
-    if value not in ([], (), set()):
+    if not isinstance(value, (list, tuple, set)) or len(value) != 0:
         return False
 
     if is_list_or_list_alias(param_type):
         return True
 
-    origin = getattr(param_type, "__origin__", None)
+    origin = get_origin(param_type)
     if origin in (tuple, set):
         return True
 
@@ -104,7 +103,7 @@ def parse_list(
     if parameter.type is list:
         element_t = str
     else:
-        args = type_args(parameter.type)
+        args = get_args(parameter.type)
         if args:
             element_t = args[0]
 

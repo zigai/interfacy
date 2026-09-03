@@ -8,7 +8,6 @@ from interfacy import Interfacy
 from interfacy.exceptions import UsageError
 from interfacy.help.presets import InterfacyLayout
 from interfacy.schema.builder import ParserSchemaBuilder
-from interfacy.schema.model_argument_mapper import ModelArgumentMapper
 from interfacy.type_parsers import build_default_type_parser
 from tests.fixtures.models import (
     Address,
@@ -632,9 +631,8 @@ def test_pydantic_like_v1_model_reconstructs_and_uses_default() -> None:
 
 
 def test_model_mapper_optional_empty_nested_dict_becomes_none() -> None:
-    mapper = ModelArgumentMapper()
-
-    assert mapper._coerce_model_value(Address | None, {}) is None
+    parser = Interfacy()
+    assert parser.invoke(maybe_plain, args=[]) is None
 
 
 def test_dataclass_expansion_falls_back_when_forward_reference_is_unresolved() -> None:

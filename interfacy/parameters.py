@@ -109,14 +109,6 @@ def _normalize_short_flag(value: str | bool | None) -> str | bool | None:
     return flag_value
 
 
-def _normalize_kind(value: str) -> ParamKind:
-    match value:
-        case "auto" | "option" | "positional":
-            return value
-        case _:
-            raise ConfigurationError("Param.kind must be one of: 'auto', 'option', 'positional'")
-
-
 def _normalize_boolean_mode(value: BooleanMode | str) -> BooleanMode:
     try:
         return BooleanMode(value)
@@ -139,7 +131,9 @@ class Param:
     boolean_mode: BooleanMode | str = BooleanMode.AUTO
 
     def __post_init__(self) -> None:
-        kind = _normalize_kind(self.kind)
+        if self.kind not in ("auto", "option", "positional"):
+            raise ConfigurationError("Param.kind must be one of: 'auto', 'option', 'positional'")
+        kind = self.kind
         flags = _normalize_flag_tuple(self.flags, field_name="flags")
         negative_flags = _normalize_flag_tuple(
             self.negative_flags,

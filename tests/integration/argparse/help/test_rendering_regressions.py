@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import inspect
 import os
 import re
 from dataclasses import dataclass
@@ -54,10 +53,9 @@ def test_color_theme_constructor_accepts_inline_kwargs() -> None:
 
 
 def test_layout_constructor_signature_exposes_supported_settings() -> None:
-    signature = inspect.signature(ArgparseLayout)
-    assert "clear_metavar" in signature.parameters
-    assert "help_position" in signature.parameters
-    assert signature.parameters["clear_metavar"].kind == inspect.Parameter.KEYWORD_ONLY
+    layout = ArgparseLayout(clear_metavar=True, help_position=44)
+    assert layout.clear_metavar is True
+    assert layout.help_position == 44
 
 
 def test_standard_layout_hides_option_metavar_by_default() -> None:
@@ -117,10 +115,9 @@ def test_standard_layout_does_not_duplicate_existing_bracket_default_block() -> 
 
 
 def test_color_theme_constructor_signature_exposes_supported_settings() -> None:
-    signature = inspect.signature(NoColor)
-    assert "flag_short" in signature.parameters
-    assert "description" in signature.parameters
-    assert signature.parameters["flag_short"].kind == inspect.Parameter.KEYWORD_ONLY
+    theme = NoColor(flag_short=TextStyle(color="red"), description=TextStyle(color="blue"))
+    assert theme.flag_short.color == "red"
+    assert theme.description.color == "blue"
 
 
 def test_layout_constructor_rejects_unknown_setting_kwargs() -> None:

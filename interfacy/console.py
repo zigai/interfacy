@@ -5,7 +5,6 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from objinspect.typing import type_name
 from stdl.st import colored
 
 
@@ -34,7 +33,7 @@ def log_exception(_tag: str, exc: BaseException, *, full_traceback: bool) -> Non
     if full_traceback:
         error("".join(traceback.format_exception(exc)).rstrip())
 
-    exception_str = type_name(str(type(exc))) + ": " + str(exc)
+    exception_str = f"{type(exc).__name__}: {exc}"
     message = colored(exception_str, color="red")
     error(message)
 

@@ -73,7 +73,7 @@ _RESETTABLE_UPDATE_FIELDS: Final = frozenset(
 )
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class EngineSettings:
     description: str | None = None
     epilog: str | None = None
@@ -111,76 +111,33 @@ class EngineSettings:
     parse_recovery_max_attempts: int = MAX_PARSE_RECOVERY_ATTEMPTS
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "abbreviation_max_generated_len",
-            validate_abbreviation_max_generated_len(self.abbreviation_max_generated_len),
+        self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
+            self.abbreviation_max_generated_len
         )
-        object.__setattr__(
-            self,
-            "abbreviation_scope",
-            validate_abbreviation_scope(self.abbreviation_scope),
-        )
+        self.abbreviation_scope = validate_abbreviation_scope(self.abbreviation_scope)
         help_option_sort = validate_help_option_sort(
             list(self.help_option_sort)
             if isinstance(self.help_option_sort, tuple)
             else self.help_option_sort
         )
-        object.__setattr__(
-            self,
-            "help_option_sort",
-            tuple(help_option_sort) if help_option_sort is not None else None,
-        )
+        self.help_option_sort = help_option_sort
         help_subcommand_sort = validate_help_subcommand_sort(
             list(self.help_subcommand_sort)
             if isinstance(self.help_subcommand_sort, tuple)
             else self.help_subcommand_sort
         )
-        object.__setattr__(
-            self,
-            "help_subcommand_sort",
-            tuple(help_subcommand_sort) if help_subcommand_sort is not None else None,
+        self.help_subcommand_sort = help_subcommand_sort
+        self.parse_recovery_max_attempts = validate_parse_recovery_max_attempts(
+            self.parse_recovery_max_attempts
         )
-        object.__setattr__(
-            self,
-            "model_expansion_max_depth",
-            validate_model_expansion_max_depth(self.model_expansion_max_depth),
+        self.method_skips = tuple(validate_method_skips(self.method_skips))
+        self.bool_negative_prefix = validate_bool_negative_prefix(self.bool_negative_prefix)
+        self.help_flags = validate_help_flags(self.help_flags)
+        self.executable_flags = tuple(normalize_executable_flags(self.executable_flags))
+        self.pipe_targets = (
+            build_pipe_targets_config(self.pipe_targets) if self.pipe_targets is not None else None
         )
-        object.__setattr__(
-            self,
-            "parse_recovery_max_attempts",
-            validate_parse_recovery_max_attempts(self.parse_recovery_max_attempts),
-        )
-        object.__setattr__(
-            self,
-            "method_skips",
-            tuple(validate_method_skips(self.method_skips)),
-        )
-        object.__setattr__(
-            self,
-            "bool_negative_prefix",
-            validate_bool_negative_prefix(self.bool_negative_prefix),
-        )
-        object.__setattr__(self, "help_flags", validate_help_flags(self.help_flags))
-        object.__setattr__(
-            self,
-            "executable_flags",
-            tuple(normalize_executable_flags(self.executable_flags)),
-        )
-        object.__setattr__(
-            self,
-            "pipe_targets",
-            (
-                build_pipe_targets_config(self.pipe_targets)
-                if self.pipe_targets is not None
-                else None
-            ),
-        )
-        object.__setattr__(
-            self,
-            "plugins",
-            tuple(self.plugins) if self.plugins is not None else None,
-        )
+        self.plugins = tuple(self.plugins) if self.plugins is not None else None
 
     def parser_kwargs(self) -> dict[str, Any]:
         return {
@@ -467,26 +424,15 @@ def validate_method_skips(value: MethodSkips) -> list[str]:
     if isinstance(value, str) or not isinstance(value, Sequence):
         raise ConfigurationError("method_skips must be a sequence of strings")
 
-    result: list[str] = []
-    seen: set[str] = set()
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError("method_skips values must be strings")
-        if item in seen:
-            continue
-
-        result.append(item)
-        seen.add(item)
-
-    return result
+    return list(dict.fromkeys(value))
 
 
 def validate_bool_negative_prefix(value: BooleanNegativePrefix) -> BooleanNegativePrefix:
-    if not isinstance(value, str):
-        raise ConfigurationError("bool_negative_prefix must be a string")
-    if not value:
-        raise ConfigurationError("bool_negative_prefix must not be empty")
-
+    if not isinstance(value, str) or not value:
+        raise ConfigurationError("bool_negative_prefix must be a non-empty string")
     return value
 
 
@@ -494,21 +440,13 @@ def validate_help_flags(value: HelpFlags) -> tuple[str, ...]:
     if isinstance(value, str) or not isinstance(value, Sequence):
         raise ConfigurationError("help_flags must be a sequence of flag strings")
 
-    result: list[str] = []
-    seen: set[str] = set()
     for item in value:
         if not isinstance(item, str) or not item.startswith("-") or item == "-":
             raise ConfigurationError("help_flags values must start with '-' or '--'")
-        if item in seen:
-            continue
-
-        result.append(item)
-        seen.add(item)
-
+    result = tuple(dict.fromkeys(value))
     if not result:
         raise ConfigurationError("help_flags must contain at least one flag")
-
-    return tuple(result)
+    return result
 
 
 def reserved_names_for_help_flags(help_flags: Sequence[str]) -> list[str]:

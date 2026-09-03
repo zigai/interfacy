@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from inspect import isroutine
+from inspect import cleandoc, isroutine
 from typing import Any, Literal
 
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
@@ -218,8 +218,8 @@ class CommandGroup:
 
         self._ensure_unique_child_name(cmd_name)
 
-        if description is None and hasattr(command, "__doc__") and command.__doc__:
-            description = command.__doc__.split("\n")[0].strip()
+        if description is None and getattr(command, "__doc__", None):
+            description = cleandoc(command.__doc__).splitlines()[0]
 
         entry = CommandEntry(
             obj=command,

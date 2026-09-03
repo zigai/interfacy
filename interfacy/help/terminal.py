@@ -1,5 +1,7 @@
-import os
 import re
+import shutil
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def get_terminal_width(default: int = 80) -> int:
@@ -9,12 +11,9 @@ def get_terminal_width(default: int = 80) -> int:
     Args:
         default (int): Width to return when terminal size cannot be detected.
     """
-    try:
-        return os.get_terminal_size().columns
-    except (OSError, AttributeError):
-        return default
+    return shutil.get_terminal_size(fallback=(default, 24)).columns
 
 
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences from a string."""
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+    return _ANSI_RE.sub("", text)

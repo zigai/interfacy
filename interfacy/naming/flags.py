@@ -7,6 +7,6 @@ def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
         prefix (str): Prefix for the inverted form.
     """
     if name.startswith(prefix):
-        return name[len(prefix) :]
+        return name.removeprefix(prefix)
 
     return prefix + name

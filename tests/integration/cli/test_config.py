@@ -54,36 +54,7 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
     )
 
     config = load_config(config_path)
-    overrides = apply_config_defaults(
-        config,
-        {
-            "help_layout": UNSET,
-            "help_colors": UNSET,
-            "flag_strategy": UNSET,
-            "abbreviation_gen": UNSET,
-            "abbreviation_max_generated_len": UNSET,
-            "abbreviation_scope": UNSET,
-            "help_option_sort": UNSET,
-            "help_subcommand_sort": UNSET,
-            "print_result": UNSET,
-            "full_error_traceback": UNSET,
-            "tab_completion": UNSET,
-            "allow_args_from_file": UNSET,
-            "include_inherited_methods": UNSET,
-            "include_protected_methods": UNSET,
-            "include_private_methods": UNSET,
-            "include_staticmethods": UNSET,
-            "include_classmethods": UNSET,
-            "method_skips": UNSET,
-            "silent_interrupt": UNSET,
-            "expand_model_params": UNSET,
-            "model_expansion_max_depth": UNSET,
-            "parse_recovery_max_attempts": UNSET,
-            "bool_negative_prefix": UNSET,
-            "help_flags": UNSET,
-            "backend": UNSET,
-        },
-    )
+    overrides = apply_config_defaults(config, {})
 
     assert isinstance(overrides["help_layout"], Modern)
     assert isinstance(overrides["help_colors"], Aurora)

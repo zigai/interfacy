@@ -24,19 +24,7 @@ class ExecutableFlag:
     exit_code: int = 0
 
     def __post_init__(self) -> None:
-        flags = _normalize_flag_tuple(self.flags)
-        if not flags:
-            raise ConfigurationError("ExecutableFlag.flags must contain at least one flag token")
-
-        if len(set(flags)) != len(flags):
-            raise ReservedFlagError(next(flag for flag in flags if flags.count(flag) > 1))
-
-        for flag in flags:
-            if not isinstance(flag, str) or not flag.startswith("-") or flag == "-":
-                raise ConfigurationError(
-                    f"Executable flag tokens must start with '-' or '--': got {flag!r}"
-                )
-
+        self.flags = _normalize_flag_tuple(self.flags)
         if not callable(self.handler):
             raise ConfigurationError("ExecutableFlag.handler must be callable")
         if not isinstance(self.help, str):
@@ -45,19 +33,25 @@ class ExecutableFlag:
             raise ConfigurationError("ExecutableFlag.display_result must be a bool")
         if not isinstance(self.exit_code, int):
             raise ConfigurationError("ExecutableFlag.exit_code must be an int")
-
-        signature = inspect.signature(self.handler)
-        if signature.parameters:
+        if inspect.signature(self.handler).parameters:
             raise ConfigurationError("ExecutableFlag.handler must accept zero arguments")
-
-        self.flags = flags
 
 
 def _normalize_flag_tuple(value: tuple[str, ...] | Sequence[str] | str) -> tuple[str, ...]:
-    if isinstance(value, str):
-        return (value,)
+    flags = (value,) if isinstance(value, str) else tuple(value)
+    if not flags:
+        raise ConfigurationError("ExecutableFlag.flags must contain at least one flag token")
 
-    return tuple(value)
+    seen: set[str] = set()
+    for flag in flags:
+        if flag in seen:
+            raise ReservedFlagError(flag)
+        seen.add(flag)
+        if not isinstance(flag, str) or not flag.startswith("-") or flag == "-":
+            raise ConfigurationError(
+                f"Executable flag tokens must start with '-' or '--': got {flag!r}"
+            )
+    return flags
 
 
 def normalize_executable_flags(

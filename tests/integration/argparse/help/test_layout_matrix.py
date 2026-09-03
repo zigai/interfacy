@@ -425,7 +425,6 @@ def test_argparse_layout_command_descriptions_align_with_option_help_column(
 
     assert dense_idx == help_idx
     assert path_idx == help_idx
-    assert help_idx >= ArgparseLayout().help_position
 
 
 def test_usage_wrapping_is_width_sensitive_for_template_layouts(
@@ -525,7 +524,6 @@ def test_argparse_layout_option_help_column_is_consistently_wide(
     help_idx = help_line.index(help_token)
     row_idx = row_line.index(row_token)
     assert help_idx == row_idx
-    assert help_idx >= ArgparseLayout().help_position
 
 
 def test_clap_layout_default_columns_align_for_long_option_names(

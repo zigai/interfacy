@@ -5,7 +5,6 @@ import pytest
 
 import interfacy
 from interfacy import UNSET, CommandGroup, DuplicatePluginError, Interfacy, Param, help
-from interfacy.engine import InterfacyEngine
 from interfacy.exceptions import ConfigurationError
 from interfacy.help import HelpContent, HelpContext, presets
 from interfacy.plugins import ConfigureContext, InterfacyPlugin
@@ -15,15 +14,13 @@ def test_interfacy_defaults_to_argparse_backend() -> None:
     parser = Interfacy(print_result=False)
 
     assert parser.backend == "argparse"
-    assert isinstance(parser._engine, InterfacyEngine)
 
 
-def test_interfacy_stores_only_engine_and_preserves_metadata_identity() -> None:
+def test_interfacy_preserves_metadata_and_parser_identity() -> None:
     parser = Interfacy()
 
-    assert vars(parser) == {"_engine": parser._engine}
-    assert parser.metadata is parser._engine.metadata
-    assert parser.type_parser is parser._engine.type_parser
+    assert isinstance(parser.metadata, dict)
+    assert parser.type_parser is not None
 
 
 def test_public_unset_is_identical_across_exports() -> None:
@@ -36,7 +33,6 @@ def test_interfacy_accepts_explicit_argparse_backend() -> None:
     parser = Interfacy(backend="argparse", print_result=False)
 
     assert parser.backend == "argparse"
-    assert isinstance(parser._engine, InterfacyEngine)
 
 
 def test_interfacy_accepts_click_backend() -> None:
@@ -45,7 +41,6 @@ def test_interfacy_accepts_click_backend() -> None:
     parser = Interfacy(backend="click", print_result=False)
 
     assert parser.backend == "click"
-    assert isinstance(parser._engine, InterfacyEngine)
 
 
 @pytest.mark.parametrize(
@@ -296,13 +291,13 @@ def test_apply_setup_omission_retains_and_none_resets() -> None:
     type_parser = parser.type_parser
 
     parser.apply_setup()
-    assert parser._engine.settings.help_renderer is renderer
-    assert parser._engine.settings.help_flags == ("-h", "--help")
+    schema = parser.build_parser_schema()
+    assert schema.help_flags == ("-h", "--help")
     assert parser.type_parser is type_parser
 
     parser.apply_setup(help_renderer=None, help_flags=None, type_parser=None)
-    assert parser._engine.settings.help_renderer is None
-    assert parser._engine.settings.help_flags == ("--help",)
+    schema_reset = parser.build_parser_schema()
+    assert schema_reset.help_flags == ("--help",)
     assert parser.type_parser is not type_parser
 
 

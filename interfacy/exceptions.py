@@ -53,9 +53,6 @@ class DuplicatePluginError(InterfacyError):
 class ConfigurationError(InterfacyError):
     """Raise for invalid configuration values."""
 
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-
 
 class UsageError(InterfacyError):
     """Raise when command-line input cannot be parsed."""
@@ -99,9 +96,6 @@ class TargetNotFoundError(CliError):
 
 class TargetImportError(CliError):
     """Raised when a module or file cannot be imported."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
 
 
 __all__ = [

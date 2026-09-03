@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 from inspect import _ParameterKind
 from typing import Any
 
@@ -69,63 +69,12 @@ def resolve_command_settings(
     base: EffectiveCommandSettings,
     overrides: CommandOverrides,
 ) -> EffectiveCommandSettings:
-    return EffectiveCommandSettings(
-        include_inherited_methods=(
-            overrides.include_inherited_methods
-            if overrides.include_inherited_methods is not None
-            else base.include_inherited_methods
-        ),
-        include_protected_methods=(
-            overrides.include_protected_methods
-            if overrides.include_protected_methods is not None
-            else base.include_protected_methods
-        ),
-        include_private_methods=(
-            overrides.include_private_methods
-            if overrides.include_private_methods is not None
-            else base.include_private_methods
-        ),
-        include_staticmethods=(
-            overrides.include_staticmethods
-            if overrides.include_staticmethods is not None
-            else base.include_staticmethods
-        ),
-        include_classmethods=(
-            overrides.include_classmethods
-            if overrides.include_classmethods is not None
-            else base.include_classmethods
-        ),
-        method_skips=(
-            list(overrides.method_skips)
-            if overrides.method_skips is not None
-            else list(base.method_skips)
-        ),
-        expand_model_params=(
-            overrides.expand_model_params
-            if overrides.expand_model_params is not None
-            else base.expand_model_params
-        ),
-        model_expansion_max_depth=(
-            overrides.model_expansion_max_depth
-            if overrides.model_expansion_max_depth is not None
-            else base.model_expansion_max_depth
-        ),
-        abbreviation_scope=(
-            overrides.abbreviation_scope
-            if overrides.abbreviation_scope is not None
-            else base.abbreviation_scope
-        ),
-        help_option_sort=(
-            list(overrides.help_option_sort)
-            if overrides.help_option_sort is not None
-            else list(base.help_option_sort)
-        ),
-        help_subcommand_sort=(
-            list(overrides.help_subcommand_sort)
-            if overrides.help_subcommand_sort is not None
-            else list(base.help_subcommand_sort)
-        ),
-    )
+    updates: dict[str, Any] = {}
+    for f in fields(overrides):
+        val = getattr(overrides, f.name)
+        if val is not None:
+            updates[f.name] = list(val) if isinstance(val, list) else val
+    return replace(base, **updates)
 
 
 __all__ = [

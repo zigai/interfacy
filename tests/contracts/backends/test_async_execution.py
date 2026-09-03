@@ -1,5 +1,5 @@
 import asyncio
-import inspect as pyinspect
+import inspect
 import warnings
 
 import pytest
@@ -32,7 +32,7 @@ class SyncLoopMath:
 
 
 def _assert_not_awaitable(result: object) -> None:
-    assert not pyinspect.isawaitable(result)
+    assert not inspect.isawaitable(result)
 
 
 def _assert_no_unawaited_runtime_warning(caught: list[warnings.WarningMessage]) -> None:

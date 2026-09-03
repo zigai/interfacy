@@ -2,7 +2,7 @@ import asyncio
 import inspect
 from typing import Any
 
-from objinspect import Class, Function, Method, Parameter
+from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
 from objinspect.method import split_args_kwargs
 
@@ -524,6 +524,31 @@ class SchemaRunner:
 
         raise InvalidCommandError(command.canonical_name)
 
+    @staticmethod
+    def _append_call_arg(
+        kind: inspect._ParameterKind,
+        name: str,
+        args: dict[str, Any],
+        positional: list[Any],
+        keyword: dict[str, Any],
+    ) -> None:
+        if name not in args:
+            return
+        val = args[name]
+        match kind:
+            case inspect.Parameter.POSITIONAL_ONLY | inspect.Parameter.POSITIONAL_OR_KEYWORD:
+                positional.append(val)
+            case inspect.Parameter.VAR_POSITIONAL:
+                if val:
+                    positional.extend(val) if isinstance(val, (list, tuple)) else positional.append(
+                        val
+                    )
+            case inspect.Parameter.KEYWORD_ONLY:
+                keyword[name] = val
+            case inspect.Parameter.VAR_KEYWORD:
+                if isinstance(val, dict):
+                    keyword.update(val)
+
     def _build_call_args(
         self,
         callable_obj: Function | Method,
@@ -532,77 +557,11 @@ class SchemaRunner:
         """Build positional and keyword arguments from parsed CLI values."""
         positional_args: list[Any] = []
         keyword_args: dict[str, Any] = {}
-        handlers = {
-            inspect.Parameter.POSITIONAL_ONLY: self._append_positional_param,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD: self._append_positional_param,
-            inspect.Parameter.VAR_POSITIONAL: self._append_var_positional_param,
-            inspect.Parameter.KEYWORD_ONLY: self._append_keyword_only_param,
-            inspect.Parameter.VAR_KEYWORD: self._append_var_keyword_param,
-        }
 
         for param in callable_obj.params:
-            if self._should_skip_call_param(param, args):
-                continue
-
-            handler = handlers.get(param.kind)
-            if handler is not None:
-                handler(param, args, positional_args, keyword_args)
+            self._append_call_arg(param.kind, param.name, args, positional_args, keyword_args)
 
         return positional_args, keyword_args
-
-    def _should_skip_call_param(self, param: Parameter, args: dict[str, Any]) -> bool:
-        return param.name not in args and param.kind not in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-        )
-
-    def _append_positional_param(
-        self,
-        param: Parameter,
-        args: dict[str, Any],
-        positional_args: list[Any],
-        _keyword_args: dict[str, Any],
-    ) -> None:
-        if param.name in args:
-            positional_args.append(args[param.name])
-
-    def _append_var_positional_param(
-        self,
-        param: Parameter,
-        args: dict[str, Any],
-        positional_args: list[Any],
-        _keyword_args: dict[str, Any],
-    ) -> None:
-        varargs = args.get(param.name)
-        if not varargs:
-            return
-
-        if isinstance(varargs, (list, tuple)):
-            positional_args.extend(varargs)
-            return
-
-        positional_args.append(varargs)
-
-    def _append_keyword_only_param(
-        self,
-        param: Parameter,
-        args: dict[str, Any],
-        _positional_args: list[Any],
-        keyword_args: dict[str, Any],
-    ) -> None:
-        if param.name in args:
-            keyword_args[param.name] = args[param.name]
-
-    def _append_var_keyword_param(
-        self,
-        param: Parameter,
-        args: dict[str, Any],
-        _positional_args: list[Any],
-        keyword_args: dict[str, Any],
-    ) -> None:
-        var_kwargs = args.get(param.name)
-        if isinstance(var_kwargs, dict):
-            keyword_args.update(var_kwargs)
 
     def _reconstruct_expanded_models(
         self,

@@ -53,18 +53,12 @@ def _make_help_argument(
 
 def has_grouped_commands(commands: dict[str, Command] | None) -> bool:
     """Return whether any command in a mapping has a help-group label."""
-    if not commands:
-        return False
-
-    return any(command.help_group is not None for command in commands.values())
+    return bool(commands and any(command.help_group is not None for command in commands.values()))
 
 
 def command_has_grouped_subcommands(command: Command | None) -> bool:
     """Return whether a command has subcommands with help-group labels."""
-    if command is None:
-        return False
-
-    return has_grouped_commands(command.subcommands)
+    return bool(command and has_grouped_commands(command.subcommands))
 
 
 class SchemaHelpRenderer:
@@ -295,12 +289,8 @@ class SchemaHelpRenderer:
         command: Command,
         parser_epilog: str | None,
     ) -> str | None:
-        epilog_parts: list[str] = []
-        if command.epilog:
-            epilog_parts.append(command.epilog)
-        if parser_epilog:
-            epilog_parts.append(parser_epilog)
-        return "\n\n".join(epilog_parts) or None
+        parts = [p for p in (command.epilog, parser_epilog) if p]
+        return "\n\n".join(parts) or None
 
     def _render_multi_command_help(self, schema: ParserSchema, prog: str) -> str:
         layout = self.layout

@@ -1040,7 +1040,7 @@ class ParserSchemaBuilder:
 
     @staticmethod
     def _flag_token_key(flag: str) -> str:
-        return flag.lstrip("-") if flag.startswith("-") else flag
+        return flag.lstrip("-")
 
     def _reserve_parameter_flags(self, flags: tuple[str, ...], taken_flags: list[str]) -> None:
         for flag in flags:
@@ -1083,7 +1083,7 @@ class ParserSchemaBuilder:
             self._reserve_parameter_flags(flags, taken_flags)
             return flags
 
-        long_flag = setting.long or self._default_long_flag(translated_name)
+        long_flag = setting.long or f"--{translated_name}"
         flags: tuple[str, ...] = (long_flag,)
         abbrev_name = long_flag.lstrip("-")
         if param.is_typed and param.type is bool:
@@ -2363,18 +2363,13 @@ class ParserSchemaBuilder:
 
         return command
 
+    @staticmethod
     def _resolve_cli_name(
-        self,
         override: str | None,
         canonical_name: str | None,
         fallback: str,
     ) -> str:
-        if override:
-            return override
-        if canonical_name:
-            return canonical_name
-
-        return fallback
+        return override or canonical_name or fallback
 
 
 __all__ = ["ParserSchemaBuilder", "SchemaBuildContext"]

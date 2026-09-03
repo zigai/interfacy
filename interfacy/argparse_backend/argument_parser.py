@@ -7,10 +7,9 @@ from argparse import Namespace
 from collections.abc import Callable, Sequence
 from copy import deepcopy
 from gettext import gettext
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NoReturn
 
 from objinspect.typing import type_name
-from typing_extensions import Never
 
 from interfacy.exceptions import InterfacyExit, UsageError
 from interfacy.help.content import HelpRenderer
@@ -522,13 +521,13 @@ class ArgumentParser(argparse.ArgumentParser):
 
         return value
 
-    def exit(self, status: int = 0, message: str | None = None) -> Never:
+    def exit(self, status: int = 0, message: str | None = None) -> NoReturn:
         if status == 0:
             raise InterfacyExit()
 
         raise UsageError((message or "").strip(), usage=self.format_usage())
 
-    def error(self, message: str) -> Never:
+    def error(self, message: str) -> NoReturn:
         """Raise a structured usage failure without terminating the process."""
         usage = self.format_usage()
         marker = "the following arguments are required:"
@@ -914,7 +913,7 @@ class ArgumentParser(argparse.ArgumentParser):
             result = parse_func(arg_string)
 
         except argparse.ArgumentTypeError as exc:
-            raise argparse.ArgumentError(action, str(sys.exc_info()[1])) from exc
+            raise argparse.ArgumentError(action, str(exc)) from exc
 
         except (TypeError, ValueError) as exc:
             t_name = _callable_type_name(parse_func, fallback="value")

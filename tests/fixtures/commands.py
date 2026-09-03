@@ -25,59 +25,46 @@ def greet(name: str) -> str:
 
 
 def fn_enum_arg(color: Color):
-    print(f"Value: {color.value}, Name: {color.name}")
     return color
 
 
 def fn_literal_arg(color: ColorLiteral):
-    print(f"Value: {color}")
     return color
 
 
 def fn_enum_optional(color: Color | None = None):
-    print(f"Value: {color}")
     return color
 
 
 def fn_literal_optional(color: ColorLiteral | None = None):
-    print(f"Value: {color}")
     return color
 
 
 def fn_bool_required(value: bool):
-    print(f"Value: {value}")
     return value
 
 
 def fn_bool_default_true(value: bool = True):
-    print(f"Value: {value}")
     return value
 
 
 def fn_bool_default_false(value: bool = False):
-    print(f"Value: {value}")
     return value
 
 
 def fn_bool_short_flag(x: bool = False):
-    print(f"Value: {x}")
     return x
 
 
 def fn_list_int(values: list[int]):
-    print(values)
     return values
 
 
 def fn_list_with_default(values: list[int] = [1, 2]):  # noqa: B006 - intentional for tests
-    print(values)
     return values
 
 
 def fn_two_lists(strings: list[str], ints: list[int]) -> tuple[int, int]:
-    print(strings, f"({len(strings)})")
-    print(ints, f"({len(ints)})")
-
     return len(strings), len(ints)
 
 

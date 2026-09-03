@@ -1,6 +1,5 @@
 import logging
 import os
-from logging import _nameToLevel
 from pathlib import Path
 
 from stdl.st import colored, terminal_link
@@ -31,7 +30,10 @@ def _get_level() -> int | None:
     if normalized.isdigit():
         return int(normalized)
 
-    return _nameToLevel.get(normalized.upper(), logging.INFO)
+    if hasattr(logging, "getLevelNamesMapping"):
+        return logging.getLevelNamesMapping().get(normalized.upper(), logging.INFO)
+    val = logging.getLevelName(normalized.upper())
+    return val if isinstance(val, int) else logging.INFO
 
 
 def get_logger(name: str) -> logging.Logger:

@@ -188,18 +188,6 @@ def plan_requires_post_conversion(value_plan: ArgumentValue | None, *, required:
     return isinstance(value_plan, (FixedTupleValue, ObjectValue))
 
 
-def convert_with_value_plan(
-    value_plan: ArgumentValue | None,
-    raw: Any,
-    *,
-    type_parser: Any,
-) -> Any:
-    if value_plan is None:
-        return raw
-
-    return value_plan.convert(raw, type_parser=type_parser)
-
-
 def _normalize_argument_value(
     argument: Any,
     bucket: dict[str, Any],
@@ -218,11 +206,7 @@ def _normalize_argument_value(
     if not plan_requires_post_conversion(value_plan, required=argument.required):
         return
 
-    bucket[argument.name] = convert_with_value_plan(
-        value_plan,
-        bucket[argument.name],
-        type_parser=type_parser,
-    )
+    bucket[argument.name] = value_plan.convert(bucket[argument.name], type_parser=type_parser)
 
 
 def normalize_argument_values(command: Any, bucket: dict[str, Any], *, type_parser: Any) -> None:

@@ -1,7 +1,5 @@
 """Reusable plugin doubles for backend contract tests."""
 
-from operator import setitem
-
 import pytest
 
 from interfacy.plugins import (
@@ -28,12 +26,12 @@ class ImmutableContextPlugin(InterfacyPlugin):
 
     def configure(self, context: ConfigureContext) -> None:
         with pytest.raises(TypeError):
-            setitem(context.metadata, "mutated", "yes")
+            context.metadata["mutated"] = "yes"
         nested = context.metadata["nested"]
         with pytest.raises(TypeError):
-            setitem(nested, "mutated", "yes")
+            nested["mutated"] = "yes"
         with pytest.raises(TypeError):
-            setitem(nested["values"], 0, "changed")
+            nested["values"][0] = "changed"
 
 
 class ArgparseAccessPlugin(BackendPlugin):

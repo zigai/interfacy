@@ -22,7 +22,7 @@ def _freeze(value: Any) -> Any:
     return value
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class ConfigureContext:
     """Registration-phase capabilities and metadata."""
 
@@ -34,10 +34,10 @@ class ConfigureContext:
     )
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
+        self.metadata = _freeze(self.metadata)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class BeforeParseContext:
     """Immutable input visible before backend parsing."""
 
@@ -46,11 +46,11 @@ class BeforeParseContext:
     args: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
-        object.__setattr__(self, "args", tuple(self.args))
+        self.metadata = _freeze(self.metadata)
+        self.args = tuple(self.args)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class SchemaTransformContext:
     """Metadata visible while transforming the explicit mutable schema payload."""
 
@@ -58,10 +58,10 @@ class SchemaTransformContext:
     metadata: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
+        self.metadata = _freeze(self.metadata)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ArgumentDescriptor:
     """Backend-neutral immutable description of a schema argument."""
 
@@ -82,17 +82,15 @@ class ArgumentDescriptor:
     )
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "command_path", tuple(self.command_path))
-        object.__setattr__(self, "flags", tuple(self.flags))
-        object.__setattr__(
-            self,
-            "choices",
-            _freeze(self.choices) if self.choices is not None else None,
+        self.command_path = tuple(self.command_path)
+        self.flags = tuple(self.flags)
+        self.choices = _freeze(
+            self.choices if self.choices is not None else None,
         )
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
+        self.metadata = _freeze(self.metadata)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class SchemaDescriptor:
     """Small immutable snapshot shared by read-only plugin phases."""
 
@@ -108,16 +106,12 @@ class SchemaDescriptor:
     )
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "command_paths",
-            tuple(tuple(path) for path in self.command_paths),
-        )
-        object.__setattr__(self, "arguments", tuple(self.arguments))
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
+        self.command_paths = tuple(tuple(path) for path in self.command_paths)
+        self.arguments = tuple(self.arguments)
+        self.metadata = _freeze(self.metadata)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class AfterParseContext:
     """Immutable parse result state visible to namespace transforms."""
 
@@ -128,12 +122,12 @@ class AfterParseContext:
     namespace: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
-        object.__setattr__(self, "args", tuple(self.args))
-        object.__setattr__(self, "namespace", _freeze(self.namespace))
+        self.metadata = _freeze(self.metadata)
+        self.args = tuple(self.args)
+        self.namespace = _freeze(self.namespace)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class HelpHookContext:
     """Immutable help invocation state visible to help plugins."""
 
@@ -145,11 +139,11 @@ class HelpHookContext:
     schema: SchemaDescriptor
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
-        object.__setattr__(self, "command_path", tuple(self.command_path))
+        self.metadata = _freeze(self.metadata)
+        self.command_path = tuple(self.command_path)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class ExecuteContext:
     """Immutable invocation state visible to execution wrappers."""
 
@@ -160,12 +154,12 @@ class ExecuteContext:
     namespace: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
-        object.__setattr__(self, "args", tuple(self.args))
-        object.__setattr__(self, "namespace", _freeze(self.namespace))
+        self.metadata = _freeze(self.metadata)
+        self.args = tuple(self.args)
+        self.namespace = _freeze(self.namespace)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class ParseFailureContext:
     """Immutable partial state visible during parse recovery."""
 
@@ -176,12 +170,12 @@ class ParseFailureContext:
     namespace: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
-        object.__setattr__(self, "args", tuple(self.args))
-        object.__setattr__(self, "namespace", _freeze(self.namespace))
+        self.metadata = _freeze(self.metadata)
+        self.args = tuple(self.args)
+        self.namespace = _freeze(self.namespace)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class BackendPluginContext:
     """Explicit unstable access to a selected backend adapter and native parser."""
 
@@ -197,7 +191,7 @@ class ParseFailureKind(str, Enum):
     MISSING_SUBCOMMAND = "missing_subcommand"
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, unsafe_hash=True)
 class ArgumentRef:
     """Stable reference to one schema argument inside a parsed command bucket."""
 
@@ -206,10 +200,10 @@ class ArgumentRef:
     argument: ArgumentDescriptor = field(compare=False, hash=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "command_path", tuple(self.command_path))
+        self.command_path = tuple(self.command_path)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class ParseFailure:
     """Backend-neutral structured recoverable parse failure."""
 
@@ -221,16 +215,14 @@ class ParseFailure:
     available_subcommands: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "command_path", tuple(self.command_path))
-        object.__setattr__(self, "missing_arguments", tuple(self.missing_arguments))
-        object.__setattr__(
-            self,
-            "available_subcommands",
-            tuple(self.available_subcommands),
+        self.command_path = tuple(self.command_path)
+        self.missing_arguments = tuple(self.missing_arguments)
+        self.available_subcommands = tuple(
+            self.available_subcommands,
         )
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class ProvideArgumentValues:
     """Recovery action that injects values into a partial parsed namespace."""
 
@@ -244,11 +236,11 @@ class ProvideArgumentValues:
         frozen_subcommands: dict[tuple[str, ...], str] = {
             tuple(path): command for path, command in self.subcommands.items()
         }
-        object.__setattr__(self, "values", MappingProxyType(frozen_values))
-        object.__setattr__(self, "subcommands", MappingProxyType(frozen_subcommands))
+        self.values = MappingProxyType(frozen_values)
+        self.subcommands = MappingProxyType(frozen_subcommands)
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True)
 class AbortRecovery:
     """Recovery action that aborts the current CLI invocation."""
 

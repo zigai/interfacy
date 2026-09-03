@@ -1,14 +1,9 @@
-import re
-
 import pytest
 
 from interfacy import CommandGroup, Interfacy
 from interfacy.exceptions import ConfigurationError
 from interfacy.help.presets import ArgparseLayout, StandardLayout
-
-
-def _strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+from interfacy.help.terminal import strip_ansi as _strip_ansi
 
 
 def cmd_status() -> None:

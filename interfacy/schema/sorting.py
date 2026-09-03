@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, get_args
 
 from interfacy.exceptions import ConfigurationError
 
@@ -23,28 +23,15 @@ HelpSubcommandSortRule = Literal[
     "name_length_desc",
 ]
 
-HELP_OPTION_SORT_RULE_VALUES: tuple[HelpOptionSortRule, ...] = (
-    "required_first",
-    "short_first",
-    "value_first",
-    "bool_last",
-    "no_default_first",
-    "choices_first",
-    "name_length",
-    "alias_count",
-    "alphabetical",
-)
+HELP_OPTION_SORT_RULE_VALUES: tuple[HelpOptionSortRule, ...] = get_args(HelpOptionSortRule)
 DEFAULT_HELP_OPTION_SORT_RULES: tuple[HelpOptionSortRule, ...] = (
     "required_first",
     "short_first",
     "bool_last",
     "alphabetical",
 )
-HELP_SUBCOMMAND_SORT_RULE_VALUES: tuple[HelpSubcommandSortRule, ...] = (
-    "insert_order",
-    "alphabetical",
-    "name_length_asc",
-    "name_length_desc",
+HELP_SUBCOMMAND_SORT_RULE_VALUES: tuple[HelpSubcommandSortRule, ...] = get_args(
+    HelpSubcommandSortRule
 )
 DEFAULT_HELP_SUBCOMMAND_SORT_RULES: tuple[HelpSubcommandSortRule, ...] = ("insert_order",)
 T = TypeVar("T", bound=str)

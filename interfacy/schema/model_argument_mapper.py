@@ -589,16 +589,7 @@ class ModelArgumentMapper:
 
     @staticmethod
     def _dedupe_preserving_order(values: list[str]) -> list[str]:
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for value in values:
-            if value in seen:
-                continue
-
-            seen.add(value)
-            deduped.append(value)
-
-        return deduped
+        return list(dict.fromkeys(values))
 
     def _model_fields(self, model_type: type) -> list[ModelField]:
         if is_dataclass(model_type):

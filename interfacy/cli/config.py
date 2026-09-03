@@ -316,7 +316,7 @@ def _resolve_named_component(
 
 
 def _is_flag_strategy(value: Any) -> TypeGuard[FlagStrategy]:
-    return callable(getattr(value, "get_arg_flags", None))
+    return isinstance(value, FlagStrategy) or callable(getattr(value, "get_arg_flags", None))
 
 
 def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy | None:

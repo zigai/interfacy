@@ -9,11 +9,8 @@ def validate_help_group(
     value_name: str = "help_group",
     allow_none: bool = True,
 ) -> str | None:
-    if value is None:
-        if allow_none:
-            return None
-
-        raise ConfigurationError(f"{value_name} must be a non-empty string")
+    if value is None and allow_none:
+        return None
     if not isinstance(value, str) or not value.strip():
         raise ConfigurationError(f"{value_name} must be a non-empty string")
 

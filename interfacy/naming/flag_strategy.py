@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from stdl.st import kebab_case, snake_case
 
@@ -54,6 +54,7 @@ class FlagParameter(Protocol):
     def has_default(self) -> bool: ...
 
 
+@runtime_checkable
 class FlagStrategy(Protocol):
     argument_translator: NameMapping
     command_translator: NameMapping

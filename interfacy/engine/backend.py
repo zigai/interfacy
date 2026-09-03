@@ -22,7 +22,7 @@ def _freeze_namespace(namespace: Mapping[str, object]) -> Mapping[str, object]:
     return MappingProxyType(dict(namespace))
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class BackendConfig:
     program_name: str | None = None
     help_flags: tuple[str, ...] = ("--help",)
@@ -32,36 +32,36 @@ class BackendConfig:
     type_parser: StrToTypeParser | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "help_flags", tuple(self.help_flags))
+        self.help_flags = tuple(self.help_flags)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ParseRequest:
     args: tuple[str, ...]
     mode: ParseMode = "full"
     default_policy: ParseDefaultPolicy = "include"
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "args", tuple(self.args))
+        self.args = tuple(self.args)
         if self.mode not in ("full", "partial"):
             raise ValueError(f"Unsupported parse mode: {self.mode}")
         if self.default_policy not in ("include", "suppress"):
             raise ValueError(f"Unsupported parse default policy: {self.default_policy}")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ParseResult:
     args: tuple[str, ...]
     namespace: Mapping[str, object]
     remaining_args: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "args", tuple(self.args))
-        object.__setattr__(self, "namespace", _freeze_namespace(self.namespace))
-        object.__setattr__(self, "remaining_args", tuple(self.remaining_args))
+        self.args = tuple(self.args)
+        self.namespace = _freeze_namespace(self.namespace)
+        self.remaining_args = tuple(self.remaining_args)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class NativePresentation:
     kind: NativePresentationKind
     message: str
@@ -69,12 +69,12 @@ class NativePresentation:
     exit_code: int = 2
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "command_path", tuple(self.command_path))
+        self.command_path = tuple(self.command_path)
         if self.kind not in ("usage", "execution"):
             raise ValueError(f"Unsupported native presentation kind: {self.kind}")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(slots=True, kw_only=True)
 class BackendParseFailure:
     request: ParseRequest
     presentation: NativePresentation
@@ -82,12 +82,8 @@ class BackendParseFailure:
     remaining_args: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "partial_namespace",
-            _freeze_namespace(self.partial_namespace),
-        )
-        object.__setattr__(self, "remaining_args", tuple(self.remaining_args))
+        self.partial_namespace = _freeze_namespace(self.partial_namespace)
+        self.remaining_args = tuple(self.remaining_args)
 
 
 ParseOutcome = ParseResult | BackendParseFailure

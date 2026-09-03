@@ -1009,21 +1009,14 @@ class HelpLayout:
 
         return list(DEFAULT_HELP_SUBCOMMAND_SORT_RULES)
 
-    @staticmethod
-    def _subcommand_sort_key(name: str) -> str:
-        return name.lower()
-
-    def _subcommand_name_length(self, name: str) -> int:
-        return len(self._subcommand_sort_key(name))
-
     def _subcommand_rule_extractors(
         self,
     ) -> dict[HelpSubcommandSortRule, Callable[[str], str | int]]:
         return {
             "insert_order": lambda _name: 0,
-            "alphabetical": self._subcommand_sort_key,
-            "name_length_asc": self._subcommand_name_length,
-            "name_length_desc": lambda name: -self._subcommand_name_length(name),
+            "alphabetical": str.lower,
+            "name_length_asc": len,
+            "name_length_desc": lambda name: -len(name),
         }
 
     def _order_named_items_for_help(
@@ -1723,15 +1716,8 @@ class HelpLayout:
     def _option_has_short_flag(arg: "Argument") -> bool:
         return any(flag.startswith("-") and not flag.startswith("--") for flag in arg.flags)
 
-    def _option_requires_value(self, arg: "Argument") -> bool:
-        return not self._arg_is_bool(arg)
-
     def _option_name_length(self, arg: "Argument") -> int:
         return len(self._option_sort_key(arg))
-
-    @staticmethod
-    def _option_alias_count(arg: "Argument") -> int:
-        return len(arg.flags)
 
     def _resolve_help_option_sort_rules(
         self,
@@ -1768,13 +1754,12 @@ class HelpLayout:
         return {
             "required_first": lambda arg: 0 if arg.required else 1,
             "short_first": lambda arg: 0 if self._option_has_short_flag(arg) else 1,
-            "value_first": lambda arg: 0 if self._option_requires_value(arg) else 1,
+            "value_first": lambda arg: 1 if self._arg_is_bool(arg) else 0,
             "bool_last": lambda arg: 1 if self._arg_is_bool(arg) else 0,
             "no_default_first": lambda arg: 0 if not self._arg_has_default(arg) else 1,
             "choices_first": lambda arg: 0 if bool(arg.choices) else 1,
-            "name_length": self._option_name_length,
-            # More aliases should be displayed earlier.
-            "alias_count": lambda arg: -self._option_alias_count(arg),
+            "name_length": lambda arg: len(self._option_sort_key(arg)),
+            "alias_count": lambda arg: -len(arg.flags),
             "alphabetical": self._option_sort_key,
         }
 

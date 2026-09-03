@@ -78,12 +78,7 @@ def reverse_translations(args: dict[str, Any], translator: NameMapping) -> dict[
         args (dict[str, Any]): Argument mapping with translated keys.
         translator (NameMapping): Translator for reversing names.
     """
-    reversed_args: dict[str, Any] = {}
-    for key, value in args.items():
-        canonical = translator.reverse(key)
-        reversed_args[canonical] = value
-
-    return reversed_args
+    return {translator.reverse(key): value for key, value in args.items()}
 
 
 __all__ = ["NameMapping", "reverse_translations"]
