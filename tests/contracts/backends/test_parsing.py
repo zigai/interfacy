@@ -56,11 +56,6 @@ class TestPowFunctionParsing:
         args = parser.parse_args(["-v", "3", "--version", "4"])
         assert args == {"value": 3, "version": 4}
 
-    # @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
-    # def test_kw_only_missing_base(self, parser: InterfacyCore):
-    #     parser.add_command(pow)
-    #     args = parser.parse_args(["-e", "4"])
-
 
 class TestMathClassParsing:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)

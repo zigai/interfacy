@@ -131,7 +131,6 @@ def test_backend_plugin_receives_explicit_adapter_context() -> None:
 
 
 def test_backend_plugin_rejects_incompatible_backend() -> None:
-    from interfacy import Interfacy
 
     with pytest.raises(ConfigurationError, match="requires backend 'argparse'"):
         Interfacy(backend="click", plugins=[ArgparseAccessPlugin()])

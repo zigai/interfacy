@@ -138,7 +138,6 @@ class TestSyncExecution:
         _assert_no_unawaited_runtime_warning(caught)
 
     def test_invoke_async_awaits_task_inside_running_loop(self) -> None:
-        from interfacy import Interfacy
 
         async def main() -> str:
             async def later() -> str:

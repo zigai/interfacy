@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from interfacy import CommandGroup, ExecutableFlag
+from interfacy import CommandGroup, ExecutableFlag, Interfacy
 from interfacy.exceptions import ReservedFlagError
 from tests.fixtures.commands import greet, pow
 
@@ -110,7 +110,6 @@ def test_executable_flag_collision_with_generated_option_is_rejected(parser) -> 
 
 
 def test_root_executable_flag_cannot_reuse_native_help() -> None:
-    from interfacy import Interfacy
 
     with pytest.raises(ReservedFlagError):
         Interfacy(backend="argparse", executable_flags=[ExecutableFlag(("--help",), lambda: None)])

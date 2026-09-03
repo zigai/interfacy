@@ -78,14 +78,7 @@ def test_backends_do_not_depend_on_public_facade() -> None:
 
 
 def test_active_package_does_not_depend_on_core_or_legacy_adapters() -> None:
-    excluded = {
-        PACKAGE_ROOT / "core.py",
-        PACKAGE_ROOT / "argparse_backend" / "legacy_adapter.py",
-        PACKAGE_ROOT / "click_backend" / "legacy_adapter.py",
-    }
-    active_modules: list[Path] = [
-        path for path in PACKAGE_ROOT.rglob("*.py") if path not in excluded
-    ]
+    active_modules: list[Path] = [path for path in PACKAGE_ROOT.rglob("*.py") if path.is_file()]
     assert_layer_excludes(
         active_modules,
         (

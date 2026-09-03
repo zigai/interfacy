@@ -361,7 +361,6 @@ class TestListNargsKwOnly:
 
 
 def test_class_runner_does_not_mutate_parsed_namespace() -> None:
-    from interfacy import Interfacy
 
     class Counter:
         def __init__(self, value: int = 1) -> None:

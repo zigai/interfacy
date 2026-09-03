@@ -125,8 +125,6 @@ def test_click_default_help_option_sort_smart() -> None:
     pytest.importorskip("click")
     from click import Context
 
-    from interfacy import Interfacy
-
     parser = Interfacy(
         backend="click",
         flag_strategy=DefaultFlagStrategy(style="keyword_only"),
@@ -147,8 +145,6 @@ def test_click_default_help_option_sort_smart() -> None:
 def test_click_help_option_sort_user_rules_override_layout_default() -> None:
     pytest.importorskip("click")
     from click import Context
-
-    from interfacy import Interfacy
 
     parser = Interfacy(
         backend="click",
@@ -172,8 +168,6 @@ def test_click_help_option_sort_user_rules_override_layout_default() -> None:
 def test_click_help_option_sort_per_command_override() -> None:
     pytest.importorskip("click")
     from click import Context
-
-    from interfacy import Interfacy
 
     parser = Interfacy(
         backend="click",
