@@ -23,6 +23,14 @@ from interfacy.runtime.process import set_process_title_from_argv
 
 CommandTarget = Callable[..., Any] | type | Any
 
+_CONFIGURATION_ERRORS = (
+    ConfigurationError,
+    DuplicateCommandError,
+    UnsupportedParameterTypeError,
+    ReservedFlagError,
+    InvalidCommandError,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class InvocationInput:
@@ -150,13 +158,7 @@ class InvocationRuntime:
             raise
         except UsageError as e:
             raise InvocationError(ExitCode.USAGE, e) from e
-        except (
-            ConfigurationError,
-            DuplicateCommandError,
-            UnsupportedParameterTypeError,
-            ReservedFlagError,
-            InvalidCommandError,
-        ) as e:
+        except _CONFIGURATION_ERRORS as e:
             raise InvocationError(ExitCode.CONFIGURATION, e) from e
         except Exception as e:
             raise InvocationError(ExitCode.INTERNAL, e) from e
@@ -168,7 +170,7 @@ class InvocationRuntime:
             raise
         except PipeInputError as e:
             raise InvocationError(ExitCode.USAGE, e) from e
-        except ConfigurationError as e:
+        except _CONFIGURATION_ERRORS as e:
             raise InvocationError(ExitCode.CONFIGURATION, e) from e
         except InterfacyError as e:
             raise InvocationError(ExitCode.INTERNAL, e) from e
@@ -184,7 +186,7 @@ class InvocationRuntime:
             raise
         except PipeInputError as e:
             raise InvocationError(ExitCode.USAGE, e) from e
-        except ConfigurationError as e:
+        except _CONFIGURATION_ERRORS as e:
             raise InvocationError(ExitCode.CONFIGURATION, e) from e
         except InterfacyError as e:
             raise InvocationError(ExitCode.INTERNAL, e) from e

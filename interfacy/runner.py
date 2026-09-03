@@ -12,7 +12,7 @@ from interfacy.naming import reverse_translations
 from interfacy.runtime.context import ExecutionContext
 from interfacy.runtime.piping import apply_pipe_values, validate_required_pipe_targets
 from interfacy.schema.model_argument_mapper import ExpandedModelValidationError, ModelArgumentMapper
-from interfacy.schema.schema import Argument, Command
+from interfacy.schema.schema import Argument, Command, find_command
 
 logger = get_logger(__name__)
 
@@ -598,11 +598,7 @@ class SchemaRunner:
         if schema_cmd is None or not schema_cmd.subcommands:
             return None
 
-        for sub_cmd in schema_cmd.subcommands.values():
-            if sub_cmd.cli_name == name or name in sub_cmd.aliases:
-                return sub_cmd
-
-        return None
+        return find_command(schema_cmd.subcommands, name)
 
 
 __all__ = [

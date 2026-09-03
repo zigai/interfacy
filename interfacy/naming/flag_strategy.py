@@ -77,23 +77,15 @@ class FlagAllocationState:
     consumed_required_list_positional: bool = False
 
 
-class FlagParamView:
-    """Proxy parameter that overrides selected attributes without losing the original shape."""
+class _OptionalParamView:
+    """View of a parameter with is_required=False."""
 
-    def __init__(self, param: FlagParameter, **overrides: Any) -> None:
+    def __init__(self, param: FlagParameter) -> None:
         self._param = param
-        self._overrides = overrides
-
-    def __getattr__(self, name: str) -> Any:
-        if name in self._overrides:
-            return self._overrides[name]
-
-        return getattr(self._param, name)
 
     @property
     def is_required(self) -> bool:
-        value = self._overrides.get("is_required", self._param.is_required)
-        return bool(value)
+        return False
 
     @property
     def is_typed(self) -> bool:
@@ -144,7 +136,7 @@ def get_arg_flags_for_parameter(
             allocation_state.consumed_required_list_positional = True
             return (name,)
 
-        param = FlagParamView(param, is_required=False)
+        param = _OptionalParamView(param)
 
     return strategy.get_arg_flags(name, param, taken_flags, abbrev_gen)
 

@@ -18,7 +18,11 @@ from interfacy.engine.backend import (
     ParseResult,
     create_backend_adapter,
 )
-from interfacy.engine.parsing import AncestorOptions, InterspersedOptionValueError
+from interfacy.engine.parsing import (
+    AncestorOptions,
+    InterspersedOptionValueError,
+    bucket_for_command_path,
+)
 from interfacy.engine.pipes import PipeState, PipeStateSnapshot
 from interfacy.engine.plugins import PluginManager
 from interfacy.engine.registry import CommandRegistry, NameRegistrySnapshot
@@ -74,7 +78,7 @@ from interfacy.runtime.invocation import (
 )
 from interfacy.runtime.policy import RuntimePolicy
 from interfacy.schema.builder import ParserSchemaBuilder, SchemaBuildContext
-from interfacy.schema.schema import Argument, Command, ParserSchema
+from interfacy.schema.schema import Argument, Command, ParserSchema, find_command
 from interfacy.schema.sorting import (
     HelpOptionSortRule,
     HelpSubcommandSortRule,
@@ -853,13 +857,12 @@ class InterfacyEngine(InvocationOperations):
         action: ProvideArgumentValues,
     ) -> None:
         missing = set(failure.missing_arguments)
-        buckets = AncestorOptions()
         for ref, value in action.values.items():
             if ref not in missing:
                 raise ConfigurationError(
                     f"Recovery provided value for non-missing argument '{ref.name}'"
                 )
-            bucket = buckets._bucket_for_command_path(
+            bucket = bucket_for_command_path(
                 schema,
                 namespace,
                 ref.command_path,
@@ -869,17 +872,10 @@ class InterfacyEngine(InvocationOperations):
                 bucket[ref.name] = value
         for path, command_name in action.subcommands.items():
             subcommands = self._subcommands_at_path(schema, path)
-            selected = next(
-                (
-                    command
-                    for command in subcommands.values()
-                    if command_name in (command.canonical_name, command.cli_name, *command.aliases)
-                ),
-                None,
-            )
+            selected = find_command(subcommands, command_name)
             if selected is None:
                 raise ConfigurationError(f"Recovery selected invalid subcommand '{command_name}'")
-            bucket = buckets._bucket_for_command_path(
+            bucket = bucket_for_command_path(
                 schema,
                 namespace,
                 path,

@@ -352,25 +352,34 @@ class AncestorOptions:
         *,
         create: bool = False,
     ) -> dict[str, Any] | None:
-        root_command = self._single_command_without_root_selection(schema)
-        if root_command is not None and not command_path:
-            return namespace
-
-        if not command_path:
-            return namespace
-
-        current: dict[str, Any] = namespace
-        for segment in command_path:
-            value = current.get(segment)
-            if not isinstance(value, dict):
-                if not create:
-                    return None
-
-                value = {}
-                current[segment] = value
-            current = value
-
-        return current
+        return bucket_for_command_path(schema, namespace, command_path, create=create)
 
 
-__all__ = ["AncestorOptions", "InterspersedOptionValueError"]
+def bucket_for_command_path(
+    schema: ParserSchema,
+    namespace: dict[str, Any],
+    command_path: tuple[str, ...],
+    *,
+    create: bool = False,
+) -> dict[str, Any] | None:
+    if len(schema.commands) == 1 and not schema.is_multi_command and not command_path:
+        return namespace
+
+    if not command_path:
+        return namespace
+
+    current: dict[str, Any] = namespace
+    for segment in command_path:
+        value = current.get(segment)
+        if not isinstance(value, dict):
+            if not create:
+                return None
+
+            value = {}
+            current[segment] = value
+        current = value
+
+    return current
+
+
+__all__ = ["AncestorOptions", "InterspersedOptionValueError", "bucket_for_command_path"]

@@ -114,16 +114,10 @@ def _is_supported_entrypoint_target(target: Any) -> bool:
     if isinstance(target, (Interfacy, CommandGroup)):
         return False
 
-    # Accept anything Interfacy can treat as a command target
-    # (functions, classes, class instances, bound methods), while
-    # still excluding Interfacy-specific orchestration objects above.
-    probe = Interfacy(print_result=False)
-    try:
-        probe.add_command(target)
-    except Exception:  # noqa: BLE001 - type gate for user-provided target objects
-        return False
+    if callable(target) or isinstance(target, type):
+        return True
 
-    return True
+    return hasattr(target, "__dict__") or hasattr(target, "__class__")
 
 
 def resolve_entrypoint_settings() -> dict[str, Any]:

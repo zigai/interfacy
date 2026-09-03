@@ -21,22 +21,24 @@ class NameMapping:
         """
         self.ignored_names.add(name)
 
-    def translate(self, key: str) -> str:
-        """
-        Translate a canonical name and record the mapping.
-
-        Args:
-            key (str): Canonical name.
-        """
+    def compute(self, key: str) -> str:
+        """Translate a name without recording the mapping."""
         if key in self.ignored_names:
             return key
+        return self.translation_fn(key)
 
-        translated_key = self.translation_fn(key)
+    def record(self, key: str, translated_key: str) -> None:
+        """Record a translated name mapping."""
         self.translations[translated_key] = key
         normalized_key = translated_key.replace("-", "_")
         if normalized_key != translated_key:
             self.translations[normalized_key] = key
 
+    def translate(self, key: str) -> str:
+        """Translate a canonical name and record the mapping."""
+        translated_key = self.compute(key)
+        if key not in self.ignored_names:
+            self.record(key, translated_key)
         return translated_key
 
     def reverse(self, translated: str) -> str:
