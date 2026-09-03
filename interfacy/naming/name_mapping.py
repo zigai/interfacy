@@ -51,24 +51,6 @@ class NameMapping:
 
         return self.translations.get(translated, translated)
 
-    def contains_key(self, name: str) -> bool:
-        """
-        Return True if a canonical name has been translated.
-
-        Args:
-            name (str): Canonical name to check.
-        """
-        return name in self.translations.values()
-
-    def contains_translation(self, name: str) -> bool:
-        """
-        Return True if a translated name exists in the cache.
-
-        Args:
-            name (str): Translated name to check.
-        """
-        return name in self.translations
-
 
 def reverse_translations(args: dict[str, Any], translator: NameMapping) -> dict[str, Any]:
     """

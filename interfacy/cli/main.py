@@ -259,14 +259,14 @@ def configure_runner_from_module(parser: Interfacy, module: ModuleType) -> None:
 
 
 def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
-    if list(args) == ["--version"]:
+    arg_tuple = tuple(args)
+    if arg_tuple == ("--version",):
         print(f"interfacy {version('interfacy')}")
         return ExitCode.SUCCESS
 
-    if list(args) == ["--config-paths"]:
+    if arg_tuple == ("--config-paths",):
         for path in get_default_config_paths():
             print(path)
-
         return ExitCode.SUCCESS
 
     return None

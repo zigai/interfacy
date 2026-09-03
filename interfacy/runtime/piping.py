@@ -21,11 +21,7 @@ def split_data(data: str, config: PipeTargets) -> list[str]:
         return [data]
 
     delimiter = config.delimiter
-    if delimiter is None:
-        pieces = data.splitlines()
-    else:
-        max_splits = expected - 1 if expected > 0 else -1
-        pieces = data.split(delimiter, max_splits) if max_splits >= 0 else data.split(delimiter)
+    pieces = data.splitlines() if delimiter is None else data.split(delimiter, expected - 1)
 
     pieces = [piece.strip() for piece in pieces]
 

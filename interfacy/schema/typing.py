@@ -6,21 +6,11 @@ import typing
 from collections.abc import Callable
 from enum import Enum
 from types import NoneType
-from typing import Any, Literal, Protocol
+from typing import Any, Literal
 
 from objinspect import Class, Function, Method, Parameter
 from objinspect.typing import get_choices as objinspect_get_choices
 from objinspect.typing import get_literal_choices, is_union_type, type_args, type_origin
-from stdl.st import TextStyle
-
-
-class TypeStyleTheme(Protocol):
-    type_keyword: TextStyle
-    type_bracket: TextStyle
-    type_punctuation: TextStyle
-    type_operator: TextStyle
-    type_literal: TextStyle
-
 
 _MISSING = object()
 
