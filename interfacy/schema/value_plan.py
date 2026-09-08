@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from interfacy.schema.schema import ParserSchema
 
 
 @dataclass(frozen=True)
@@ -16,12 +19,16 @@ class ValueCardinality:
     def __post_init__(self) -> None:
         if self.minimum_values < 0:
             raise ValueError("minimum_values must be nonnegative")
+
         if self.maximum_values is not None and self.maximum_values < self.minimum_values:
             raise ValueError("maximum_values must not be less than minimum_values")
+
         if self.maximum_values == 0:
             if self.group_size != 0:
                 raise ValueError("zero-value cardinality must have a zero group_size")
+
             return
+
         if self.group_size <= 0:
             raise ValueError("value-taking cardinality must have a positive group_size")
 
@@ -196,6 +203,7 @@ def _normalize_argument_value(
         if item_cardinality.group_size == 1:
             bucket[argument.name] = list(_as_sequence(bucket[argument.name]))
             return
+
     if not plan_requires_post_conversion(value_plan, required=argument.required):
         return
 
@@ -213,5 +221,22 @@ def normalize_argument_values(command: Any, bucket: dict[str, Any], *, type_pars
         sub_bucket = bucket.get(sub_cmd.canonical_name)
         if not isinstance(sub_bucket, dict):
             sub_bucket = bucket.get(sub_cmd.cli_name)
+
         if isinstance(sub_bucket, dict):
             normalize_argument_values(sub_cmd, sub_bucket, type_parser=type_parser)
+
+
+def normalize_schema_values(
+    schema: ParserSchema, namespace: dict[str, Any], *, type_parser: Any
+) -> None:
+    """Normalize present command buckets after a backend has canonicalized their names."""
+    if len(schema.commands) == 1 and not schema.is_multi_command:
+        command = next(iter(schema.commands.values()))
+        normalize_argument_values(command, namespace, type_parser=type_parser)
+
+        return
+
+    for command in schema.commands.values():
+        bucket = namespace.get(command.canonical_name)
+        if isinstance(bucket, dict):
+            normalize_argument_values(command, bucket, type_parser=type_parser)

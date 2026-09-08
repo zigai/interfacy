@@ -17,6 +17,12 @@ from interfacy.exceptions import (
     UnsupportedParameterTypeError,
     UsageError,
 )
+from interfacy.executable_flag import (
+    ExecutableAction,
+    ExecutableActionPending,
+    execute_executable_flag,
+    execute_executable_flag_async,
+)
 from interfacy.runtime.exit_codes import ExitCode
 from interfacy.runtime.policy import RuntimePolicy
 from interfacy.runtime.process import set_process_title_from_argv
@@ -61,6 +67,24 @@ class InvocationError(Exception):
         self.code = code
         self.error = error
         super().__init__(str(error))
+
+
+def _execution_error_code(error: Exception) -> ExitCode:
+    if isinstance(error, PipeInputError):
+        return ExitCode.USAGE
+    if isinstance(error, _CONFIGURATION_ERRORS):
+        return ExitCode.CONFIGURATION
+    if isinstance(error, InterfacyError):
+        return ExitCode.INTERNAL
+    return ExitCode.COMMAND_FAILED
+
+
+def _parse_error_code(error: Exception) -> ExitCode:
+    if isinstance(error, UsageError):
+        return ExitCode.USAGE
+    if isinstance(error, _CONFIGURATION_ERRORS):
+        return ExitCode.CONFIGURATION
+    return ExitCode.INTERNAL
 
 
 class InvocationRuntime:
@@ -112,11 +136,15 @@ class InvocationRuntime:
             if isinstance(failure, UsageError):
                 if failure.usage:
                     error(failure.usage.rstrip())
+
                 self._policy.log_error(str(failure))
             else:
                 self._policy.log_exception(failure)
+
             raise SystemExit(e.code) from failure
+
         self._policy.display(result)
+
         raise SystemExit(ExitCode.SUCCESS)
 
     def _invoke(
@@ -126,7 +154,11 @@ class InvocationRuntime:
     ) -> Any:
         snapshot = self._operations.snapshot() if commands else None
         try:
-            invocation = self._parse(commands, args)
+            try:
+                invocation = self._parse(commands, args)
+            except ExecutableActionPending as e:
+                self._complete_action(e.action)
+
             return self._execute(invocation)
         finally:
             if snapshot is not None:
@@ -139,7 +171,11 @@ class InvocationRuntime:
     ) -> Any:
         snapshot = self._operations.snapshot() if commands else None
         try:
-            invocation = self._parse(commands, args)
+            try:
+                invocation = self._parse(commands, args)
+            except ExecutableActionPending as e:
+                await self._complete_action_async(e.action)
+
             return await self._execute_async(invocation)
         finally:
             if snapshot is not None:
@@ -153,45 +189,43 @@ class InvocationRuntime:
         try:
             self._operations.reset_input()
             self._operations.register_inline(commands)
+
             return self._operations.parse(self._operations.resolve_args(args))
-        except (InterfacyExit, KeyboardInterrupt, SystemExit):
-            raise
-        except UsageError as e:
-            raise InvocationError(ExitCode.USAGE, e) from e
-        except _CONFIGURATION_ERRORS as e:
-            raise InvocationError(ExitCode.CONFIGURATION, e) from e
         except Exception as e:
-            raise InvocationError(ExitCode.INTERNAL, e) from e
+            raise InvocationError(_parse_error_code(e), e) from e
+
+    def _complete_action(self, action: ExecutableAction) -> NoReturn:
+        try:
+            code = execute_executable_flag(action.flag, display_result_fn=action.display_result_fn)
+        except Exception as e:
+            raise InvocationError(_parse_error_code(e), e) from e
+
+        raise InterfacyExit(code)
+
+    async def _complete_action_async(self, action: ExecutableAction) -> NoReturn:
+        try:
+            code = await execute_executable_flag_async(
+                action.flag,
+                display_result_fn=action.display_result_fn,
+            )
+        except Exception as e:
+            raise InvocationError(_parse_error_code(e), e) from e
+
+        raise InterfacyExit(code)
 
     def _execute(self, invocation: InvocationInput) -> Any:
         try:
             return self._operations.execute(invocation)
-        except (InterfacyExit, KeyboardInterrupt, SystemExit):
-            raise
-        except PipeInputError as e:
-            raise InvocationError(ExitCode.USAGE, e) from e
-        except _CONFIGURATION_ERRORS as e:
-            raise InvocationError(ExitCode.CONFIGURATION, e) from e
-        except InterfacyError as e:
-            raise InvocationError(ExitCode.INTERNAL, e) from e
         except Exception as e:
-            raise InvocationError(ExitCode.COMMAND_FAILED, e) from e
+            raise InvocationError(_execution_error_code(e), e) from e
 
     async def _execute_async(self, invocation: InvocationInput) -> Any:
         try:
             result = self._operations.execute_async(invocation)
             if isawaitable(result):
                 result = await result
-        except (InterfacyExit, KeyboardInterrupt, SystemExit):
-            raise
-        except PipeInputError as e:
-            raise InvocationError(ExitCode.USAGE, e) from e
-        except _CONFIGURATION_ERRORS as e:
-            raise InvocationError(ExitCode.CONFIGURATION, e) from e
-        except InterfacyError as e:
-            raise InvocationError(ExitCode.INTERNAL, e) from e
         except Exception as e:
-            raise InvocationError(ExitCode.COMMAND_FAILED, e) from e
+            raise InvocationError(_execution_error_code(e), e) from e
         else:
             return result
 

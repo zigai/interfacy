@@ -479,15 +479,15 @@ class ArgumentParser(argparse.ArgumentParser):
             args (Sequence[str] | None): Argument list to parse. Defaults to sys.argv.
             namespace (Namespace | None): Optional namespace to populate.
         """
+        if namespace is None:
+            namespace = Namespace()
+
         parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
         logger.info(
             "Initial parse keys: %s, unknown count=%d",
             sorted(vars(parsed_args)),
             len(unknown_args),
         )
-
-        if parsed_args is None:
-            raise ValueError("No parsed arguments found.")
 
         deflattened_args = self._deflatten_namespace(parsed_args)
         logger.info("Deflattened keys: %s", sorted(vars(deflattened_args)))
@@ -558,6 +558,7 @@ class ArgumentParser(argparse.ArgumentParser):
                     usage = self.format_help()
 
         error_type = ArgparseParseError if self._interfacy_raise_parse_errors else UsageError
+
         raise error_type(message, usage=usage)
 
     def _get_formatter(self) -> argparse.HelpFormatter:  # type: ignore[override]
@@ -565,6 +566,7 @@ class ArgumentParser(argparse.ArgumentParser):
         set_color = getattr(formatter, "_set_color", None)
         if callable(set_color):
             set_color(getattr(self, "color", False))
+
         return formatter
 
     def _get_help_argument_for_schema(self) -> Argument | None:
@@ -622,14 +624,10 @@ class ArgumentParser(argparse.ArgumentParser):
 
         return dest
 
-    def _display_name_for_dest(self, dest: str) -> str:
-        return self._original_dest_name(dest).replace("_", "-")
-
     def _subcommands_from_action(
         self,
         action: argparse._SubParsersAction,  # type: ignore[private-member-access]
     ) -> dict[str, Command] | None:
-
         parser_names: dict[int, list[str]] = {}
         for name, parser in action.choices.items():
             parser_names.setdefault(id(parser), []).append(name)
@@ -671,7 +669,7 @@ class ArgumentParser(argparse.ArgumentParser):
     def _argument_from_action(self, action: argparse.Action) -> Argument:
         value_shape = _action_value_shape(action)
         dest_name = self._original_dest_name(action.dest)
-        display_name = self._display_name_for_dest(action.dest)
+        display_name = dest_name.replace("_", "-")
         kind = ArgumentKind.OPTION if action.option_strings else ArgumentKind.POSITIONAL
 
         arg_type = action.type if isinstance(action.type, type) else None
@@ -765,6 +763,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 if not hasattr(current, component):
                     logger.debug("Creating new namespace for '%s'", component)
                     setattr(current, component, Namespace())
+
                 current = getattr(current, component)
 
             # Set or merge final value
@@ -807,12 +806,6 @@ class ArgumentParser(argparse.ArgumentParser):
         return {}
 
     @staticmethod
-    def _set_container_defaults(
-        container: argparse._ActionsContainer, defaults: dict[str, Any]
-    ) -> None:
-        container._defaults = defaults
-
-    @staticmethod
     def _iter_container_actions(container: argparse._ActionsContainer) -> list[argparse.Action]:
         actions = getattr(container, "_actions", ())
         if not isinstance(actions, list):
@@ -826,7 +819,7 @@ class ArgumentParser(argparse.ArgumentParser):
         remapped_defaults = {
             self._get_nested_destination(dest): value for dest, value in defaults.items()
         }
-        self._set_container_defaults(container, remapped_defaults)
+        container._defaults = remapped_defaults
         logger.info("Remapped container destination keys: %s", sorted(remapped_defaults))
 
         for action in self._iter_container_actions(container):
@@ -892,6 +885,7 @@ class ArgumentParser(argparse.ArgumentParser):
             dest_for_metavar = original_dest
             if self.nest_separator in dest_for_metavar:
                 dest_for_metavar = dest_for_metavar.split(self.nest_separator)[-1]
+
             kwargs["metavar"] = dest_for_metavar.replace("_", "-").upper()
 
         return kwargs

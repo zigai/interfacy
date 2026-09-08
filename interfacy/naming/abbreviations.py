@@ -57,9 +57,6 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
             raise ValueError(f"'{value}' is already an abbreviation")
 
         name_split = value.replace("-", "_").split("_")
-        if not name_split:
-            return None
-
         candidates = [
             name_split[0][0],
             "".join([part[0] for part in name_split if part]),

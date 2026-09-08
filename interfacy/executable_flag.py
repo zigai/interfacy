@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import threading
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -37,6 +36,22 @@ class ExecutableFlag:
             raise ConfigurationError("ExecutableFlag.handler must accept zero arguments")
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutableAction:
+    """A detected flag whose handler is completed by the invocation owner."""
+
+    flag: ExecutableFlag
+    display_result_fn: Callable[[Any], Any] = print
+
+
+class ExecutableActionPending(BaseException):
+    """Transfer a detected flag from synchronous parsing to invocation execution."""
+
+    def __init__(self, action: ExecutableAction) -> None:
+        self.action = action
+        super().__init__()
+
+
 def _normalize_flag_tuple(value: tuple[str, ...] | Sequence[str] | str) -> tuple[str, ...]:
     flags = (value,) if isinstance(value, str) else tuple(value)
     if not flags:
@@ -46,11 +61,14 @@ def _normalize_flag_tuple(value: tuple[str, ...] | Sequence[str] | str) -> tuple
     for flag in flags:
         if flag in seen:
             raise ReservedFlagError(flag)
+
         seen.add(flag)
+
         if not isinstance(flag, str) or not flag.startswith("-") or flag == "-":
             raise ConfigurationError(
                 f"Executable flag tokens must start with '-' or '--': got {flag!r}"
             )
+
     return flags
 
 
@@ -98,36 +116,23 @@ def _resolve_handler_result(value: Any) -> Any:
     if not inspect.isawaitable(value):
         return value
 
-    if isinstance(value, asyncio.Future):
-        loop = value.get_loop()
-        if loop.is_running():
-            return value
-
-        return loop.run_until_complete(value)
-
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(_await_handler_result(value))
+        if isinstance(value, asyncio.Future):
+            loop = value.get_loop()
+            if not loop.is_running():
+                return loop.run_until_complete(value)
+        else:
+            return asyncio.run(_await_handler_result(value))
 
-    result: Any | None = None
-    error: BaseException | None = None
+    if inspect.iscoroutine(value):
+        value.close()
 
-    def run_handler() -> None:
-        nonlocal result, error
-        try:
-            result = asyncio.run(_await_handler_result(value))
-        except BaseException as e:  # noqa: BLE001 - propagate handler/runtime errors
-            error = e
-
-    thread = threading.Thread(target=run_handler)
-    thread.start()
-    thread.join()
-
-    if error is not None:
-        raise error
-
-    return result
+    raise RuntimeError(
+        "A synchronous invocation cannot execute an async executable flag on a running event loop; "
+        "use 'await invoke_async(...)'"
+    )
 
 
 def execute_executable_flag(
@@ -137,6 +142,22 @@ def execute_executable_flag(
 ) -> int:
     """Execute a flag handler and display its result when configured."""
     result = _resolve_handler_result(flag.handler())
+    if result is not None and flag.display_result:
+        display_result_fn(result)
+
+    return flag.exit_code
+
+
+async def execute_executable_flag_async(
+    flag: ExecutableFlag,
+    *,
+    display_result_fn: Callable[[Any], Any],
+) -> int:
+    """Complete a flag on the caller's event loop before displaying or exiting."""
+    result = flag.handler()
+    if inspect.isawaitable(result):
+        result = await result
+
     if result is not None and flag.display_result:
         display_result_fn(result)
 
@@ -179,9 +200,11 @@ def executable_flag_to_argument(flag: ExecutableFlag) -> Argument:
 
 
 __all__ = [
+    "ExecutableAction",
     "ExecutableFlag",
     "executable_flag_to_argument",
     "executable_flag_tokens",
     "execute_executable_flag",
+    "execute_executable_flag_async",
     "normalize_executable_flags",
 ]

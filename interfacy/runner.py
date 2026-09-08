@@ -51,7 +51,7 @@ class SchemaRunner:
 
         if len(commands) == 1:
             command = self.context.get_commands()[0]
-            if not command.is_leaf:
+            if not command.is_leaf and not isinstance(command.obj, Class):
                 group_args = self.namespace.get(command.canonical_name, {})
                 return self._run_with_chain(command, group_args, depth=0)
 
@@ -236,7 +236,7 @@ class SchemaRunner:
         command = self.context.get_command_by_cli_name(command_name)
         args = self.namespace.get(command.canonical_name, {})
 
-        if not command.is_leaf:
+        if not command.is_leaf and not isinstance(command.obj, Class):
             return self._run_with_chain(command, args, depth=0)
 
         return self.run_command(command, args)
@@ -262,6 +262,7 @@ class SchemaRunner:
 
         if inspect.iscoroutine(awaitable):
             awaitable.close()
+
         raise RuntimeError(
             "invoke() cannot execute an async command inside a running event loop; "
             "use 'await invoke_async(...)'"
@@ -429,8 +430,6 @@ class SchemaRunner:
             subcommand.cli_name,
             fallback_name=subcommand_name,
         )
-        if not isinstance(subcommand_args, dict):
-            subcommand_args = {}
 
         return subcommand, subcommand_args
 
@@ -533,6 +532,7 @@ class SchemaRunner:
     ) -> None:
         if name not in args:
             return
+
         val = args[name]
         match kind:
             case inspect.Parameter.POSITIONAL_ONLY | inspect.Parameter.POSITIONAL_OR_KEYWORD:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from typing import Any, TypeVar
 
 from objinspect import Class, Function, Method, Parameter, inspect
@@ -38,8 +39,14 @@ from interfacy.engine.settings import (
     validate_method_skips,
     validate_model_expansion_max_depth,
 )
-from interfacy.exceptions import ConfigurationError, DuplicateCommandError
-from interfacy.executable_flag import ExecutableFlag, normalize_executable_flags
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InterfacyExit
+from interfacy.executable_flag import (
+    ExecutableAction,
+    ExecutableActionPending,
+    ExecutableFlag,
+    execute_executable_flag,
+    normalize_executable_flags,
+)
 from interfacy.group import CommandGroup
 from interfacy.help.content import HelpContent, HelpContext, HelpRenderer, default_help_renderer
 from interfacy.help.presets import StandardLayout
@@ -113,6 +120,14 @@ class _CompiledGeneration:
 
 
 @dataclass(frozen=True, slots=True)
+class _CompiledParser:
+    generation: _CompiledGeneration
+    schema: ParserSchema
+    schema_fingerprint: Any
+    session: BackendSession[object]
+
+
+@dataclass(frozen=True, slots=True)
 class _EngineSnapshot:
     registry_commands: dict[str, Command]
     registry_names: NameRegistrySnapshot
@@ -122,8 +137,9 @@ class _EngineSnapshot:
     plugin_generation: int
     pipes: PipeStateSnapshot
     last_schema: ParserSchema | None
-    generation: _CompiledGeneration | None
-    session: BackendSession[object] | None
+    compiled: _CompiledParser | None
+    command_translations: dict[str, str]
+    argument_translations: dict[str, str]
 
 
 class _EngineHelpPipeline(HelpPipeline):
@@ -151,6 +167,7 @@ class InterfacyEngine(InvocationOperations):
     ) -> None:
         if backend not in ("argparse", "click"):
             raise ConfigurationError("backend must be one of: argparse, click")
+
         self.backend: BackendName = backend
         self.settings = settings or EngineSettings()
         self.metadata: dict[str, Any] = {}
@@ -159,8 +176,10 @@ class InterfacyEngine(InvocationOperations):
         )
         if self.settings.help_colors is not None:
             self.help_layout.style = self.settings.help_colors
+
         if self.settings.help_position is not None:
             self.help_layout.help_position = self.settings.help_position
+
         self.flag_strategy = self.settings.flag_strategy or DefaultFlagStrategy()
         self.abbreviation_gen = self.settings.abbreviation_gen or DefaultAbbreviationGenerator(
             max_generated_len=self.settings.abbreviation_max_generated_len
@@ -194,11 +213,12 @@ class InterfacyEngine(InvocationOperations):
             raise ConfigurationError(
                 f"Adapter backend '{self.adapter.name}' does not match selected backend '{backend}'"
             )
+
         self._last_schema: ParserSchema | None = None
-        self._compiled_generation: _CompiledGeneration | None = None
-        self._compiled_session: BackendSession[object] | None = None
+        self._compiled: _CompiledParser | None = None
         self._runtime = InvocationRuntime(self, self.runtime_policy)
         self._invocation_sequence = 0
+
         for plugin in self.settings.plugins or ():
             self.add_plugin(plugin)
 
@@ -211,6 +231,7 @@ class InterfacyEngine(InvocationOperations):
         self.help_option_sort_effective = self._resolve_option_sort()
         self.help_layout.help_option_sort_rules = list(self.help_option_sort_effective)
         self._invalidate_compiled()
+
         return list(self.help_option_sort_effective)
 
     def refresh_help_subcommand_sort_rules(self) -> list[HelpSubcommandSortRule]:
@@ -218,6 +239,7 @@ class InterfacyEngine(InvocationOperations):
         self.help_subcommand_sort_effective = self._resolve_subcommand_sort()
         self.help_layout.help_subcommand_sort_rules = list(self.help_subcommand_sort_effective)
         self._invalidate_compiled()
+
         return list(self.help_subcommand_sort_effective)
 
     def log(self, message: str) -> None:
@@ -248,9 +270,7 @@ class InterfacyEngine(InvocationOperations):
                 backend=self.backend,
                 adapter=self.adapter,
                 native_parser=(
-                    self._compiled_session.native_parser
-                    if self._compiled_session is not None
-                    else None
+                    self._compiled.session.native_parser if self._compiled is not None else None
                 ),
             ),
         )
@@ -285,6 +305,7 @@ class InterfacyEngine(InvocationOperations):
             layout.style = type(layout)().style
         elif candidate.help_colors is not None:
             layout.style = candidate.help_colors
+
         if candidate.help_position is not None:
             layout.help_position = candidate.help_position
         elif "help_position" in prepared.reset_fields:
@@ -354,6 +375,7 @@ class InterfacyEngine(InvocationOperations):
             silent_interrupt=candidate.silent_interrupt,
             logger_message_tag=self.runtime_policy.logger_message_tag,
         )
+
         if additions:
             type_parser.parsers.clear()
             type_parser.parsers.update(staged_type_parser.parsers)
@@ -414,6 +436,7 @@ class InterfacyEngine(InvocationOperations):
                 method_skips=method_skips,
                 parameter_settings=parameter_settings,
             )
+
         inspected = inspect(
             command,
             init=True,
@@ -435,51 +458,56 @@ class InterfacyEngine(InvocationOperations):
             else include_private_methods,
         )
         resolve_objinspect_annotations(inspected)
-        canonical, registered_aliases = self.registry.register_name(
-            default_name=inspected.name,
-            explicit_name=name,
-            aliases=aliases,
-        )
-        if canonical in self.commands:
-            raise DuplicateCommandError(canonical)
-        raw_description = (
-            description
-            if description is not None
-            else (inspected.description if inspected.has_docstring else None)
-        )
-        schema_command = Command(
-            obj=inspected,
-            canonical_name=canonical,
-            cli_name=canonical,
-            aliases=tuple(registered_aliases),
-            raw_description=raw_description,
-            parameters=[],
-            initializer=[],
-            subcommands=None,
-            pipe_targets=None,
-        )
-        self._apply_command_settings(
-            schema_command,
-            include_inherited_methods=include_inherited_methods,
-            include_protected_methods=include_protected_methods,
-            include_private_methods=include_private_methods,
-            include_staticmethods=include_staticmethods,
-            include_classmethods=include_classmethods,
-            expand_model_params=expand_model_params,
-            model_expansion_max_depth=model_expansion_max_depth,
-            abbreviation_scope=abbreviation_scope,
-            executable_flags=executable_flags,
-            help_option_sort=help_option_sort,
-            help_subcommand_sort=help_subcommand_sort,
-            help_group=help_group,
-            method_skips=method_skips,
-            parameter_settings=parameter_settings,
-        )
-        self.registry.add(schema_command)
-        if pipe_targets is not None:
-            self.pipes.configure(pipe_targets, command=canonical)
-        self._invalidate_compiled()
-        return schema_command
+
+        with self._registration():
+            canonical, registered_aliases = self.registry.register_name(
+                default_name=inspected.name,
+                explicit_name=name,
+                aliases=aliases,
+            )
+            if canonical in self.commands:
+                raise DuplicateCommandError(canonical)
+
+            raw_description = (
+                description
+                if description is not None
+                else (inspected.description if inspected.has_docstring else None)
+            )
+            schema_command = Command(
+                obj=inspected,
+                canonical_name=canonical,
+                cli_name=canonical,
+                aliases=tuple(registered_aliases),
+                raw_description=raw_description,
+                parameters=[],
+                initializer=[],
+                subcommands=None,
+                pipe_targets=None,
+            )
+            self._apply_command_settings(
+                schema_command,
+                include_inherited_methods=include_inherited_methods,
+                include_protected_methods=include_protected_methods,
+                include_private_methods=include_private_methods,
+                include_staticmethods=include_staticmethods,
+                include_classmethods=include_classmethods,
+                expand_model_params=expand_model_params,
+                model_expansion_max_depth=model_expansion_max_depth,
+                abbreviation_scope=abbreviation_scope,
+                executable_flags=executable_flags,
+                help_option_sort=help_option_sort,
+                help_subcommand_sort=help_subcommand_sort,
+                help_group=help_group,
+                method_skips=method_skips,
+                parameter_settings=parameter_settings,
+            )
+            self.registry.add(schema_command)
+            if pipe_targets is not None:
+                self.pipes.configure(pipe_targets, command=canonical)
+
+            self._invalidate_compiled()
+
+            return schema_command
 
     def command(self, **options: Any) -> Callable[[F], F]:
         def decorator(target: F) -> F:
@@ -499,26 +527,30 @@ class InterfacyEngine(InvocationOperations):
         options["help_group"] = validate_help_group(options.get("help_group"))
         combined_aliases: list[str] = list(aliases or ())
         combined_aliases.extend(alias for alias in group.aliases if alias not in combined_aliases)
-        canonical, registered_aliases = self.registry.register_name(
-            default_name=group.name,
-            explicit_name=name,
-            aliases=combined_aliases or None,
-        )
-        if canonical in self.commands:
-            raise DuplicateCommandError(canonical)
-        command = ParserSchemaBuilder(self._schema_build_context()).build_from_group(
-            group,
-            canonical_name=canonical,
-            **self._group_build_options(options),
-        )
-        if description is not None:
-            command.raw_description = description
-        command.aliases = tuple(registered_aliases)
-        command.group_source = group
-        self._apply_command_settings(command, **options)
-        self.registry.add(command)
-        self._invalidate_compiled()
-        return command
+        with self._registration():
+            canonical, registered_aliases = self.registry.register_name(
+                default_name=group.name,
+                explicit_name=name,
+                aliases=combined_aliases or None,
+            )
+            if canonical in self.commands:
+                raise DuplicateCommandError(canonical)
+
+            command = ParserSchemaBuilder(self._schema_build_context()).build_from_group(
+                group,
+                canonical_name=canonical,
+                **self._group_build_options(options),
+            )
+            if description is not None:
+                command.raw_description = description
+
+            command.aliases = tuple(registered_aliases)
+            command.group_source = group
+            self._apply_command_settings(command, **options)
+            self.registry.add(command)
+            self._invalidate_compiled()
+
+            return command
 
     def get_commands(self) -> list[Command]:
         return self.registry.all()
@@ -536,6 +568,7 @@ class InterfacyEngine(InvocationOperations):
         schema = self.plugin_manager.transform_schema(context, schema)
         schema = builder.finalize(schema)
         self._last_schema = schema
+
         return schema
 
     def build_parser(self) -> object:
@@ -546,7 +579,14 @@ class InterfacyEngine(InvocationOperations):
 
     def parse_args(self, args: Sequence[str] | None = None) -> dict[str, Any]:
         resolved = tuple(sys.argv[1:] if args is None else args)
-        return self.parse(resolved).namespace
+        try:
+            return self.parse(resolved).namespace
+        except ExecutableActionPending as e:
+            code = execute_executable_flag(
+                e.action.flag,
+                display_result_fn=e.action.display_result_fn,
+            )
+            raise InterfacyExit(code) from None
 
     def parse(self, args: tuple[str, ...]) -> InvocationInput:
         self._invocation_sequence += 1
@@ -567,26 +607,29 @@ class InterfacyEngine(InvocationOperations):
         )
         normalized_args = tuple(state.ancestor_options.normalize_args(schema, transformed_args))
         outcome = session.parse(ParseRequest(normalized_args))
+        if isinstance(outcome, ExecutableAction):
+            raise ExecutableActionPending(outcome)
+
         if isinstance(outcome, BackendParseFailure):
             namespace = self._recover(session, schema, state, outcome)
         else:
             namespace = dict(outcome.namespace)
+
         try:
-            namespace = state.ancestor_options.apply_values(schema, namespace)
+            ancestor_values = state.ancestor_options.resolve_values()
+            namespace = ancestor_values.apply_to(schema, namespace)
         except InterspersedOptionValueError as e:
             session.present_error(
                 outcome.presentation
                 if isinstance(outcome, BackendParseFailure)
                 else self._presentation(str(e))
             )
+
         if self.pipes.schema_uses_pipes(schema):
             source = session.parse(ParseRequest(normalized_args, default_policy="suppress"))
             source_namespace: dict[str, Any] | None = None
             if isinstance(source, ParseResult):
-                source_namespace = state.ancestor_options.apply_values(
-                    schema,
-                    dict(source.namespace),
-                )
+                source_namespace = ancestor_values.apply_to(schema, dict(source.namespace))
             self.pipes.record_cli_namespace(source_namespace)
         namespace = self.plugin_manager.after_parse(
             lambda current: AfterParseContext(
@@ -598,6 +641,7 @@ class InterfacyEngine(InvocationOperations):
             ),
             namespace,
         )
+
         return InvocationInput(normalized_args, namespace)
 
     def invoke(
@@ -653,7 +697,7 @@ class InterfacyEngine(InvocationOperations):
 
     def execution_context(self) -> ExecutionContext:
         return ExecutionContext(
-            commands=self.commands,
+            commands=self._last_schema.commands if self._last_schema is not None else self.commands,
             argument_names=self.flag_strategy.argument_translator,
             command_names=self.flag_strategy.command_translator,
             type_parser=self.type_parser,
@@ -702,13 +746,15 @@ class InterfacyEngine(InvocationOperations):
             plugin_generation=plugin_generation,
             pipes=self.pipes.snapshot(),
             last_schema=self._last_schema,
-            generation=self._compiled_generation,
-            session=self._compiled_session,
+            compiled=self._compiled,
+            command_translations=dict(self.flag_strategy.command_translator.translations),
+            argument_translations=dict(self.flag_strategy.argument_translator.translations),
         )
 
     def restore(self, snapshot: object) -> None:
         if not isinstance(snapshot, _EngineSnapshot):
             raise TypeError("Invalid engine snapshot")
+
         self.registry.restore(
             snapshot.registry_commands,
             snapshot.registry_names,
@@ -721,8 +767,11 @@ class InterfacyEngine(InvocationOperations):
         )
         self.pipes.restore(snapshot.pipes)
         self._last_schema = snapshot.last_schema
-        self._compiled_generation = snapshot.generation
-        self._compiled_session = snapshot.session
+        self._compiled = snapshot.compiled
+        self.flag_strategy.command_translator.translations.clear()
+        self.flag_strategy.command_translator.translations.update(snapshot.command_translations)
+        self.flag_strategy.argument_translator.translations.clear()
+        self.flag_strategy.argument_translator.translations.update(snapshot.argument_translations)
 
     def render_help(
         self,
@@ -748,9 +797,11 @@ class InterfacyEngine(InvocationOperations):
             plugin_result = self.plugin_manager.render_help(hook_context, transformed)
             if plugin_result is not None:
                 return plugin_result.text
+
             configured_renderer: HelpRenderer | None = self.settings.help_renderer
             if configured_renderer is not None:
                 return configured_renderer(context, transformed)
+
             return default_help_renderer(context, transformed)
 
         renderer = SchemaHelpRenderer(
@@ -762,6 +813,7 @@ class InterfacyEngine(InvocationOperations):
         command = self._command_for_path(schema, command_path)
         if command is None:
             return renderer.render_parser_help(schema, program)
+
         return renderer.render_command_help(
             command,
             program,
@@ -775,6 +827,7 @@ class InterfacyEngine(InvocationOperations):
     ) -> Command | None:
         if not command_path:
             return None
+
         commands = schema.commands
         current: Command | None = None
         for segment in command_path:
@@ -788,18 +841,23 @@ class InterfacyEngine(InvocationOperations):
             )
             if current is None:
                 return None
+
             commands = current.subcommands or {}
+
         return current
 
     def _session(self, schema: ParserSchema | None = None) -> BackendSession[object]:
         current_schema = schema or self.build_parser_schema()
         generation = self._generation_key()
+        schema_fingerprint = self._schema_fingerprint(current_schema)
         if (
-            self._compiled_session is not None
-            and self._compiled_generation == generation
-            and self._last_schema == current_schema
+            self._compiled is not None
+            and self._compiled.generation == generation
+            and self._compiled.schema == current_schema
+            and self._compiled.schema_fingerprint == schema_fingerprint
         ):
-            return self._compiled_session
+            return self._compiled.session
+
         session = self.adapter.compile(
             current_schema,
             _EngineHelpPipeline(self, current_schema),
@@ -812,9 +870,9 @@ class InterfacyEngine(InvocationOperations):
                 native_parser=session.native_parser,
             )
         )
-        self._compiled_session = session
-        self._compiled_generation = generation
+        self._compiled = _CompiledParser(generation, current_schema, schema_fingerprint, session)
         self._last_schema = current_schema
+
         return session
 
     def _recover(
@@ -841,12 +899,15 @@ class InterfacyEngine(InvocationOperations):
             )
             if action is None:
                 break
+
             if isinstance(action, AbortRecovery):
                 message = action.message or failure.presentation.message
                 session.present_error(self._presentation(message, action.exit_code))
+
             self._apply_recovery_action(schema, namespace, descriptor, action)
             if not self._missing_required(schema, namespace):
                 return namespace
+
         return session.present_error(failure.presentation)
 
     def _apply_recovery_action(
@@ -862,6 +923,7 @@ class InterfacyEngine(InvocationOperations):
                 raise ConfigurationError(
                     f"Recovery provided value for non-missing argument '{ref.name}'"
                 )
+
             bucket = bucket_for_command_path(
                 schema,
                 namespace,
@@ -870,11 +932,13 @@ class InterfacyEngine(InvocationOperations):
             )
             if bucket is not None:
                 bucket[ref.name] = value
+
         for path, command_name in action.subcommands.items():
             subcommands = self._subcommands_at_path(schema, path)
             selected = find_command(subcommands, command_name)
             if selected is None:
                 raise ConfigurationError(f"Recovery selected invalid subcommand '{command_name}'")
+
             bucket = bucket_for_command_path(
                 schema,
                 namespace,
@@ -896,6 +960,7 @@ class InterfacyEngine(InvocationOperations):
                 root = next(iter(commands.values()))
                 if root.command_type != "group" and root.subcommands:
                     return root.subcommands
+
             return commands
 
         for segment in path:
@@ -909,7 +974,9 @@ class InterfacyEngine(InvocationOperations):
             )
             if current is None:
                 return {}
+
             commands = current.subcommands or {}
+
         return commands
 
     @classmethod
@@ -960,7 +1027,17 @@ class InterfacyEngine(InvocationOperations):
                 for argument in (*command.initializer, *command.parameters)
                 if argument.required and argument.name not in bucket
             )
+
         return missing
+
+    @contextmanager
+    def _registration(self) -> Generator[None, None, None]:
+        snapshot = self.snapshot()
+        try:
+            yield
+        except BaseException:
+            self.restore(snapshot)
+            raise
 
     def _schema_build_context(self) -> SchemaBuildContext:
         return SchemaBuildContext(
@@ -1022,17 +1099,60 @@ class InterfacyEngine(InvocationOperations):
         )
 
     @classmethod
+    def _schema_fingerprint(cls, value: Any, active: set[int] | None = None) -> Any:
+        """Snapshot schema-owned structure without traversing or hashing user objects."""
+        if type(value) in (str, int, float, bool, bytes, type(None)):
+            return value
+
+        framework_record = (
+            not isinstance(value, type)
+            and type(value).__module__.startswith("interfacy.")
+            and is_dataclass(value)
+        )
+        if not framework_record and type(value) not in (dict, list, tuple, set, frozenset):
+            return ("opaque", id(value))
+
+        active = set() if active is None else active
+        identity = id(value)
+        if identity in active:
+            return ("cycle", identity)
+
+        active.add(identity)
+        try:
+            if framework_record:
+                return type(value), tuple(
+                    (field.name, cls._schema_fingerprint(getattr(value, field.name), active))
+                    for field in fields(value)
+                )
+
+            if type(value) is dict:
+                return tuple(
+                    (cls._schema_fingerprint(key, active), cls._schema_fingerprint(item, active))
+                    for key, item in value.items()
+                )
+
+            items = tuple(cls._schema_fingerprint(item, active) for item in value)
+
+            return tuple(sorted(items, key=repr)) if type(value) in (set, frozenset) else items
+        finally:
+            active.remove(identity)
+
+    @classmethod
     def _fingerprint(cls, value: Any) -> Any:
         if isinstance(value, Mapping):
             return tuple(sorted((str(key), cls._fingerprint(item)) for key, item in value.items()))
+
         if isinstance(value, (list, tuple)):
             return tuple(cls._fingerprint(item) for item in value)
+
         if isinstance(value, (set, frozenset)):
             return tuple(sorted(repr(cls._fingerprint(item)) for item in value))
+
         try:
             hash(value)
         except TypeError:
             return id(value)
+
         return value
 
     def _schema_descriptor(self, schema: ParserSchema) -> SchemaDescriptor:
@@ -1045,11 +1165,13 @@ class InterfacyEngine(InvocationOperations):
                 self._argument_descriptor(path, argument)
                 for argument in (*command.initializer, *command.parameters)
             )
+
             for child in (command.subcommands or {}).values():
                 visit(child, (*path, child.canonical_name))
 
         for command in schema.commands.values():
             visit(command, (command.canonical_name,))
+
         return SchemaDescriptor(
             description=schema.description,
             epilog=schema.epilog,
@@ -1084,8 +1206,10 @@ class InterfacyEngine(InvocationOperations):
         obj = command.obj
         if isinstance(obj, (Function, Method)):
             return {parameter.name: parameter for parameter in obj.params}
+
         if not isinstance(obj, Class):
             return {}
+
         if subcommand in (None, "__init__"):
             method = obj.init_method
         else:
@@ -1098,6 +1222,7 @@ class InterfacyEngine(InvocationOperations):
                 ),
                 None,
             )
+
         return {} if method is None else {parameter.name: parameter for parameter in method.params}
 
     def _apply_command_settings(self, command: Command, **options: Any) -> None:
@@ -1173,12 +1298,12 @@ class InterfacyEngine(InvocationOperations):
         return list(resolved) if resolved else default_help_subcommand_sort_rules()
 
     def _invalidate_compiled(self) -> None:
-        self._compiled_generation = None
-        self._compiled_session = None
+        self._compiled = None
 
     def _require_schema(self) -> ParserSchema:
         if self._last_schema is None:
             raise ConfigurationError("No schema is available for execution")
+
         return self._last_schema
 
     @staticmethod

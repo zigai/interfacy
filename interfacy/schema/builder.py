@@ -189,6 +189,7 @@ class ParserSchemaBuilder:
         base = parent or self._base_build_settings()
         if overrides is not None:
             return resolve_command_settings(base, overrides)
+
         resolved_overrides = CommandOverrides(
             include_inherited_methods=include_inherited_methods,
             include_protected_methods=include_protected_methods,
@@ -202,6 +203,7 @@ class ParserSchemaBuilder:
             help_option_sort=help_option_sort,
             help_subcommand_sort=help_subcommand_sort,
         )
+
         return resolve_command_settings(base, resolved_overrides)
 
     @staticmethod
@@ -280,7 +282,9 @@ class ParserSchemaBuilder:
                 rebuilt_group.raw_description = command.raw_description
                 rebuilt_group.group_source = command.group_source
                 commands[canonical_name] = rebuilt_group
+
                 continue
+
             if command.command_type in ("group", "instance") or (
                 not command.is_leaf and command.obj is None
             ):
@@ -371,7 +375,6 @@ class ParserSchemaBuilder:
         parent_option_rules: list[HelpOptionSortRule],
         parent_subcommand_rules: list[HelpSubcommandSortRule],
     ) -> None:
-
         command.is_leaf = not bool(command.subcommands)
         if command.command_type == "group" and not command.subcommands:
             command.is_leaf = False
@@ -695,6 +698,7 @@ class ParserSchemaBuilder:
             if class_info.init_method is not None
             else {}
         )
+
         return merge_parameter_settings(class_settings, init_settings)
 
     @staticmethod
@@ -913,6 +917,7 @@ class ParserSchemaBuilder:
                 )
                 or class_pipe_config
             )
+
         effective_parameter_settings = merge_parameter_settings(
             self._class_parameter_settings(cls),
             parameter_settings,
@@ -1408,11 +1413,15 @@ class ParserSchemaBuilder:
         )
         if force_optional:
             required = False
+
         if state.value_shape is ValueShape.FLAG:
             cardinality = ValueCardinality(0, 0, 0)
         elif state.value_shape is ValueShape.LIST:
             item_size = state.cardinality.group_size
-            cardinality = ValueCardinality(item_size if required else 0, None, item_size)
+            min_count = (
+                0 if spec.kind == InspectParameter.VAR_POSITIONAL or not required else item_size
+            )
+            cardinality = ValueCardinality(min_count, None, item_size)
         elif state.value_shape is ValueShape.TUPLE:
             cardinality = (
                 state.value_plan.token_consumption(required=True)

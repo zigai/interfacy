@@ -9,6 +9,7 @@ from strto import StrToTypeParser
 
 from interfacy.engine.settings import BackendName
 from interfacy.exceptions import ConfigurationError
+from interfacy.executable_flag import ExecutableAction
 from interfacy.help.layout import HelpLayout
 from interfacy.schema.schema import ParserSchema
 
@@ -86,7 +87,7 @@ class BackendParseFailure:
         self.remaining_args = tuple(self.remaining_args)
 
 
-ParseOutcome = ParseResult | BackendParseFailure
+ParseOutcome = ParseResult | BackendParseFailure | ExecutableAction
 
 
 class HelpPipeline(Protocol):
@@ -105,7 +106,9 @@ class BackendSession(Protocol[NativeParserT_co]):
     @property
     def native_parser(self) -> NativeParserT_co: ...
 
-    def parse(self, request: ParseRequest) -> ParseOutcome: ...
+    def parse(self, request: ParseRequest) -> ParseOutcome:
+        """Parse arguments or return a flag action without executing its handler."""
+        ...
 
     def present_error(self, presentation: NativePresentation) -> NoReturn: ...
 
@@ -135,16 +138,41 @@ def create_backend_adapter(backend: BackendName) -> BackendAdapter[object]:
         from interfacy.argparse_backend.adapter import ArgparseBackend
 
         return ArgparseBackend()
+
     if backend != "click":
         raise ConfigurationError("backend must be one of: argparse, click")
+
     try:
         from interfacy.click_backend.adapter import ClickBackend
     except ImportError as e:
+        if not _is_missing_click(e):
+            raise
+
         raise ImportError(
             "Click is required to use Interfacy with backend='click'. Install it with "
             "\"pip install 'interfacy[click]'\" or \"uv add 'interfacy[click]'\"."
         ) from e
+
     return ClickBackend()
+
+
+def _is_missing_click(error: BaseException) -> bool:
+    """Recognize an absent Click package through an import failure's visible chain."""
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+
+        if isinstance(current, ModuleNotFoundError) and current.name == "click":
+            return True
+
+        current = (
+            current.__cause__
+            if current.__suppress_context__
+            else current.__cause__ or current.__context__
+        )
+
+    return False
 
 
 __all__ = [
@@ -153,6 +181,7 @@ __all__ = [
     "BackendConfig",
     "BackendParseFailure",
     "BackendSession",
+    "ExecutableAction",
     "HelpPipeline",
     "NativePresentation",
     "NativePresentationKind",

@@ -28,9 +28,9 @@ from interfacy.engine.backend import (
 )
 from interfacy.engine.settings import BackendName
 from interfacy.exceptions import ConfigurationError, InterfacyExit, UsageError
-from interfacy.executable_flag import ExecutableFlag, execute_executable_flag
+from interfacy.executable_flag import ExecutableAction, ExecutableFlag
 from interfacy.schema.schema import Argument, ArgumentKind, Command, ParserSchema, ValueShape
-from interfacy.schema.value_plan import normalize_argument_values
+from interfacy.schema.value_plan import normalize_schema_values
 
 _COMMAND_KEY = "command"
 
@@ -68,11 +68,10 @@ class ClickSession(BackendSession[click.Command]):
                 partial=request.mode == "partial",
                 include_defaults=request.default_policy == "include",
             )
-            self._normalize(namespace)
+            normalize_schema_values(self._schema, namespace, type_parser=self._config.type_parser)
             return ParseResult(request.args, namespace, tuple(remaining))
         except _ExecutableFlagTriggeredError as e:
-            code = execute_executable_flag(e.flag, display_result_fn=print)
-            raise InterfacyExit(code) from None
+            return ExecutableAction(e.flag)
         except click.exceptions.Exit as e:
             raise InterfacyExit(e.exit_code) from e
         except click.UsageError as e:
@@ -102,6 +101,7 @@ class ClickSession(BackendSession[click.Command]):
         usage = None
         if presentation.kind == "usage":
             usage = self._native_parser.get_usage(click.Context(self._native_parser))
+
         raise UsageError(presentation.message, usage=usage)
 
     def _attach_help(
@@ -111,12 +111,15 @@ class ClickSession(BackendSession[click.Command]):
     ) -> None:
         if isinstance(command, (InterfacyClickCommand, InterfacyClickGroup)):
             command.set_help_pipeline(self._help_pipeline, command_path)
+
         if not isinstance(command, click.Group):
             return
+
         seen: set[int] = set()
         for name, child in command.commands.items():
             if id(child) in seen:
                 continue
+
             seen.add(id(child))
             schema_command = getattr(child, "interfacy_schema", None)
             canonical = (
@@ -127,8 +130,10 @@ class ClickSession(BackendSession[click.Command]):
     def _parser_for(self, request: ParseRequest) -> click.Command:
         if request.mode == "full":
             return self._native_parser
+
         if self._partial_parser is None:
             self._partial_parser = self._build(self._schema, relaxed=True)
+
         return self._partial_parser
 
     def _build(self, schema: ParserSchema, *, relaxed: bool) -> click.Command:
@@ -140,6 +145,7 @@ class ClickSession(BackendSession[click.Command]):
         if not root_group:
             if single is None:
                 raise ConfigurationError("No commands were provided")
+
             root = self._build_command(
                 single,
                 relaxed=relaxed,
@@ -147,7 +153,9 @@ class ClickSession(BackendSession[click.Command]):
             )
             root.interfacy_parser_schema = schema
             root.interfacy_help_layout = self._config.help_layout
+
             return root
+
         params, bindings, specs, suppressed = self._build_params(
             (),
             schema.executable_flags,
@@ -168,8 +176,10 @@ class ClickSession(BackendSession[click.Command]):
         root.interfacy_is_root = True
         root.interfacy_parser_schema = schema
         root.interfacy_help_layout = self._config.help_layout
+
         for command in commands:
             root.add_command(self._build_command(command, relaxed=relaxed), command.cli_name)
+
         return root
 
     def _build_command(
@@ -196,6 +206,7 @@ class ClickSession(BackendSession[click.Command]):
             )
             self._attach(native, bindings, specs, suppressed, command)
             return native
+
         context_settings["allow_interspersed_args"] = False
         native_group = InterfacyClickGroup(
             name=command.cli_name,
@@ -206,12 +217,14 @@ class ClickSession(BackendSession[click.Command]):
             no_args_is_help=bool(command.subcommands) and not relaxed,
         )
         self._attach(native_group, bindings, specs, suppressed, command)
+
         if command.subcommands:
             for child in command.subcommands.values():
                 native_group.add_command(
                     self._build_command(child, relaxed=relaxed),
                     child.cli_name,
                 )
+
         return native_group
 
     def _build_params(
@@ -229,12 +242,17 @@ class ClickSession(BackendSession[click.Command]):
         for argument in arguments:
             param, suppress = self._make_param(argument, used, relaxed=relaxed)
             params.append(param)
+
             if param.name is not None:
                 bindings[param.name] = argument.name
+
             specs[argument.name] = argument
+
             if suppress:
                 suppressed.add(argument.name)
+
         params.extend(self._executable_param(flag, used) for flag in executable_flags)
+
         return params, bindings, specs, suppressed
 
     def _make_param(
@@ -251,6 +269,7 @@ class ClickSession(BackendSession[click.Command]):
                 attrs["nargs"] = -1
             elif maximum > 1:
                 attrs["nargs"] = maximum
+
             return InterfacyClickArgument((argument.display_name,), **attrs), suppress
 
         name = self._sanitize(argument.name, used)
@@ -258,7 +277,9 @@ class ClickSession(BackendSession[click.Command]):
             behavior = argument.boolean_behavior
             if behavior is None:
                 raise ConfigurationError("Boolean flag behavior is required")
+
             attrs["is_flag"] = True
+
             return (
                 InterfacyBooleanOption(
                     [name, *behavior.positive_flags, *behavior.negative_flags],
@@ -272,27 +293,31 @@ class ClickSession(BackendSession[click.Command]):
         declarations = [name, *argument.flags]
         if argument.value_shape is ValueShape.LIST:
             return InterfacyListOption(declarations, **attrs), suppress
+
         maximum = argument.cardinality.maximum_values
         if maximum is not None and maximum > 1:
             attrs["nargs"] = maximum
+
         return InterfacyClickOption(declarations, **attrs), suppress
 
     def _param_attributes(
         self, argument: Argument, *, relaxed: bool
     ) -> tuple[dict[str, Any], bool]:
+        is_required = argument.required and argument.cardinality.minimum_values > 0
         attrs: dict[str, Any] = {
-            "required": argument.required and not relaxed,
+            "required": is_required and not relaxed,
             "help": argument.help,
         }
         if argument.metavar and argument.value_shape is not ValueShape.FLAG:
             attrs["metavar"] = argument.metavar
         default = argument.argument_default
         suppress = not default.applies_during_parse
-        if default.is_set and not suppress and not argument.required:
+        if default.is_set and not suppress and not is_required:
             attrs["default"] = default.value
         param_type = self._param_type(argument)
         if param_type is not None and argument.value_shape is not ValueShape.FLAG:
             attrs["type"] = param_type
+
         return attrs, suppress
 
     @staticmethod
@@ -306,6 +331,7 @@ class ClickSession(BackendSession[click.Command]):
             candidate = f"{root}_{index}"
             index += 1
         used.add(candidate)
+
         return candidate
 
     @staticmethod
@@ -316,8 +342,10 @@ class ClickSession(BackendSession[click.Command]):
             if all(isinstance(choice, str) for choice in argument.choices):
                 return click.Choice([str(choice) for choice in argument.choices])
             return ChoiceParamType(argument.choices, None)
+
         if argument.parser is not None:
             return ClickFuncParamType(argument.parser, f"parse_{argument.name}")
+
         return None
 
     def _executable_param(
@@ -334,6 +362,7 @@ class ClickSession(BackendSession[click.Command]):
             value: bool,
         ) -> None:
             del context, parameter
+
             if value:
                 raise _ExecutableFlagTriggeredError(flag)
 
@@ -374,12 +403,15 @@ class ClickSession(BackendSession[click.Command]):
             args,
             resilient_parsing=partial,
         )
+
         if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
             raise ConfigurationError(f"Unexpected Click root: {type(root)!r}")
+
         if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
             child_info = self._resolve_child_context(context, root, partial=partial)
             if child_info is None:
                 return {}, self._remaining(context)
+
             key, command, child_context = child_info
             namespace = {
                 _COMMAND_KEY: key,
@@ -391,7 +423,9 @@ class ClickSession(BackendSession[click.Command]):
                     include_defaults=include_defaults,
                 ),
             }
+
             return namespace, self._remaining(child_context)
+
         namespace = self._context_namespace(
             context,
             root,
@@ -399,6 +433,7 @@ class ClickSession(BackendSession[click.Command]):
             partial=partial,
             include_defaults=include_defaults,
         )
+
         return namespace, self._remaining(context)
 
     def _resolve_child_context(
@@ -411,9 +446,11 @@ class ClickSession(BackendSession[click.Command]):
         remaining = self._remaining(context)
         if not remaining and partial:
             return None
+
         name, command, command_args = group.resolve_command(context, remaining)
         if command is None or not isinstance(command, (InterfacyClickCommand, InterfacyClickGroup)):
             return None
+
         resolved = name or command.name or ""
         child_context = command.make_context(
             resolved,
@@ -423,6 +460,7 @@ class ClickSession(BackendSession[click.Command]):
         )
         schema_cmd = command.interfacy_schema
         key = schema_cmd.canonical_name if schema_cmd is not None else resolved
+
         return key, command, child_context
 
     def _context_namespace(
@@ -442,12 +480,16 @@ class ClickSession(BackendSession[click.Command]):
                 not include_defaults or schema_name in native.interfacy_suppress_defaults
             ):
                 continue
+
             namespace[schema_name] = value
+
         if not isinstance(native, InterfacyClickGroup) or not native.commands:
             return namespace
+
         child_info = self._resolve_child_context(context, native, partial=partial)
         if child_info is None:
             return namespace
+
         key, child, child_context = child_info
         destination = f"{_COMMAND_KEY}_{depth}" if depth else _COMMAND_KEY
         namespace[destination] = key
@@ -458,6 +500,7 @@ class ClickSession(BackendSession[click.Command]):
             partial=partial,
             include_defaults=include_defaults,
         )
+
         return namespace
 
     @staticmethod
@@ -466,16 +509,6 @@ class ClickSession(BackendSession[click.Command]):
             warnings.simplefilter("ignore", DeprecationWarning)
             protected = list(getattr(context, "protected_args", []))
         return [*protected, *context.args]
-
-    def _normalize(self, namespace: dict[str, Any]) -> None:
-        if len(self._schema.commands) == 1 and not self._schema.is_multi_command:
-            command = next(iter(self._schema.commands.values()))
-            normalize_argument_values(command, namespace, type_parser=self._config.type_parser)
-            return
-        for command in self._schema.commands.values():
-            bucket = namespace.get(command.canonical_name)
-            if isinstance(bucket, dict):
-                normalize_argument_values(command, bucket, type_parser=self._config.type_parser)
 
     def _partial_namespace(self, args: tuple[str, ...]) -> Mapping[str, Any]:
         try:
@@ -488,7 +521,8 @@ class ClickSession(BackendSession[click.Command]):
             )
             if remaining:
                 return {}
-            self._normalize(namespace)
+
+            normalize_schema_values(self._schema, namespace, type_parser=self._config.type_parser)
         except (click.UsageError, _ExecutableFlagTriggeredError, ValueError):
             return {}
         else:

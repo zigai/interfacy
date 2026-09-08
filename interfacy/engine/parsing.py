@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from interfacy.schema.schema import Argument, Command, ParserSchema
@@ -19,6 +20,25 @@ class InterspersedOptionValueError(ValueError):
         self.raw_value = raw_value
         self.original = original
         super().__init__(str(original))
+
+
+@dataclass(frozen=True, slots=True)
+class AncestorOptionValues:
+    """One conversion result reused by execution and CLI-provenance projections."""
+
+    values: tuple[tuple[tuple[str, ...], str, Any], ...]
+
+    def apply_to(
+        self,
+        schema: ParserSchema,
+        namespace: dict[str, Any],
+    ) -> dict[str, Any]:
+        for command_path, name, value in self.values:
+            bucket = bucket_for_command_path(schema, namespace, command_path, create=True)
+            if bucket is not None:
+                bucket[name] = value
+
+        return namespace
 
 
 class AncestorOptions:
@@ -93,16 +113,17 @@ class AncestorOptions:
         schema: ParserSchema,
         namespace: dict[str, Any],
     ) -> dict[str, Any]:
-        try:
-            for command_path, argument, raw_values in self._pending_values:
-                value = self._parse_option_values(argument, raw_values)
-                bucket = self._bucket_for_command_path(schema, namespace, command_path, create=True)
-                if bucket is not None:
-                    bucket[argument.name] = value
-        finally:
-            self._pending_values = []
+        return self.resolve_values().apply_to(schema, namespace)
 
-        return namespace
+    def resolve_values(self) -> AncestorOptionValues:
+        pending = self._pending_values
+        self._pending_values = []
+        return AncestorOptionValues(
+            tuple(
+                (command_path, argument.name, self._parse_option_values(argument, raw_values))
+                for command_path, argument, raw_values in pending
+            )
+        )
 
     @staticmethod
     def _single_command_without_root_selection(schema: ParserSchema) -> Command | None:
@@ -201,25 +222,22 @@ class AncestorOptions:
         if cardinality.maximum_values is not None:
             return min(len(args), start + 1 + cardinality.maximum_values)
 
-        if cardinality.maximum_values is None:
-            index = start + 1
-            while index < len(args):
-                value = args[index]
-                if value == "--" or self._find_nearest_option_owner(value, command_chain):
-                    break
+        index = start + 1
+        while index < len(args):
+            value = args[index]
+            if value == "--" or self._find_nearest_option_owner(value, command_chain):
+                break
 
-                if (
-                    command_chain
-                    and command_chain[-1].subcommands
-                    and self._match_command_name(command_chain[-1].subcommands, value)
-                ):
-                    break
+            if (
+                command_chain
+                and command_chain[-1].subcommands
+                and self._match_command_name(command_chain[-1].subcommands, value)
+            ):
+                break
 
-                index += 1
+            index += 1
 
-            return index
-
-        return min(len(args), start + 2)
+        return index
 
     @staticmethod
     def _option_group_raw_values(
@@ -344,27 +362,14 @@ class AncestorOptions:
         command_chain.append(command)
         command_token_positions.append(index)
 
-    def _bucket_for_command_path(
-        self,
-        schema: ParserSchema,
-        namespace: dict[str, Any],
-        command_path: tuple[str, ...],
-        *,
-        create: bool = False,
-    ) -> dict[str, Any] | None:
-        return bucket_for_command_path(schema, namespace, command_path, create=create)
-
 
 def bucket_for_command_path(
-    schema: ParserSchema,
+    schema: ParserSchema,  # noqa: ARG001 - Preserve the public keyword parameter.
     namespace: dict[str, Any],
     command_path: tuple[str, ...],
     *,
     create: bool = False,
 ) -> dict[str, Any] | None:
-    if len(schema.commands) == 1 and not schema.is_multi_command and not command_path:
-        return namespace
-
     if not command_path:
         return namespace
 
@@ -377,6 +382,7 @@ def bucket_for_command_path(
 
             value = {}
             current[segment] = value
+
         current = value
 
     return current

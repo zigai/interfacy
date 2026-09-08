@@ -23,8 +23,8 @@ from interfacy.engine.backend import (
     ParseResult,
 )
 from interfacy.engine.settings import BackendName
-from interfacy.exceptions import ConfigurationError, InterfacyExit, UsageError
-from interfacy.executable_flag import ExecutableFlag, execute_executable_flag
+from interfacy.exceptions import ConfigurationError, UsageError
+from interfacy.executable_flag import ExecutableAction, ExecutableFlag
 from interfacy.schema.schema import (
     Argument,
     ArgumentKind,
@@ -33,7 +33,7 @@ from interfacy.schema.schema import (
     ValueShape,
     find_command,
 )
-from interfacy.schema.value_plan import normalize_argument_values
+from interfacy.schema.value_plan import normalize_schema_values
 
 _SUPPRESSED_DEFAULT = object()
 _COMMAND_KEY = "command"
@@ -55,6 +55,7 @@ class _ExecutableFlagAction(argparse.Action):
         flag = kwargs.pop("executable_flag")
         if not isinstance(flag, ExecutableFlag):
             raise ConfigurationError("Executable flag action requires ExecutableFlag")
+
         self.flag = flag
         super().__init__(option_strings, dest, nargs=0, **kwargs)
 
@@ -107,6 +108,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         self._attach_help(self._native_parser, ())
         if config.tab_completion:
             self._install_tab_completion(self._native_parser)
+
         self._suppressed_parser: ArgumentParser | None = None
 
     @property
@@ -123,14 +125,14 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 parsed = parser.parse_args(list(request.args))
                 remaining = []
             namespace = self._normalize(namespace_to_dict(parsed))
+
             return ParseResult(
                 args=request.args,
                 namespace=namespace,
                 remaining_args=tuple(remaining),
             )
         except _ExecutableFlagTriggeredError as e:
-            code = execute_executable_flag(e.flag, display_result_fn=print)
-            raise InterfacyExit(code) from None
+            return ExecutableAction(e.flag)
         except (ArgparseParseError, argparse.ArgumentError, ValueError) as e:
             partial = self._best_effort_partial(request.args)
             return BackendParseFailure(
@@ -158,14 +160,18 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                         relaxed=True,
                         suppress_defaults=True,
                     )
+
                 return self._partial_suppressed_parser
+
             if self._partial_parser is None:
                 self._partial_parser = self._build(
                     self._schema,
                     relaxed=True,
                     suppress_defaults=False,
                 )
+
             return self._partial_parser
+
         if request.default_policy == "suppress":
             if self._suppressed_parser is None:
                 self._suppressed_parser = self._build(
@@ -173,7 +179,9 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                     relaxed=False,
                     suppress_defaults=True,
                 )
+
             return self._suppressed_parser
+
         return self._native_parser
 
     def _attach_help(
@@ -185,10 +193,12 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         for action in parser._actions:
             if not isinstance(action, NestedSubParsersAction):
                 continue
+
             seen: set[int] = set()
             for name, child in action.choices.items():
                 if id(child) in seen:
                     continue
+
                 seen.add(id(child))
                 schema_command = child._schema_command
                 canonical = schema_command.canonical_name if schema_command is not None else name
@@ -239,10 +249,14 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                     relaxed=relaxed,
                     suppress_defaults=suppress_defaults,
                 )
+
             self._set_metavar(subparsers)
+
             return parser
+
         if single is None:
             raise ConfigurationError("No commands were provided")
+
         parser.set_schema(None)
         self._apply_command(
             parser,
@@ -252,6 +266,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             suppress_defaults=suppress_defaults,
             extra_flags=schema.executable_flags,
         )
+
         return parser
 
     def _apply_command(
@@ -274,10 +289,13 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 relax_initializer_options if argument.kind is ArgumentKind.OPTION else relaxed
             )
             self._add_argument(parser, argument, argument_relaxed, suppress_defaults)
+
         for argument in command.parameters:
             self._add_argument(parser, argument, relaxed, suppress_defaults)
+
         if not command.subcommands:
             return
+
         subparsers = parser.add_subparsers(
             dest=f"{_COMMAND_KEY}_{depth}" if depth else _COMMAND_KEY,
             required=not relaxed,
@@ -297,6 +315,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 relaxed=relaxed,
                 suppress_defaults=suppress_defaults,
             )
+
         self._set_metavar(subparsers)
 
     def _add_argument(
@@ -312,10 +331,12 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         nargs = self._native_nargs(argument, relaxed)
         if nargs is not None and argument.value_shape is not ValueShape.FLAG:
             kwargs["nargs"] = nargs
+
         if argument.value_shape is ValueShape.FLAG:
             behavior = argument.boolean_behavior
             if behavior is None:
                 raise ConfigurationError("Boolean flag behavior is required")
+
             kwargs["action"] = _BooleanAction
             kwargs["positive_options"] = behavior.positive_flags
             flags = (*behavior.positive_flags, *behavior.negative_flags)
@@ -323,12 +344,14 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             flags = argument.flags
             if argument.parser is not None:
                 kwargs["type"] = argument.parser
+
             if argument.choices:
                 kwargs["choices"] = (
                     tuple(argument.parser(choice) for choice in argument.choices)
                     if argument.parser is not None
                     else argument.choices
                 )
+
         if argument.kind is ArgumentKind.OPTION:
             kwargs["dest"] = argument.name
             kwargs["required"] = argument.required and not relaxed
@@ -337,6 +360,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             kwargs["default"] = _SUPPRESSED_DEFAULT
         elif default.is_set:
             kwargs["default"] = default.value
+
         parser.add_argument(*flags, **kwargs)
 
     @staticmethod
@@ -345,13 +369,18 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         if relaxed and argument.required:
             if cardinality.maximum_values is None or cardinality.maximum_values > 1:
                 return "*"
+
             return "?"
+
         if cardinality.maximum_values is None:
             return "+" if cardinality.minimum_values else "*"
+
         if cardinality.maximum_values in (0, 1):
             if argument.kind is ArgumentKind.POSITIONAL and cardinality.minimum_values == 0:
                 return "?"
+
             return None
+
         return cardinality.maximum_values
 
     @staticmethod
@@ -378,15 +407,18 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         for name, parser in subparsers.choices.items():
             if id(parser) in seen:
                 continue
+
             seen.add(id(parser))
             names.append(name)
+
         if names:
             subparsers.metavar = "{" + ",".join(names) + "}"
 
     def _normalize(self, namespace: dict[str, Any]) -> dict[str, Any]:
         self._remove_suppressed(namespace)
         self._canonicalize(namespace, self._schema)
-        self._normalize_schema_values(self._schema, namespace)
+        normalize_schema_values(self._schema, namespace, type_parser=self._config.type_parser)
+
         return namespace
 
     def _canonicalize(self, namespace: dict[str, Any], schema: ParserSchema) -> None:
@@ -398,15 +430,18 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         selected = namespace.get(_COMMAND_KEY)
         if not isinstance(selected, str):
             return
+
         command = find_command(commands, selected)
         if command is None:
             return
+
         namespace[_COMMAND_KEY] = command.canonical_name
         bucket = namespace.get(selected)
         if isinstance(bucket, dict):
             namespace[command.canonical_name] = bucket
             if selected != command.canonical_name:
                 del namespace[selected]
+
             self._canonicalize_children(bucket, command)
 
     def _canonicalize_children(
@@ -416,12 +451,15 @@ class ArgparseSession(BackendSession[ArgumentParser]):
     ) -> None:
         if not command.subcommands:
             return
+
         selected = namespace.get(_COMMAND_KEY)
         if not isinstance(selected, str):
             return
+
         child = find_command(command.subcommands, selected)
         if child is None:
             return
+
         namespace[_COMMAND_KEY] = child.canonical_name
         nested = namespace.pop("_subcommands", None)
         child_bucket = namespace.get(selected)
@@ -431,31 +469,21 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 if isinstance(candidate, dict):
                     child_bucket = candidate
                     break
+
         if not isinstance(child_bucket, dict):
             child_bucket = {}
+
         namespace[child.canonical_name] = child_bucket
         if selected != child.canonical_name:
             namespace.pop(selected, None)
-        self._canonicalize_children(child_bucket, child)
 
-    def _normalize_schema_values(
-        self,
-        schema: ParserSchema,
-        namespace: dict[str, Any],
-    ) -> None:
-        if len(schema.commands) == 1 and not schema.is_multi_command:
-            command = next(iter(schema.commands.values()))
-            normalize_argument_values(command, namespace, type_parser=self._config.type_parser)
-            return
-        for command in schema.commands.values():
-            bucket = namespace.get(command.canonical_name)
-            if isinstance(bucket, dict):
-                normalize_argument_values(command, bucket, type_parser=self._config.type_parser)
+        self._canonicalize_children(child_bucket, child)
 
     @staticmethod
     def _remove_suppressed(namespace: dict[str, Any]) -> None:
         for key in [key for key, value in namespace.items() if value is _SUPPRESSED_DEFAULT]:
             del namespace[key]
+
         for value in namespace.values():
             if isinstance(value, dict):
                 ArgparseSession._remove_suppressed(value)
@@ -467,6 +495,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             parsed, remaining = parser.parse_known_args(list(args))
             if remaining:
                 return {}
+
             return self._normalize(namespace_to_dict(parsed))
         except (
             ArgparseParseError,
