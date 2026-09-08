@@ -11,6 +11,15 @@ from platformdirs import user_config_path
 from interfacy.cli.main import ExitCode, _split_target, build_parser, main, resolve_target
 
 
+@pytest.fixture(autouse=True)
+def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = tmp_path / "empty-config.toml"
+    config_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("INTERFACY_CONFIG", str(config_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+
 def _write_module(path: Path, source: str) -> None:
     path.write_text(source, encoding="utf-8")
 

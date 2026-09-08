@@ -48,6 +48,7 @@ def test_auto_mode_rejects_forms_that_only_restate_defaults(
 
     with pytest.raises(UsageError):
         parser.invoke(args=["--cache"])
+
     with pytest.raises(UsageError):
         parser.invoke(args=["--no-verbose"])
 

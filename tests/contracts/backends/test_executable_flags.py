@@ -110,6 +110,5 @@ def test_executable_flag_collision_with_generated_option_is_rejected(parser) -> 
 
 
 def test_root_executable_flag_cannot_reuse_native_help() -> None:
-
     with pytest.raises(ReservedFlagError):
         Interfacy(backend="argparse", executable_flags=[ExecutableFlag(("--help",), lambda: None)])

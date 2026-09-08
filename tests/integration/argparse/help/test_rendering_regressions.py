@@ -228,6 +228,7 @@ def test_argument_parser_disables_argparse_usage_colors_when_python_colors_force
 
     with pytest.raises(UsageError) as excinfo:
         parser.parse_args(["status"])
+
     assert "invalid choice: 'status'" in str(excinfo.value)
     assert excinfo.value.usage == strip_ansi(excinfo.value.usage or "")
 

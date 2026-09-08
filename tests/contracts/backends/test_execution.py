@@ -96,6 +96,7 @@ class TestParserReuse:
 
         with pytest.raises(UsageError):
             parser.invoke(temporary, args=["temporary"])
+
         assert [command.canonical_name for command in parser.get_commands()] == ["persistent"]
         assert parser.get_last_schema() is schema_before
         assert parser.invoke(args=["Ada"]) == "persisted Ada"
@@ -125,8 +126,10 @@ class TestParserReuse:
 
         with pytest.raises(ValueError, match="boom"):
             parser.invoke(boom, args=["boom"])
+
         with pytest.raises(DuplicatePluginError):
             parser.add_plugin(plugin)
+
         assert parser.invoke(args=[]) == "piped"
 
 

@@ -131,7 +131,6 @@ def test_backend_plugin_receives_explicit_adapter_context() -> None:
 
 
 def test_backend_plugin_rejects_incompatible_backend() -> None:
-
     with pytest.raises(ConfigurationError, match="requires backend 'argparse'"):
         Interfacy(backend="click", plugins=[ArgparseAccessPlugin()])
 
@@ -280,6 +279,7 @@ class AfterParsePlugin(InterfacyPlugin):
         self.backend = context.backend
         updated = dict(namespace)
         updated["name"] = updated["name"].upper()
+
         return updated
 
 
@@ -321,6 +321,7 @@ class HelpContentPlugin(InterfacyPlugin):
         self.backend = context.backend
         assert context.command_path
         sections = tuple(section for section in content.sections if section.kind != "options")
+
         return HelpContent((*sections, HelpSection("epilog", "Plugin footer")))
 
 

@@ -47,7 +47,8 @@ def test_get_logger_uses_null_handler_without_interfacy_log_env() -> None:
         logger = get_logger("tests.logger")
         print(json.dumps([type(handler).__name__ for handler in logger.handlers]))
         logger.info("should stay quiet")
-        """
+        """,
+        env_overrides={"INTERFACY_LOG": None},
     )
 
     assert process.returncode == 0, process.stderr

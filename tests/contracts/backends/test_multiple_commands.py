@@ -69,13 +69,13 @@ class TestMultipleClasses:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_two_instances_same_class_different_names(self, parser: Interfacy):
         """Verify two instances of the same class can use distinct names."""
-        precise = Math(rounding=6)
-        rough = Math(rounding=0)
-        parser.add_command(precise, name="math-precise")
-        parser.add_command(rough, name="math-rough")
+        first = TextTools(prefix="first-")
+        second = TextTools(prefix="second-")
+        parser.add_command(first, name="first")
+        parser.add_command(second, name="second")
 
-        assert parser.invoke(args=["math-precise", "add", "1", "2"]) == 3
-        assert parser.invoke(args=["math-rough", "add", "1", "2"]) == 3
+        assert parser.invoke(args=["first", "prefix-text", "Ada"]) == "first-Ada"
+        assert parser.invoke(args=["second", "prefix-text", "Ada"]) == "second-Ada"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_two_different_class_instances(self, parser: Interfacy):

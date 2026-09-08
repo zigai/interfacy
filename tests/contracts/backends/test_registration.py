@@ -148,30 +148,34 @@ class TestDecoratorPreservesMetadata:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_decorator_preserves_function_name(self, parser: Interfacy):
         """Verify decorated function retains __name__."""
+        expected_name = greet.__name__
         decorated = parser.command()(greet)
 
-        assert decorated.__name__ == "greet"
+        assert decorated.__name__ == expected_name
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_decorator_preserves_function_doc(self, parser: Interfacy):
         """Verify decorated function retains __doc__."""
+        expected_doc = greet.__doc__
         decorated = parser.command()(greet)
 
-        assert decorated.__doc__ == "Return a friendly greeting."
+        assert decorated.__doc__ == expected_doc
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_decorator_preserves_class_name(self, parser: Interfacy):
         """Verify decorated class retains __name__."""
+        expected_name = Math.__name__
         decorated = parser.command()(Math)
 
-        assert decorated.__name__ == "Math"
+        assert decorated.__name__ == expected_name
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_decorator_preserves_class_doc(self, parser: Interfacy):
         """Verify decorated class retains __doc__."""
+        expected_doc = TextTools.__doc__
         decorated = parser.command()(TextTools)
 
-        assert decorated.__doc__ == "String utilities with a configurable prefix."
+        assert decorated.__doc__ == expected_doc
 
 
 class TestDecoratorWithAllParameters:

@@ -13,10 +13,21 @@ from interfacy.cli.config import (
 )
 from interfacy.exceptions import ConfigurationError
 from interfacy.help.colors import Aurora
-from interfacy.help.presets import InterfacyLayout, Modern
+from interfacy.help.presets import Aligned, AlignedTyped, InterfacyLayout, Modern
 from interfacy.naming.abbreviations import DefaultAbbreviationGenerator
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
 from interfacy.plugins import InterfacyPlugin
+
+
+@pytest.mark.parametrize("layout_type", [Aligned, AlignedTyped])
+def test_aligned_presets_resolve_through_shared_base(layout_type: type[Aligned]) -> None:
+    resolved = apply_config_defaults({"help_layout": layout_type.__name__}, {})
+    assert isinstance(resolved["help_layout"], layout_type)
+
+
+def test_internal_layout_base_is_not_a_config_preset() -> None:
+    with pytest.raises(ConfigurationError, match="Unknown help_layout value"):
+        apply_config_defaults({"help_layout": "AlignedLayoutBase"}, {})
 
 
 def test_load_config_and_apply_defaults(tmp_path: Path) -> None:

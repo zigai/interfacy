@@ -27,7 +27,9 @@ class _SchemaHelpPipeline:
         renderer = SchemaHelpRenderer(StandardLayout(), terminal_width=terminal_width)
         if not command_path:
             return renderer.render_parser_help(self._schema, "main")
+
         command = self._schema.get_command(command_path[-1])
+
         return renderer.render_command_help(
             command,
             " ".join(command_path),

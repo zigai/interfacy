@@ -147,6 +147,7 @@ class TestSyncExecution:
                 return asyncio.create_task(later())
 
             parser = Interfacy()
+
             return await parser.invoke_async(command, args=[])
 
         assert asyncio.run(main()) == "ok"

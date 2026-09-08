@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 from typing import Literal
 
 import pytest
@@ -18,6 +19,14 @@ from interfacy.help.presets import (
     StandardLayout,
 )
 from interfacy.naming import DefaultFlagStrategy
+
+
+@pytest.fixture
+def fixed_terminal_width(monkeypatch: pytest.MonkeyPatch) -> None:
+    size = os.terminal_size((80, 24))
+    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
+    monkeypatch.setenv("COLUMNS", "80")
 
 
 @pytest.mark.parametrize(
@@ -107,6 +116,7 @@ def test_all_layouts_render_literal_choices_for_required_flags(
     assert expected_required_flag_choices in help_text
 
 
+@pytest.mark.usefixtures("fixed_terminal_width")
 def test_clap_layout_wraps_long_possible_values() -> None:
     def list_items(
         sort: Literal[
@@ -195,6 +205,7 @@ def test_clap_layout_styles_group_and_command_rows_consistently(monkeypatch) -> 
     assert "   <S>cache-prune, prune</S>" in help_text
 
 
+@pytest.mark.usefixtures("fixed_terminal_width")
 def test_clap_layout_wrapped_description_continuation_aligns() -> None:
     def compress_videos(
         directory: str,

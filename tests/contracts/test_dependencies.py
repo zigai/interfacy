@@ -1,6 +1,8 @@
 import ast
 from pathlib import Path
 
+import pytest
+
 PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "interfacy"
 
 
@@ -11,9 +13,50 @@ def imported_modules(path: Path) -> set[str]:
         if isinstance(node, ast.Import):
             modules.update(alias.name for alias in node.names)
             continue
+
         if isinstance(node, ast.ImportFrom) and node.module is not None:
             modules.add(node.module)
+            modules.update(f"{node.module}.{alias.name}" for alias in node.names)
+            if node.module == "interfacy" and any(
+                alias.name == "Interfacy" for alias in node.names
+            ):
+                modules.add("interfacy.interfacy")
+
     return modules
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("import interfacy.click_backend as backend", {"interfacy.click_backend"}),
+        (
+            "from interfacy import click_backend as backend",
+            {"interfacy", "interfacy.click_backend"},
+        ),
+        (
+            "from interfacy import Interfacy as Cli",
+            {"interfacy", "interfacy.Interfacy", "interfacy.interfacy"},
+        ),
+        (
+            "if TYPE_CHECKING:\n    from interfacy import Interfacy",
+            {"interfacy", "interfacy.Interfacy", "interfacy.interfacy"},
+        ),
+        ("from interfacy import Param", {"interfacy", "interfacy.Param"}),
+        (
+            "from interfacy.schema.schema import Command as SchemaCommand",
+            {"interfacy.schema.schema", "interfacy.schema.schema.Command"},
+        ),
+    ],
+)
+def test_imported_modules_tracks_from_import_targets(
+    tmp_path: Path,
+    source: str,
+    expected: set[str],
+) -> None:
+    path = tmp_path / "imports.py"
+    path.write_text(source, encoding="utf-8")
+
+    assert imported_modules(path) == expected
 
 
 def assert_layer_excludes(
@@ -26,6 +69,7 @@ def assert_layer_excludes(
             if module.startswith(forbidden_prefixes):
                 relative_path = path.relative_to(PACKAGE_ROOT)
                 violations.append(f"{relative_path}: {module}")
+
     assert not violations, "Forbidden architectural imports:\n" + "\n".join(sorted(violations))
 
 

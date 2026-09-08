@@ -47,6 +47,7 @@ def click_req_pos() -> Interfacy:
         print_result=True,
     )
     parser.metadata["flag_style"] = "required_positional"
+
     return parser
 
 
@@ -61,4 +62,5 @@ def click_kw_only() -> Interfacy:
         print_result=True,
     )
     parser.metadata["flag_style"] = "keyword_only"
+
     return parser

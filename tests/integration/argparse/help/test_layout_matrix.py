@@ -198,6 +198,7 @@ def build_stress_parser(layout: HelpLayout, parser: Interfacy) -> Interfacy:
     configured.add_command(keyword_only_options)
     configured.add_command(ReportTool)
     configured.add_command(build_group())
+
     return configured
 
 

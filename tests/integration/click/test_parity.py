@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import re
+import os
+import shutil
 from dataclasses import dataclass
 from typing import Literal
 
@@ -24,6 +25,13 @@ from tests.fixtures.commands import (
     fn_list_int,
     fn_list_int_optional,
 )
+
+
+def freeze_terminal(monkeypatch: pytest.MonkeyPatch, width: int = 80) -> None:
+    size = os.terminal_size((width, 24))
+    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
+    monkeypatch.setenv("COLUMNS", str(width))
 
 
 def fn_metadata_help(
@@ -224,7 +232,10 @@ class TestClickBooleanFlags:
 
         assert "-h, --help" in help_text
 
-    def test_parser_help_position_keeps_long_executable_flag_help_inline(self) -> None:
+    def test_parser_help_position_keeps_long_executable_flag_help_inline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        freeze_terminal(monkeypatch)
         parser = Interfacy(
             backend="click",
             help_position=42,
@@ -246,13 +257,14 @@ class TestClickBooleanFlags:
         help_text = command.get_help(click.Context(command))
 
         assert "usage:" in help_text
-        assert re.search(
-            r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
-            help_text,
-            re.MULTILINE,
-        )
+        row = next(line for line in help_text.splitlines() if line.lstrip().startswith("-d,"))
+        assert row.endswith("Disable the per-job duration limit.")
+        assert row.index("Disable") == 44
 
-    def test_default_click_help_keeps_long_executable_flag_wrapped(self) -> None:
+    def test_default_click_help_wraps_long_executable_flag_description_at_narrow_width(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        freeze_terminal(monkeypatch, width=50)
         parser = Interfacy(
             backend="click",
             executable_flags=[
@@ -272,15 +284,29 @@ class TestClickBooleanFlags:
         command = parser.build_parser()
         help_text = command.get_help(click.Context(command))
 
-        assert re.search(
-            r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
-            help_text,
-            re.MULTILINE,
+        lines = help_text.splitlines()
+        row_index = next(i for i, line in enumerate(lines) if line.lstrip().startswith("-d,"))
+        row = lines[row_index]
+        description_column = row.index("Disable")
+        continuation = []
+        for line in lines[row_index + 1 :]:
+            if not line.strip() or line.lstrip().startswith("-"):
+                break
+
+            continuation.append(line)
+
+        assert continuation
+        assert all(len(line) - len(line.lstrip()) == description_column for line in continuation)
+        assert " ".join([row[description_column:], *(line.strip() for line in continuation)]) == (
+            "Disable the per-job duration limit."
         )
-        assert "Disable the per-job duration limit." in help_text
+        assert all(len(line) <= 50 for line in [row, *continuation])
 
 
-def test_interfacy_click_command_help_position_aligns_positionals_and_options() -> None:
+def test_interfacy_click_command_help_position_aligns_positionals_and_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_terminal(monkeypatch)
     command = InterfacyClickCommand(
         name="deploy",
         help="Deploy an application build.",
@@ -294,11 +320,19 @@ def test_interfacy_click_command_help_position_aligns_positionals_and_options() 
     help_text = command.get_help(click.Context(command))
 
     assert "positional arguments:" in help_text
-    assert re.search(r"^\s*ENVIRONMENT\s+Target environment\.$", help_text, re.MULTILINE)
-    assert re.search(r"^\s*--region\s+Cloud region\..*$", help_text, re.MULTILINE)
+    positional = next(
+        line for line in help_text.splitlines() if line.lstrip().startswith("ENVIRONMENT")
+    )
+    option = next(line for line in help_text.splitlines() if line.lstrip().startswith("--region"))
+    assert positional.endswith("Target environment.")
+    assert "Cloud region." in option
+    assert positional.index("Target") == option.index("Cloud") == 40
 
 
-def test_interfacy_click_group_help_position_aligns_command_rows() -> None:
+def test_interfacy_click_group_help_position_aligns_command_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_terminal(monkeypatch, width=100)
     group = InterfacyClickGroup(
         name="main",
         help="Maintenance tools.",
@@ -312,8 +346,14 @@ def test_interfacy_click_group_help_position_aligns_command_rows() -> None:
         )
     )
     help_text = group.get_help(click.Context(group))
-    normalized = " ".join(help_text.split())
-    assert "disable-job-duration-limit Disable the per-job duration limit." in normalized
+    lines = help_text.splitlines()
+    long_row = next(
+        line for line in lines if line.lstrip().startswith("disable-job-duration-limit")
+    )
+    short_row = next(line for line in lines if line.lstrip().startswith("status"))
+    assert long_row.endswith("Disable the per-job duration limit.")
+    assert short_row.endswith("Show current status.")
+    assert long_row.index("Disable") == short_row.index("Show") == 44
 
 
 class TestClickTupleParsing:

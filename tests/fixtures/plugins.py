@@ -27,9 +27,11 @@ class ImmutableContextPlugin(InterfacyPlugin):
     def configure(self, context: ConfigureContext) -> None:
         with pytest.raises(TypeError):
             context.metadata["mutated"] = "yes"
+
         nested = context.metadata["nested"]
         with pytest.raises(TypeError):
             nested["mutated"] = "yes"
+
         with pytest.raises(TypeError):
             nested["values"][0] = "changed"
 

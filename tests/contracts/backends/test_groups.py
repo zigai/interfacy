@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from interfacy import CommandGroup, Interfacy
+from interfacy import CommandGroup, ExitCode, Interfacy
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, UsageError
 from tests.fixtures.classes import Container, Database, DerivedOperation, Math, TextTools
 from tests.fixtures.commands import attach, detach, greet, pow
@@ -243,6 +243,10 @@ class TestGroupWithFunctions:
         cli.add_command(attach, description="Connect to container")
 
         parser.add_command(cli)
+        schema = parser.build_parser_schema()
+        subcommands = schema.commands["cli"].subcommands
+        assert subcommands is not None
+        assert subcommands["attach"].description == "Connect to container"
         assert parser.invoke(args=["cli", "attach", "web"]) == "Attached to web"
 
 
@@ -461,8 +465,10 @@ class TestGroupErrors:
         module.add_command(attach)
 
         parser.add_command(workspace)
-        with pytest.raises(UsageError):
-            parser.invoke(args=["workspace", "module"])
+        with pytest.raises(SystemExit) as e:
+            parser.run(args=["workspace", "module"])
+
+        assert e.value.code == ExitCode.USAGE
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
     def test_invalid_subcommand_error(self, parser: Interfacy):

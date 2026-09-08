@@ -208,10 +208,18 @@ def test_interfacy_rejects_unknown_backend() -> None:
         Interfacy(backend="unknown")
 
 
-def test_backend_classes_are_not_top_level_exports() -> None:
+@pytest.mark.parametrize(
+    "backend_name",
+    ["ArgparseBackend", "ArgparseSession", "ClickBackend", "ClickSession"],
+)
+def test_backend_classes_are_not_top_level_exports(backend_name: str) -> None:
     assert "Interfacy" in interfacy.__all__
     assert "Param" in interfacy.__all__
     assert "params" in interfacy.__all__
+    assert backend_name not in interfacy.__all__
+
+    with pytest.raises(AttributeError):
+        getattr(interfacy, backend_name)
 
 
 def test_help_does_not_export_simple_layout_alias() -> None:
@@ -350,13 +358,13 @@ def test_sort_refresh_uses_current_setup() -> None:
         help_subcommand_sort=["alphabetical"],
     )
 
-    assert len(parser.refresh_help_option_sort_rules()) == 1
-    assert len(parser.refresh_help_subcommand_sort_rules()) == 1
+    assert parser.refresh_help_option_sort_rules() == ["alphabetical"]
+    assert parser.refresh_help_subcommand_sort_rules() == ["alphabetical"]
 
     parser.apply_setup(
         help_option_sort=["name_length"],
         help_subcommand_sort=["insert_order"],
     )
 
-    assert len(parser.refresh_help_option_sort_rules()) == 1
-    assert len(parser.refresh_help_subcommand_sort_rules()) == 1
+    assert parser.refresh_help_option_sort_rules() == ["name_length"]
+    assert parser.refresh_help_subcommand_sort_rules() == ["insert_order"]

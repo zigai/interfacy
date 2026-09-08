@@ -8,6 +8,7 @@ from interfacy import Interfacy
 from interfacy.exceptions import UsageError
 from interfacy.help.presets import InterfacyLayout
 from interfacy.schema.builder import ParserSchemaBuilder
+from interfacy.schema.model_argument_mapper import ModelArgumentMapper
 from interfacy.type_parsers import build_default_type_parser
 from tests.fixtures.models import (
     Address,
@@ -631,8 +632,21 @@ def test_pydantic_like_v1_model_reconstructs_and_uses_default() -> None:
 
 
 def test_model_mapper_optional_empty_nested_dict_becomes_none() -> None:
-    parser = Interfacy()
-    assert parser.invoke(maybe_plain, args=[]) is None
+    mapper = ModelArgumentMapper()
+
+    user = mapper._build_model_instance(
+        UserWithAddress,
+        {"name": "Ada", "age": 32, "address": {}},
+    )
+
+    assert user == UserWithAddress(name="Ada", age=32, address=None)
+
+
+def test_model_mapper_required_empty_nested_dict_is_not_optional() -> None:
+    mapper = ModelArgumentMapper()
+
+    with pytest.raises(TypeError):
+        mapper._coerce_model_value(Address, {})
 
 
 def test_dataclass_expansion_falls_back_when_forward_reference_is_unresolved() -> None:

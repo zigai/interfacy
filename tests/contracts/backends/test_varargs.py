@@ -20,6 +20,26 @@ class TestMixedPositionalAndVarargs:
         )
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_function_with_positional_and_varargs_omitted(self, parser: Interfacy):
+        """Verify execution of a function when *args is omitted."""
+        parser.add_command(fn_positional_varargs)
+        assert parser.invoke(args=["primary"]) == (
+            "primary",
+            (),
+        )
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_function_with_only_varargs_omitted(self, parser: Interfacy):
+        """Verify execution of a function with only *args when omitted."""
+
+        def only_varargs(*paths: str) -> tuple[str, ...]:
+            return paths
+
+        parser.add_command(only_varargs)
+        assert parser.invoke(args=[]) == ()
+        assert parser.invoke(args=["a", "b"]) == ("a", "b")
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_class_method_with_positional_and_varargs(self, parser: Interfacy):
         """Verify execution of class method subcommands with positional + *args."""
         parser.add_command(TextCollector)

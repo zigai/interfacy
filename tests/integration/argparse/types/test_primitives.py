@@ -24,6 +24,7 @@ class TestPrimitives:
 
         with pytest.raises(UsageError) as excinfo:
             parser.parse_args(["Ada", "--times", "bad"])
+
         assert "argument -t/--times: invalid int value: 'bad'" in str(excinfo.value)
         assert "parser[int]" not in str(excinfo.value)
 

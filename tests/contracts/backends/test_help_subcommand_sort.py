@@ -2,6 +2,7 @@ import pytest
 
 from interfacy import Interfacy
 from interfacy.help.presets import InterfacyLayout
+from interfacy.help.terminal import strip_ansi
 from tests.fixtures.classes import TextTools
 from tests.fixtures.commands import attach, greet, pow
 
@@ -12,6 +13,25 @@ class TodoCommands:
 
     def add(self) -> str:
         return "add"
+
+
+def _command_rows(help_text: str) -> list[str]:
+    lines = strip_ansi(help_text).splitlines()
+    heading = next(index for index, line in enumerate(lines) if line.lower() == "commands:")
+    rows: list[str] = []
+    for line in lines[heading + 1 :]:
+        if not line.strip() or not line.startswith(" "):
+            break
+
+        rows.append(line)
+
+    assert rows, "The commands section must contain listing rows"
+    indent = min(len(line) - len(line.lstrip()) for line in rows)
+    return [
+        line.strip().split(maxsplit=1)[0]
+        for line in rows
+        if len(line) - len(line.lstrip()) == indent
+    ]
 
 
 def test_argparse_help_subcommand_sort_default_insert_order() -> None:
@@ -75,7 +95,9 @@ def test_argparse_help_subcommand_sort_nested_name_length_desc() -> None:
     root = parser.build_parser()
     help_text = root.format_help()
 
-    assert help_text.index("prefix-text") < help_text.index("repeat") < help_text.index("join")
+    assert _command_rows(help_text) == ["prefix-text", "repeat", "join"]
+    usage = help_text.split("\n\n", maxsplit=1)[0]
+    assert usage.index("prefix-text") < usage.index("repeat") < usage.index("join")
 
 
 def test_argparse_help_subcommand_sort_per_command_override() -> None:
@@ -87,7 +109,9 @@ def test_argparse_help_subcommand_sort_per_command_override() -> None:
     root = parser.build_parser()
     help_text = root.format_help()
 
-    assert help_text.index("add") < help_text.index("remove")
+    assert _command_rows(help_text) == ["add", "remove"]
+    usage = help_text.split("\n\n", maxsplit=1)[0]
+    assert usage.index("add") < usage.index("remove")
 
 
 def test_click_help_subcommand_sort_alphabetical_top_level() -> None:
@@ -119,7 +143,9 @@ def test_click_help_subcommand_sort_nested_name_length_asc() -> None:
     root = parser.build_parser()
     help_text = root.get_help(Context(root))
 
-    assert help_text.index("join") < help_text.index("repeat") < help_text.index("prefix-text")
+    assert _command_rows(help_text) == ["join", "repeat", "prefix-text"]
+    usage = help_text.split("\n\n", maxsplit=1)[0]
+    assert usage.index("join") < usage.index("repeat") < usage.index("prefix-text")
 
 
 def test_click_help_subcommand_sort_per_command_override() -> None:
@@ -134,4 +160,6 @@ def test_click_help_subcommand_sort_per_command_override() -> None:
     root = parser.build_parser()
     help_text = root.get_help(Context(root))
 
-    assert help_text.index("add") < help_text.index("remove")
+    assert _command_rows(help_text) == ["add", "remove"]
+    usage = help_text.split("\n\n", maxsplit=1)[0]
+    assert usage.index("add") < usage.index("remove")

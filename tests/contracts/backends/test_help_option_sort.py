@@ -94,13 +94,14 @@ def test_argparse_help_option_sort_layout_default_used_when_user_unset() -> None
     )
     parser.add_command(smart_options)
     help_text = parser.build_parser().format_help()
+    options_section = _help_section(help_text, "options")
 
     assert (
-        help_text.index("--dry-run")
-        < help_text.index("--environment")
-        < help_text.index("--replicas")
+        options_section.index("--dry-run")
+        < options_section.index("--environment")
+        < options_section.index("--replicas")
     )
-    assert help_text.index("--replicas") < help_text.index("--timeout")
+    assert options_section.index("--replicas") < options_section.index("--timeout")
 
 
 def test_argparse_help_option_sort_per_command_override() -> None:

@@ -188,7 +188,6 @@ class TestPipeExecution:
         backend: str,
         mocker,
     ):
-
         parser = Interfacy(backend=backend, pipe_targets="msg")
         mocker.patch("interfacy.engine.pipes.read_piped", return_value="hello")
 
