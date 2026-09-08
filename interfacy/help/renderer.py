@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import textwrap
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import replace
 from typing import Any
 
@@ -81,10 +83,23 @@ class SchemaHelpRenderer:
         final_renderer: HelpRenderer | None = None,
     ) -> None:
         self.layout = layout
-        self.terminal_width = terminal_width or get_terminal_width()
+        self._configured_terminal_width = terminal_width
+        self._render_width: int | None = None
+        self._render_layout_source: HelpLayout | None = None
         self._help_argument = help_argument
         self._help_flags = help_flags
         self._final_renderer = final_renderer
+
+    @property
+    def terminal_width(self) -> int:
+        if self._render_width is not None:
+            return self._render_width
+
+        return self._configured_terminal_width or get_terminal_width()
+
+    @terminal_width.setter
+    def terminal_width(self, value: int | None) -> None:
+        self._configured_terminal_width = value
 
     def render_parser_help(self, schema: ParserSchema, prog: str) -> str:
         """
@@ -94,27 +109,29 @@ class SchemaHelpRenderer:
             schema (ParserSchema): Parser schema to render.
             prog (str): Program name or invocation prefix.
         """
-        previous_help_argument = self._help_argument
-        if previous_help_argument is _DEFAULT_HELP_ARGUMENT:
-            self._help_argument = _make_help_argument(
-                self.layout.help_option_description,
-                flags=schema.help_flags,
-            )
-
-        try:
-            if len(schema.commands) == 1:
-                cmd = next(iter(schema.commands.values()))
-                return self.render_command_help(
-                    cmd,
-                    prog,
-                    parser_description=schema.description,
-                    parser_epilog=schema.epilog,
-                    parser_executable_flags=schema.executable_flags,
-                    parser_schema=schema,
+        with self._render_scope():
+            previous_help_argument = self._help_argument
+            if previous_help_argument is _DEFAULT_HELP_ARGUMENT:
+                self._help_argument = _make_help_argument(
+                    self.layout.help_option_description,
+                    flags=schema.help_flags,
                 )
-            return self._render_multi_command_help(schema, prog)
-        finally:
-            self._help_argument = previous_help_argument
+
+            try:
+                if len(schema.commands) == 1:
+                    cmd = next(iter(schema.commands.values()))
+                    return self.render_command_help(
+                        cmd,
+                        prog,
+                        parser_description=schema.description,
+                        parser_epilog=schema.epilog,
+                        parser_executable_flags=schema.executable_flags,
+                        parser_schema=schema,
+                    )
+
+                return self._render_multi_command_help(schema, prog)
+            finally:
+                self._help_argument = previous_help_argument
 
     def render_command_help(
         self,
@@ -138,57 +155,81 @@ class SchemaHelpRenderer:
                 flags to merge into single-command help output.
             parser_schema (ParserSchema | None): Parser schema owning the rendered command.
         """
-        layout = self.layout
-        all_args = command.initializer + command.parameters
-        positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
-        options = self._ordered_option_arguments(
-            [a for a in all_args if a.kind == ArgumentKind.OPTION],
-            command.executable_flags,
-            parser_executable_flags=parser_executable_flags,
-            rules=command.help_option_sort_effective,
-        )
-        help_arg = self._get_help_argument()
-
-        layout.prepare_default_field_width_for_arguments(
-            [*([help_arg] if help_arg is not None else []), *positionals, *options]
-        )
-
-        sections: list[HelpSection] = []
-        usage = self._build_usage(command, prog, parser_executable_flags=parser_executable_flags)
-        description = parser_description or command.description
-        self._append_usage_and_description(sections=sections, usage=usage, description=description)
-
-        positionals_section = self._render_argument_section("positional arguments", positionals)
-        if positionals_section is not None:
-            sections.append(HelpSection("positionals", positionals_section))
-
-        options_with_help = [*([help_arg] if help_arg is not None else []), *options]
-        options_section = self._render_argument_section(
-            "options",
-            options_with_help,
-            normalize_help_only=help_arg is not None and not options,
-        )
-        if options_section is not None:
-            sections.append(HelpSection("options", options_section))
-
-        if command.subcommands:
-            subcommand_help = layout.get_help_for_multiple_commands(
-                command.subcommands,
-                rules=command.help_subcommand_sort_effective,
+        with self._render_scope():
+            layout = self.layout
+            all_args = command.initializer + command.parameters
+            positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
+            options = self._ordered_option_arguments(
+                [a for a in all_args if a.kind == ArgumentKind.OPTION],
+                command.executable_flags,
+                parser_executable_flags=parser_executable_flags,
+                rules=command.help_option_sort_effective,
             )
-            sections.append(HelpSection("commands", subcommand_help))
+            help_arg = self._get_help_argument()
 
-        epilog_block = self._build_epilog_block(command, parser_epilog)
-        if epilog_block is not None:
-            sections.append(HelpSection("epilog", epilog_block))
+            layout.prepare_default_field_width_for_arguments(
+                [*([help_arg] if help_arg is not None else []), *positionals, *options]
+            )
 
-        context = HelpContext(
-            prog=prog,
-            terminal_width=self.terminal_width,
-            schema=parser_schema,
-            command=command,
-        )
-        return self._render_content(context, sections)
+            sections: list[HelpSection] = []
+            usage = self._build_usage(
+                command, prog, parser_executable_flags=parser_executable_flags
+            )
+            description = parser_description or command.description
+            self._append_usage_and_description(
+                sections=sections, usage=usage, description=description
+            )
+
+            positionals_section = self._render_argument_section("positional arguments", positionals)
+            if positionals_section is not None:
+                sections.append(HelpSection("positionals", positionals_section))
+
+            options_with_help = [*([help_arg] if help_arg is not None else []), *options]
+            options_section = self._render_argument_section(
+                "options",
+                options_with_help,
+                normalize_help_only=help_arg is not None and not options,
+            )
+            if options_section is not None:
+                sections.append(HelpSection("options", options_section))
+
+            if command.subcommands:
+                subcommand_help = layout.get_help_for_multiple_commands(
+                    command.subcommands,
+                    rules=command.help_subcommand_sort_effective,
+                )
+                sections.append(HelpSection("commands", subcommand_help))
+
+            epilog_block = self._build_epilog_block(command, parser_epilog)
+            if epilog_block is not None:
+                sections.append(HelpSection("epilog", epilog_block))
+
+            context = HelpContext(
+                prog=prog,
+                terminal_width=self.terminal_width,
+                schema=parser_schema,
+                command=command,
+            )
+
+            return self._render_content(context, sections)
+
+    @contextmanager
+    def _render_scope(self) -> Generator[None, None, None]:
+        previous_layout = self.layout
+        previous_source = self._render_layout_source
+        previous_width = self._render_width
+        source = previous_source if previous_source is not None else previous_layout
+        width = self.terminal_width
+        layout = source._for_render(width)
+        self.layout = layout
+        self._render_layout_source = source
+        self._render_width = width
+        try:
+            yield
+        finally:
+            self.layout = previous_layout
+            self._render_layout_source = previous_source
+            self._render_width = previous_width
 
     def _append_usage_and_description(
         self,
@@ -203,6 +244,7 @@ class SchemaHelpRenderer:
                 sections.append(HelpSection("description", rendered_description))
 
             sections.append(HelpSection("usage", usage))
+
             return
 
         sections.append(HelpSection("usage", usage))
@@ -306,15 +348,11 @@ class SchemaHelpRenderer:
         else:
             usage = f"{usage_prefix}{usage_text}"
 
-        description = self._wrap_description(schema.description)
-        if layout.should_render_description_before_usage():
-            if description:
-                sections.append(HelpSection("description", description))
-            sections.append(HelpSection("usage", usage))
-        else:
-            sections.append(HelpSection("usage", usage))
-            if description:
-                sections.append(HelpSection("description", description))
+        self._append_usage_and_description(
+            sections=sections,
+            usage=usage,
+            description=schema.description,
+        )
 
         help_arg = self._get_help_argument()
         root_options = self._ordered_option_arguments(
@@ -345,6 +383,7 @@ class SchemaHelpRenderer:
             terminal_width=self.terminal_width,
             schema=schema,
         )
+
         return self._render_content(context, sections)
 
     def _render_content(
@@ -520,6 +559,7 @@ class SchemaHelpRenderer:
         prefix = layout.usage_prefix or "usage: "
         if layout.style.usage_style is not None:
             prefix = with_style(prefix, layout.style.usage_style)
+
         return prefix
 
     def _normalize_prog(self, prog: str) -> str:
@@ -528,6 +568,7 @@ class SchemaHelpRenderer:
     def _style_usage_text(self, text: str) -> str:
         if self.layout.style.usage_text_style is not None:
             return with_style(text, self.layout.style.usage_text_style)
+
         return text
 
     def _style_section_heading(self, heading: str) -> str:
@@ -538,8 +579,10 @@ class SchemaHelpRenderer:
             mapped = title_map.get(heading) or title_map.get(heading_key)
             if mapped:
                 heading = mapped
+
         if layout.style.section_heading_style is not None:
             heading = with_style(heading, layout.style.section_heading_style)
+
         return heading + ":"
 
     def _indent(self, text: str, width: int = 2) -> str:
@@ -558,7 +601,7 @@ class SchemaHelpRenderer:
                     indented.strip(),
                     width=max(10, self.terminal_width),
                     initial_indent=wrap_indent,
-                    subsequent_indent=f"{wrap_indent}  ",
+                    subsequent_indent=wrap_indent,
                     break_long_words=True,
                     break_on_hyphens=False,
                 )
@@ -590,6 +633,7 @@ class SchemaHelpRenderer:
             for continuation in normalized_lines[1:]:
                 leading = len(continuation) - len(continuation.lstrip(" "))
                 dedented.append(continuation[min(removed, leading) :])
+
             normalized = "\n".join(dedented)
 
         if any(flag and flag in normalized for flag in help_arg.flags):

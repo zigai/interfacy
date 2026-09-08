@@ -1,7 +1,7 @@
-import os
 import re
 import textwrap
 from collections.abc import Callable
+from copy import copy
 from dataclasses import dataclass, field
 from enum import Enum
 from inspect import Parameter as StdParameter
@@ -18,6 +18,7 @@ from stdl.st import (
 
 from interfacy.help.formatting import format_default_for_help, format_type_for_help
 from interfacy.help.style import HelpStyle
+from interfacy.help.terminal import get_terminal_width
 from interfacy.naming import CommandNameRegistry, FlagStrategy
 from interfacy.schema.sorting import (
     DEFAULT_HELP_OPTION_SORT_RULES,
@@ -33,6 +34,14 @@ if TYPE_CHECKING:  # pragma: no cover
     from interfacy.schema.schema import Argument, Command
 
 _TNamedItem = TypeVar("_TNamedItem")
+
+
+@dataclass
+class LayoutMeasurements:
+    terminal_width: int | None = None
+    default_field_width_base: int | None = None
+    pos_flag_width_base: int | None = None
+    active_pos_flag_width: int | None = None
 
 
 @dataclass(kw_only=True)
@@ -169,22 +178,28 @@ class HelpLayout:
     # "bold":  remove backticks in docstring and make text bold
     # "strip": remove backticks in docstring and leave plain text
     doc_inline_code_mode: Literal["bold", "strip"] = "bold"
-    _default_field_width_base: int | None = field(default=None, init=False, repr=False)
-    _pos_flag_width_base: int | None = field(default=None, init=False, repr=False)
+    _measurements: LayoutMeasurements = field(
+        default_factory=LayoutMeasurements, init=False, repr=False, compare=False
+    )
+
+    def _for_render(self, terminal_width: int) -> "HelpLayout":
+        layout = copy(self)
+        layout._measurements = LayoutMeasurements(terminal_width=terminal_width)
+        return layout
 
     def _get_default_field_width_base(self) -> int:
-        base = self._default_field_width_base
+        base = self._measurements.default_field_width_base
         if base is None:
             base = self.default_field_width
-            self._default_field_width_base = base
+            self._measurements.default_field_width_base = base
 
         return base
 
     def _get_pos_flag_width_base(self) -> int:
-        base = self._pos_flag_width_base
+        base = self._measurements.pos_flag_width_base
         if base is None:
             base = self.pos_flag_width
-            self._pos_flag_width_base = base
+            self._measurements.pos_flag_width_base = base
 
         return base
 
@@ -193,10 +208,7 @@ class HelpLayout:
         if max_len <= 0:
             return base_width
 
-        try:
-            term_width = os.get_terminal_size().columns
-        except (OSError, AttributeError):
-            term_width = 80
+        term_width = self._terminal_width()
 
         ratio = max(1, self.default_field_width_term_ratio)
         term_cap = max(base_width, term_width // ratio)
@@ -210,6 +222,7 @@ class HelpLayout:
     def _compute_default_field_width_from_lengths(self, lengths: list[int]) -> int:
         if not lengths:
             return self._get_default_field_width_base()
+
         return self._compute_default_field_width_for_len(max(lengths))
 
     def _parameter_to_argument(
@@ -237,6 +250,7 @@ class HelpLayout:
             else ValueCardinality(1 if param.is_required else 0, 1, 1)
         )
         param_type = param.type if isinstance(param.type, type) else None
+
         return Argument(
             name=param.name,
             display_name=param.name,
@@ -356,6 +370,7 @@ class HelpLayout:
             arguments (list[Argument]): Argument rows being rendered.
         """
         del arguments
+
         return self.keep_empty_default_slot_for_help
 
     def _collapse_empty_default_slot(
@@ -657,12 +672,9 @@ class HelpLayout:
         except (KeyError, IndexError, TypeError, ValueError):
             return None
 
-    @staticmethod
-    def _terminal_width(default: int = 80) -> int:
-        try:
-            return os.get_terminal_size().columns
-        except (OSError, AttributeError):
-            return default
+    def _terminal_width(self, default: int = 80) -> int:
+        width = self._measurements.terminal_width
+        return width if width is not None else get_terminal_width(default)
 
     @staticmethod
     def _wrap_plain_words(text: str, wrap_width: int) -> list[str]:
@@ -764,6 +776,7 @@ class HelpLayout:
                 styled_lines.extend(
                     [cont_indent + with_style(line, self.style.description) for line in wrapped[1:]]
                 )
+
             values["description"] = "\n".join(styled_lines)
 
         if default_overflow:
@@ -786,6 +799,7 @@ class HelpLayout:
         template: str,
         values: dict[str, str],
         is_required: bool,
+        indent: int,
         is_help_option: bool = False,
     ) -> str:
         if is_required and values.get("required") and values["required"] not in rendered:
@@ -801,10 +815,10 @@ class HelpLayout:
             is_help_option=is_help_option,
         )
 
-        return self._wrap_overwide_rendered_line(rendered.rstrip())
+        return self._wrap_overwide_rendered_line(rendered.rstrip(), indent=indent)
 
-    def _wrap_overwide_rendered_line(self, rendered: str) -> str:
-        width = self._terminal_width()
+    def _wrap_overwide_rendered_line(self, rendered: str, *, indent: int = 0) -> str:
+        width = max(10, self._terminal_width() - indent)
         wrapped_lines: list[str] = []
         for line in rendered.splitlines() or [rendered]:
             if ansi_len(line) <= width:
@@ -840,12 +854,12 @@ class HelpLayout:
                 continue
 
             leading = len(line) - len(line.lstrip(" "))
-            indent = " " * (leading if leading < width - 10 else 2)
+            continuation_indent = " " * (leading if leading < width - 10 else 2)
             wrapped = self._wrap_text_preserving_words(
                 line.strip(),
                 width=width - 1,
-                initial_indent=indent,
-                subsequent_indent=f"{indent}  ",
+                initial_indent=continuation_indent,
+                subsequent_indent=f"{continuation_indent}  ",
             )
             wrapped_lines.extend(wrapped or [line])
 
@@ -905,6 +919,7 @@ class HelpLayout:
             template=template,
             values=values,
             is_required=is_required,
+            indent=indent,
             is_help_option=is_help_option,
         )
 
@@ -1123,16 +1138,6 @@ class HelpLayout:
 
         return marker_idx
 
-    def _get_commands_prefix_len(self) -> int | None:
-        if not self._use_template_layout():
-            return None
-
-        template = self.format_option or self.format_positional
-        if not template:
-            return None
-
-        return self._get_template_token_index("description")
-
     def _wrap_template_field_value(
         self,
         *,
@@ -1191,7 +1196,7 @@ class HelpLayout:
         term_cap = max(self.min_ljust, self._terminal_width() // 2)
         base = min(max(self.min_ljust, max_display_len + 3), term_cap)
         default_idx = self._get_template_token_index("default_padded")
-        prefix_len = self._get_commands_prefix_len()
+        prefix_len = self._get_template_token_index("description")
         align_idx = default_idx if default_idx is not None else prefix_len
 
         if align_idx is None:
@@ -1281,46 +1286,6 @@ class HelpLayout:
 
         return base_flag or longs[0]
 
-    def _build_flag_parts(
-        self, param: Parameter, flags: tuple[str, ...]
-    ) -> tuple[str, str, str, bool]:
-        shorts = [f for f in flags if f.startswith("-") and not f.startswith("--")]
-        longs = [f for f in flags if f.startswith("--")]
-        is_option = any(f.startswith("-") for f in flags)
-
-        metavar = ""
-        needs_value = param.is_typed and not self._param_is_bool(param)
-        if is_option:
-            if needs_value and self.include_metavar_in_flag_display:
-                metavar = (param.name or "value").upper()
-        else:  # Always show uppercase name for positional arguments
-            metavar = (param.name or "value").upper()
-
-        def with_metavar(flag: str) -> str:
-            return f"{flag} {metavar}" if metavar else flag
-
-        is_bool_param = param.is_typed and self._param_is_bool(param)
-        if is_bool_param:
-            primary_flag = self._get_primary_boolean_flag(param, flags)
-            flag_short = shorts[0] if shorts else ""
-            flag_long = primary_flag
-            joined = f"{flag_short}, {flag_long}" if flag_short else flag_long
-
-            return joined, flag_short, flag_long, is_option
-
-        flag_short = with_metavar(shorts[0]) if shorts else ""
-        flag_long = with_metavar(longs[0]) if longs else ""
-
-        if is_option:
-            joined = ", ".join([p for p in (flag_short, flag_long) if p])
-        else:
-            joined = metavar or (param.name or "")
-
-        return joined, flag_short, flag_long, is_option
-
-    def _build_extra(self, param: Parameter) -> str:
-        return HelpLayout._get_param_extra_help(self, param)
-
     def _format_choice_for_help(self, value: Any) -> str:
         if isinstance(value, Enum):
             raw = value.value
@@ -1363,6 +1328,9 @@ class HelpLayout:
 
         return arg.type
 
+    def _style_flag_token(self, flag: str, style: TextStyle) -> str:
+        return with_style(flag, style)
+
     def _build_styled_columns(
         self, flag_short: str, flag_long: str, flag: str, is_option: bool
     ) -> dict[str, str]:
@@ -1373,14 +1341,14 @@ class HelpLayout:
         styled_values = {}
 
         styled_values["flag_short_styled"] = (
-            with_style(flag_short, self.style.flag_short) if flag_short else ""
+            self._style_flag_token(flag_short, self.style.flag_short) if flag_short else ""
         )
         styled_values["flag_long_styled"] = (
-            with_style(flag_long, self.style.flag_long) if flag_long else ""
+            self._style_flag_token(flag_long, self.style.flag_long) if flag_long else ""
         )
 
         if not is_option and flag:
-            styled_values["flag_styled"] = with_style(flag, self.style.flag_positional)
+            styled_values["flag_styled"] = self._style_flag_token(flag, self.style.flag_positional)
         else:
             styled_parts = [
                 p
@@ -1403,9 +1371,10 @@ class HelpLayout:
         else:
             styled_values["flag_long_col"] = " " * self.long_flag_width
 
+        measured_pos_width = self._measurements.active_pos_flag_width
         active_pos_width = max(
             self._get_pos_flag_width_base(),
-            getattr(self, "_active_pos_flag_width", self.pos_flag_width),
+            measured_pos_width if measured_pos_width is not None else self.pos_flag_width,
         )
 
         if flag:
@@ -1416,10 +1385,6 @@ class HelpLayout:
             styled_values["flag_col"] = " " * active_pos_width
 
         return styled_values
-
-    def _build_values(self, param: Parameter, flags: tuple[str, ...]) -> dict[str, str]:
-        arg = self._parameter_to_argument(param, flags)
-        return self._build_values_from_argument(arg)
 
     def _arg_is_bool(self, arg: "Argument") -> bool:
         return self._enum_matches(arg.value_shape, "FLAG")
@@ -1467,6 +1432,7 @@ class HelpLayout:
                 *arg.boolean_behavior.positive_flags,
                 *arg.boolean_behavior.negative_flags,
             )
+
         shorts = [f for f in exposed_flags if f.startswith("-") and not f.startswith("--")]
         longs = [f for f in exposed_flags if f.startswith("--")]
         is_option = self._enum_matches(arg.kind, "OPTION")
@@ -1640,9 +1606,6 @@ class HelpLayout:
     def _option_has_short_flag(arg: "Argument") -> bool:
         return any(flag.startswith("-") and not flag.startswith("--") for flag in arg.flags)
 
-    def _option_name_length(self, arg: "Argument") -> int:
-        return len(self._option_sort_key(arg))
-
     def _resolve_help_option_sort_rules(
         self,
         rules: list[HelpOptionSortRule] | None = None,
@@ -1747,6 +1710,7 @@ class HelpLayout:
         flag, flag_short, flag_long, is_option = self._build_flag_parts_from_argument(arg)
         if is_option and flag_short and flag_long and self.include_metavar_in_flag_display:
             return f"{flag_short.split(' ', 1)[0]}, {flag_long}"
+
         return flag
 
     def format_adaptive_argument_row(self, arg: "Argument") -> str:
@@ -1760,7 +1724,7 @@ class HelpLayout:
         gap = max(2, help_position - ansi_len(flag))
         rendered = f"{flag}{' ' * gap}{help_text}"
 
-        return self._wrap_overwide_rendered_line(rendered)
+        return self._wrap_overwide_rendered_line(rendered, indent=2)
 
     def _format_argument_legacy(self, arg: "Argument", _indent: int = 2) -> str:
         is_bool = self._arg_is_bool(arg)
@@ -1802,14 +1766,17 @@ class HelpLayout:
             arguments (list[Argument]): Argument schemas rendered in one help section.
         """
         template = self.format_option or self.format_positional or ""
-        self._active_pos_flag_width = self._get_pos_flag_width_base()
+        active_pos_width = self._get_pos_flag_width_base()
 
         if "{flag_col}" in template:
             max_flag_len = 0
             for argument in arguments:
                 flag, _, _, _ = self._build_flag_parts_from_argument(argument)
                 max_flag_len = max(max_flag_len, ansi_len(flag))
-            self._active_pos_flag_width = max(self._active_pos_flag_width, max_flag_len)
+
+            active_pos_width = max(active_pos_width, max_flag_len)
+
+        self._measurements.active_pos_flag_width = active_pos_width
 
         if "{default_padded}" not in template:
             return

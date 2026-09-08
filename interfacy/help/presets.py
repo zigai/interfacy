@@ -1,7 +1,6 @@
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from inspect import Parameter as StdParameter
 from typing import TYPE_CHECKING, Any, Literal
 
 from objinspect import Parameter
@@ -45,48 +44,6 @@ class InterfacyLayout(HelpLayout):
 
     def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
         return self._apply_interfacy_columns(super()._build_values_from_argument(arg))
-
-    def _build_extra(self, param: Parameter) -> str:
-        parts: list[str] = []
-        default_added = False
-
-        if param.is_typed and not self._param_is_bool(param):
-            if choices := get_param_choices(param, for_display=True):
-                param_info = self.prefix_choices + ", ".join(
-                    [with_style(str(i), self.style.string) for i in choices]
-                )
-                if not param.is_required:
-                    default_text = self.prefix_default + with_style(
-                        format_default_for_help(param.default), self.style.default
-                    )
-                    param_info += ", " + default_text
-                    default_added = True
-                parts.append(param_info)
-            else:
-                if param.is_optional and param.default is not None:
-                    parts.append(
-                        self.prefix_default
-                        + with_style(format_default_for_help(param.default), self.style.default)
-                    )
-                    default_added = True
-                type_str = format_type_for_help(param.type, self.style.type, theme=self.style)
-                parts.append(self.prefix_type + type_str)
-
-        if (
-            param.is_optional
-            and param.default is not None
-            and not self._param_is_bool(param)
-            and not default_added
-        ):
-            parts.append(
-                self.prefix_default
-                + with_style(format_default_for_help(param.default), self.style.default)
-            )
-
-        if not parts:
-            return ""
-
-        return f"[{', '.join(parts)}]"
 
     def _build_extra_from_argument(self, arg: "Argument") -> str:
         parts: list[str] = []
@@ -139,8 +96,8 @@ class InterfacyLayout(HelpLayout):
 
 
 @dataclass(kw_only=True)
-class Aligned(InterfacyLayout):
-    """Layout with aligned default column and compact flag spacing."""
+class AlignedLayoutBase(InterfacyLayout):
+    """Shared column and help-slot policy for the aligned preset family."""
 
     short_flag_width: int = 6
     long_flag_width: int = 18
@@ -150,10 +107,6 @@ class Aligned(InterfacyLayout):
     suppress_empty_default_brackets_for_help: bool = True
     keep_empty_default_slot_for_help: bool = True
 
-    format_option: str | None = (
-        "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
-    )
-    format_positional: str | None = "{flag_col}{description}{choices_block}"
     include_metavar_in_flag_display: bool = False
     layout_mode: Literal["auto", "adaptive", "template"] = "template"
 
@@ -164,7 +117,7 @@ class Aligned(InterfacyLayout):
         if default_idx is not None:
             return max(base, default_idx + 1)
 
-        prefix_len = self._get_commands_prefix_len()
+        prefix_len = self._get_template_token_index("description")
         if prefix_len is not None:
             return max(base, prefix_len + 1)
 
@@ -190,25 +143,6 @@ class Aligned(InterfacyLayout):
 
         return normalized.lower() != "none"
 
-    def _suppress_positive_false_boolean_default(
-        self,
-        values: dict[str, str],
-        *,
-        is_boolean: bool,
-    ) -> dict[str, str]:
-        if not is_boolean:
-            return values
-
-        default_text = strip_ansi(values.get("default", "")).strip().lower()
-        long_flag = values.get("flag_long", "")
-        is_positive_boolean_flag = long_flag.startswith("--") and not long_flag.startswith("--no-")
-
-        if default_text == "false" and is_positive_boolean_flag:
-            values["default"] = ""
-            values["default_padded"] = " " * self.default_field_width
-
-        return values
-
     def _ensure_default_slot_separator_for_overflow(self, values: dict[str, str]) -> dict[str, str]:
         flag_long = values.get("flag_long", "")
         if not flag_long:
@@ -221,100 +155,28 @@ class Aligned(InterfacyLayout):
 
     def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
         values = super()._build_values_from_argument(arg)
-        values = self._ensure_default_slot_separator_for_overflow(values)
-        return self._suppress_positive_false_boolean_default(
-            values, is_boolean=self._arg_is_bool(arg)
-        )
+        return self._ensure_default_slot_separator_for_overflow(values)
 
 
 @dataclass(kw_only=True)
-class AlignedTyped(InterfacyLayout):
-    """Aligned layout that includes explicit type display."""
+class Aligned(AlignedLayoutBase):
+    """Layout with aligned default column and compact flag spacing."""
 
-    short_flag_width: int = 6
-    long_flag_width: int = 18
-    pos_flag_width: int = 24
-    default_field_width_max: int | None = 12
-    default_overflow_mode: Literal["inline", "newline"] = "inline"
-    suppress_empty_default_brackets_for_help: bool = True
-    keep_empty_default_slot_for_help: bool = True
+    format_option: str | None = (
+        "{flag_short_col}{flag_long_col}[{default_padded}] {description}{choices_block}"
+    )
+    format_positional: str | None = "{flag_col}{description}{choices_block}"
+
+
+@dataclass(kw_only=True)
+class AlignedTyped(AlignedLayoutBase):
+    """Aligned layout that includes explicit type display."""
 
     format_option: str | None = (
         "{flag_short_col}{flag_long_col}[{default_padded}] {description} [type: {type}]"
         "{choices_block}"
     )
     format_positional: str | None = "{flag_col}{description} [type: {type}]{choices_block}"
-    include_metavar_in_flag_display: bool = False
-    layout_mode: Literal["auto", "adaptive", "template"] = "template"
-
-    def get_commands_ljust(self, max_display_len: int) -> int:
-        term_cap = max(self.min_ljust, self._terminal_width() // 2)
-        base = min(max(self.min_ljust, max_display_len + 3), term_cap)
-        default_idx = self._get_template_token_index("default_padded")
-        if default_idx is not None:
-            return max(base, default_idx + 1)
-
-        prefix_len = self._get_commands_prefix_len()
-        if prefix_len is not None:
-            return max(base, prefix_len + 1)
-
-        return super().get_commands_ljust(max_display_len)
-
-    def keep_help_default_slot_for_arguments(self, arguments: list["Argument"]) -> bool:
-        non_help_args = [arg for arg in arguments if arg.name != "help"]
-        if not non_help_args:
-            return False
-
-        described = sum(1 for arg in non_help_args if self._has_user_facing_help(arg.help))
-        metadata_only = len(non_help_args) - described
-        return described >= metadata_only
-
-    @staticmethod
-    def _has_user_facing_help(text: str | None) -> bool:
-        if text is None:
-            return False
-
-        normalized = text.strip()
-        if not normalized:
-            return False
-
-        return normalized.lower() != "none"
-
-    def _suppress_positive_false_boolean_default(
-        self,
-        values: dict[str, str],
-        *,
-        is_boolean: bool,
-    ) -> dict[str, str]:
-        if not is_boolean:
-            return values
-
-        default_text = strip_ansi(values.get("default", "")).strip().lower()
-        long_flag = values.get("flag_long", "")
-        is_positive_boolean_flag = long_flag.startswith("--") and not long_flag.startswith("--no-")
-
-        if default_text == "false" and is_positive_boolean_flag:
-            values["default"] = ""
-            values["default_padded"] = " " * self.default_field_width
-
-        return values
-
-    def _ensure_default_slot_separator_for_overflow(self, values: dict[str, str]) -> dict[str, str]:
-        flag_long = values.get("flag_long", "")
-        if not flag_long:
-            return values
-
-        if ansi_len(strip_ansi(flag_long)) > self.long_flag_width:
-            values["flag_long_col"] = values.get("flag_long_col", "") + " "
-
-        return values
-
-    def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
-        values = super()._build_values_from_argument(arg)
-        values = self._ensure_default_slot_separator_for_overflow(values)
-        return self._suppress_positive_false_boolean_default(
-            values, is_boolean=self._arg_is_bool(arg)
-        )
 
 
 @dataclass(kw_only=True)
@@ -423,24 +285,6 @@ class ClapLayout(HelpLayout):
     def format_usage_metavar(self, name: str, *, is_varargs: bool = False) -> str:
         return self._format_metavar(name, is_varargs=is_varargs)
 
-    def _build_flag_parts(
-        self, param: Parameter, flags: tuple[str, ...]
-    ) -> tuple[str, str, str, bool]:
-        is_option = any(flag.startswith("-") for flag in flags)
-        is_bool = param.is_typed and self._param_is_bool(param)
-        needs_value = param.is_typed and not is_bool
-        is_varargs = param.kind == StdParameter.VAR_POSITIONAL
-
-        return self._build_clap_flag_parts(
-            flags=flags,
-            is_option=is_option,
-            is_bool=is_bool,
-            needs_value=needs_value,
-            metavar_name=param.name or "value",
-            is_varargs=is_varargs,
-            primary_bool_flag=self._get_primary_boolean_flag(param, flags),
-        )
-
     def _build_clap_extra(
         self,
         *,
@@ -473,16 +317,6 @@ class ClapLayout(HelpLayout):
 
         return " " + " ".join(parts)
 
-    def _build_extra(self, param: Parameter) -> str:
-        choices = get_param_choices(param, for_display=True) if param.is_typed else None
-        return self._build_clap_extra(
-            is_bool=self._param_is_bool(param),
-            is_required=param.is_required,
-            has_default=param.default is not None,
-            default_value=param.default,
-            choices=choices,
-        )
-
     def _style_flag_token(self, flag: str, style: TextStyle) -> str:
         if not flag:
             return ""
@@ -493,60 +327,8 @@ class ClapLayout(HelpLayout):
         head, tail = flag.split(" ", 1)
 
         placeholder_style = self.style.placeholder_style or self.style.flag_long
+
         return f"{with_style(head, style)} {with_style(tail, placeholder_style)}"
-
-    def _build_styled_columns(
-        self, flag_short: str, flag_long: str, flag: str, is_option: bool
-    ) -> dict[str, str]:
-        styled_values: dict[str, str] = {}
-
-        styled_values["flag_short_styled"] = (
-            self._style_flag_token(flag_short, self.style.flag_short) if flag_short else ""
-        )
-        styled_values["flag_long_styled"] = (
-            self._style_flag_token(flag_long, self.style.flag_long) if flag_long else ""
-        )
-
-        if not is_option and flag:
-            styled_values["flag_styled"] = self._style_flag_token(flag, self.style.flag_positional)
-        else:
-            styled_parts = [
-                p
-                for p in (styled_values["flag_short_styled"], styled_values["flag_long_styled"])
-                if p
-            ]
-            styled_values["flag_styled"] = ", ".join(styled_parts) if styled_parts else flag
-
-        if flag_short:
-            fs = styled_values["flag_short_styled"]
-            pad = max(0, self.short_flag_width - ansi_len(fs))
-            styled_values["flag_short_col"] = f"{fs}{' ' * pad}"
-        else:
-            styled_values["flag_short_col"] = " " * self.short_flag_width
-
-        if flag_long:
-            fl = styled_values["flag_long_styled"]
-            pad = max(0, self.long_flag_width - ansi_len(fl))
-            styled_values["flag_long_col"] = f"{fl}{' ' * pad}"
-        else:
-            styled_values["flag_long_col"] = " " * self.long_flag_width
-
-        if flag:
-            fp = styled_values["flag_styled"]
-            active_pos_width = max(
-                self._get_pos_flag_width_base(),
-                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
-            )
-            pad = max(0, active_pos_width - ansi_len(fp))
-            styled_values["flag_col"] = f"{fp}{' ' * pad}"
-        else:
-            active_pos_width = max(
-                self._get_pos_flag_width_base(),
-                getattr(self, "_active_pos_flag_width", self.pos_flag_width),
-            )
-            styled_values["flag_col"] = " " * active_pos_width
-
-        return styled_values
 
     def _apply_clap_spacing(self, values: dict[str, str]) -> dict[str, str]:
         desc = values.get("description", "")
@@ -681,19 +463,6 @@ class StandardLayout(HelpLayout):
     @staticmethod
     def _normalize_whitespace(text: str) -> str:
         return " ".join(text.split())
-
-    @staticmethod
-    def _collapse_duplicate_terminal_period(text: str) -> str:
-        if not text:
-            return text
-
-        stripped = text.rstrip()
-        trailing_ws = text[len(stripped) :]
-
-        if stripped.endswith("..") and not stripped.endswith("..."):
-            stripped = stripped[:-1]
-
-        return stripped + trailing_ws
 
     @classmethod
     def _description_mentions_same_default(cls, description: str, default_text: str) -> bool:
