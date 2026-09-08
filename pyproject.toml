@@ -55,17 +55,18 @@ interfacy = "interfacy.cli.main:main"
 dev = [
     "pytest>=9.0.3",
     "pytest-mock",
+    "pyyaml>=6.0.2",
     "ruff==0.16.1",
     "pre-commit>=4.6.0",
     "coverage>=7.14.1",
     "pyrefly>=1.0.0",
     "click>=8.3.1",
     "argcomplete",
-    "rattle-lint>=2.5.1",
+    "rattle-lint>=3.0.0",
 ]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
-test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1"]
+test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2"]
 docs = [
     "beautifulsoup4",
     "click>=8.3.1",
@@ -305,5 +306,5 @@ convention = "google"
 default-groups = ["test"]
 
 [dependency-groups]
-test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1"]
-dev = [{include-group = "test"}, "ruff==0.16.1", "pre-commit>=4.6.0", "pyrefly>=1.0.0", "argcomplete", "rattle-lint>=2.5.1", "codespell>=2.4.2"]
+test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2"]
+dev = [{include-group = "test"}, "ruff==0.16.1", "pre-commit>=4.6.0", "pyrefly>=1.0.0", "argcomplete", "rattle-lint>=3.0.0", "codespell>=2.4.2"]
