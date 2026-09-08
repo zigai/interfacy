@@ -10,15 +10,16 @@ _require-uv:
 lint: _require-uv
   uv run --group dev ruff check .
 
-# format code
+# Format code
 format: _require-uv
   uv run --group dev ruff format .
 
-# fix automatically fixable linting issues
+
+# Fix automatically fixable linting issues
 fix: _require-uv
   uv run --group dev ruff check --fix .
 
-# run tests across all supported Python versions
+# Run tests across all supported Python versions
 [script]
 test *args: _require-uv
   from pathlib import Path
@@ -74,38 +75,46 @@ test *args: _require-uv
 build: _require-uv
   uv build
 
-# build the documentation site locally
+# Install the CLI executable to ~/.local/bin
+install: _require-uv
+  uv tool install --editable .
+
+# Run the command-line interface
+run *args: _require-uv
+  uv run interfacy {{args}}
+
+# Build the documentation site locally
 docs: _require-uv
   uv run --extra docs sphinx-build -W --keep-going -b html docs docs/_build/html
 
-# setup or update local dev environment, keeps previously installed packages
+# Setup or update local dev environment, keeps previously installed packages
 sync: _require-uv
   uv sync --inexact --group dev
   uv run --group dev pre-commit install
 
-# run tests with coverage and show a coverage report
+# Run tests with coverage and show a coverage report
 coverage: _require-uv
   uv run coverage run -m pytest
   uv run coverage report
 
-# clean build artifacts and caches
+# Clean build artifacts and caches
 clean:
   rm -rf .venv .pytest_cache .pyrefly .ruff_cache
   find . -type d -name "__pycache__" -exec rm -r {} +
 
-# static type check with pyrefly
+# Static type check with pyrefly
 typecheck: _require-uv
   uv run --group dev pyrefly check --min-severity warn
 
-# check code for common misspellings
+# Check code for common misspellings
 spell: _require-uv
   uv run --group dev codespell
 
-# run all quality checks
+# Run all quality checks
 check: lint coverage typecheck spell
   uv run --group dev ruff format --check .
 
-# list available recipes
+# List available recipes
 help:
   @just --list
 
