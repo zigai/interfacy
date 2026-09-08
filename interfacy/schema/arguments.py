@@ -77,6 +77,7 @@ def resolve_command_settings(
                 updates[f.name] = list(val)
             else:
                 updates[f.name] = list(val) if isinstance(val, list) else val
+
     return replace(base, **updates)
 
 

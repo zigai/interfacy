@@ -261,6 +261,7 @@ def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
     if arg_tuple == ("--config-paths",):
         for path in get_default_config_paths():
             print(path)
+
         return ExitCode.SUCCESS
 
     return None
@@ -315,4 +316,5 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
         return ExitCode.USAGE
 
     runner.run(target, args=target_args)
+
     return ExitCode.SUCCESS

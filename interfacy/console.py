@@ -31,6 +31,7 @@ def log_error(tag: str, message: str) -> None:
 
 def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None:
     del tag
+
     if full_traceback:
         error("".join(traceback.format_exception(exc)).rstrip())
 

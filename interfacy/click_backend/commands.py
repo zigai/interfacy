@@ -133,7 +133,9 @@ class InterfacyClickArgument(click.Argument):
             name, help_text = help_record
             if " " in name:
                 name = name.rsplit(" ", 1)[0]
+
             return name, help_text
+
         return None
 
 
@@ -184,16 +186,20 @@ class HelpMixin:
         schema = self.interfacy_parser_schema
         if schema is not None:
             return renderer.render_parser_help(schema, ctx.command_path)
+
         command = self.interfacy_schema or self._build_implicit_schema_command(ctx)
+
         return renderer.render_command_help(command, ctx.command_path)
 
     def _build_implicit_schema_command(self, ctx: click.Context) -> Command:
         if not isinstance(self, click.Command):
             raise TypeError("HelpMixin must be combined with click.Command")
+
         parameters: list[Argument] = []
         for parameter in self.get_params(ctx):
             if isinstance(parameter, click.Option) and parameter.name == "help":
                 continue
+
             parameters.append(self._argument_from_click_parameter(parameter))
 
         subcommands: dict[str, Command] | None = None
@@ -213,11 +219,14 @@ class HelpMixin:
                         aliases=(),
                         raw_description=child.help,
                     )
+
                 subcommands[name] = child_schema
+
             if not subcommands:
                 subcommands = None
 
         name = self.name or ctx.info_name or "command"
+
         return Command(
             obj=None,
             canonical_name=name,
@@ -237,6 +246,7 @@ class HelpMixin:
         is_flag = is_option and parameter.is_flag
         nargs = parameter.nargs
         is_multiple = bool(getattr(parameter, "multiple", False))
+
         if is_flag:
             value_shape = ValueShape.FLAG
             cardinality = ValueCardinality(0, 0, 0)
@@ -253,6 +263,7 @@ class HelpMixin:
         default = getattr(parameter, "default", None)
         boolean_behavior: BooleanBehavior | None = None
         flags = tuple(parameter.opts + parameter.secondary_opts) if is_option else ()
+
         if is_flag:
             boolean_behavior = BooleanBehavior(
                 positive_flags=tuple(parameter.opts),
@@ -260,6 +271,7 @@ class HelpMixin:
                 default=default if isinstance(default, bool) else None,
                 mode=BooleanMode.DUAL,
             )
+
         help_text = (
             parameter.help
             if isinstance(parameter, click.Option)
@@ -273,6 +285,7 @@ class HelpMixin:
             tuple(parameter.type.choices) if isinstance(parameter.type, click.Choice) else None
         )
         metavar = parameter.metavar if isinstance(parameter.metavar, str) else None
+
         return Argument(
             name=parameter.name or "value",
             display_name=(parameter.name or "value").replace("_", "-"),
@@ -372,6 +385,7 @@ class InterfacyClickGroup(HelpMixin, click.Group):
     def list_commands(self, ctx: click.Context) -> list[str]:
         """Return canonical subcommand names in insertion order."""
         del ctx
+
         return list(self.commands.keys())
 
 

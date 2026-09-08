@@ -59,12 +59,14 @@ def normalize_help_text(text: str) -> str:
     """Return help text with exactly one trailing newline."""
     if not isinstance(text, str):
         raise TypeError("help renderers must return str")
+
     return text.rstrip("\r\n") + "\n"
 
 
 def default_help_renderer(context: HelpContext, content: HelpContent) -> str:
     """Join nonempty structured help sections."""
     del context
+
     return "\n\n".join(section.text.rstrip("\n") for section in content.sections if section.text)
 
 

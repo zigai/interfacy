@@ -184,6 +184,7 @@ class TypeHelpFormatter:
             elif current == quote:
                 index += 1
                 break
+
             index += 1
 
         return index

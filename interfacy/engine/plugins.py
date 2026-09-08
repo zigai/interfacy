@@ -45,14 +45,18 @@ class PluginManager:
         for plugin in additions:
             if not isinstance(plugin, InterfacyPlugin):
                 raise ConfigurationError("plugins must contain InterfacyPlugin instances")
+
             name = plugin.plugin_name
             if name in names:
                 raise DuplicatePluginError(name)
+
             if isinstance(plugin, BackendPlugin) and plugin.backend != backend:
                 raise ConfigurationError(
                     f"Plugin '{name}' requires backend '{plugin.backend}', got '{backend}'"
                 )
+
             names.add(name)
+
         return additions
 
     def commit_additions(self, plugins: Sequence[InterfacyPlugin]) -> None:
@@ -71,7 +75,9 @@ class PluginManager:
         plugin.configure(context)
         if isinstance(plugin, BackendPlugin):
             plugin.configure_backend(backend_context)
+
         self.commit_additions((plugin,))
+
         return plugin
 
     def attach_backend_plugins(self, context: BackendPluginContext) -> None:
@@ -88,6 +94,7 @@ class PluginManager:
         for plugin in self.plugins:
             result = plugin.before_parse(context_factory(current), current)
             current = self._validate_args(plugin.plugin_name, "before_parse", result)
+
         return current
 
     def after_parse(
@@ -99,6 +106,7 @@ class PluginManager:
         for plugin in self.plugins:
             result = plugin.after_parse(context_factory(current), current)
             current = self._validate_namespace(plugin.plugin_name, "after_parse", result)
+
         return current
 
     def execute(
@@ -109,6 +117,7 @@ class PluginManager:
         wrapped = call_next
         for plugin in reversed(self.plugins):
             wrapped = partial(plugin.wrap_execute, context, wrapped)
+
         return wrapped()
 
     def transform_schema(
@@ -121,7 +130,9 @@ class PluginManager:
             result = plugin.transform_schema(context, current)
             if not isinstance(result, ParserSchema):
                 self._invalid_result(plugin.plugin_name, "transform_schema", "ParserSchema")
+
             current = result
+
         return current
 
     def transform_help(
@@ -134,7 +145,9 @@ class PluginManager:
             result = plugin.transform_help(context, current)
             if not isinstance(result, HelpContent):
                 self._invalid_result(plugin.plugin_name, "transform_help", "HelpContent")
+
             current = result
+
         return current
 
     def render_help(
@@ -146,9 +159,12 @@ class PluginManager:
             result = plugin.render_help(context, content)
             if result is None:
                 continue
+
             if not isinstance(result, HelpResult):
                 self._invalid_result(plugin.plugin_name, "render_help", "HelpResult | None")
+
             return result
+
         return None
 
     def recover(
@@ -160,13 +176,16 @@ class PluginManager:
             action = plugin.recover_parse_failure(context, failure)
             if action is None:
                 continue
+
             if not isinstance(action, (ProvideArgumentValues, AbortRecovery)):
                 self._invalid_result(
                     plugin.plugin_name,
                     "recover_parse_failure",
                     "ProvideArgumentValues | AbortRecovery | None",
                 )
+
             return action
+
         return None
 
     def snapshot(self) -> tuple[list[InterfacyPlugin], set[str], int]:
@@ -193,6 +212,7 @@ class PluginManager:
         args = tuple(value)
         if not all(isinstance(item, str) for item in args):
             PluginManager._invalid_result(plugin_name, hook, "Sequence[str]")
+
         return args
 
     @staticmethod
@@ -203,8 +223,10 @@ class PluginManager:
     ) -> dict[str, Any]:
         if not isinstance(value, Mapping):
             PluginManager._invalid_result(plugin_name, hook, "Mapping[str, object]")
+
         if not all(isinstance(key, str) for key in value):
             PluginManager._invalid_result(plugin_name, hook, "Mapping[str, object]")
+
         return dict(value)
 
     @staticmethod

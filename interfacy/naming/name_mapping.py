@@ -25,6 +25,7 @@ class NameMapping:
         """Translate a name without recording the mapping."""
         if key in self.ignored_names:
             return key
+
         return self.translation_fn(key)
 
     def record(self, key: str, translated_key: str) -> None:
@@ -39,6 +40,7 @@ class NameMapping:
         translated_key = self.compute(key)
         if key not in self.ignored_names:
             self.record(key, translated_key)
+
         return translated_key
 
     def reverse(self, translated: str) -> str:

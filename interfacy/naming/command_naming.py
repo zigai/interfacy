@@ -54,6 +54,7 @@ class CommandNameRegistry:
         self._ensure_unique(canonical, alias_tuple)
         if not explicit_name:
             self._translator.record(default_name, canonical)
+
         self._canonical.add(canonical)
         for alias in alias_tuple:
             self._alias_to_canonical[alias] = canonical

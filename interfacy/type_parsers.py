@@ -17,6 +17,7 @@ def build_default_type_parser(
     """
     parser = strto.get_parser(from_file=from_file, allow_class_init=allow_class_init)
     _ = parser.parsers.pop(list, None)
+
     return parser
 
 

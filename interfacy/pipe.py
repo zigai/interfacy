@@ -144,6 +144,7 @@ def _resolve_pipe_target_inputs(
         final_delimiter = delimiter
     else:
         raise ConfigurationError("Pipe delimiter must be a string or None")
+
     resolved_allow_partial = _normalize_allow_partial(allow_partial)
     resolved_priority = priority
 

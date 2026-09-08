@@ -62,6 +62,7 @@ def expand_usage_parts(parts: list[str], available_width: int) -> list[str]:
                 if index == len(choices) - 1:
                     suffix += bracket_suffix
                 expanded.append(f"{prefix}{choice}{suffix}")
+
             continue
 
         expanded.append(part)
@@ -95,6 +96,7 @@ def wrap_usage_parts(
 
     if current:
         lines.append(" ".join(current))
+
     if len(lines) <= 1:
         return lines[0] if lines else ""
 

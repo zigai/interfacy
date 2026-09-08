@@ -46,6 +46,7 @@ class _UnsetType:
     def __new__(cls) -> Self:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+
         return cls._instance
 
     def __repr__(self) -> str:
@@ -199,6 +200,7 @@ def _resolve_resettable_update(
 ) -> _T | None:
     if isinstance(value, _UnsetType):
         return current
+
     return value
 
 
@@ -329,6 +331,7 @@ def _prepare_settings_update(
             current.parse_recovery_max_attempts,
         ),
     )
+
     return _PreparedEngineSettings(
         settings=settings,
         plugin_additions=plugin_additions,
@@ -386,12 +389,14 @@ def validate_method_skips(value: MethodSkips) -> list[str]:
     for item in value:
         if not isinstance(item, str):
             raise ConfigurationError("method_skips values must be strings")
+
     return list(dict.fromkeys(value))
 
 
 def validate_bool_negative_prefix(value: BooleanNegativePrefix) -> BooleanNegativePrefix:
     if not isinstance(value, str) or not value:
         raise ConfigurationError("bool_negative_prefix must be a non-empty string")
+
     return value
 
 
@@ -405,6 +410,7 @@ def validate_help_flags(value: HelpFlags) -> tuple[str, ...]:
     result = tuple(dict.fromkeys(value))
     if not result:
         raise ConfigurationError("help_flags must contain at least one flag")
+
     return result
 
 

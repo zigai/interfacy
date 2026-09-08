@@ -48,7 +48,9 @@ class PipeState:
         if command is None:
             self.default_targets = config
             return config
+
         self._overrides[(command, subcommand)] = config
+
         return config
 
     def resolve(
@@ -68,8 +70,10 @@ class PipeState:
             target = self._overrides.get(key)
             if target is not None:
                 return target
+
         if subcommand in (None, "__init__") and command.pipe_targets is not None:
             return command.pipe_targets
+
         return self.default_targets
 
     def resolve_by_names(
@@ -85,15 +89,18 @@ class PipeState:
         for name in (obj_name, *aliases):
             if name and name not in names:
                 names.append(name)
+
         for key in self._override_keys(names, subcommand):
             target = self._overrides.get(key)
             if target is not None:
                 return target
+
         return self.default_targets if include_default else None
 
     def read_input(self) -> str | None:
         if self._input_buffer is _PIPE_UNSET:
             self._input_buffer = None if sys.stdin.isatty() else read_piped()
+
         return self._input_buffer if isinstance(self._input_buffer, str) else None
 
     def reset_input(self) -> None:
@@ -111,14 +118,17 @@ class PipeState:
         namespace = self._cli_namespace
         if namespace is None:
             return None
+
         bucket = self._command_bucket(namespace, command)
         if subcommand not in (None, "__init__"):
             bucket = self._subcommand_bucket(bucket, command, subcommand)
+
         return set(bucket) if isinstance(bucket, dict) else set()
 
     def schema_uses_pipes(self, schema: ParserSchema) -> bool:
         if schema.pipe_targets is not None or self.default_targets is not None or self._overrides:
             return True
+
         return any(self._command_uses_pipes(command) for command in schema.commands.values())
 
     def snapshot(self) -> PipeStateSnapshot:
@@ -148,12 +158,16 @@ class PipeState:
             reverse = self._command_names.reverse(subcommand)
             if reverse != subcommand:
                 subcommands.append(reverse)
+
         for name in names:
             for candidate in subcommands:
                 yield name, candidate
+
         yield None, subcommand
+
         if len(subcommands) > 1:
             yield None, subcommands[1]
+
         yield None, None
 
     @staticmethod
@@ -173,8 +187,10 @@ class PipeState:
         for name in (command.canonical_name, command.cli_name, *(command.aliases or ())):
             if name and name not in names:
                 names.append(name)
+
         if command.obj is not None and command.obj.name not in names:
             names.append(command.obj.name)
+
         return tuple(names)
 
     def _command_bucket(self, namespace: dict[str, Any], command: Command) -> dict[str, Any]:
@@ -182,6 +198,7 @@ class PipeState:
             value = namespace.get(name)
             if isinstance(value, dict):
                 return value
+
         return namespace
 
     def _subcommand_bucket(
@@ -197,6 +214,7 @@ class PipeState:
         ):
             if name not in candidates:
                 candidates.append(name)
+
         if command.subcommands:
             for child in command.subcommands.values():
                 names = self._command_names_for(child)
@@ -209,6 +227,7 @@ class PipeState:
                 value = container.get(name)
                 if isinstance(value, dict):
                     return value
+
         return {}
 
 

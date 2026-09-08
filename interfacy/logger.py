@@ -32,7 +32,9 @@ def _get_level() -> int | None:
 
     if hasattr(logging, "getLevelNamesMapping"):
         return logging.getLevelNamesMapping().get(normalized.upper(), logging.INFO)
+
     val = logging.getLevelName(normalized.upper())
+
     return val if isinstance(val, int) else logging.INFO
 
 

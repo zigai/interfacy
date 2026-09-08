@@ -290,6 +290,7 @@ def find_command(
     for cmd in candidates:
         if name_or_alias in (cmd.canonical_name, cmd.cli_name, *cmd.aliases):
             return cmd
+
     return None
 
 
@@ -299,6 +300,7 @@ def finalize_schema(schema: ParserSchema) -> ParserSchema:
         raise TypeError("schema transformations must return a ParserSchema")
 
     _validate_command_mapping(schema.commands, path=(), active_command_ids=set(), root=True)
+
     return schema
 
 
@@ -315,9 +317,11 @@ def _validate_command_mapping(
     for key, command in commands.items():
         if not isinstance(key, str):
             raise TypeError("schema command keys must be strings")
+
         if not isinstance(command, Command):
             command_path = " ".join((*path, key))
             raise TypeError(f"schema command {command_path!r} must be a Command")
+
         expected_key = command.canonical_name if root else command.cli_name
         if key != expected_key:
             command_path = " ".join((*path, key))
@@ -334,6 +338,7 @@ def _validate_command_mapping(
         if command_id in active_command_ids:
             command_path = " ".join((*path, key))
             raise ValueError(f"schema command {command_path!r} contains a cycle")
+
         active_command_ids.add(command_id)
         _validate_command_mapping(
             command.subcommands,

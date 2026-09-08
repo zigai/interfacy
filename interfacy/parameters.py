@@ -133,6 +133,7 @@ class Param:
     def __post_init__(self) -> None:
         if self.kind not in ("auto", "option", "positional"):
             raise ConfigurationError("Param.kind must be one of: 'auto', 'option', 'positional'")
+
         kind = self.kind
         flags = _normalize_flag_tuple(self.flags, field_name="flags")
         negative_flags = _normalize_flag_tuple(

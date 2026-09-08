@@ -61,6 +61,7 @@ class InterfacyOptionParser(_BaseOptionParser):
             parameter = argument.obj
             if not parameter.required:
                 continue
+
             required_values += max(parameter.nargs, 1)
 
         for index, value in enumerate(args):
