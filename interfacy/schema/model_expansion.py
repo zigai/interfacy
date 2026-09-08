@@ -9,7 +9,7 @@ from objinspect import Parameter
 from interfacy.exceptions import ReservedFlagError
 from interfacy.schema.arguments import EffectiveCommandSettings, ParamSpec
 from interfacy.schema.schema import MODEL_DEFAULT_UNSET, Argument
-from interfacy.schema.typing import resolve_type_alias, simplified_type_name
+from interfacy.schema.typing import normalize_basic_annotation
 
 if TYPE_CHECKING:
     from interfacy.schema.builder import ParserSchemaBuilder
@@ -64,7 +64,7 @@ class ModelExpansionBuilder:
         max_depth = self.settings.model_expansion_max_depth
 
         for field in self.builder.model_argument_mapper.model_fields_for_expansion(model_type):
-            annotation = self._normalize_annotation(field.annotation)
+            annotation = normalize_basic_annotation(field.annotation)
             inner_type, is_optional_model = self.builder.model_argument_mapper.unwrap_optional(
                 annotation
             )
@@ -102,18 +102,6 @@ class ModelExpansionBuilder:
             )
 
         return arguments
-
-    @staticmethod
-    def _normalize_annotation(annotation: Any) -> Any:
-        annotation = resolve_type_alias(annotation)
-        if not isinstance(annotation, str):
-            return annotation
-
-        simple_name = simplified_type_name(annotation)
-        base_name = simple_name.removesuffix("?")
-        builtin_map = {"bool": bool, "int": int, "float": float, "str": str}
-
-        return builtin_map.get(base_name, annotation)
 
     def _argument_for_field(
         self,

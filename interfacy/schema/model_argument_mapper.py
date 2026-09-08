@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
 from types import NoneType
 from typing import Any, get_type_hints
 
-from objinspect import Class
+from objinspect import Class, Parameter
 from objinspect.typing import is_union_type, type_args
 
 from interfacy.schema.schema import MODEL_DEFAULT_UNSET, Argument
@@ -75,31 +75,7 @@ class ModelArgumentMapper:
         if annotation in {str, int, float, bool, bytes, list, dict, tuple, set}:
             return False
 
-        try:
-            cls_info = Class(
-                annotation,
-                init=True,
-                public=True,
-                inherited=True,
-                static_methods=True,
-                protected=False,
-                private=False,
-                classmethod=True,
-            )
-        except OBJINSPECT_CLASS_ERRORS:
-            return False
-
-        init_method = cls_info.init_method
-        if init_method is None:
-            return False
-
-        params = [
-            param
-            for param in init_method.params
-            if param.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-        ]
-
-        return len(params) > 0
+        return next(self._plain_class_parameters(annotation), None) is not None
 
     def is_model_type(self, annotation: Any) -> bool:
         """
@@ -274,40 +250,16 @@ class ModelArgumentMapper:
 
     def _plain_class_model_fields_for_expansion(self, model_type: type) -> list[ModelField]:
         class_docs = self._parse_docstring_args(model_type.__doc__)
-        try:
-            cls_info = Class(
-                model_type,
-                init=True,
-                public=True,
-                inherited=True,
-                static_methods=True,
-                protected=False,
-                private=False,
-                classmethod=True,
+        return [
+            ModelField(
+                name=param.name,
+                annotation=param.type if param.is_typed else None,
+                required=param.is_required,
+                default=param.default if param.has_default else None,
+                description=param.description or class_docs.get(param.name),
             )
-        except OBJINSPECT_CLASS_ERRORS:
-            return []
-
-        init_method = cls_info.init_method
-        if init_method is None:
-            return []
-
-        result: list[ModelField] = []
-        for param in init_method.params:
-            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
-                continue
-
-            result.append(
-                ModelField(
-                    name=param.name,
-                    annotation=param.type if param.is_typed else None,
-                    required=param.is_required,
-                    default=param.default if param.has_default else None,
-                    description=param.description or class_docs.get(param.name),
-                )
-            )
-
-        return result
+            for param in self._plain_class_parameters(model_type)
+        ]
 
     @staticmethod
     def _parse_docstring_args(docstring: str | None) -> dict[str, str]:
@@ -599,6 +551,7 @@ class ModelArgumentMapper:
                 if field.init and field.name in values:
                     annotation = resolved_hints.get(field.name, field.type)
                     kwargs[field.name] = self._coerce_model_value(annotation, values[field.name])
+
             return model_type(**kwargs)
 
         if hasattr(model_type, "model_fields"):
@@ -651,6 +604,13 @@ class ModelArgumentMapper:
         return value
 
     def _plain_class_param_annotations(self, model_type: type) -> dict[str, Any]:
+        return {
+            param.name: param.type if param.is_typed else None
+            for param in self._plain_class_parameters(model_type)
+        }
+
+    @staticmethod
+    def _plain_class_parameters(model_type: type) -> Iterator[Parameter]:
         try:
             cls_info = Class(
                 model_type,
@@ -663,20 +623,17 @@ class ModelArgumentMapper:
                 classmethod=True,
             )
         except OBJINSPECT_CLASS_ERRORS:
-            return {}
+            return
 
         init_method = cls_info.init_method
         if init_method is None:
-            return {}
+            return
 
-        annotations: dict[str, Any] = {}
         for param in init_method.params:
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
 
-            annotations[param.name] = param.type if param.is_typed else None
-
-        return annotations
+            yield param
 
     @staticmethod
     def _resolved_type_hints(model_type: type) -> dict[str, Any]:

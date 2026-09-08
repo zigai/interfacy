@@ -3,7 +3,7 @@ import functools
 import operator
 import re
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from enum import Enum
 from types import NoneType
 from typing import Any, Literal
@@ -23,31 +23,30 @@ def simplified_type_name(name: str) -> str:
     - Removes surrounding quotes if present
     - Collapses Optional/Union with None into a trailing '?' (e.g. "str | None" -> "str?")
     """
-    name = name.strip().strip("'\"")
-    name = _strip_qualified_names(name)
-    name = re.sub(r"\s+", " ", name)
-    optional_suffix = False  # Handle Optional[...] and Union[..., None] forms
+    tokens = list(_type_name_tokens(name.strip().strip("'\"")))
+    optional_suffix = False
 
-    match = re.fullmatch(r"Optional\[(.*)\]", name)  # Optional[T]
-    if match:
-        name = match.group(1)
+    optional_args = _generic_type_arguments(tokens, "Optional")
+    if optional_args is not None and len(optional_args) == 1:
+        tokens = optional_args[0]
         optional_suffix = True
 
-    match = re.fullmatch(r"Union\[(.*)\]", name)  # Union[T, None] or Union[None, T]
-    if match:
-        args = [a.strip() for a in match.group(1).split(",")]
-        if "None" in args and len(args) == 2:
-            args = [a for a in args if a != "None"]
-            name = args[0] if args else name
+    union_args = _generic_type_arguments(tokens, "Union")
+    if union_args is not None and len(union_args) == 2:
+        for index, argument in enumerate(union_args):
+            if "".join(argument).strip() == "None":
+                tokens = union_args[1 - index]
+                optional_suffix = True
+                break
+
+    name = "".join(tokens).strip()
+    union_parts = _split_type_tokens(tokens, "|")
+    if union_parts is not None and len(union_parts) > 1:
+        parts = ["".join(part) for part in union_parts]
+        if any(part.strip() == "None" for part in parts):
+            name = "|".join(part for part in parts if part.strip() != "None").strip()
             optional_suffix = True
 
-    if re.search(r"\|\s*None\b", name) or re.search(r"\bNone\s*\|", name):  # T | None or None | T
-        name = re.sub(r"\s*\|\s*None\b", "", name)
-        name = re.sub(r"\bNone\s*\|\s*", "", name)
-        name = name.strip()
-        optional_suffix = True
-
-    name = name.strip()
     if optional_suffix and not name.endswith("?"):
         name += "?"
 
@@ -183,6 +182,7 @@ def _consume_quoted_segment(text: str, start: int) -> int:
             escaped = True
         elif current == quote:
             return index + 1
+
         index += 1
 
     return index
@@ -196,30 +196,61 @@ def _consume_dotted_identifier(text: str, start: int) -> int:
     return index
 
 
-def _strip_qualified_names(name: str) -> str:
-    """Drop module prefixes from dotted type identifiers while preserving literals."""
-    parts: list[str] = []
+def _type_name_tokens(name: str) -> Iterator[str]:
+    """Normalize identifiers and whitespace while keeping each quoted span opaque."""
     index = 0
     while index < len(name):
         ch = name[index]
         if ch in {"'", '"'}:
             end = _consume_quoted_segment(name, index)
-            parts.append(name[index:end])
+            yield name[index:end]
             index = end
             continue
 
         if ch.isalpha() or ch == "_":
             end = _consume_dotted_identifier(name, index)
             token = name[index:end]
-            parts.append(token.split(".")[-1])
+            yield token.split(".")[-1]
             index = end
             continue
 
-        parts.append(ch)
+        if ch.isspace():
+            yield " "
+            index += 1
+            while index < len(name) and name[index].isspace():
+                index += 1
 
+            continue
+
+        yield ch
         index += 1
 
-    return "".join(parts)
+
+def _split_type_tokens(tokens: list[str], separator: str) -> list[list[str]] | None:
+    """Split only outside balanced brackets; malformed expressions remain opaque."""
+    parts: list[list[str]] = [[]]
+    brackets: list[str] = []
+    closing = {"[": "]", "(": ")", "{": "}"}
+    for token in tokens:
+        if token in closing:
+            brackets.append(closing[token])
+        elif token in closing.values():
+            if not brackets or brackets.pop() != token:
+                return None
+        elif token == separator and not brackets:
+            parts.append([])
+            continue
+
+        parts[-1].append(token)
+
+    return None if brackets else parts
+
+
+def _generic_type_arguments(tokens: list[str], name: str) -> list[list[str]] | None:
+    if tokens[:2] != [name, "["] or tokens[-1:] != ["]"]:
+        return None
+
+    return _split_type_tokens(tokens[2:-1], ",")
 
 
 def resolve_type_alias(annotation: Any) -> Any:
@@ -236,6 +267,19 @@ def resolve_type_alias(annotation: Any) -> Any:
         annotation = value
 
     return annotation
+
+
+def normalize_basic_annotation(annotation: Any) -> Any:
+    """Resolve aliases and the builtin string annotations supported by argument discovery."""
+    annotation = resolve_type_alias(annotation)
+    if not isinstance(annotation, str):
+        return annotation
+
+    simple_name = simplified_type_name(annotation)
+    base_name = simple_name.removesuffix("?")
+    builtin_map = {"bool": bool, "int": int, "float": float, "str": str}
+
+    return builtin_map.get(base_name, annotation)
 
 
 def _resolve_type_alias_value(annotation: Any) -> Any:
@@ -409,6 +453,7 @@ __all__ = [
     "get_param_choices",
     "is_fixed_tuple",
     "is_list_or_list_alias",
+    "normalize_basic_annotation",
     "resolve_objinspect_annotations",
     "resolve_type_alias",
     "simplified_type_name",
