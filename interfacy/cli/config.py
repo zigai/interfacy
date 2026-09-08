@@ -12,7 +12,7 @@ from platformdirs import user_config_path
 from stdl.fs import toml_load
 
 import interfacy.help.colors as appearance_colors  # noqa: F401
-import interfacy.help.presets as appearance_layouts  # noqa: F401
+import interfacy.help.presets as appearance_layouts
 from interfacy.engine import UNSET
 from interfacy.engine.settings import (
     AbbreviationScope,
@@ -277,6 +277,12 @@ def _component_registry(
             continue
 
         seen.add(current)
+        stack.extend(current.__subclasses__())
+        if (
+            current.__module__ == appearance_layouts.__name__
+            and current.__name__ not in appearance_layouts.__all__
+        ):
+            continue
 
         class_name = _normalize_name(current.__name__)
         registry.setdefault(class_name, current)
@@ -285,8 +291,6 @@ def _component_registry(
             alias = class_name.removesuffix(suffix)
             if alias:
                 registry.setdefault(alias, current)
-
-        stack.extend(current.__subclasses__())
 
     return registry
 
@@ -411,6 +415,7 @@ def _resolve_abbreviation_scope(value: Any) -> AbbreviationScope | None:
         raise ConfigurationError(
             "abbreviation_scope must be one of: top_level_options, all_options"
         )
+
     return validate_abbreviation_scope(resolved)
 
 
@@ -466,6 +471,7 @@ def _resolve_bool_negative_prefix(value: Any) -> str | None:
 def _resolve_help_flags(value: Any) -> Any:
     if value is None:
         return UNSET
+
     return validate_help_flags(value)
 
 
@@ -475,8 +481,7 @@ def _resolve_plugin(value: Any) -> InterfacyPlugin:
     if not isinstance(value, str):
         raise ConfigurationError(f"Plugin entries must be import paths, got {value!r}")
 
-    symbol = _import_symbol(value)
-    resolved = symbol() if isinstance(symbol, type) else symbol
+    resolved = _resolve_symbol_value(value)
     if not isinstance(resolved, InterfacyPlugin):
         raise ConfigurationError(
             f"Plugin symbol must resolve to InterfacyPlugin, got {type(resolved)}"
@@ -579,6 +584,7 @@ def apply_config_defaults(
 
         if bool(config_field.metadata.get("passthrough", False)) and value is not None:
             resolved[field_name] = value
+
     return resolved
 
 
