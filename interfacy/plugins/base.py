@@ -39,7 +39,7 @@ class ConfigureContext:
 
 @dataclass(slots=True)
 class BeforeParseContext:
-    """Immutable input visible before backend parsing."""
+    """Input snapshot visible before backend parsing."""
 
     backend: BackendName
     metadata: Mapping[str, Any]
@@ -63,7 +63,7 @@ class SchemaTransformContext:
 
 @dataclass(slots=True, unsafe_hash=True)
 class ArgumentDescriptor:
-    """Backend-neutral immutable description of a schema argument."""
+    """Backend-neutral description of a schema argument."""
 
     command_path: tuple[str, ...]
     name: str
@@ -84,15 +84,13 @@ class ArgumentDescriptor:
     def __post_init__(self) -> None:
         self.command_path = tuple(self.command_path)
         self.flags = tuple(self.flags)
-        self.choices = _freeze(
-            self.choices if self.choices is not None else None,
-        )
+        self.choices = _freeze(self.choices)
         self.metadata = _freeze(self.metadata)
 
 
 @dataclass(slots=True)
 class SchemaDescriptor:
-    """Small immutable snapshot shared by read-only plugin phases."""
+    """Schema snapshot shared by plugin phases."""
 
     description: str | None
     epilog: str | None
@@ -113,7 +111,7 @@ class SchemaDescriptor:
 
 @dataclass(slots=True)
 class AfterParseContext:
-    """Immutable parse result state visible to namespace transforms."""
+    """Parse result snapshot visible to namespace transforms."""
 
     backend: BackendName
     metadata: Mapping[str, Any]
@@ -129,7 +127,7 @@ class AfterParseContext:
 
 @dataclass(slots=True)
 class HelpHookContext:
-    """Immutable help invocation state visible to help plugins."""
+    """Help invocation snapshot visible to help plugins."""
 
     backend: BackendName
     metadata: Mapping[str, Any]
@@ -145,7 +143,7 @@ class HelpHookContext:
 
 @dataclass(slots=True)
 class ExecuteContext:
-    """Immutable invocation state visible to execution wrappers."""
+    """Invocation snapshot visible to execution wrappers."""
 
     backend: BackendName
     metadata: Mapping[str, Any]
@@ -161,7 +159,7 @@ class ExecuteContext:
 
 @dataclass(slots=True)
 class ParseFailureContext:
-    """Immutable partial state visible during parse recovery."""
+    """Partial parse snapshot visible during parse recovery."""
 
     backend: BackendName
     metadata: Mapping[str, Any]
@@ -217,9 +215,7 @@ class ParseFailure:
     def __post_init__(self) -> None:
         self.command_path = tuple(self.command_path)
         self.missing_arguments = tuple(self.missing_arguments)
-        self.available_subcommands = tuple(
-            self.available_subcommands,
-        )
+        self.available_subcommands = tuple(self.available_subcommands)
 
 
 @dataclass(slots=True)
@@ -267,6 +263,7 @@ class InterfacyPlugin:
     ) -> Sequence[str]:
         """Transform raw CLI arguments before backend parsing."""
         del context
+
         return args
 
     def after_parse(
@@ -276,6 +273,7 @@ class InterfacyPlugin:
     ) -> Mapping[str, Any]:
         """Transform the parsed namespace before it is returned."""
         del context
+
         return namespace
 
     def transform_schema(
@@ -285,6 +283,7 @@ class InterfacyPlugin:
     ) -> ParserSchema:
         """Transform the explicit mutable schema payload."""
         del context
+
         return schema
 
     def transform_help(
@@ -294,6 +293,7 @@ class InterfacyPlugin:
     ) -> HelpContent:
         """Transform structured help content before final rendering."""
         del context
+
         return content
 
     def render_help(
@@ -303,6 +303,7 @@ class InterfacyPlugin:
     ) -> HelpResult | None:
         """Optionally provide final rendered help text."""
         del context, content
+
         return None
 
     def wrap_execute(
@@ -312,6 +313,7 @@ class InterfacyPlugin:
     ) -> Any:
         """Wrap command execution."""
         del context
+
         return call_next()
 
     def recover_parse_failure(
@@ -321,6 +323,7 @@ class InterfacyPlugin:
     ) -> RecoveryAction | None:
         """Optionally recover from a structured parse failure."""
         del context, failure
+
         return None
 
     @property
@@ -329,6 +332,7 @@ class InterfacyPlugin:
         explicit_name = self.name
         if explicit_name:
             return explicit_name
+
         return type(self).__name__
 
 
