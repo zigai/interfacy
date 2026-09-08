@@ -45,4 +45,4 @@ click_command = parser.build_parser()
 
 The Interfacy API is shared, but the backend libraries have different error types and parsing details.
 
-`formatter_class` is argparse-specific and cannot be used with `backend="click"`.
+Use the shared `help_layout` and `help_renderer` settings to customize help on either backend.

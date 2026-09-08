@@ -33,6 +33,28 @@ demo 1.0.0
 
 The command is not executed when the executable flag is present.
 
+## Async handlers
+
+Use `invoke_async()` when an executable flag handler returns an awaitable:
+
+```python
+async def version() -> str:
+    return "demo 1.0.0"
+
+
+parser = Interfacy(executable_flags=[ExecutableFlag("--version", version)])
+parser.add_command(run)
+
+
+async def show_version() -> None:
+    await parser.invoke_async(args=["--version"])
+```
+
+The handler completes on the caller's event loop before its result is printed. Cancellation
+propagates to the caller. A synchronous invocation can run an async handler when no event
+loop is running in that thread. Inside a running loop, use `await parser.invoke_async(...)`;
+`invoke()` and `parse_args()` raise `RuntimeError` for awaitable flag results.
+
 ## Command-level flags
 
 Executable flags can also live on a specific command or group.

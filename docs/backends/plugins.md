@@ -38,9 +38,10 @@ Portable plugins subclass `InterfacyPlugin` and can implement these hooks:
 | `wrap_execute()` | wrap command execution |
 | `recover_parse_failure()` | provide values or subcommands for recoverable parse failures |
 
-Each hook receives an immutable context tailored to that lifecycle phase. Portable
+Each hook receives a context dataclass tailored to that lifecycle phase. Portable
 contexts expose only backend-neutral state and capabilities, such as the backend name,
-metadata, immutable schema descriptors, raw arguments, or parsed namespaces. Plugins
+metadata, schema descriptors, raw arguments, or parsed namespaces. Metadata and namespace
+containers are copied into read-only mappings when the context is constructed. Plugins
 must return replacements from transformation hooks rather than reaching into parser
 internals.
 
@@ -68,7 +69,7 @@ class ConciseHelpPlugin(InterfacyPlugin):
 
 Each `HelpSection` has a stable `kind` (`usage`, `description`, `positionals`, `options`,
 `commands`, or `epilog`) and its rendered text. `HelpHookContext` identifies the program,
-terminal width, current command path, and an immutable schema descriptor.
+terminal width, current command path, and a schema descriptor.
 
 
 ## Backend-native plugins

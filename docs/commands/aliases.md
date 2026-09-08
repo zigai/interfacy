@@ -11,8 +11,14 @@ def build(release: bool = False) -> str:
     return "release" if release else "debug"
 
 
+def status() -> str:
+    """Report project status."""
+    return "ready"
+
+
 parser = Interfacy(print_result=True)
 parser.add_command(build, aliases=("b",))
+parser.add_command(status)
 parser.run()
 ```
 
@@ -22,6 +28,8 @@ $ python project.py b
 ```
 
 The canonical name is still `build`. The alias is only another way to select it from the command line.
+The second command creates a command-selection root. A lone function is flattened into
+the root and is invoked without its command name.
 
 ## Group aliases
 

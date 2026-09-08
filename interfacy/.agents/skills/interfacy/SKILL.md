@@ -1,8 +1,6 @@
 ---
 name: interfacy
 description: "Use when building, reviewing, or refactoring Interfacy-based Python CLIs."
-disable-model-invocation: false
-user-invocable: true
 ---
 
 # Interfacy
@@ -59,7 +57,7 @@ Hello, Ada! Hello, Ada!
 3. Make the callable signature describe the CLI:
    - Required inputs are positional parameters.
    - Options are keyword/defaulted parameters, often keyword-only.
-   - Boolean options should use plain `bool` defaults. Positive names keep paired toggle behavior; negative-looking `bool = False` names such as `disable_cache` and `without_color` become one-way flags like `--disable-cache` without an inverse alias.
+   - Boolean options should use plain `bool` defaults. In automatic mode, `False` defaults expose a positive flag, `True` defaults expose a negative flag, and required or `None`-default booleans expose both. Negative-looking names such as `disable_cache: bool = False` remain ordinary booleans and expose `--disable-cache`. Use `Param(boolean_mode="dual")` when a defaulted boolean needs an explicit pair of flags.
    - Choices are `Literal[...]` or `Enum`.
    - Repeated values are `list[T]` or variadic parameters.
    - Grouped settings are small dataclasses, Pydantic models, or typed config classes.
@@ -75,8 +73,7 @@ Interfacy(print_result=True).run(command)
 
 ## Exit Behavior
 
-In a normal console entrypoint, keep `sys_exit_enabled=True` and let `run()` manage the
-process exit:
+In a normal console entrypoint, let `run()` manage the process exit:
 
 ```python
 def main() -> None:
@@ -84,22 +81,19 @@ def main() -> None:
 ```
 
 A command that returns normally is successful. Its return value is Python data, including
-when that value is an integer. Do not disable exits and reinterpret integer results:
+when that value is an integer. Do not reinterpret integer results as process status codes.
+
+Use `invoke()` for tests or embedded execution that must inspect the result without
+terminating the host process:
 
 ```python
-# Wrong: this turns a valid integer result into a process status.
-def main() -> int:
-    parser = Interfacy(sys_exit_enabled=False)
-    result = parser.run(command)
-    if isinstance(result, int):
-        return result
-    return 0
+parser = Interfacy()
+result = parser.invoke(command, args=[])
 ```
 
-Use `sys_exit_enabled=False` only for tests or embedded execution that must inspect the
-result without terminating the host process. In that mode, `run()` returns the command's
-normal value on success and returns exception objects for parser exits, interrupts, or
-failures. Those values are inspection results, not exit codes.
+`invoke()` returns normal command values, returns `None` for normal help/exit requests,
+and raises failures as exceptions. It does not return exception objects. Use
+`await parser.invoke_async(...)` for asynchronous embedded execution.
 
 ## What Good Interfacy Code Looks Like
 

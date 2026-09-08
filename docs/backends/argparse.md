@@ -8,7 +8,7 @@ from interfacy import Interfacy
 Interfacy(backend="argparse").run(main)
 ```
 
-It builds on Python's standard `argparse` module and Interfacy's custom help formatter.
+It builds on Python's standard `argparse` module and Interfacy's shared help renderer.
 
 ## Features
 
@@ -34,21 +34,22 @@ print(argparse_parser.format_help())
 
 This is useful for tests, documentation snapshots, or integration with existing parser code.
 
-## Formatter class
+## Help customization
 
-The argparse backend accepts `formatter_class` when you need a custom `argparse.HelpFormatter` subclass.
+Use `help_layout` to select a layout for generated help:
 
 ```python
-import argparse
 from interfacy import Interfacy
+from interfacy.help import Aligned
 
 Interfacy(
     backend="argparse",
-    formatter_class=argparse.RawDescriptionHelpFormatter,
+    help_layout=Aligned(),
 ).run(main)
 ```
 
-For most users, `help_layout=` is the preferred customization surface.
+Use `help_renderer` to customize the final rendering of structured help content. Both
+customization surfaces are shared with the Click backend. See {doc}`../help/layouts`.
 
 ## Independent parser
 

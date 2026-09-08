@@ -377,19 +377,15 @@ def main() -> None:
     Interfacy(print_result=True).run(command)
 ```
 
-Do not reconstruct process behavior around inspection mode:
+Use `invoke()` when an embedded host needs the command's return value:
 
 ```python
-# Wrong: `result` may be legitimate integer data.
-def main() -> int:
-    parser = Interfacy(sys_exit_enabled=False)
-    result = parser.run(command)
-    if isinstance(result, int):
-        return result
-    return 0
+parser = Interfacy()
+result = parser.invoke(command, args=[])
 ```
 
-Set `sys_exit_enabled=False` only in tests and embedded hosts that need `run()` to return
-normal values or exception objects for inspection without terminating the process.
+`invoke()` returns command data or `None` for normal help/exit requests, and raises failures
+as exceptions. For asynchronous embedded execution, use `await parser.invoke_async(...)`.
+Do not reinterpret an integer result as an exit status or expect returned exception objects.
 
 Avoid `raise SystemExit(main())` wrappers around Interfacy commands. Let Interfacy manage parser exits, and use normal exceptions for failures.

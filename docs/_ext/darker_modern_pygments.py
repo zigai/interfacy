@@ -45,22 +45,6 @@ def is_whitespace(token: Token, value: str) -> bool:
     return token in Text and not value.strip()
 
 
-def next_significant(tokens: list[TokenItem], start: int) -> TokenItem | None:
-    for item in tokens[start:]:
-        if not is_whitespace(item[1], item[2]):
-            return item
-
-    return None
-
-
-def previous_significant(tokens: list[TokenItem], start: int) -> TokenItem | None:
-    for item in reversed(tokens[:start]):
-        if not is_whitespace(item[1], item[2]):
-            return item
-
-    return None
-
-
 def is_capitalized_name(value: str) -> bool:
     return bool(value) and value[0].isupper()
 
@@ -69,7 +53,6 @@ def darker_modern_token(
     token: Token,
     value: str,
     *,
-    previous_value: str,
     next_value: str,
 ) -> Token:
     resolved = token
@@ -83,7 +66,7 @@ def darker_modern_token(
         resolved = Name.Function
     elif token is Name and is_capitalized_name(value):
         resolved = Name.Class
-    elif token is Name and (next_value == "(" or (previous_value == "." and next_value == "(")):
+    elif token is Name and next_value == "(":
         resolved = Name.Function
 
     return resolved
@@ -97,17 +80,21 @@ class DarkerModernPythonLexer(PythonLexer):
 
     def get_tokens_unprocessed(self, text: str) -> Iterator[TokenItem]:
         tokens = list(super().get_tokens_unprocessed(text))
+        next_values = [""] * len(tokens)
+        next_value = ""
+        for position in range(len(tokens) - 1, -1, -1):
+            next_values[position] = next_value
+            _, token, value = tokens[position]
+            if not is_whitespace(token, value):
+                next_value = value
 
         for position, (index, token, value) in enumerate(tokens):
-            previous_token = previous_significant(tokens, position)
-            next_token = next_significant(tokens, position + 1)
             yield (
                 index,
                 darker_modern_token(
                     token,
                     value,
-                    previous_value=previous_token[2] if previous_token else "",
-                    next_value=next_token[2] if next_token else "",
+                    next_value=next_values[position],
                 ),
                 value,
             )

@@ -73,8 +73,8 @@ scoped to each render, so one layout instance can be reused across commands with
 column widths or terminal dimensions from an earlier help screen. An explicit backend terminal
 width takes precedence over the process terminal size.
 
-Manually constructed schema-less `ArgumentParser` objects continue to use native argparse help
-formatting with the selected adaptive layout settings.
+Manually constructed `ArgumentParser` objects derive an implicit schema from their actions
+and use the same structured help renderer with the selected layout settings.
 
 Custom layouts should use the documented `HelpLayout` methods and constructor fields as extension
 points. Private row, measurement, wrapping, and template helpers are implementation details.

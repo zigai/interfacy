@@ -76,6 +76,7 @@ If compatibility matters more than grouping, keep a flat function signature.
 Test that the command reconstructs the expected object, not just that parsing succeeds:
 
 ```python
-parser = Interfacy(sys_exit_enabled=False)
-result = parser.run(create_user, args=["--user.name", "Ada", "--user.age", "32"])
+parser = Interfacy()
+result = parser.invoke(create_user, args=["--user.name", "Ada", "--user.age", "32"])
+assert result == "Ada"
 ```
