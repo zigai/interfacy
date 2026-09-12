@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, Literal, NoReturn, TypeVar
+from typing import Any, Literal, TypeVar
 
 from strto import StrToTypeParser
 from typing_extensions import final
@@ -52,6 +52,7 @@ class Interfacy:
         tab_completion: Install shell completion support when the backend supports it.
         full_error_traceback: Include full tracebacks for runtime errors.
         allow_args_from_file: Enable ``@file`` argument expansion.
+        sys_exit_enabled: Preserve the pre-0.8 embedded ``run()`` behavior when false.
         flag_strategy: Strategy for deriving option flags from Python names.
         abbreviation_gen: Generator used for short option flags.
         abbreviation_max_generated_len: Maximum generated short-flag length. Must be >= 1.
@@ -93,6 +94,7 @@ class Interfacy:
         tab_completion: bool = False,
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
+        sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
         abbreviation_max_generated_len: int = 1,
@@ -118,6 +120,7 @@ class Interfacy:
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int = 3,
     ) -> None:
+        self._sys_exit_enabled = sys_exit_enabled
         settings = EngineSettings(
             description=description,
             epilog=epilog,
@@ -496,11 +499,14 @@ class Interfacy:
         """Invoke a command and await asynchronous execution without blocking a live loop."""
         return await self._engine.invoke_async(*commands, args=args)
 
-    def run(self, *commands: CommandTarget, args: list[str] | None = None) -> NoReturn:
-        """Invoke a command, render its result or failure, and terminate the process."""
+    def run(self, *commands: CommandTarget, args: list[str] | None = None) -> Any:
+        """Invoke a command and terminate unless embedded compatibility is enabled."""
+        if not self._sys_exit_enabled:
+            return self._engine.invoke(*commands, args=args)
+
         return self._engine.run(*commands, args=args)
 
-    def build_parser(self) -> object:
+    def build_parser(self) -> Any:
         """Build the backend parser for registered commands."""
         return self._engine.build_parser()
 
