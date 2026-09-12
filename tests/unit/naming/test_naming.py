@@ -84,6 +84,15 @@ def test_abbreviation_generator_default_max_len_is_one():
     assert gen.generate("version_check", taken) is None
 
 
+def test_abbreviation_generator_handles_underscore_and_empty():
+    """Verify DefaultAbbreviationGenerator handles underscore and already-taken values safely."""
+    gen = DefaultAbbreviationGenerator(max_generated_len=1)
+    assert gen.generate("_", []) is None
+    assert gen.generate("", []) is None
+    assert gen.generate("__", []) is None
+    assert gen.generate("no-cache", ["no-cache"]) is None
+
+
 def test_name_mapping_roundtrip():
     """Verify that NameMapping correctly handles forward and reverse translations."""
     mapping = NameMapping(kebab_case)

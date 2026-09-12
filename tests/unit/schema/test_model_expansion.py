@@ -665,3 +665,32 @@ def test_dataclass_expansion_falls_back_when_forward_reference_is_unresolved() -
 
     arg = next(arg for arg in cmd.parameters if arg.name == "config.value")
     assert arg.type is Any
+
+
+def test_root_model_not_none_when_nested_submodel_optional() -> None:
+    """Verify that a non-optional root model is not nullified when it has an optional submodel."""
+
+    @dataclass
+    class SubConfig:
+        val: str = "default_sub"
+
+    @dataclass
+    class RootConfig:
+        name: str = "default_name"
+        sub: SubConfig | None = None
+
+    RootConfig.__annotations__["sub"] = SubConfig | None
+    RootConfig.__annotations__["name"] = str
+    SubConfig.__annotations__["val"] = str
+
+    def cmd(cfg: RootConfig) -> RootConfig:
+        return cfg
+
+    app = Interfacy()
+    app.add_command(cmd)
+
+    result = app.invoke(args=[])
+    assert result is not None
+    assert isinstance(result, RootConfig)
+    assert result.name == "default_name"
+    assert result.sub is None

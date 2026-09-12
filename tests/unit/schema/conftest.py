@@ -65,7 +65,10 @@ class StubTypeParser:
 
         self.requests.append(typ)
 
-        return self.parsers.get(typ)
+        try:
+            return self.parsers.get(typ)
+        except TypeError:
+            return None
 
 
 def make_command_stub(

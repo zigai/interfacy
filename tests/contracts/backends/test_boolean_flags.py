@@ -156,3 +156,17 @@ def test_positive_only_mode_rejects_negative_flags() -> None:
 
     with pytest.raises(ConfigurationError, match="cannot define negative flags"):
         parser.build_parser_schema()
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_required_boolean_flag_enforced_when_omitted(
+    backend: Literal["argparse", "click"],
+) -> None:
+    def command(flag: bool) -> bool:
+        return flag
+
+    parser = Interfacy(backend=backend)
+    parser.add_command(command)
+
+    with pytest.raises(UsageError):
+        parser.invoke(args=[])

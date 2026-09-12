@@ -217,3 +217,26 @@ def test_tuple_of_dataclasses_builds_object_value_plan(schema_source: SchemaSour
     assert argument.cardinality.group_size == 4
     assert isinstance(argument.value_plan, FixedTupleValue)
     assert all(isinstance(item, ObjectValue) for item in argument.value_plan.items)
+
+
+def test_callable_and_annotated_unhashable_metadata_do_not_crash(
+    schema_source: SchemaSource,
+) -> None:
+    """Verify Callable and Annotated with unhashable metadata do not crash schema builder."""
+    from collections.abc import Callable
+    from typing import Annotated
+
+    from interfacy.parameters import Param
+
+    def cmd(
+        callback: Callable[[int], int],
+        unhashable: Annotated[int, [1, 2]],
+        param: Annotated[int, Param(kind="option")],
+    ) -> None:
+        pass
+
+    builder = ParserSchemaBuilder(schema_source.schema_context())
+    params = Function(cmd).params
+    for param in params:
+        args = builder._argument_from_parameter(param, [*schema_source.RESERVED_FLAGS])
+        assert len(args) == 1

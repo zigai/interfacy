@@ -35,6 +35,29 @@ def test_interfacy_accepts_explicit_argparse_backend() -> None:
     assert parser.backend == "argparse"
 
 
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_sys_exit_disabled_preserves_embedded_run_result(backend: str) -> None:
+    if backend == "click":
+        pytest.importorskip("click")
+
+    parser = Interfacy(backend=backend, sys_exit_enabled=False)
+
+    assert parser.run(lambda: 7, args=[]) == 7
+
+
+def test_none_bool_negative_prefix_disables_generated_inverse_flag() -> None:
+    def command(enabled: bool, cached: bool = True) -> tuple[bool, bool]:
+        return enabled, cached
+
+    parser = Interfacy(bool_negative_prefix=None)
+    parser.add_command(command)
+    arguments = parser.build_parser_schema().commands["command"].parameters
+
+    assert all(argument.boolean_behavior is not None for argument in arguments)
+    assert all(argument.boolean_behavior.negative_flags == () for argument in arguments)
+    assert parser.invoke(args=["--enabled"]) == (True, True)
+
+
 def test_interfacy_accepts_click_backend() -> None:
     pytest.importorskip("click")
 

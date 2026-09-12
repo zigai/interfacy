@@ -1,4 +1,6 @@
 import sys
+from enum import Enum
+from typing import Literal
 
 import pytest
 
@@ -132,6 +134,38 @@ class TestPipeExecution:
 
         assert parser.invoke(args=["--msg", "default"]) == "default"
 
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_priority_cli_does_not_convert_unused_invalid_pipe_value(
+        self,
+        parser: Interfacy,
+        mocker,
+    ) -> None:
+        def command(value: int = 3) -> int:
+            return value
+
+        parser.add_command(command, pipe_targets="value")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="not-an-integer")
+
+        assert parser.invoke(args=["--value", "3"]) == 3
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_priority_pipe_converts_and_rejects_invalid_value(
+        self,
+        parser: Interfacy,
+        mocker,
+    ) -> None:
+        def command(value: int = 3) -> int:
+            return value
+
+        parser.add_command(
+            command,
+            pipe_targets={"bindings": "value", "priority": "pipe"},
+        )
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="not-an-integer")
+
+        with pytest.raises(PipeInputError, match="failed to convert piped input"):
+            parser.invoke(args=["--value", "3"])
+
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_typed_conversion(self, parser: Interfacy, mocker):
         """Verify piped string is converted to target type (int)."""
@@ -243,3 +277,73 @@ class TestPipedListInput:
 
         result = parser.invoke(args=[])
         assert result == [1, 2, 3]
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_piped_literal_list_rejects_invalid_values_before_execution(
+        self,
+        parser: Interfacy,
+        mocker,
+    ) -> None:
+        executed = False
+
+        def command(values: list[Literal["red", "blue"]]) -> list[str]:
+            nonlocal executed
+            executed = True
+
+            return values
+
+        parser.add_command(command, pipe_targets="values")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="green")
+
+        with pytest.raises(PipeInputError, match="failed to convert piped input"):
+            parser.invoke(args=[])
+
+        assert executed is False
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_piped_literal_list_preserves_valid_values(
+        self,
+        parser: Interfacy,
+        mocker,
+    ) -> None:
+        def command(values: list[Literal["red", "blue"]]) -> list[str]:
+            return values
+
+        parser.add_command(command, pipe_targets="values")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="red\nblue\nred")
+
+        assert parser.invoke(args=[]) == ["red", "blue", "red"]
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_piped_enum_list_converts_each_value(
+        self,
+        parser: Interfacy,
+        mocker,
+    ) -> None:
+        class Color(Enum):
+            RED = "red"
+            BLUE = "blue"
+
+        def command(values: list[Color]) -> list[Color]:
+            return values
+
+        parser.add_command(command, pipe_targets="values")
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value="red\nblue")
+
+        assert parser.invoke(args=[]) == [Color.RED, Color.BLUE]
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_piped_generic_and_union_types_conversion(self, parser: Interfacy, mocker):
+        """Verify piped data converts to generic types (dict[str, int]) and unions (int | None)."""
+
+        def fn_complex_pipe(data: dict[str, int], num: int | None):
+            return data, num
+
+        parser.add_command(fn_complex_pipe, pipe_targets=("data", "num"))
+        mocker.patch("interfacy.engine.pipes.read_piped", return_value='{"a": 1}\n42')
+
+        res_data, res_num = parser.invoke(args=[])
+        assert isinstance(res_data, dict)
+        assert res_data == {"a": 1}
+        assert isinstance(res_num, int)
+        assert res_num == 42

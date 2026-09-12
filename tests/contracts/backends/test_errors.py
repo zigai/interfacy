@@ -171,3 +171,17 @@ def test_run_maps_help_to_success(parser: Interfacy) -> None:
         parser.run(command, args=["--help"])
 
     assert error.value.code == ExitCode.SUCCESS
+
+
+def test_invoke_raises_usage_error_on_invalid_enum(parser: Interfacy) -> None:
+    from enum import Enum
+
+    class Color(Enum):
+        RED = "red"
+        BLUE = "blue"
+
+    def set_color(c: Color) -> Color:
+        return c
+
+    with pytest.raises(UsageError):
+        parser.invoke(set_color, args=["yellow"])

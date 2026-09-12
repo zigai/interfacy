@@ -18,6 +18,7 @@ from interfacy.help.presets import (
     Modern,
     StandardLayout,
 )
+from interfacy.help.wrapping import expand_usage_parts
 from interfacy.naming import DefaultFlagStrategy
 
 
@@ -114,6 +115,57 @@ def test_all_layouts_render_literal_choices_for_required_flags(
 
     help_text = parser.build_parser().format_help()
     assert expected_required_flag_choices in help_text
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("{alpha,beta,gamma}", ["{alpha,", "beta,", "gamma}"]),
+        ("[{alpha,beta,gamma}]", ["[{alpha,", "beta,", "gamma}]"]),
+        ("{single}", ["{single}"]),
+        ("{}", ["{}"]),
+        ("intrinsically-overlong-atom", ["intrinsically-overlong-atom"]),
+    ],
+)
+def test_expand_usage_parts_preserves_choice_atoms(token: str, expected: list[str]) -> None:
+    assert expand_usage_parts([token], available_width=10) == expected
+
+
+def test_argparse_layout_wraps_overwide_command_choices_without_token_loss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    size = os.terminal_size((35, 24))
+    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
+
+    parser = Interfacy(backend="argparse", help_layout=ArgparseLayout())
+    for name in ("alpha-long-command", "beta-long-command", "gamma-long-command"):
+        parser.add_command(lambda: None, name=name)
+
+    help_text = parser.build_parser().format_help()
+    usage = help_text[: help_text.index("\n\n")]
+
+    assert "alpha-long-command," in usage
+    assert "\n       beta-long-command," in usage
+    assert "\n       gamma-long-command}" in usage
+    assert usage.index("alpha-long-command") < usage.index("beta-long-command")
+    assert usage.index("beta-long-command") < usage.index("gamma-long-command")
+
+
+def test_argparse_layout_keeps_intrinsically_overlong_command_atom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    size = os.terminal_size((24, 24))
+    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
+    name = "one-command-name-wider-than-the-terminal"
+    parser = Interfacy(backend="argparse", help_layout=ArgparseLayout())
+    parser.add_command(lambda: None, name=name)
+    parser.add_command(lambda: None, name="short")
+
+    help_text = parser.build_parser().format_help()
+
+    assert name in help_text[: help_text.index("\n\n")]
 
 
 @pytest.mark.usefixtures("fixed_terminal_width")

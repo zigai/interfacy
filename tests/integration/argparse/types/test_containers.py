@@ -208,6 +208,29 @@ class TestContainers:
         assert parser.invoke(args=args) == [User("ann", 1), User("bob", 2)]
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+    def test_list_of_single_field_dataclasses(self, parser: Interfacy):
+        """Verify repeated dataclass items with single field are converted from CLI values."""
+
+        @dataclass
+        class Tag:
+            name: str
+
+        def fn_tags(tags: list[Tag]):
+            return tags
+
+        parser.add_command(fn_tags, name="fn-tags")
+        match parser.metadata["flag_style"]:
+            case "required_positional":
+                args = ["alpha", "beta"]
+            case "keyword_only":
+                args = ["--tags", "alpha", "beta"]
+            case _:
+                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
+
+        result = parser.invoke(args=args)
+        assert result == [Tag("alpha"), Tag("beta")]
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_dict_str_int(self, parser: Interfacy):
         """Verify that a dictionary is parsed from a JSON string."""
         parser.add_command(fn_dict_str_int, name="fn-dict")

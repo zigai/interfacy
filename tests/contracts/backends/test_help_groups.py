@@ -3,7 +3,7 @@ import pytest
 from interfacy import CommandGroup, Interfacy
 from interfacy.exceptions import ConfigurationError
 from interfacy.help.presets import ArgparseLayout, StandardLayout
-from interfacy.help.terminal import strip_ansi as _strip_ansi
+from interfacy.help.terminal import strip_ansi
 
 
 def cmd_status() -> None:
@@ -36,7 +36,7 @@ def test_root_help_groups_commands_before_ungrouped(parser, capsys) -> None:
     assert result is None
 
     captured = capsys.readouterr()
-    combined = _strip_ansi(captured.out + captured.err)
+    combined = strip_ansi(captured.out + captured.err)
     lines = combined.splitlines()
     heading_idx = lines.index("start a working area")
     clone_idx = next(idx for idx, line in enumerate(lines) if line.strip().startswith("clone"))
@@ -64,7 +64,7 @@ def test_help_group_command_indent_is_configurable(parser, capsys) -> None:
     assert result is None
 
     captured = capsys.readouterr()
-    combined = _strip_ansi(captured.out + captured.err)
+    combined = strip_ansi(captured.out + captured.err)
     lines = combined.splitlines()
 
     assert any(line.startswith("     clone") for line in lines)
@@ -81,7 +81,7 @@ def test_help_group_spacing_is_configurable(parser, capsys) -> None:
     assert result is None
 
     captured = capsys.readouterr()
-    combined = _strip_ansi(captured.out + captured.err)
+    combined = strip_ansi(captured.out + captured.err)
     lines = combined.splitlines()
     clone_idx = next(idx for idx, line in enumerate(lines) if line.strip().startswith("clone"))
     sync_idx = lines.index("sync")
@@ -121,7 +121,7 @@ def test_nested_help_groups_render_with_adaptive_layout(backend: str, capsys) ->
     assert result is None
 
     captured = capsys.readouterr()
-    combined = _strip_ansi(captured.out + captured.err)
+    combined = strip_ansi(captured.out + captured.err)
     lines = combined.splitlines()
     heading_idx = lines.index("setup")
     clone_idx = next(idx for idx, line in enumerate(lines) if line.strip().startswith("clone"))

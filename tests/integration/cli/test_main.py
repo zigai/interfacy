@@ -200,6 +200,14 @@ def test_main_missing_target_is_argparse_usage_error(capsys: pytest.CaptureFixtu
     assert "TARGET" in capsys.readouterr().err
 
 
+def test_main_root_help_is_success(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--help"]) == ExitCode.SUCCESS
+
+    captured = capsys.readouterr()
+    assert "TARGET" in captured.out
+    assert captured.err == ""
+
+
 def test_entrypoint_parser_installs_argcomplete_when_config_enables_completion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
