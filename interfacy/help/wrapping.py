@@ -57,7 +57,7 @@ def expand_usage_parts(parts: list[str], available_width: int) -> list[str]:
         if body.startswith("{") and body.endswith("}") and "," in body:
             choices = body[1:-1].split(",")
             for index, choice in enumerate(choices):
-                prefix = bracket_prefix + ("{" if index == 0 else "")
+                prefix = (bracket_prefix + "{") if index == 0 else ""
                 suffix = "}" if index == len(choices) - 1 else ","
                 if index == len(choices) - 1:
                     suffix += bracket_suffix
