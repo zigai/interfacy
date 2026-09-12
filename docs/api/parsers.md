@@ -6,6 +6,10 @@
 - `invoke_async()` executes and awaits asynchronous results inside an existing event loop.
 - `run()` is the CLI boundary; it renders results or failures and raises `SystemExit`.
 
+For compatibility with applications written before 0.8, `Interfacy(sys_exit_enabled=False)`
+makes `run()` return like an embedded invocation. New embedded integrations should call
+`invoke()` directly.
+
 ```python
 from interfacy import Interfacy
 

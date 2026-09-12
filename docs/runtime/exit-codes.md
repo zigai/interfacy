@@ -43,6 +43,10 @@ result = parser.invoke(count, args=[])
 assert result == 7
 ```
 
+The compatibility option `Interfacy(sys_exit_enabled=False)` also prevents `run()` from
+terminating the process for applications written against Interfacy 0.7. Prefer `invoke()` in
+new code because it states the embedded boundary directly.
+
 `invoke()` never renders failures or terminates the process. Parsing, configuration,
 plugin, and command failures are raised as exceptions. A command that explicitly raises
 `SystemExit` still propagates that exception because it is part of the command's behavior.

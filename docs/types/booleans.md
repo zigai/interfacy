@@ -116,4 +116,6 @@ not define `negative_flags`.
 Interfacy(bool_negative_prefix="without-").run(build)
 ```
 
+Set `bool_negative_prefix=None` to disable automatically generated inverse flags.
+
 For the true-default `cache` example, this generates `--without-cache`.
