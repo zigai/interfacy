@@ -13,7 +13,7 @@ from typing import Any
 from interfacy.argparse_backend.argument_parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
 from interfacy.console import error, warn
-from interfacy.exceptions import UsageError
+from interfacy.exceptions import InterfacyExit, UsageError
 from interfacy.help.layout import HelpLayout
 from interfacy.help.presets import StandardLayout
 from interfacy.interfacy import Interfacy
@@ -267,7 +267,7 @@ def _handle_config_independent_flag(args: Sequence[str]) -> ExitCode | None:
     return None
 
 
-def _validate_entrypoint_target(target: object) -> None:
+def _validate_entrypoint_target(target: Any) -> None:
     if _is_supported_entrypoint_target(target):
         return
 
@@ -308,6 +308,8 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
 
         runner = Interfacy(**build_runner_kwargs(settings))
         configure_runner_from_module(runner, module)
+    except InterfacyExit as exc:
+        return ExitCode(exc.code)
     except UsageError as exc:
         _render_usage_error(parser, exc)
         return ExitCode.USAGE
