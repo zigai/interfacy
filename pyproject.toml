@@ -64,6 +64,7 @@ dev = [
     "argcomplete",
     "pydantic>=2,<3",
     "rattle-lint>=3.0.0",
+    "codespell>=2.4.1",
 ]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
