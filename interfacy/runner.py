@@ -570,7 +570,7 @@ class SchemaRunner:
         try:
             return self.model_argument_mapper.reconstruct_expanded_models(args, arguments)
         except ExpandedModelValidationError as e:
-            raise UsageError(str(e)) from e
+            raise UsageError(e.message) from e
 
     def _schema_command_for(self, command: Command) -> Command | None:
         schema = self.context.schema

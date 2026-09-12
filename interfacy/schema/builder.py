@@ -8,7 +8,7 @@ from types import NoneType
 from typing import TYPE_CHECKING, Any
 
 from objinspect import Class, Function, Method, Parameter, inspect
-from objinspect.typing import type_args
+from objinspect.typing import is_union_type, type_args
 
 from interfacy.exceptions import (
     ConfigurationError,
@@ -109,7 +109,7 @@ class SchemaBuildContext:
     help_subcommand_sort: Any
     help_option_sort_effective: list[HelpOptionSortRule]
     help_subcommand_sort_effective: list[HelpSubcommandSortRule]
-    bool_negative_prefix: str
+    bool_negative_prefix: str | None
     help_flags: tuple[str, ...]
 
 
@@ -1163,9 +1163,14 @@ class ParserSchemaBuilder:
             if base_name in builtin_map:
                 annotation = builtin_map[base_name]
 
-        annotation_args = type_args(annotation)
-        if len(annotation_args) == 2 and set(annotation_args) == {bool, NoneType}:
-            annotation = bool
+        if is_union_type(annotation):
+            annotation_args = type_args(annotation)
+            if (
+                len(annotation_args) == 2
+                and NoneType in annotation_args
+                and bool in annotation_args
+            ):
+                annotation = bool
 
         if parameter_setting is not None and annotation is not bool:
             if parameter_setting.boolean_mode is not BooleanMode.AUTO:
@@ -1238,9 +1243,12 @@ class ParserSchemaBuilder:
         settings: EffectiveCommandSettings,
     ) -> bool:
         registered_parsers = getattr(self.context.type_parser, "parsers", {})
-        if param_type in registered_parsers and self.model_argument_mapper.is_plain_class_model(
-            param_type
-        ):
+        try:
+            has_parser = param_type in registered_parsers
+        except TypeError:
+            has_parser = False
+
+        if has_parser and self.model_argument_mapper.is_plain_class_model(param_type):
             return False
 
         return self.model_argument_mapper.should_expand_model(
@@ -1664,7 +1672,13 @@ class ParserSchemaBuilder:
         if not isinstance(requested_mode, BooleanMode):
             raise ConfigurationError(f"Boolean parameter '{spec.name}' has an invalid boolean mode")
 
-        mode = self._resolve_boolean_mode(spec, requested_mode)
+        configured_negative_flags = (
+            tuple(parameter_setting.negative_flags)
+            if parameter_setting is not None and parameter_setting.negative_flags is not None
+            else None
+        )
+        mode = self._effective_boolean_mode(spec, requested_mode, configured_negative_flags)
+
         positive_flags = flags if mode in {BooleanMode.POSITIVE_ONLY, BooleanMode.DUAL} else ()
         negative_flags: tuple[str, ...] = ()
 
@@ -1675,11 +1689,6 @@ class ParserSchemaBuilder:
                     if short_name in taken_flags:
                         taken_flags.remove(short_name)
 
-        configured_negative_flags = (
-            tuple(parameter_setting.negative_flags)
-            if parameter_setting is not None and parameter_setting.negative_flags is not None
-            else None
-        )
         if mode is BooleanMode.POSITIVE_ONLY and configured_negative_flags is not None:
             raise ConfigurationError(
                 f"Boolean parameter '{spec.name}' cannot define negative flags in positive_only mode"
@@ -1700,6 +1709,23 @@ class ParserSchemaBuilder:
         )
 
         return True
+
+    def _effective_boolean_mode(
+        self,
+        spec: ParamSpec,
+        requested_mode: BooleanMode,
+        configured_negative_flags: tuple[str, ...] | None,
+    ) -> BooleanMode:
+        mode = self._resolve_boolean_mode(spec, requested_mode)
+
+        if (
+            self.context.bool_negative_prefix is None
+            and configured_negative_flags is None
+            and requested_mode is BooleanMode.AUTO
+        ):
+            return BooleanMode.POSITIVE_ONLY
+
+        return mode
 
     @staticmethod
     def _resolve_boolean_mode(spec: ParamSpec, requested_mode: BooleanMode) -> BooleanMode:
@@ -1732,6 +1758,9 @@ class ParserSchemaBuilder:
         spec: ParamSpec,
         flags: tuple[str, ...],
     ) -> tuple[str, ...]:
+        if self.context.bool_negative_prefix is None:
+            return ()
+
         long_flags = [flag for flag in flags if flag.startswith("--")]
         if not long_flags:
             raise ConfigurationError(
@@ -1753,7 +1782,10 @@ class ParserSchemaBuilder:
     ) -> None:
         state.value_plan = ScalarValue(spec.type)
         if spec.type is not str:
-            state.parser_func = self.context.type_parser.get_parse_func(spec.type)
+            try:
+                state.parser_func = self.context.type_parser.get_parse_func(spec.type)
+            except TypeError:
+                state.parser_func = None
 
     def _argument_kind_from_flags(self, flags: tuple[str, ...]) -> ArgumentKind:
         if any(flag.startswith("-") for flag in flags):

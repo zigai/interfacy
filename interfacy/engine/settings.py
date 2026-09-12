@@ -23,7 +23,7 @@ from interfacy.schema.sorting import (
 
 AbbreviationScope = Literal["top_level_options", "all_options"]
 BackendName = Literal["argparse", "click"]
-BooleanNegativePrefix = str
+BooleanNegativePrefix = str | None
 HelpFlags = Sequence[str]
 HelpOptionSort = list[HelpOptionSortRule] | None
 HelpSubcommandSort = list[HelpSubcommandSortRule] | None
@@ -394,8 +394,12 @@ def validate_method_skips(value: MethodSkips) -> list[str]:
 
 
 def validate_bool_negative_prefix(value: BooleanNegativePrefix) -> BooleanNegativePrefix:
-    if not isinstance(value, str) or not value:
-        raise ConfigurationError("bool_negative_prefix must be a non-empty string")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigurationError("bool_negative_prefix must be a string or None")
+    if not value:
+        raise ConfigurationError("bool_negative_prefix must not be empty")
 
     return value
 

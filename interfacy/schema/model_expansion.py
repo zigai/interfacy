@@ -46,6 +46,7 @@ class ModelExpansionBuilder:
             parent_has_default=self.param.has_default,
             original_model_type=model_type,
             model_default=model_default,
+            root_is_optional=is_optional_model,
         )
 
     def _fields(
@@ -59,6 +60,7 @@ class ModelExpansionBuilder:
         parent_has_default: bool,
         original_model_type: type,
         model_default: Any,
+        root_is_optional: bool,
     ) -> list[Argument]:
         arguments: list[Argument] = []
         max_depth = self.settings.model_expansion_max_depth
@@ -83,6 +85,7 @@ class ModelExpansionBuilder:
                         parent_has_default=parent_has_default,
                         original_model_type=original_model_type,
                         model_default=model_default,
+                        root_is_optional=root_is_optional,
                     )
                 )
                 continue
@@ -98,6 +101,7 @@ class ModelExpansionBuilder:
                     parent_has_default=parent_has_default,
                     original_model_type=original_model_type,
                     model_default=model_default,
+                    root_is_optional=root_is_optional,
                 )
             )
 
@@ -115,6 +119,7 @@ class ModelExpansionBuilder:
         parent_has_default: bool,
         original_model_type: type,
         model_default: Any,
+        root_is_optional: bool,
     ) -> Argument:
         translated_path = tuple(
             self.builder.context.flag_strategy.argument_translator.translate(part) for part in path
@@ -160,7 +165,7 @@ class ModelExpansionBuilder:
             is_expanded_from=root_name,
             expansion_path=path,
             original_model_type=original_model_type,
-            parent_is_optional=parent_optional,
+            parent_is_optional=root_is_optional,
             model_default=model_default,
             settings=self.settings,
         )

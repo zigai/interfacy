@@ -198,13 +198,10 @@ def _normalize_argument_value(
         return
 
     value_plan = argument.value_plan
-    if isinstance(value_plan, RepeatedValue):
-        item_cardinality = value_plan.item.token_consumption(required=True)
-        if item_cardinality.group_size == 1:
-            bucket[argument.name] = list(_as_sequence(bucket[argument.name]))
-            return
-
     if not plan_requires_post_conversion(value_plan, required=argument.required):
+        if isinstance(value_plan, RepeatedValue):
+            bucket[argument.name] = list(_as_sequence(bucket[argument.name]))
+
         return
 
     bucket[argument.name] = value_plan.convert(bucket[argument.name], type_parser=type_parser)
