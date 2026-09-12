@@ -54,12 +54,15 @@ class DefaultAbbreviationGenerator(AbbreviationGenerator):
             ValueError: If the full value is already reserved as an abbreviation.
         """
         if value in taken:
-            raise ValueError(f"'{value}' is already an abbreviation")
+            return None
 
-        name_split = value.replace("-", "_").split("_")
+        name_split = [part for part in value.replace("-", "_").split("_") if part]
+        if not name_split:
+            return None
+
         candidates = [
             name_split[0][0],
-            "".join([part[0] for part in name_split if part]),
+            "".join(part[0] for part in name_split),
             name_split[0][:2],
         ]
 
