@@ -62,11 +62,12 @@ dev = [
     "pyrefly>=1.0.0",
     "click>=8.3.1",
     "argcomplete",
+    "pydantic>=2,<3",
     "rattle-lint>=3.0.0",
 ]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
-test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2"]
+test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2", "pydantic>=2,<3", "argcomplete"]
 docs = [
     "beautifulsoup4",
     "click>=8.3.1",
@@ -306,5 +307,5 @@ convention = "google"
 default-groups = ["test"]
 
 [dependency-groups]
-test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2"]
+test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2", "pydantic>=2,<3", "argcomplete"]
 dev = [{include-group = "test"}, "ruff==0.16.1", "pre-commit>=4.6.0", "pyrefly>=1.0.0", "argcomplete", "rattle-lint>=3.0.0", "codespell>=2.4.2"]

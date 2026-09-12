@@ -74,6 +74,7 @@ test *args: _require-uv
 # Build the project
 build: _require-uv
   uv build
+  INTERFACY_TEST_ARTIFACTS=1 uv run --group test pytest tests/packaging -ra
 
 # Install the CLI executable to ~/.local/bin
 install: _require-uv
@@ -113,6 +114,7 @@ spell: _require-uv
 # Run all quality checks
 check: lint coverage typecheck spell
   uv run --group dev ruff format --check .
+  uv run --group dev rattle --help > /dev/null
 
 # List available recipes
 help:
