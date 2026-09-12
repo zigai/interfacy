@@ -571,7 +571,7 @@ class InterfacyEngine(InvocationOperations):
 
         return schema
 
-    def build_parser(self) -> object:
+    def build_parser(self) -> Any:
         return self._session().native_parser
 
     def get_last_schema(self) -> ParserSchema | None:
@@ -582,11 +582,12 @@ class InterfacyEngine(InvocationOperations):
         try:
             return self.parse(resolved).namespace
         except ExecutableActionPending as e:
-            code = execute_executable_flag(
-                e.action.flag,
-                display_result_fn=e.action.display_result_fn,
-            )
-            raise InterfacyExit(code) from None
+            raise InterfacyExit(
+                execute_executable_flag(
+                    e.action.flag,
+                    display_result_fn=e.action.display_result_fn,
+                )
+            ) from None
 
     def parse(self, args: tuple[str, ...]) -> InvocationInput:
         self._invocation_sequence += 1
@@ -751,7 +752,7 @@ class InterfacyEngine(InvocationOperations):
             argument_translations=dict(self.flag_strategy.argument_translator.translations),
         )
 
-    def restore(self, snapshot: object) -> None:
+    def restore(self, snapshot: Any) -> None:
         if not isinstance(snapshot, _EngineSnapshot):
             raise TypeError("Invalid engine snapshot")
 

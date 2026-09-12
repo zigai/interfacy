@@ -178,8 +178,8 @@ class BackendPluginContext:
     """Explicit unstable access to a selected backend adapter and native parser."""
 
     backend: BackendName
-    adapter: object = field(compare=False, repr=False)
-    native_parser: object | None = field(default=None, compare=False, repr=False)
+    adapter: Any = field(compare=False, repr=False)
+    native_parser: Any | None = field(default=None, compare=False, repr=False)
 
 
 class ParseFailureKind(str, Enum):

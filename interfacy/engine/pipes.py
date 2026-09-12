@@ -18,7 +18,7 @@ _PIPE_UNSET = object()
 class PipeStateSnapshot:
     default_targets: PipeTargets | None
     overrides: dict[tuple[str | None, str | None], PipeTargets]
-    input_buffer: object
+    input_buffer: Any
     cli_namespace: dict[str, Any] | None
 
 
@@ -31,7 +31,7 @@ class PipeState:
         self._command_names = command_names
         self.default_targets = default_targets
         self._overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
-        self._input_buffer: object = _PIPE_UNSET
+        self._input_buffer: Any = _PIPE_UNSET
         self._cli_namespace: dict[str, Any] | None = None
 
     def configure(
