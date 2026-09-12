@@ -103,7 +103,12 @@ def parse_list(
         if args:
             element_t = args[0]
 
-    parse_func = type_parser.get_parse_func(element_t) if isinstance(element_t, type) else None
+    try:
+        # strto accepts runtime typing forms such as Literal despite its narrow type annotation.
+        parse_func = type_parser.get_parse_func(element_t)  # pyrefly: ignore [bad-argument-type]
+    except (TypeError, ValueError, AttributeError):
+        parse_func = None
+
     if parse_func is None:
         return values
 
@@ -131,9 +136,14 @@ def parse_value(
     if not parameter.is_typed:
         return raw
 
-    parse_func = (
-        type_parser.get_parse_func(parameter.type) if isinstance(parameter.type, type) else None
-    )
+    try:
+        # strto accepts runtime typing forms such as unions despite its narrow type annotation.
+        parse_func = type_parser.get_parse_func(
+            parameter.type  # pyrefly: ignore [bad-argument-type]
+        )
+    except (TypeError, ValueError, AttributeError):
+        parse_func = None
+
     if parse_func is None:
         return raw
 
@@ -239,6 +249,9 @@ def apply_pipe_values(
         if raw_chunk is None or raw_chunk == "":  # No piped data for this binding
             continue
 
+        if config.priority == "cli" and cli_supplied:
+            continue
+
         try:
             parsed = parse_value(parameter, raw_chunk, config.delimiter, type_parser)
         except Exception as e:
@@ -246,10 +259,6 @@ def apply_pipe_values(
                 param_name,
                 f"failed to convert piped input: {e}",
             ) from e
-
-        priority = config.priority
-        if priority == "cli" and cli_supplied:
-            continue
 
         updated[param_name] = parsed
 

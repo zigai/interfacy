@@ -303,7 +303,11 @@ class ClickSession(BackendSession[click.Command]):
     def _param_attributes(
         self, argument: Argument, *, relaxed: bool
     ) -> tuple[dict[str, Any], bool]:
-        is_required = argument.required and argument.cardinality.minimum_values > 0
+        if argument.value_shape is ValueShape.FLAG:
+            is_required = argument.required
+        else:
+            is_required = argument.required and argument.cardinality.minimum_values > 0
+
         attrs: dict[str, Any] = {
             "required": is_required and not relaxed,
             "help": argument.help,

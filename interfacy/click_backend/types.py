@@ -14,6 +14,12 @@ class ClickFuncParamType(click.types.FuncParamType):
         raw_name = name if name is not None else getattr(func, "__name__", None)
         self.name = str(raw_name) if raw_name is not None else "NO_NAME"
 
+    def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
+        try:
+            return self.func(value)
+        except (ValueError, TypeError, KeyError) as exc:
+            self.fail(f"invalid value for configured type parser: {exc}", param, ctx)
+
 
 class ChoiceParamType(click.ParamType):
     """Validate values against a fixed choice set with optional pre-parsing."""
@@ -46,13 +52,8 @@ class ChoiceParamType(click.ParamType):
         if self.parser is not None:
             try:
                 converted = self.parser(value)
-            except (TypeError, ValueError, click.BadParameter) as exc:
-                raise click.BadParameter(
-                    "invalid value for configured type parser",
-                    ctx=ctx,
-                    param=param,
-                ) from exc
-
+            except (TypeError, ValueError, KeyError, click.BadParameter):
+                converted = value
         allowed = self._parsed_choices if self._parsed_choices is not None else self.choices
         if converted not in allowed:
             choices_repr = ", ".join(repr(choice) for choice in self.choices)

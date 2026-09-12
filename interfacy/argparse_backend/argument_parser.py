@@ -899,13 +899,29 @@ class ArgumentParser(argparse.ArgumentParser):
             result = parse_func(arg_string)
 
         except argparse.ArgumentTypeError as exc:
-            raise argparse.ArgumentError(action, str(exc)) from exc
+            raise argparse.ArgumentError(action, exc.args[0]) from exc
 
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, KeyError) as exc:
             t_name = _callable_type_name(parse_func, fallback="value")
             raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'") from exc
 
         return result
+
+    def _get_values(self, action: argparse.Action, arg_strings: list[str]) -> Any:
+        if (
+            not arg_strings
+            and action.nargs == argparse.ZERO_OR_MORE
+            and not action.option_strings
+            and action.choices is not None
+        ):
+            choices = action.choices
+            action.choices = None
+            try:
+                return super()._get_values(action, arg_strings)
+            finally:
+                action.choices = choices
+
+        return super()._get_values(action, arg_strings)
 
 
 __all__ = [

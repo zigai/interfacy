@@ -148,8 +148,10 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             parser._interfacy_raise_parse_errors = False
 
     def present_error(self, presentation: NativePresentation) -> NoReturn:
-        usage = self._native_parser.format_usage() if presentation.kind == "usage" else None
-        raise UsageError(presentation.message, usage=usage)
+        raise UsageError(
+            presentation.message,
+            usage=self._native_parser.format_usage() if presentation.kind == "usage" else None,
+        )
 
     def _parser_for(self, request: ParseRequest) -> ArgumentParser:
         if request.mode == "partial":
