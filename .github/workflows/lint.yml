@@ -21,3 +21,17 @@ jobs:
 
       - name: Run Ruff lint
         run: uv run --python 3.12 ruff check .
+
+      - name: Run tests with coverage
+        run: |
+          uv run --python 3.12 coverage run -m pytest
+          uv run --python 3.12 coverage report
+
+      - name: Run Pyrefly
+        run: uv run --python 3.12 pyrefly check --min-severity warn
+
+      - name: Run codespell
+        run: uv run --python 3.12 codespell
+
+      - name: Verify Rattle consumer startup
+        run: uv run --python 3.12 rattle --help
