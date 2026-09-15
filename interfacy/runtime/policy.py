@@ -20,8 +20,8 @@ class RuntimePolicy:
         if self.display_result:
             self.result_display_fn(value)
 
-    def handle_interrupt(self, e: KeyboardInterrupt) -> None:
-        if self.on_interrupt is not None:
+    def handle_interrupt(self, e: BaseException) -> None:
+        if self.on_interrupt is not None and isinstance(e, KeyboardInterrupt):
             self.on_interrupt(e)
 
         self.log_interrupt()

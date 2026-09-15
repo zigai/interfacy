@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from inspect import isawaitable
@@ -126,7 +127,7 @@ class InvocationRuntime:
             result = self._invoke(commands, args)
         except InterfacyExit as e:
             raise SystemExit(e.code) from None
-        except KeyboardInterrupt as e:
+        except (KeyboardInterrupt, asyncio.CancelledError) as e:
             self._policy.handle_interrupt(e)
             raise SystemExit(ExitCode.INTERRUPTED) from None
         except SystemExit:

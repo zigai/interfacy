@@ -504,7 +504,10 @@ class SchemaRunner:
                     len(method_args),
                     len(method_kwargs),
                 )
-                result = obj.call(instance, *method_args, **method_kwargs)
+                if obj.is_static or obj.is_classmethod:
+                    result = obj.call(*method_args, **method_kwargs)
+                else:
+                    result = obj.call(instance, *method_args, **method_kwargs)
 
                 return self._resolve_result(result)
 

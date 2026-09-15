@@ -502,8 +502,10 @@ class Interfacy:
     def run(self, *commands: CommandTarget, args: list[str] | None = None) -> Any:
         """Invoke a command and terminate unless embedded compatibility is enabled."""
         if not self._sys_exit_enabled:
-            return self._engine.invoke(*commands, args=args)
-
+            result = self._engine.invoke(*commands, args=args)
+            if self._engine.runtime_policy.display_result:
+                self._engine.runtime_policy.display(result)
+            return result
         return self._engine.run(*commands, args=args)
 
     def build_parser(self) -> Any:
