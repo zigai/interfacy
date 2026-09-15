@@ -1035,12 +1035,20 @@ class ParserSchemaBuilder:
         return flag.lstrip("-")
 
     def _reserve_parameter_flags(self, flags: tuple[str, ...], taken_flags: list[str]) -> None:
+        seen_in_param: set[str] = set()
         for flag in flags:
+            if flag in seen_in_param:
+                raise ReservedFlagError(self._flag_token_key(flag))
+            seen_in_param.add(flag)
+
             key = self._flag_token_key(flag)
             if key in taken_flags:
                 raise ReservedFlagError(key)
 
-            taken_flags.append(key)
+        for flag in flags:
+            key = self._flag_token_key(flag)
+            if key not in taken_flags:
+                taken_flags.append(key)
 
     def _default_long_flag(self, translated_name: str) -> str:
         return f"--{translated_name}"
@@ -1191,9 +1199,12 @@ class ParserSchemaBuilder:
                     is_optional_model=is_optional_model,
                     taken_flags=taken_flags,
                     settings=resolved_settings,
+                    pipe_param_names=pipe_param_names,
                 )
 
-        translated_name = self.context.flag_strategy.argument_translator.translate(param.name)
+        translated_name = (
+            self.context.flag_strategy.argument_translator.translate(param.name) or param.name
+        )
         flags = self._flags_for_parameter(
             translated_name=translated_name,
             param=param,
@@ -1362,12 +1373,14 @@ class ParserSchemaBuilder:
         is_optional_model: bool,
         taken_flags: list[str],
         settings: EffectiveCommandSettings,
+        pipe_param_names: set[str] | None = None,
     ) -> list[Argument]:
         return ModelExpansionBuilder(
             builder=self,
             param=param,
             taken_flags=taken_flags,
             settings=settings,
+            pipe_param_names=pipe_param_names,
         ).build(model_type=model_type, is_optional_model=is_optional_model)
 
     def _argument_from_spec(
@@ -1410,7 +1423,10 @@ class ParserSchemaBuilder:
             state.argument_default = ArgumentDefault.present(spec.default)
 
         kind = self._argument_kind_from_flags(flags)
-        accepts_stdin = pipe_param_names is not None and spec.name in pipe_param_names
+        accepts_stdin = pipe_param_names is not None and (
+            spec.name in pipe_param_names
+            or (is_expanded_from is not None and is_expanded_from in pipe_param_names)
+        )
         pipe_required = accepts_stdin and spec.is_required
         required = self._required_for_spec(
             spec=spec,
@@ -1780,6 +1796,11 @@ class ParserSchemaBuilder:
         spec: ParamSpec,
         state: ArgumentBuildState,
     ) -> None:
+        if spec.type is Any or spec.type is object:
+            state.value_plan = UntypedValue()
+            state.parser_func = None
+            return
+
         state.value_plan = ScalarValue(spec.type)
         if spec.type is not str:
             try:
@@ -1891,8 +1912,11 @@ class ParserSchemaBuilder:
                 self.context.flag_strategy.command_translator.translate(alias) for alias in aliases
             )
             candidates = (cli_name, *translated_aliases)
-            if len(set(candidates)) != len(candidates):
-                raise DuplicateCommandError(cli_name)
+            seen_candidates: set[str] = set()
+            for candidate in candidates:
+                if candidate in seen_candidates:
+                    raise DuplicateCommandError(candidate)
+                seen_candidates.add(candidate)
 
             for candidate in candidates:
                 if candidate in translated_child_names:
@@ -1902,7 +1926,7 @@ class ParserSchemaBuilder:
 
         for name, subgroup_entry in group.subgroup_entries.items():
             sub_cli_name = self.context.flag_strategy.command_translator.translate(name)
-            register_translated_child(name)
+            register_translated_child(name, subgroup_entry.group.aliases)
             subcommands[sub_cli_name] = self.build_from_group(
                 subgroup_entry.group,
                 current_path,

@@ -397,6 +397,17 @@ def _objinspect_choices_from_annotation(annotation: Any, *, for_display: bool) -
     return _normalize_enum_choices(list(raw), for_display=for_display)
 
 
+def _union_choices(resolved: Any, *, for_display: bool) -> list[Any] | None:
+    args = [arg for arg in type_args(resolved) if arg is not NoneType]
+    all_choices: list[Any] = []
+    for arg in args:
+        sub = get_annotation_choices(arg, for_display=for_display)
+        if not sub:
+            return None
+        all_choices.extend(sub)
+    return all_choices or None
+
+
 def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> list[Any] | None:
     """
     Return a normalized list of choices for a type annotation.
@@ -407,6 +418,8 @@ def get_annotation_choices(annotation: Any, *, for_display: bool = False) -> lis
         return None
 
     resolved = resolve_type_alias(annotation)
+    if is_union_type(resolved):
+        return _union_choices(resolved, for_display=for_display)
 
     if isinstance(resolved, type) and issubclass(resolved, Enum):
         return _normalize_enum_choices(list(resolved), for_display=for_display)

@@ -25,6 +25,7 @@ class ModelExpansionBuilder:
     param: Parameter
     taken_flags: list[str]
     settings: EffectiveCommandSettings
+    pipe_param_names: set[str] | None = None
 
     def build(self, *, model_type: type, is_optional_model: bool) -> list[Argument]:
         translated_name = self.builder.context.flag_strategy.argument_translator.translate(
@@ -157,7 +158,7 @@ class ModelExpansionBuilder:
             translated_name=display_name,
             flags=flags,
             taken_flags=self.taken_flags,
-            pipe_param_names=None,
+            pipe_param_names=self.pipe_param_names,
             allow_optional_union_list=False,
             suppress_parse_default=True,
             force_optional=False,

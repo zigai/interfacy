@@ -53,15 +53,21 @@ def _callable_type_name(value: Any, *, fallback: str = "value") -> str:
     if isinstance(name, str) and name:
         return name
 
+    def _safe_type_name(target: Any) -> str:
+        try:
+            return type_name(target)
+        except (AttributeError, TypeError, ValueError):
+            return str(target)
+
     parsed_type = getattr(value, "_t", None)
     if parsed_type is not None:
-        return type_name(str(parsed_type))
+        return _safe_type_name(parsed_type)
 
     keywords = getattr(value, "keywords", None)
     if isinstance(keywords, dict) and keywords.get("t") is not None:
-        return type_name(str(keywords["t"]))
+        return _safe_type_name(keywords["t"])
 
-    return type_name(str(value))
+    return _safe_type_name(value)
 
 
 def _set_callable_type_name(value: Any) -> None:

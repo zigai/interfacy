@@ -182,16 +182,20 @@ class DefaultFlagStrategy(FlagStrategy):
         Returns:
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).
         """
+        effective_name = name or getattr(param, "name", "arg")
         is_bool_flag = param.is_typed and param.type is bool
         if not is_bool_flag and param.is_required and self.style == "required_positional":
-            return (name,)
+            return (effective_name,)
 
-        flag_long = f"--{name}".strip() if is_bool_flag or len(name) > 1 else f"-{name}".strip()
+        flag_long = (
+            f"--{effective_name}".strip()
+            if is_bool_flag or len(effective_name) > 1
+            else f"-{effective_name}".strip()
+        )
 
         flags: tuple[str, ...] = (flag_long,)
 
-        abbrev_name = name
-
+        abbrev_name = effective_name
         if is_bool_flag:
             default_value = param.default if param.has_default else False
             if default_value is True:
