@@ -454,20 +454,6 @@ dependencies = [
 click = [
     { name = "click" },
 ]
-dev = [
-    { name = "argcomplete" },
-    { name = "click" },
-    { name = "codespell" },
-    { name = "coverage" },
-    { name = "pre-commit" },
-    { name = "pydantic" },
-    { name = "pyrefly" },
-    { name = "pytest" },
-    { name = "pytest-mock" },
-    { name = "pyyaml" },
-    { name = "rattle-lint" },
-    { name = "ruff" },
-]
 docs = [
     { name = "beautifulsoup4" },
     { name = "click" },
@@ -484,15 +470,6 @@ full = [
     { name = "argcomplete" },
     { name = "click" },
 ]
-test = [
-    { name = "argcomplete" },
-    { name = "click" },
-    { name = "coverage" },
-    { name = "pydantic" },
-    { name = "pytest" },
-    { name = "pytest-mock" },
-    { name = "pyyaml" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -505,7 +482,6 @@ dev = [
     { name = "pyrefly" },
     { name = "pytest" },
     { name = "pytest-mock" },
-    { name = "pyyaml" },
     { name = "rattle-lint" },
     { name = "ruff" },
 ]
@@ -516,40 +492,20 @@ test = [
     { name = "pydantic" },
     { name = "pytest" },
     { name = "pytest-mock" },
-    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "argcomplete", marker = "extra == 'dev'" },
     { name = "argcomplete", marker = "extra == 'full'" },
-    { name = "argcomplete", marker = "extra == 'test'" },
     { name = "beautifulsoup4", marker = "extra == 'docs'" },
     { name = "click", marker = "extra == 'click'", specifier = ">=8.3.1" },
-    { name = "click", marker = "extra == 'dev'", specifier = ">=8.3.1" },
     { name = "click", marker = "extra == 'docs'", specifier = ">=8.3.1" },
     { name = "click", marker = "extra == 'full'", specifier = ">=8.3.1" },
-    { name = "click", marker = "extra == 'test'", specifier = ">=8.3.1" },
-    { name = "codespell", marker = "extra == 'dev'", specifier = ">=2.4.1" },
-    { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.14.1" },
-    { name = "coverage", marker = "extra == 'test'", specifier = ">=7.14.1" },
     { name = "furo", marker = "extra == 'docs'" },
     { name = "jinja2", marker = "extra == 'docs'", specifier = "==3.1.6" },
     { name = "myst-parser", marker = "extra == 'docs'", specifier = "==4.0.1" },
     { name = "objinspect", specifier = ">=0.4.3" },
     { name = "platformdirs", specifier = ">=4.3.8" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.6.0" },
-    { name = "pydantic", marker = "extra == 'dev'", specifier = ">=2,<3" },
-    { name = "pydantic", marker = "extra == 'test'", specifier = ">=2,<3" },
-    { name = "pyrefly", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
-    { name = "pytest-mock", marker = "extra == 'dev'" },
-    { name = "pytest-mock", marker = "extra == 'test'" },
-    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.2" },
-    { name = "pyyaml", marker = "extra == 'test'", specifier = ">=6.0.2" },
-    { name = "rattle-lint", marker = "extra == 'dev'", specifier = ">=3.0.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.1" },
     { name = "setproctitle", specifier = ">=1.3.7" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = "==8.0.2" },
     { name = "sphinx-copybutton", marker = "extra == 'docs'" },
@@ -561,7 +517,7 @@ requires-dist = [
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "tomlkit", specifier = ">=0.12" },
 ]
-provides-extras = ["dev", "full", "click", "test", "docs"]
+provides-extras = ["full", "click", "docs"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -574,7 +530,6 @@ dev = [
     { name = "pyrefly", specifier = ">=1.0.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-mock" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "rattle-lint", specifier = ">=3.0.0" },
     { name = "ruff", specifier = "==0.16.1" },
 ]
@@ -585,7 +540,6 @@ test = [
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-mock" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]

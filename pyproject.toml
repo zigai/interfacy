@@ -52,23 +52,8 @@ interfacy = "interfacy.cli.main:main"
 
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=9.0.3",
-    "pytest-mock",
-    "pyyaml>=6.0.2",
-    "ruff==0.16.1",
-    "pre-commit>=4.6.0",
-    "coverage>=7.14.1",
-    "pyrefly>=1.0.0",
-    "click>=8.3.1",
-    "argcomplete",
-    "pydantic>=2,<3",
-    "rattle-lint>=3.0.0",
-    "codespell>=2.4.1",
-]
 full = ["argcomplete", "click>=8.3.1"]
 click = ["click>=8.3.1"]
-test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2", "pydantic>=2,<3", "argcomplete"]
 docs = [
     "beautifulsoup4",
     "click>=8.3.1",
@@ -96,6 +81,7 @@ module-name = "interfacy"
 module-root = ""
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 filterwarnings = [
     "ignore:'_UnionGenericAlias' is deprecated:DeprecationWarning",
 ]
@@ -242,11 +228,7 @@ exclude = ["build"]
 "__init__.py" = ["F401", "E402"]
 "docs/conf.py" = ["A001", "INP001"]
 "docs/_ext/darker_modern_pygments.py" = ["RUF012"]
-"interfacy/argparse_backend/argument_parser.py" = ["C901"]
-"interfacy/argparse_backend/help_formatter.py" = ["C901"]
-"interfacy/help/layout.py" = ["RUF009"]
 "interfacy/help/colors.py" = ["RUF009"]
-"interfacy/help/presets.py" = ["RUF009"]
 "tests/fixtures/commands.py" = ["UP006", "UP007", "UP035", "UP045"]
 "**/tests/**/*.py" = [
     "S104",
@@ -308,5 +290,5 @@ convention = "google"
 default-groups = ["test"]
 
 [dependency-groups]
-test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pyyaml>=6.0.2", "pydantic>=2,<3", "argcomplete"]
+test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pydantic>=2,<3", "argcomplete"]
 dev = [{include-group = "test"}, "ruff==0.16.1", "pre-commit>=4.6.0", "pyrefly>=1.0.0", "argcomplete", "rattle-lint>=3.0.0", "codespell>=2.4.2"]
