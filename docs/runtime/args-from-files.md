@@ -42,10 +42,10 @@ Interfacy(
 
 ## Manual argparse wrapper
 
-When using `interfacy.argparse_backend.ArgumentParser` directly, use the standard `fromfile_prefix_chars` argument.
+When using `interfacy.backends.argparse.ArgumentParser` directly, use the standard `fromfile_prefix_chars` argument.
 
 ```python
-from interfacy.argparse_backend import ArgumentParser
+from interfacy.backends.argparse import ArgumentParser
 
 parser = ArgumentParser(fromfile_prefix_chars="@")
 parser.add_argument("value")

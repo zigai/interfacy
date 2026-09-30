@@ -46,16 +46,16 @@
 ## Group Metadata
 
 ```{eval-rst}
-.. autodata:: interfacy.group.AbbreviationScope
+.. autodata:: interfacy.declarations.settings.AbbreviationScope
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.group.CommandEntry
+.. autoclass:: interfacy.declarations.groups.CommandEntry
    :exclude-members: __init__, __new__
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.group.SubgroupEntry
+.. autoclass:: interfacy.declarations.groups.SubgroupEntry
    :exclude-members: __init__, __new__
 ```
 
@@ -65,16 +65,16 @@ The low-level `ArgumentParser` also accepts `help_position` so manual argparse
 setups can use the same help-description column control as `Interfacy`.
 
 ```{eval-rst}
-.. autoclass:: interfacy.argparse_backend.argument_parser.ArgumentParser
+.. autoclass:: interfacy.backends.argparse.parser.ArgumentParser
    :exclude-members: __init__, __new__
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.click_backend.commands.InterfacyClickCommand
+.. autoclass:: interfacy.backends.click.commands.InterfacyClickCommand
    :exclude-members: __init__, __new__
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.click_backend.commands.InterfacyClickGroup
+.. autoclass:: interfacy.backends.click.commands.InterfacyClickGroup
    :exclude-members: __init__, __new__
 ```

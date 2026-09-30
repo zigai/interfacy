@@ -5,7 +5,7 @@ Interfacy's `ArgumentParser` is an argparse-compatible parser with Interfacy hel
 It keeps the regular argparse workflow: create a parser, call `add_argument()`, and parse arguments. The wrapper adds Interfacy layouts and colors, custom help flags, and nested destination handling.
 
 ```python
-from interfacy.argparse_backend import ArgumentParser
+from interfacy.backends.argparse import ArgumentParser
 
 
 parser = ArgumentParser(
@@ -29,7 +29,7 @@ Pass `help_layout=` to style manual argparse help.
 
 ```python
 from interfacy.help import ClapLayout
-from interfacy.argparse_backend import ArgumentParser
+from interfacy.backends.argparse import ArgumentParser
 
 parser = ArgumentParser(
     prog="deploy",
@@ -57,6 +57,24 @@ Customize help aliases with `help_flags`.
 
 ```python
 parser = ArgumentParser(help_flags=("--help", "-h"))
+```
+
+## Exiting
+
+Like argparse, the parser prints help and exits with status 0, and reports usage errors on stderr and exits with status 2. Pass `sys_exit_enabled=False` to handle these yourself: help raises `InterfacyExit` and usage errors raise `UsageError`. Subparsers inherit the setting.
+
+```python
+from interfacy.exceptions import InterfacyExit, UsageError
+
+parser = ArgumentParser(prog="deploy", sys_exit_enabled=False)
+parser.add_argument("environment")
+
+try:
+    args = parser.parse_args()
+except InterfacyExit:
+    ...
+except UsageError as exc:
+    print(exc.usage, exc)
 ```
 
 ## Args from files
