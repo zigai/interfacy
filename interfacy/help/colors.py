@@ -2,7 +2,30 @@ from dataclasses import dataclass
 
 from stdl.st import TextStyle
 
-from interfacy.help.layout import InterfacyColors
+
+@dataclass(kw_only=True)
+class InterfacyColors:
+    """Base color theme for interfacy."""
+
+    type: TextStyle = TextStyle(color="green")
+    type_keyword: TextStyle = TextStyle(color="light_blue")
+    type_bracket: TextStyle = TextStyle(color="white")
+    type_punctuation: TextStyle = TextStyle(color="white")
+    type_operator: TextStyle = TextStyle(color="white")
+    type_literal: TextStyle = TextStyle(color="yellow")
+    default: TextStyle = TextStyle(color="light_blue")
+    description: TextStyle = TextStyle(color="white")
+    string: TextStyle = TextStyle(color="yellow")
+    extra_data: TextStyle = TextStyle(color="gray")
+    flag_short: TextStyle = TextStyle(color="white")
+    flag_long: TextStyle = TextStyle(color="white")
+    flag_positional: TextStyle = TextStyle(color="white")
+    usage_style: TextStyle | None = None
+    usage_text_style: TextStyle | None = None
+    section_heading_style: TextStyle | None = None
+    placeholder_style: TextStyle | None = None
+    command_name_style: TextStyle | None = None
+
 
 WHITE_TEXT = TextStyle(color="white")
 

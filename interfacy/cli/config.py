@@ -2,30 +2,23 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, fields
 from functools import cache
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Literal, TypeGuard, TypeVar
+from typing import Any, TypeGuard, TypeVar
 
 from platformdirs import user_config_path
 from stdl.fs import toml_load
 
-import interfacy.help.colors as appearance_colors  # noqa: F401
-import interfacy.help.presets as appearance_layouts
+import interfacy.help.layouts as appearance_layouts
+from interfacy.declarations.settings import BACKEND_NAMES, AbbreviationScope, BackendName
 from interfacy.engine import UNSET
-from interfacy.engine.settings import (
-    AbbreviationScope,
-    validate_abbreviation_max_generated_len,
-    validate_abbreviation_scope,
-    validate_bool_negative_prefix,
-    validate_help_flags,
-    validate_method_skips,
-    validate_model_expansion_max_depth,
-    validate_parse_recovery_max_attempts,
-)
+from interfacy.engine.settings import SETTING_NAMES, EngineSettings
 from interfacy.exceptions import ConfigurationError
-from interfacy.help.layout import HelpLayout, InterfacyColors
+from interfacy.help import HelpLayout
+from interfacy.help.colors import InterfacyColors
 from interfacy.naming.abbreviations import (
     AbbreviationGenerator,
     DefaultAbbreviationGenerator,
@@ -38,14 +31,10 @@ from interfacy.naming.flag_strategy import (
     TranslationMode,
 )
 from interfacy.plugins import InterfacyPlugin
-from interfacy.schema.sorting import (
-    resolve_help_option_sort_rules,
-    resolve_help_subcommand_sort_rules,
-)
 
 _ComponentT = TypeVar("_ComponentT")
 _ResolverResultT = TypeVar("_ResolverResultT")
-Backend = Literal["argparse", "click"]
+Backend = BackendName
 
 _ABBREVIATION_SCOPE_LOOKUP: dict[str, AbbreviationScope] = {
     "topleveloptions": "top_level_options",
@@ -101,39 +90,39 @@ class InterfacyConfig:
     )
     print_result: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     full_error_traceback: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     tab_completion: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     allow_args_from_file: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     include_inherited_methods: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     include_protected_methods: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     include_private_methods: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     include_staticmethods: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     include_classmethods: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     method_skips: list[str] | None = field(
         default=None,
@@ -141,11 +130,11 @@ class InterfacyConfig:
     )
     silent_interrupt: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     expand_model_params: bool | None = field(
         default=None,
-        metadata={"section": "behavior", "passthrough": True},
+        metadata={"section": "behavior"},
     )
     model_expansion_max_depth: int | None = field(
         default=None,
@@ -279,7 +268,7 @@ def _component_registry(
         seen.add(current)
         stack.extend(current.__subclasses__())
         if (
-            current.__module__ == appearance_layouts.__name__
+            current.__module__.startswith(f"{appearance_layouts.__name__}.")
             and current.__name__ not in appearance_layouts.__all__
         ):
             continue
@@ -359,27 +348,7 @@ def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy |
     raise ConfigurationError(f"Unknown flag_strategy value: {value}")
 
 
-def _resolve_abbreviation_max_generated_len(value: Any) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigurationError("abbreviation_max_generated_len must be an integer >= 1")
-    return validate_abbreviation_max_generated_len(value)
-
-
-def _resolve_abbreviation_gen(
-    value: Any,
-    config: dict[str, Any],
-) -> AbbreviationGenerator | None:
-    max_generated_len = _resolve_abbreviation_max_generated_len(
-        config.get("abbreviation_max_generated_len")
-    )
-    if value is None:
-        if max_generated_len is None:
-            return None
-
-        return DefaultAbbreviationGenerator(max_generated_len=max_generated_len)
-
+def _resolve_abbreviation_gen(value: Any, config: dict[str, Any]) -> AbbreviationGenerator:
     if isinstance(value, AbbreviationGenerator):
         return value
 
@@ -397,16 +366,15 @@ def _resolve_abbreviation_gen(
 
     key = _normalize_name(value)
     if key in {"default", "standard"}:
-        return DefaultAbbreviationGenerator(max_generated_len=max_generated_len or 1)
+        max_generated_len = config.get("abbreviation_max_generated_len") or 1
+        return DefaultAbbreviationGenerator(max_generated_len=max_generated_len)
     if key in {"none", "noabbrev", "noabbreviations"}:
         return NoAbbreviations()
 
     raise ConfigurationError(f"Unknown abbreviation_gen value: {value}")
 
 
-def _resolve_abbreviation_scope(value: Any) -> AbbreviationScope | None:
-    if value is None:
-        return None
+def _resolve_abbreviation_scope(value: Any) -> AbbreviationScope:
     if not isinstance(value, str):
         raise ConfigurationError("abbreviation_scope must be a string")
 
@@ -416,63 +384,18 @@ def _resolve_abbreviation_scope(value: Any) -> AbbreviationScope | None:
             "abbreviation_scope must be one of: top_level_options, all_options"
         )
 
-    return validate_abbreviation_scope(resolved)
+    return resolved
 
 
-def _resolve_backend(value: Any) -> Backend | None:
-    if value is None:
-        return None
-
+def _resolve_backend(value: Any) -> Backend:
     if not isinstance(value, str):
         raise ConfigurationError("backend must be a string")
 
-    normalized = _normalize_name(value)
-    if normalized not in {"argparse", "click"}:
-        raise ConfigurationError("backend must be one of: argparse, click")
+    for name in BACKEND_NAMES:
+        if _normalize_name(value) == name:
+            return name
 
-    if normalized == "argparse":
-        return "argparse"
-
-    return "click"
-
-
-def _resolve_model_expansion_max_depth(value: Any) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigurationError("model_expansion_max_depth must be an integer >= 1")
-
-    return validate_model_expansion_max_depth(value)
-
-
-def _resolve_parse_recovery_max_attempts(value: Any) -> int | None:
-    if value is None:
-        return None
-
-    return validate_parse_recovery_max_attempts(value)
-
-
-def _resolve_method_skips(value: Any) -> list[str] | None:
-    if value is None:
-        return None
-    if not isinstance(value, list):
-        raise ConfigurationError("method_skips must be a list")
-    return validate_method_skips(value)
-
-
-def _resolve_bool_negative_prefix(value: Any) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ConfigurationError("bool_negative_prefix must be a string")
-    return validate_bool_negative_prefix(value)
-
-
-def _resolve_help_flags(value: Any) -> Any:
-    if value is None:
-        return UNSET
-
-    return validate_help_flags(value)
+    raise ConfigurationError(f"backend must be one of: {', '.join(BACKEND_NAMES)}")
 
 
 def _resolve_plugin(value: Any) -> InterfacyPlugin:
@@ -490,78 +413,48 @@ def _resolve_plugin(value: Any) -> InterfacyPlugin:
     return resolved
 
 
-def _resolve_plugins(value: Any) -> list[InterfacyPlugin] | None:
-    if value is None:
-        return None
+def _resolve_plugins(value: Any) -> list[InterfacyPlugin]:
     if not isinstance(value, list):
         raise ConfigurationError("plugins.enabled must be a list")
 
     return [_resolve_plugin(item) for item in value]
 
 
-_FIELD_RESOLVERS = {
+# Config values that name objects rather than hold them. Every other value is passed through,
+# and those that are engine settings are validated by EngineSettings.
+_RESOLVERS: dict[str, Callable[[Any, dict[str, Any]], Any]] = {
+    "backend": lambda value, _config: _resolve_backend(value),
+    "help_layout": lambda value, _config: _resolve_named_component(
+        value,
+        value_name="help_layout",
+        component_type=HelpLayout,
+        registry=_component_registry(HelpLayout, suffix="layout"),
+    ),
+    "help_colors": lambda value, _config: _resolve_named_component(
+        value,
+        value_name="help_colors",
+        component_type=InterfacyColors,
+        registry=_component_registry(InterfacyColors, include_base=True, suffix="colors"),
+    ),
     "flag_strategy": _resolve_flag_strategy,
     "abbreviation_gen": _resolve_abbreviation_gen,
-    "abbreviation_max_generated_len": lambda value, _config: (
-        _resolve_abbreviation_max_generated_len(value)
-    ),
     "abbreviation_scope": lambda value, _config: _resolve_abbreviation_scope(value),
-    "help_option_sort": lambda value, _config: resolve_help_option_sort_rules(
-        value,
-        value_name="help_option_sort",
-    ),
-    "help_subcommand_sort": lambda value, _config: resolve_help_subcommand_sort_rules(
-        value,
-        value_name="help_subcommand_sort",
-    ),
-    "backend": lambda value, _config: _resolve_backend(value),
-    "model_expansion_max_depth": lambda value, _config: _resolve_model_expansion_max_depth(value),
-    "parse_recovery_max_attempts": lambda value, _config: _resolve_parse_recovery_max_attempts(
-        value
-    ),
-    "method_skips": lambda value, _config: _resolve_method_skips(value),
-    "bool_negative_prefix": lambda value, _config: _resolve_bool_negative_prefix(value),
-    "help_flags": lambda value, _config: _resolve_help_flags(value),
     "plugins": lambda value, _config: _resolve_plugins(value),
 }
-
-
-def _resolve_default_for_field(
-    field_name: str,
-    value: Any,
-    config_data: dict[str, Any],
-) -> Any:
-    resolved: Any = UNSET
-
-    if field_name == "help_layout":
-        resolved = _resolve_named_component(
-            value,
-            value_name="help_layout",
-            component_type=HelpLayout,
-            registry=_component_registry(HelpLayout, suffix="layout"),
-        )
-    elif field_name == "help_colors":
-        resolved = _resolve_named_component(
-            value,
-            value_name="help_colors",
-            component_type=InterfacyColors,
-            registry=_component_registry(
-                InterfacyColors,
-                include_base=True,
-                suffix="colors",
-            ),
-        )
-    elif field_name in _FIELD_RESOLVERS:
-        resolved = _FIELD_RESOLVERS[field_name](value, config_data)
-
-    return resolved
+# Config keys consumed while resolving other values.
+_CONFIG_ONLY_FIELDS = frozenset({"flag_style", "translation_mode"})
 
 
 def apply_config_defaults(
     config: InterfacyConfig | dict[str, Any],
     overrides: dict[str, Any],
 ) -> dict[str, Any]:
-    """Merge config-derived defaults into a dictionary of explicit parser overrides."""
+    """
+    Merge validated config-derived defaults into a dictionary of explicit parser overrides.
+
+    Raises:
+        ConfigurationError: If a config value is invalid.
+    """
     if isinstance(config, InterfacyConfig):
         config_data = asdict(config)
     elif isinstance(config, dict):
@@ -569,23 +462,22 @@ def apply_config_defaults(
     else:
         raise ConfigurationError(f"Unsupported config type: {type(config)}")
 
-    resolved = {field_name: value for field_name, value in overrides.items() if value is not UNSET}
-
+    resolved = {name: value for name, value in overrides.items() if value is not UNSET}
+    defaults: dict[str, Any] = {}
     for config_field in fields(InterfacyConfig):
-        field_name = config_field.name
-        if field_name in resolved:
+        name = config_field.name
+        value = config_data.get(name)
+        if name in resolved or name in _CONFIG_ONLY_FIELDS or value is None:
             continue
 
-        value = config_data.get(field_name)
-        default_value = _resolve_default_for_field(field_name, value, config_data)
-        if default_value is not UNSET:
-            resolved[field_name] = default_value
-            continue
+        resolver = _RESOLVERS.get(name)
+        defaults[name] = value if resolver is None else resolver(value, config_data)
 
-        if bool(config_field.metadata.get("passthrough", False)) and value is not None:
-            resolved[field_name] = value
+    settings = {name: value for name, value in defaults.items() if name in SETTING_NAMES}
+    validated = EngineSettings(**settings)
+    defaults.update({name: getattr(validated, name) for name in settings})
 
-    return resolved
+    return {**resolved, **defaults}
 
 
 __all__ = ["InterfacyConfig", "apply_config_defaults", "get_default_config_paths", "load_config"]

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from interfacy.exceptions import InvalidCommandError
 from interfacy.naming import CommandNameRegistry
 from interfacy.naming.name_mapping import NameMapping
-from interfacy.schema.schema import Command
+from interfacy.schema.model import Command
 
 NameRegistrySnapshot = tuple[set[str], dict[str, str]]
 

@@ -7,9 +7,9 @@ from typing import Any
 
 from stdl.fs import read_piped
 
+from interfacy.declarations.pipes import PipeTargets, build_pipe_targets_config
 from interfacy.naming import NameMapping
-from interfacy.pipe import PipeTargets, build_pipe_targets_config
-from interfacy.schema.schema import Command, ParserSchema
+from interfacy.schema.model import Command
 
 _PIPE_UNSET = object()
 
@@ -19,7 +19,6 @@ class PipeStateSnapshot:
     default_targets: PipeTargets | None
     overrides: dict[tuple[str | None, str | None], PipeTargets]
     input_buffer: Any
-    cli_namespace: dict[str, Any] | None
 
 
 class PipeState:
@@ -32,7 +31,6 @@ class PipeState:
         self.default_targets = default_targets
         self._overrides: dict[tuple[str | None, str | None], PipeTargets] = {}
         self._input_buffer: Any = _PIPE_UNSET
-        self._cli_namespace: dict[str, Any] | None = None
 
     def configure(
         self,
@@ -106,47 +104,17 @@ class PipeState:
     def reset_input(self) -> None:
         self._input_buffer = _PIPE_UNSET
 
-    def record_cli_namespace(self, namespace: dict[str, Any] | None) -> None:
-        self._cli_namespace = namespace
-
-    def cli_supplied_parameters(
-        self,
-        command: Command,
-        *,
-        subcommand: str | None = None,
-    ) -> set[str] | None:
-        namespace = self._cli_namespace
-        if namespace is None:
-            return None
-
-        bucket = self._command_bucket(namespace, command)
-        if subcommand not in (None, "__init__"):
-            bucket = self._subcommand_bucket(bucket, command, subcommand)
-
-        return set(bucket) if isinstance(bucket, dict) else set()
-
-    def schema_uses_pipes(self, schema: ParserSchema) -> bool:
-        if schema.pipe_targets is not None or self.default_targets is not None or self._overrides:
-            return True
-
-        return any(self._command_uses_pipes(command) for command in schema.commands.values())
-
     def snapshot(self) -> PipeStateSnapshot:
-        namespace = None if self._cli_namespace is None else dict(self._cli_namespace)
         return PipeStateSnapshot(
             default_targets=self.default_targets,
             overrides=dict(self._overrides),
             input_buffer=self._input_buffer,
-            cli_namespace=namespace,
         )
 
     def restore(self, snapshot: PipeStateSnapshot) -> None:
         self.default_targets = snapshot.default_targets
         self._overrides = dict(snapshot.overrides)
         self._input_buffer = snapshot.input_buffer
-        self._cli_namespace = (
-            None if snapshot.cli_namespace is None else dict(snapshot.cli_namespace)
-        )
 
     def _override_keys(
         self,
@@ -169,66 +137,6 @@ class PipeState:
             yield None, subcommands[1]
 
         yield None, None
-
-    @staticmethod
-    def _command_uses_pipes(command: Command) -> bool:
-        if command.pipe_targets is not None:
-            return True
-        if any(argument.accepts_stdin for argument in (*command.initializer, *command.parameters)):
-            return True
-        return bool(
-            command.subcommands
-            and any(PipeState._command_uses_pipes(child) for child in command.subcommands.values())
-        )
-
-    @staticmethod
-    def _command_names_for(command: Command) -> tuple[str, ...]:
-        names: list[str] = []
-        for name in (command.canonical_name, command.cli_name, *(command.aliases or ())):
-            if name and name not in names:
-                names.append(name)
-
-        if command.obj is not None and command.obj.name not in names:
-            names.append(command.obj.name)
-
-        return tuple(names)
-
-    def _command_bucket(self, namespace: dict[str, Any], command: Command) -> dict[str, Any]:
-        for name in self._command_names_for(command):
-            value = namespace.get(name)
-            if isinstance(value, dict):
-                return value
-
-        return namespace
-
-    def _subcommand_bucket(
-        self,
-        bucket: dict[str, Any],
-        command: Command,
-        subcommand: str,
-    ) -> dict[str, Any]:
-        candidates: list[str] = [subcommand]
-        for name in (
-            self._command_names.translate(subcommand),
-            self._command_names.reverse(subcommand),
-        ):
-            if name not in candidates:
-                candidates.append(name)
-
-        if command.subcommands:
-            for child in command.subcommands.values():
-                names = self._command_names_for(child)
-                if any(name in candidates for name in names):
-                    candidates.extend(name for name in names if name not in candidates)
-        nested = bucket.get("_subcommands")
-        containers = (bucket, nested) if isinstance(nested, dict) else (bucket,)
-        for container in containers:
-            for name in candidates:
-                value = container.get(name)
-                if isinstance(value, dict):
-                    return value
-
-        return {}
 
 
 __all__ = ["PipeState", "PipeStateSnapshot"]

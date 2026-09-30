@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from inspect import isawaitable
-from typing import Any, NoReturn, Protocol
+from typing import Any, NoReturn
 
-from interfacy.console import error
+from interfacy.common.console import error
+from interfacy.declarations.executable_flags import ExecutableAction
 from interfacy.exceptions import (
     ConfigurationError,
     DuplicateCommandError,
@@ -18,8 +20,7 @@ from interfacy.exceptions import (
     UnsupportedParameterTypeError,
     UsageError,
 )
-from interfacy.executable_flag import (
-    ExecutableAction,
+from interfacy.runtime.executable_flags import (
     ExecutableActionPending,
     execute_executable_flag,
     execute_executable_flag_async,
@@ -27,6 +28,7 @@ from interfacy.executable_flag import (
 from interfacy.runtime.exit_codes import ExitCode
 from interfacy.runtime.policy import RuntimePolicy
 from interfacy.runtime.process import set_process_title_from_argv
+from interfacy.schema.model import ParserSchema
 
 CommandTarget = Callable[..., Any] | type | Any
 
@@ -41,26 +43,27 @@ _CONFIGURATION_ERRORS = (
 
 @dataclass(frozen=True, slots=True)
 class InvocationInput:
+    """
+    Parsed arguments together with the schema they were parsed against.
+
+    ``supplied`` is ``namespace`` restricted to the values given on the command line, or
+    ``None`` when that is unknown.
+    """
+
     args: tuple[str, ...]
     namespace: dict[str, Any]
+    schema: ParserSchema
+    supplied: dict[str, Any] | None = None
 
 
-class InvocationOperations(Protocol):
-    def snapshot(self) -> Any: ...
+ParseStep = Callable[[], InvocationInput]
+ExecuteStep = Callable[[InvocationInput], Any]
+AsyncExecuteStep = Callable[[InvocationInput], Awaitable[Any] | Any]
 
-    def restore(self, snapshot: Any) -> None: ...
 
-    def register_inline(self, commands: Sequence[CommandTarget]) -> None: ...
-
-    def reset_input(self) -> None: ...
-
-    def resolve_args(self, args: Sequence[str] | None) -> tuple[str, ...]: ...
-
-    def parse(self, args: tuple[str, ...]) -> InvocationInput: ...
-
-    def execute(self, invocation: InvocationInput) -> Any: ...
-
-    def execute_async(self, invocation: InvocationInput) -> Awaitable[Any] | Any: ...
+def resolve_args(args: Sequence[str] | None) -> tuple[str, ...]:
+    """Return ``args``, or the process arguments when ``args`` is ``None``."""
+    return tuple(sys.argv[1:] if args is None else args)
 
 
 class InvocationError(Exception):
@@ -89,42 +92,36 @@ def _parse_error_code(error: Exception) -> ExitCode:
 
 
 class InvocationRuntime:
-    def __init__(self, operations: InvocationOperations, policy: RuntimePolicy) -> None:
-        self._operations = operations
+    """
+    Run one parse-then-execute cycle under a ``RuntimePolicy``.
+
+    Parse and execute failures are classified into exit codes; executable flags raised during
+    parsing are completed in place of execution.
+    """
+
+    def __init__(self, policy: RuntimePolicy) -> None:
         self._policy = policy
 
-    def invoke(
-        self,
-        commands: Sequence[CommandTarget],
-        args: Sequence[str] | None = None,
-    ) -> Any:
+    def invoke(self, parse: ParseStep, execute: ExecuteStep) -> Any:
         try:
-            return self._invoke(commands, args)
+            return self._invoke(parse, execute)
         except InterfacyExit:
             return None
         except InvocationError as e:
             raise e.error.with_traceback(e.error.__traceback__) from None
 
-    async def invoke_async(
-        self,
-        commands: Sequence[CommandTarget],
-        args: Sequence[str] | None = None,
-    ) -> Any:
+    async def invoke_async(self, parse: ParseStep, execute: AsyncExecuteStep) -> Any:
         try:
-            return await self._invoke_async(commands, args)
+            return await self._invoke_async(parse, execute)
         except InterfacyExit:
             return None
         except InvocationError as e:
             raise e.error.with_traceback(e.error.__traceback__) from None
 
-    def run(
-        self,
-        commands: Sequence[CommandTarget],
-        args: Sequence[str] | None = None,
-    ) -> NoReturn:
+    def run(self, parse: ParseStep, execute: ExecuteStep) -> NoReturn:
         set_process_title_from_argv()
         try:
-            result = self._invoke(commands, args)
+            result = self._invoke(parse, execute)
         except InterfacyExit as e:
             raise SystemExit(e.code) from None
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
@@ -148,50 +145,25 @@ class InvocationRuntime:
 
         raise SystemExit(ExitCode.SUCCESS)
 
-    def _invoke(
-        self,
-        commands: Sequence[CommandTarget],
-        args: Sequence[str] | None,
-    ) -> Any:
-        snapshot = self._operations.snapshot() if commands else None
+    def _invoke(self, parse: ParseStep, execute: ExecuteStep) -> Any:
         try:
-            try:
-                invocation = self._parse(commands, args)
-            except ExecutableActionPending as e:
-                self._complete_action(e.action)
+            invocation = self._parse(parse)
+        except ExecutableActionPending as e:
+            self._complete_action(e.action)
 
-            return self._execute(invocation)
-        finally:
-            if snapshot is not None:
-                self._operations.restore(snapshot)
+        return self._execute(execute, invocation)
 
-    async def _invoke_async(
-        self,
-        commands: Sequence[CommandTarget],
-        args: Sequence[str] | None,
-    ) -> Any:
-        snapshot = self._operations.snapshot() if commands else None
+    async def _invoke_async(self, parse: ParseStep, execute: AsyncExecuteStep) -> Any:
         try:
-            try:
-                invocation = self._parse(commands, args)
-            except ExecutableActionPending as e:
-                await self._complete_action_async(e.action)
+            invocation = self._parse(parse)
+        except ExecutableActionPending as e:
+            await self._complete_action_async(e.action)
 
-            return await self._execute_async(invocation)
-        finally:
-            if snapshot is not None:
-                self._operations.restore(snapshot)
+        return await self._execute_async(execute, invocation)
 
-    def _parse(
-        self,
-        commands: Sequence[CommandTarget],
-        args: Sequence[str] | None,
-    ) -> InvocationInput:
+    def _parse(self, parse: ParseStep) -> InvocationInput:
         try:
-            self._operations.reset_input()
-            self._operations.register_inline(commands)
-
-            return self._operations.parse(self._operations.resolve_args(args))
+            return parse()
         except Exception as e:
             raise InvocationError(_parse_error_code(e), e) from e
 
@@ -214,15 +186,19 @@ class InvocationRuntime:
 
         raise InterfacyExit(code)
 
-    def _execute(self, invocation: InvocationInput) -> Any:
+    def _execute(self, execute: ExecuteStep, invocation: InvocationInput) -> Any:
         try:
-            return self._operations.execute(invocation)
+            return execute(invocation)
         except Exception as e:
             raise InvocationError(_execution_error_code(e), e) from e
 
-    async def _execute_async(self, invocation: InvocationInput) -> Any:
+    async def _execute_async(
+        self,
+        execute: AsyncExecuteStep,
+        invocation: InvocationInput,
+    ) -> Any:
         try:
-            result = self._operations.execute_async(invocation)
+            result = execute(invocation)
             if isawaitable(result):
                 result = await result
         except Exception as e:
@@ -235,6 +211,6 @@ __all__ = [
     "CommandTarget",
     "InvocationError",
     "InvocationInput",
-    "InvocationOperations",
     "InvocationRuntime",
+    "resolve_args",
 ]

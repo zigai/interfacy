@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from objinspect import Parameter
 from strto import StrToTypeParser
 
+from interfacy.declarations.pipes import PipeTargets
 from interfacy.naming.name_mapping import NameMapping
-from interfacy.pipe import PipeTargets
-from interfacy.schema.schema import Command, ParserSchema
+from interfacy.schema.model import COMMAND_KEY, Command, ParserSchema
 
 
 @dataclass(frozen=True)
@@ -21,8 +22,8 @@ class ExecutionContext:
     read_piped_input: Callable[[], str | None]
     resolve_pipe_targets: Callable[[Command, str | None], PipeTargets | None]
     parameters_for: Callable[[Command, str | None], dict[str, Parameter]]
-    cli_supplied_parameters_for: Callable[[Command, str | None], set[str] | None]
-    command_key: str = "command"
+    supplied: Mapping[str, Any] | None = None
+    command_key: str = COMMAND_KEY
 
     def get_commands(self) -> list[Command]:
         return list(self.commands.values())

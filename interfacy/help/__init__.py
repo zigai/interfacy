@@ -1,3 +1,4 @@
+from interfacy.help.colors import InterfacyColors
 from interfacy.help.content import (
     HelpContent,
     HelpContext,
@@ -7,12 +8,12 @@ from interfacy.help.content import (
     HelpSectionKind,
     default_help_renderer,
 )
-from interfacy.help.layout import HelpLayout, InterfacyColors
-from interfacy.help.presets import (
+from interfacy.help.layouts import (
     Aligned,
     AlignedTyped,
     ArgparseLayout,
     ClapLayout,
+    HelpLayout,
     InterfacyLayout,
     Modern,
     StandardLayout,

@@ -1,4 +1,7 @@
-"""ANSI-aware wrapping primitives shared by help renderers."""
+"""Text wrapping primitives shared by help renderers and layouts."""
+
+import re
+import textwrap
 
 from stdl.st import ansi_len
 
@@ -103,4 +106,114 @@ def wrap_usage_parts(
     return lines[0] + "\n" + "\n".join(indent + line for line in lines[1:])
 
 
-__all__ = ["expand_usage_parts", "wrap_usage_parts", "wrap_visible_words"]
+def wrap_plain_words(text: str, wrap_width: int) -> list[str]:
+    """Greedily wrap words into lines no wider than ``wrap_width`` characters."""
+    wrapped: list[str] = []
+    for word in text.split():
+        if not wrapped:
+            wrapped.append(word)
+        elif len(wrapped[-1]) + 1 + len(word) <= wrap_width:
+            wrapped[-1] = f"{wrapped[-1]} {word}"
+        else:
+            wrapped.append(word)
+
+    return wrapped
+
+
+def wrap_text_preserving_words(
+    text: str,
+    *,
+    width: int,
+    initial_indent: str = "",
+    subsequent_indent: str = "",
+) -> list[str]:
+    """Wrap text without breaking words or hyphenated tokens."""
+    return textwrap.wrap(
+        text,
+        width=max(10, width),
+        initial_indent=initial_indent,
+        subsequent_indent=subsequent_indent,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+
+
+def metadata_wrap_index(line: str) -> int | None:
+    """Return where trailing choice metadata starts in a rendered row, if present."""
+    candidates = [
+        line.find("[choices:"),
+        line.find("[possible values:"),
+    ]
+    indexes = [idx for idx in candidates if idx > 0]
+    if not indexes:
+        return None
+
+    return min(indexes)
+
+
+def wrap_overwide_line(rendered: str, *, terminal_width: int, indent: int = 0) -> str:
+    """
+    Wrap rendered help lines that exceed the terminal width.
+
+    Args:
+        rendered (str): Rendered help text, possibly spanning several lines.
+        terminal_width (int): Terminal width in columns.
+        indent (int): Leading indent applied to the rendered text.
+    """
+    width = max(10, terminal_width - indent)
+    wrapped_lines: list[str] = []
+    for line in rendered.splitlines() or [rendered]:
+        if ansi_len(line) <= width:
+            wrapped_lines.append(line)
+            continue
+
+        metadata_idx = metadata_wrap_index(line)
+        if metadata_idx is not None:
+            prefix = line[:metadata_idx]
+            body = line[metadata_idx:]
+            wrapped_lines.extend(
+                wrap_text_preserving_words(
+                    body.strip(),
+                    width=width,
+                    initial_indent=prefix,
+                    subsequent_indent=" " * ansi_len(prefix),
+                )
+            )
+            continue
+
+        column_match = re.match(r"^(\s*\S(?:.*\S)?\s{2,})(\S.*)$", line)
+        if column_match is not None:
+            head = column_match.group(1)
+            body = column_match.group(2)
+            wrapped_lines.extend(
+                wrap_text_preserving_words(
+                    body.strip(),
+                    width=width,
+                    initial_indent=head,
+                    subsequent_indent=" " * ansi_len(head),
+                )
+            )
+            continue
+
+        leading = len(line) - len(line.lstrip(" "))
+        continuation_indent = " " * (leading if leading < width - 10 else 2)
+        wrapped = wrap_text_preserving_words(
+            line.strip(),
+            width=width - 1,
+            initial_indent=continuation_indent,
+            subsequent_indent=f"{continuation_indent}  ",
+        )
+        wrapped_lines.extend(wrapped or [line])
+
+    return "\n".join(wrapped_lines)
+
+
+__all__ = [
+    "expand_usage_parts",
+    "metadata_wrap_index",
+    "wrap_overwide_line",
+    "wrap_plain_words",
+    "wrap_text_preserving_words",
+    "wrap_usage_parts",
+    "wrap_visible_words",
+]

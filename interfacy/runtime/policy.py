@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from interfacy.console import log, log_error, log_exception, log_interrupt
+from interfacy.common.console import log, log_error, log_exception, log_interrupt
 
 
 @dataclass

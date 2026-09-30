@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from interfacy.schema.schema import Argument, Command, ParserSchema
+from interfacy.schema.model import Argument, Command, ParserSchema
 
 
 class InterspersedOptionValueError(ValueError):
@@ -28,13 +28,9 @@ class AncestorOptionValues:
 
     values: tuple[tuple[tuple[str, ...], str, Any], ...]
 
-    def apply_to(
-        self,
-        schema: ParserSchema,
-        namespace: dict[str, Any],
-    ) -> dict[str, Any]:
+    def apply_to(self, namespace: dict[str, Any]) -> dict[str, Any]:
         for command_path, name, value in self.values:
-            bucket = bucket_for_command_path(schema, namespace, command_path, create=True)
+            bucket = bucket_for_command_path(namespace, command_path, create=True)
             if bucket is not None:
                 bucket[name] = value
 
@@ -107,13 +103,6 @@ class AncestorOptions:
             reordered.extend(group)
 
         return reordered
-
-    def apply_values(
-        self,
-        schema: ParserSchema,
-        namespace: dict[str, Any],
-    ) -> dict[str, Any]:
-        return self.resolve_values().apply_to(schema, namespace)
 
     def resolve_values(self) -> AncestorOptionValues:
         pending = self._pending_values
@@ -363,8 +352,16 @@ class AncestorOptions:
         command_token_positions.append(index)
 
 
+@dataclass(slots=True)
+class InvocationState:
+    """Per-invocation parse inputs and the recovery attempts spent on them."""
+
+    args: tuple[str, ...]
+    ancestor_options: AncestorOptions
+    recovery_attempts: int = 0
+
+
 def bucket_for_command_path(
-    schema: ParserSchema,  # noqa: ARG001 - Preserve the public keyword parameter.
     namespace: dict[str, Any],
     command_path: tuple[str, ...],
     *,
@@ -388,4 +385,9 @@ def bucket_for_command_path(
     return current
 
 
-__all__ = ["AncestorOptions", "InterspersedOptionValueError", "bucket_for_command_path"]
+__all__ = [
+    "AncestorOptions",
+    "InterspersedOptionValueError",
+    "InvocationState",
+    "bucket_for_command_path",
+]

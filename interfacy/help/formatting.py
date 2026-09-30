@@ -2,13 +2,14 @@ import ast
 import re
 from enum import Enum
 from pathlib import PurePath
+from re import Match
 from types import NoneType
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from objinspect.typing import is_union_type, type_args, type_origin
-from stdl.st import TextStyle, with_style
+from stdl.st import TextStyle, colored, with_style
 
-from interfacy.schema.typing import resolve_type_alias, simplified_type_name
+from interfacy.introspection.annotations import resolve_type_alias, simplified_type_name
 
 _PATH_DEFAULT_REPR_RE = re.compile(
     r"^(?:Path|PosixPath|WindowsPath|PurePath|PurePosixPath|PureWindowsPath)\((.+)\)$"
@@ -280,9 +281,36 @@ def format_default_for_help(value: Any) -> str:
     return str(value)
 
 
+def format_doc_inline_code(text: str, *, mode: Literal["bold", "strip"]) -> str:
+    """
+    Format fenced blocks and backtick code spans in docstring text.
+
+    Args:
+        text (str): Docstring text to format.
+        mode (Literal["bold", "strip"]): Render code spans bold or as plain text.
+    """
+    if not text:
+        return text
+
+    def strip_triple_backtick(match: Match[str]) -> str:
+        return match.group(1)
+
+    text = re.sub(r"```[a-zA-Z0-9_+\-]*\n([\s\S]*?)```", strip_triple_backtick, text)
+
+    def fmt(match: Match[str]) -> str:
+        content = match.group(2)
+        if mode == "bold":
+            return colored(content, style="bold")
+
+        return content
+
+    return re.sub(r"(`{1,2})([^`]+?)\1", fmt, text)
+
+
 __all__ = [
     "TypeHelpFormatter",
     "TypeStyleTheme",
     "format_default_for_help",
+    "format_doc_inline_code",
     "format_type_for_help",
 ]

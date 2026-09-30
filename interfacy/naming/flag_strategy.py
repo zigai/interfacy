@@ -4,9 +4,9 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from stdl.st import kebab_case, snake_case
 
+from interfacy.introspection.annotations import is_list_or_list_alias
 from interfacy.naming.abbreviations import AbbreviationGenerator
 from interfacy.naming.name_mapping import NameMapping
-from interfacy.schema.typing import is_list_or_list_alias
 
 FlagStyle = Literal["keyword_only", "required_positional"]
 TranslationMode = Literal["none", "kebab", "snake"]
@@ -77,7 +77,7 @@ class FlagAllocationState:
     consumed_required_list_positional: bool = False
 
 
-class _OptionalParamView:
+class OptionalParamView:
     """View of a parameter with is_required=False."""
 
     def __init__(self, param: FlagParameter) -> None:
@@ -136,7 +136,7 @@ def get_arg_flags_for_parameter(
             allocation_state.consumed_required_list_positional = True
             return (name,)
 
-        param = _OptionalParamView(param)
+        param = OptionalParamView(param)
 
     return strategy.get_arg_flags(name, param, taken_flags, abbrev_gen)
 
@@ -209,6 +209,20 @@ class DefaultFlagStrategy(FlagStrategy):
         return flags
 
 
+def inverted_bool_flag_name(name: str, prefix: str = "no-") -> str:
+    """
+    Return the inverted boolean flag name with a prefix toggle.
+
+    Args:
+        name (str): Base flag name.
+        prefix (str): Prefix for the inverted form.
+    """
+    if name.startswith(prefix):
+        return name.removeprefix(prefix)
+
+    return prefix + name
+
+
 __all__ = [
     "DefaultFlagStrategy",
     "FlagAllocationState",
@@ -217,4 +231,5 @@ __all__ = [
     "TranslationMode",
     "build_name_mapping",
     "get_arg_flags_for_parameter",
+    "inverted_bool_flag_name",
 ]

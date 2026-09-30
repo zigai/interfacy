@@ -9,7 +9,9 @@ from typing import Any
 
 from stdl.st import ansi_len, with_style
 
-from interfacy.executable_flag import ExecutableFlag, executable_flag_to_argument
+from interfacy.common.terminal import get_terminal_width
+from interfacy.declarations.executable_flags import ExecutableFlag
+from interfacy.declarations.params import BooleanMode
 from interfacy.help.content import (
     HelpContent,
     HelpContext,
@@ -17,18 +19,45 @@ from interfacy.help.content import (
     HelpSection,
     render_help_content,
 )
-from interfacy.help.layout import HelpLayout
-from interfacy.help.terminal import get_terminal_width
+from interfacy.help.layouts import HelpLayout
 from interfacy.help.wrapping import wrap_usage_parts
-from interfacy.schema.schema import (
+from interfacy.schema.model import (
     Argument,
     ArgumentDefault,
     ArgumentKind,
+    BooleanBehavior,
     Command,
     ParserSchema,
-    ValueCardinality,
     ValueShape,
 )
+from interfacy.schema.values import ValueCardinality
+
+
+def executable_flag_to_argument(flag: ExecutableFlag) -> Argument:
+    """Return a synthetic schema argument for help rendering and option sorting."""
+    primary = next((token for token in flag.flags if token.startswith("--")), flag.flags[0])
+    name = primary.lstrip("-") or "flag"
+
+    return Argument(
+        name=name,
+        display_name=name,
+        kind=ArgumentKind.OPTION,
+        value_shape=ValueShape.FLAG,
+        flags=tuple(flag.flags),
+        required=False,
+        cardinality=ValueCardinality(0, 0, 0),
+        argument_default=ArgumentDefault.present(value=False),
+        help=flag.help,
+        type=None,
+        parser=None,
+        boolean_behavior=BooleanBehavior(
+            positive_flags=tuple(flag.flags),
+            negative_flags=(),
+            default=False,
+            mode=BooleanMode.POSITIVE_ONLY,
+        ),
+    )
+
 
 _DEFAULT_HELP_ARGUMENT = object()
 _USAGE_PREFIX_RE = re.compile(r"^(?:\x1b\[[0-9;]*m)*\s*usage:\s*", flags=re.IGNORECASE)
