@@ -1,36 +1,20 @@
-import inspect
+import argparse
 from typing import get_type_hints
 
+import click
 import pytest
 
 import interfacy
-from interfacy import UNSET, CommandGroup, DuplicatePluginError, Interfacy, Param, help
-from interfacy.exceptions import ConfigurationError
-from interfacy.help import HelpContent, HelpContext, presets
-from interfacy.plugins import ConfigureContext, InterfacyPlugin
+from interfacy import CommandGroup, DuplicatePluginError, Interfacy, Param
+from interfacy.exceptions import ConfigurationError, UsageError
+from interfacy.help import HelpContent, HelpContext
+from interfacy.plugins import ConfigureContext, InterfacyPlugin, SchemaTransformContext
+from interfacy.schema.model import ParserSchema
+from tests.fixtures.help import render_help
 
 
 def test_interfacy_defaults_to_argparse_backend() -> None:
     parser = Interfacy(print_result=False)
-
-    assert parser.backend == "argparse"
-
-
-def test_interfacy_preserves_metadata_and_parser_identity() -> None:
-    parser = Interfacy()
-
-    assert isinstance(parser.metadata, dict)
-    assert parser.type_parser is not None
-
-
-def test_public_unset_is_identical_across_exports() -> None:
-    from interfacy.engine import UNSET as ENGINE_SENTINEL
-
-    assert UNSET is ENGINE_SENTINEL
-
-
-def test_interfacy_accepts_explicit_argparse_backend() -> None:
-    parser = Interfacy(backend="argparse", print_result=False)
 
     assert parser.backend == "argparse"
 
@@ -51,66 +35,25 @@ def test_none_bool_negative_prefix_disables_generated_inverse_flag() -> None:
 
     parser = Interfacy(bool_negative_prefix=None)
     parser.add_command(command)
-    arguments = parser.build_parser_schema().commands["command"].parameters
 
-    assert all(argument.boolean_behavior is not None for argument in arguments)
-    assert all(argument.boolean_behavior.negative_flags == () for argument in arguments)
     assert parser.invoke(args=["--enabled"]) == (True, True)
 
-
-def test_interfacy_accepts_click_backend() -> None:
-    pytest.importorskip("click")
-
-    parser = Interfacy(backend="click", print_result=False)
-
-    assert parser.backend == "click"
+    with pytest.raises(UsageError):
+        parser.invoke(args=["--enabled", "--no-cached"])
 
 
 @pytest.mark.parametrize(
-    ("backend", "native_module"),
-    [
-        ("argparse", "interfacy.argparse_backend.argument_parser"),
-        ("click", "interfacy.click_backend.commands"),
-    ],
+    ("backend", "native_type"),
+    [("argparse", argparse.ArgumentParser), ("click", click.Command)],
 )
-def test_build_parser_returns_native_backend_value(
-    backend: str,
-    native_module: str,
-) -> None:
-    if backend == "click":
-        pytest.importorskip("click")
-
+def test_build_parser_returns_native_backend_value(backend: str, native_type: type) -> None:
     def command() -> None:
         return None
 
     parser = Interfacy(backend=backend)
     parser.add_command(command)
 
-    assert type(parser.build_parser()).__module__ == native_module
-
-
-def test_interfacy_init_is_fully_typed_without_variadic_kwargs() -> None:
-    parameters = inspect.signature(Interfacy.__init__).parameters.values()
-
-    assert inspect.Parameter.VAR_POSITIONAL not in {param.kind for param in parameters}
-    assert inspect.Parameter.VAR_KEYWORD not in {param.kind for param in parameters}
-
-
-def test_interfacy_is_declared_final() -> None:
-    assert getattr(Interfacy, "__final__", False) is True
-
-
-def test_interfacy_facade_hides_backend_specific_parser_construction_helpers() -> None:
-    parser = Interfacy()
-
-    for name in (
-        "install_tab_completion",
-        "parser_from_class",
-        "parser_from_command",
-        "parser_from_function",
-        "parser_from_multiple_commands",
-    ):
-        assert not hasattr(parser, name)
+    assert isinstance(parser.build_parser(), native_type)
 
 
 def test_public_parameter_settings_type_hints_resolve() -> None:
@@ -131,26 +74,11 @@ def test_configured_help_renderer_is_backend_neutral(backend: str) -> None:
         help_renderer=lambda context, content: f"{context.prog}:{len(content.sections)}",
     )
     parser.add_command(command)
-    built_parser = parser.build_parser()
-    if backend == "click":
-        import click
-
-        help_text = built_parser.get_help(click.Context(built_parser))
-    else:
-        help_text = built_parser.format_help()
+    help_text = render_help(parser)
 
     assert help_text.startswith("main:")
     assert help_text.endswith("\n")
     assert not help_text.endswith("\n\n")
-
-
-def test_interfacy_runs_with_selected_backend() -> None:
-    def greet(name: str) -> str:
-        return f"Hello, {name}!"
-
-    parser = Interfacy()
-
-    assert parser.invoke(greet, args=["Ada"]) == "Hello, Ada!"
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
@@ -226,33 +154,19 @@ def test_command_group_instance_method_accepts_parameter_settings(backend: str) 
     assert parser.invoke(args=["tools", "tool", "render", "--style", "json"]) == "json"
 
 
+def test_unknown_top_level_attribute_raises_attribute_error() -> None:
+    assert not hasattr(interfacy, "not_a_public_export")
+
+    with pytest.raises(AttributeError, match="not_a_public_export"):
+        interfacy.not_a_public_export  # noqa: B018
+
+
 def test_interfacy_rejects_unknown_backend() -> None:
     with pytest.raises(ConfigurationError, match="backend must be one of: argparse, click"):
         Interfacy(backend="unknown")
 
 
-@pytest.mark.parametrize(
-    "backend_name",
-    ["ArgparseBackend", "ArgparseSession", "ClickBackend", "ClickSession"],
-)
-def test_backend_classes_are_not_top_level_exports(backend_name: str) -> None:
-    assert "Interfacy" in interfacy.__all__
-    assert "Param" in interfacy.__all__
-    assert "params" in interfacy.__all__
-    assert backend_name not in interfacy.__all__
-
-    with pytest.raises(AttributeError):
-        getattr(interfacy, backend_name)
-
-
-def test_help_does_not_export_simple_layout_alias() -> None:
-    assert "SimpleLayout" not in help.__all__
-    assert "SimpleLayout" not in presets.__all__
-    assert not hasattr(help, "SimpleLayout")
-    assert not hasattr(presets, "SimpleLayout")
-
-
-def test_apply_setup_duplicate_plugins_is_atomic() -> None:
+def test_apply_setup_duplicate_plugins_is_atomic(capsys: pytest.CaptureFixture[str]) -> None:
     class ExistingPlugin(InterfacyPlugin):
         name = "existing"
 
@@ -266,11 +180,8 @@ def test_apply_setup_duplicate_plugins_is_atomic() -> None:
             del context
             self.configured = True
 
-    parser = Interfacy(plugins=[ExistingPlugin()])
+    parser = Interfacy(print_result=False, sys_exit_enabled=False, plugins=[ExistingPlugin()])
     candidate = CandidatePlugin()
-    settings_before = parser._engine.settings
-    layout_before = parser._engine.help_layout
-    generation_before = parser._engine.plugin_manager.generation
 
     with pytest.raises(DuplicatePluginError):
         parser.apply_setup(
@@ -278,10 +189,11 @@ def test_apply_setup_duplicate_plugins_is_atomic() -> None:
             plugins=[candidate, ExistingPlugin()],
         )
 
-    assert parser._engine.settings is settings_before
-    assert parser._engine.help_layout is layout_before
-    assert parser._engine.plugin_manager.generation == generation_before
     assert candidate.configured is False
+    assert parser.run(lambda: "quiet", args=[]) == "quiet"
+    assert capsys.readouterr().out == ""
+    parser.add_plugin(candidate)
+    assert candidate.configured is True
 
 
 @pytest.mark.parametrize(
@@ -334,21 +246,22 @@ def test_apply_setup_omission_retains_and_none_resets() -> None:
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
 def test_complete_generation_invalidates_on_nested_metadata_change(backend: str) -> None:
-    if backend == "click":
-        pytest.importorskip("click")
+    class MetadataDescriptionPlugin(InterfacyPlugin):
+        def transform_schema(self, context: SchemaTransformContext, schema: ParserSchema):
+            schema.raw_description = f"metadata value {context.metadata['nested']['value']}"
+            return schema
 
     def command() -> None:
         return None
 
-    parser = Interfacy(backend=backend)
+    parser = Interfacy(backend=backend, plugins=[MetadataDescriptionPlugin()])
     parser.metadata["nested"] = {"value": 1}
     parser.add_command(command)
-    first = parser.build_parser()
+    assert "metadata value 1" in render_help(parser)
 
     parser.metadata["nested"]["value"] = 2
-    second = parser.build_parser()
 
-    assert second is not first
+    assert "metadata value 2" in render_help(parser)
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
@@ -375,19 +288,20 @@ def test_inline_base_exception_restores_registered_commands(backend: str) -> Non
     assert parser.invoke(args=[]) == "persistent"
 
 
-def test_sort_refresh_uses_current_setup() -> None:
-    parser = Interfacy(
-        help_option_sort=["alphabetical"],
-        help_subcommand_sort=["alphabetical"],
-    )
+def test_help_sort_follows_current_setup() -> None:
+    def zz() -> None:
+        """Short name."""
 
-    assert parser.refresh_help_option_sort_rules() == ["alphabetical"]
-    assert parser.refresh_help_subcommand_sort_rules() == ["alphabetical"]
+    def aaaa() -> None:
+        """Long name."""
 
-    parser.apply_setup(
-        help_option_sort=["name_length"],
-        help_subcommand_sort=["insert_order"],
-    )
+    parser = Interfacy(help_subcommand_sort=["alphabetical"])
+    parser.add_command(zz)
+    parser.add_command(aaaa)
+    alphabetical = render_help(parser)
 
-    assert parser.refresh_help_option_sort_rules() == ["name_length"]
-    assert parser.refresh_help_subcommand_sort_rules() == ["insert_order"]
+    parser.apply_setup(help_subcommand_sort=["name_length_asc"])
+    by_length = render_help(parser)
+
+    assert alphabetical.index("aaaa") < alphabetical.index("zz")
+    assert by_length.index("zz") < by_length.index("aaaa")

@@ -46,14 +46,15 @@ def test_execution_error_classification_preserves_original_exception(
 
     parser = Interfacy()
     parser.add_command(command if mode == "sync" else async_command)
-    runtime = parser._engine._runtime
+    engine = parser._engine
+    runtime = engine._runtime
 
     if mode == "sync":
         with pytest.raises(InvocationError) as e:
-            runtime._invoke((), [])
+            runtime._invoke(engine._parse_step((), []), engine.execute)
     else:
         with pytest.raises(InvocationError) as e:
-            asyncio.run(runtime._invoke_async((), []))
+            asyncio.run(runtime._invoke_async(engine._parse_step((), []), engine.execute_async))
 
     assert e.value.code == expected_code
     assert e.value.error is failure
@@ -77,18 +78,19 @@ def test_execution_propagates_exit_interrupt_and_cancellation(
 
     parser = Interfacy()
     parser.add_command(command if mode == "sync" else async_command)
-    runtime = parser._engine._runtime
+    engine = parser._engine
+    runtime = engine._runtime
 
     if mode == "sync":
         with pytest.raises(type(failure)) as e:
-            runtime._invoke((), [])
+            runtime._invoke(engine._parse_step((), []), engine.execute)
 
         assert e.value is failure
     else:
 
         async def scenario() -> None:
             with pytest.raises(type(failure)) as e:
-                await runtime._invoke_async((), [])
+                await runtime._invoke_async(engine._parse_step((), []), engine.execute_async)
 
             assert e.value is failure
 

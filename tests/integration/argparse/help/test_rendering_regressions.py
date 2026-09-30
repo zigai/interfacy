@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 from dataclasses import dataclass
 from typing import Literal
 
 import pytest
-from stdl.st import TextStyle
 
 from interfacy import CommandGroup, ExecutableFlag, Interfacy
-from interfacy.argparse_backend.argument_parser import ArgumentParser
+from interfacy.backends.argparse.parser import ArgumentParser
+from interfacy.common.terminal import strip_ansi
 from interfacy.exceptions import UsageError
-from interfacy.help.colors import NoColor
-from interfacy.help.presets import (
+from interfacy.help import (
     Aligned,
     AlignedTyped,
     ArgparseLayout,
@@ -21,8 +19,8 @@ from interfacy.help.presets import (
     Modern,
     StandardLayout,
 )
-from interfacy.help.terminal import strip_ansi
-from interfacy.schema.schema import Command, ParserSchema
+from interfacy.schema.model import Command, ParserSchema
+from tests.fixtures.terminal import freeze_terminal
 
 
 @dataclass
@@ -37,25 +35,6 @@ def run_with_expandable_settings(
     settings: ExpandableSettings = DEFAULT_EXPANDABLE_SETTINGS,
 ) -> None:
     return None
-
-
-def test_layout_constructor_accepts_inline_kwargs() -> None:
-    layout = ArgparseLayout(clear_metavar=True, help_position=44, help_option_description="Help.")
-    assert layout.clear_metavar is True
-    assert layout.help_position == 44
-    assert layout.help_option_description == "Help."
-
-
-def test_color_theme_constructor_accepts_inline_kwargs() -> None:
-    theme = NoColor(flag_short=TextStyle(color="red"), description=TextStyle(color="yellow"))
-    assert theme.flag_short.color == "red"
-    assert theme.description.color == "yellow"
-
-
-def test_layout_constructor_signature_exposes_supported_settings() -> None:
-    layout = ArgparseLayout(clear_metavar=True, help_position=44)
-    assert layout.clear_metavar is True
-    assert layout.help_position == 44
 
 
 def test_standard_layout_hides_option_metavar_by_default() -> None:
@@ -112,12 +91,6 @@ def test_standard_layout_does_not_duplicate_existing_bracket_default_block() -> 
     level_line = next(line for line in help_text.splitlines() if "--level" in line)
 
     assert level_line.count("[default: 2]") == 1
-
-
-def test_color_theme_constructor_signature_exposes_supported_settings() -> None:
-    theme = NoColor(flag_short=TextStyle(color="red"), description=TextStyle(color="blue"))
-    assert theme.flag_short.color == "red"
-    assert theme.description.color == "blue"
 
 
 def test_layout_constructor_rejects_unknown_setting_kwargs() -> None:
@@ -221,7 +194,7 @@ def test_argument_parser_disables_argparse_usage_colors_when_python_colors_force
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("PYTHON_COLORS", "1")
-    parser = ArgumentParser(prog="agentctl pi")
+    parser = ArgumentParser(prog="agentctl pi", sys_exit_enabled=False)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in ("new", "send", "skill", "slash", "steer", "rename"):
         subparsers.add_parser(name)
@@ -562,14 +535,7 @@ def test_aligned_family_help_option_continuation_aligns_to_description_column(
     layout_cls: type[Aligned | AlignedTyped],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
+    freeze_terminal(monkeypatch, 60)
 
     def demo(*, delay: float = 0.5) -> None:
         return None
@@ -589,14 +555,7 @@ def test_aligned_family_choice_continuation_uses_metadata_column(
     layout_cls: type[Aligned | AlignedTyped],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
+    freeze_terminal(monkeypatch, 60)
 
     def demo(*, mode: Literal["fast", "safe", "balanced"] = "balanced") -> None:
         return None
@@ -631,14 +590,7 @@ def test_aligned_family_help_only_option_continuation_aligns(
     layout_cls: type[Aligned | AlignedTyped],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
+    freeze_terminal(monkeypatch, 60)
 
     def demo() -> None:
         return None
@@ -654,14 +606,7 @@ def test_aligned_family_help_only_option_continuation_aligns(
 
 
 def test_modern_detail_continuation_uses_detail_column(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
+    freeze_terminal(monkeypatch, 60)
 
     def demo(*, mode: Literal["fast", "safe", "balanced"] = "balanced") -> None:
         return None

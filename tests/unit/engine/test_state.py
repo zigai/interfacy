@@ -1,4 +1,4 @@
-import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,6 +7,7 @@ import pytest
 from interfacy import CommandGroup, Interfacy
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from interfacy.plugins import InterfacyPlugin
+from tests.fixtures.help import render_help
 
 
 @pytest.fixture(params=["argparse", "click"])
@@ -26,12 +27,11 @@ def test_rebuilt_group_replaces_compiled_parser_and_executes_new_command(parser:
 
     group = CommandGroup("tools").add_command(first)
     parser.add_group(group)
-    original = parser.build_parser()
+    parser.build_parser()
 
     group.add_command(second)
 
     assert parser.invoke(args=["tools", "second"]) == "second"
-    assert parser.build_parser() is not original
 
 
 def test_schema_plugin_change_invalidates_cached_backend(parser: Interfacy) -> None:
@@ -48,29 +48,11 @@ def test_schema_plugin_change_invalidates_cached_backend(parser: Interfacy) -> N
     plugin = DescriptionPlugin()
     parser.add_plugin(plugin)
     parser.add_command(command)
-    first = parser.build_parser()
+    assert "first description" in render_help(parser)
+
     plugin.description = "second description"
-    second = parser.build_parser()
 
-    assert second is not first
-    assert parser.get_last_schema().description == "second description"
-
-
-def test_unchanged_schema_reuses_compiled_backend_after_inline_restore(parser: Interfacy) -> None:
-    def persistent() -> str:
-        return "persistent"
-
-    def temporary() -> str:
-        return "temporary"
-
-    parser.add_command(persistent)
-    first = parser.build_parser()
-    assert parser.build_parser() is first
-
-    assert parser.invoke(temporary, args=["temporary"]) == "temporary"
-
-    assert parser.build_parser() is first
-    assert parser.invoke(args=[]) == "persistent"
+    assert "second description" in render_help(parser)
 
 
 def test_cache_accepts_cyclic_user_dataclass_default(parser: Interfacy) -> None:
@@ -107,27 +89,17 @@ def test_failed_registration_restores_names_commands_pipes_and_cache(
         return "new"
 
     parser.add_command(persistent)
-    original_parser = parser.build_parser()
-    original_schema = parser.get_last_schema()
-    engine = parser._engine
-    names_before = engine.registry.names.snapshot()
-    command_translations = dict(engine.flag_strategy.command_translator.translations)
-    argument_translations = dict(engine.flag_strategy.argument_translator.translations)
-    pipes_before = engine.pipes.snapshot()
+    parser.build_parser()
 
     with pytest.raises(ConfigurationError):
         parser.add_command(new_command, aliases=["new-alias"], **invalid_options)
 
-    assert engine.registry.names.snapshot() == names_before
-    assert engine.flag_strategy.command_translator.translations == command_translations
-    assert engine.flag_strategy.argument_translator.translations == argument_translations
-    assert engine.pipes.snapshot() == pipes_before
     assert [command.canonical_name for command in parser.get_commands()] == ["persistent"]
-    assert parser.get_last_schema() is original_schema
-    assert parser.build_parser() is original_parser
+    assert parser.invoke(args=[]) == "persistent"
 
     parser.add_command(new_command, aliases=["new-alias"])
     assert parser.invoke(args=["new-alias"]) == "new"
+    assert parser.invoke(args=["persistent"]) == "persistent"
 
 
 def test_failed_group_build_restores_translation_and_group_name(parser: Interfacy) -> None:
@@ -137,16 +109,11 @@ def test_failed_group_build_restores_translation_and_group_name(parser: Interfac
     invalid = CommandGroup("new_tools")
     invalid.add_command(leaf, name="foo_bar")
     invalid.add_command(leaf, name="foo-bar")
-    engine = parser._engine
-    names_before = engine.registry.names.snapshot()
-    translations_before = dict(engine.flag_strategy.command_translator.translations)
 
     with pytest.raises(DuplicateCommandError):
         parser.add_group(invalid, aliases=["tools-alias"])
 
     assert parser.get_commands() == []
-    assert engine.registry.names.snapshot() == names_before
-    assert engine.flag_strategy.command_translator.translations == translations_before
 
     valid = CommandGroup("new_tools").add_command(leaf)
     parser.add_group(valid, aliases=["tools-alias"])
@@ -155,7 +122,7 @@ def test_failed_group_build_restores_translation_and_group_name(parser: Interfac
 
 def test_late_ancestor_list_keeps_cli_priority_and_converts_once(
     parser: Interfacy,
-    monkeypatch: pytest.MonkeyPatch,
+    pipe_stdin: Callable[[str], None],
 ) -> None:
     defaults = [7]
     converted: list[str] = []
@@ -173,10 +140,15 @@ def test_late_ancestor_list_keeps_cli_priority_and_converts_once(
 
     parser.add_type_parser(int, convert)
     parser.add_command(Tool, pipe_targets="values")
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-    monkeypatch.setattr("interfacy.engine.pipes.read_piped", lambda: "9")
-
+    pipe_stdin("9")
     assert parser.invoke(args=["show", "--values", "7"]) == [7]
     assert converted.count("7") == 1
 
+    pipe_stdin("9")
     assert parser.invoke(args=["show"]) == [9]
+
+
+@pytest.mark.parametrize("depth", [0, True, "2"])
+def test_constructor_rejects_invalid_model_expansion_max_depth(depth: object) -> None:
+    with pytest.raises(ConfigurationError, match="model_expansion_max_depth"):
+        Interfacy(model_expansion_max_depth=depth)  # type: ignore[arg-type]

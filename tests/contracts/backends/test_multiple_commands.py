@@ -117,33 +117,29 @@ class TestComplexMixes:
 
 
 class TestConflictErrorHandling:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_duplicate_command_name_detection(self, parser: Interfacy):
+    def test_duplicate_command_name_detection(self, schema_parser: Interfacy):
         """Verify duplicate explicit command names raise DuplicateCommandError."""
-        parser.add_command(pow, name="dup")
+        schema_parser.add_command(pow, name="dup")
         with pytest.raises(DuplicateCommandError):
-            parser.add_command(greet, name="dup")
+            schema_parser.add_command(greet, name="dup")
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_adding_same_function_twice(self, parser: Interfacy):
+    def test_adding_same_function_twice(self, schema_parser: Interfacy):
         """Verify adding the same function twice raises DuplicateCommandError."""
-        parser.add_command(pow)
+        schema_parser.add_command(pow)
         with pytest.raises(DuplicateCommandError):
-            parser.add_command(pow)
+            schema_parser.add_command(pow)
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_overlapping_aliases(self, parser: Interfacy):
+    def test_overlapping_aliases(self, schema_parser: Interfacy):
         """Verify overlapping aliases across commands raise DuplicateCommandError."""
-        parser.add_command(greet, aliases=["hello"])
+        schema_parser.add_command(greet, aliases=["hello"])
         with pytest.raises(DuplicateCommandError):
-            parser.add_command(pow, aliases=["hello"])
+            schema_parser.add_command(pow, aliases=["hello"])
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_alias_conflicts_with_canonical_name(self, parser: Interfacy):
+    def test_alias_conflicts_with_canonical_name(self, schema_parser: Interfacy):
         """Verify an alias matching an existing canonical name is rejected."""
-        parser.add_command(pow)
+        schema_parser.add_command(pow)
         with pytest.raises(DuplicateCommandError):
-            parser.add_command(greet, aliases=["pow"])
+            schema_parser.add_command(greet, aliases=["pow"])
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
     def test_invalid_command_name_in_cli_args(self, parser: Interfacy):
@@ -163,48 +159,29 @@ class TestConflictErrorHandling:
 
 
 class TestCommandDiscovery:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_listing_available_commands(self, parser: Interfacy):
+    def test_listing_available_commands(self, schema_parser: Interfacy):
         """Verify get_commands lists all registered commands."""
-        parser.add_command(greet)
-        parser.add_command(pow)
+        schema_parser.add_command(greet)
+        schema_parser.add_command(pow)
 
-        names = {cmd.canonical_name for cmd in parser.get_commands()}
+        names = {cmd.canonical_name for cmd in schema_parser.get_commands()}
         assert names == {"greet", "pow"}
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_parser_state_before_adding_commands(self, parser: Interfacy):
-        """Verify parser starts with no commands registered."""
-        assert len(parser.get_commands()) == 0
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_transition_single_to_multi_command(self, parser: Interfacy):
-        """Verify schema transitions from single to multi-command as commands are added."""
-        parser.add_command(pow)
-        schema = parser.build_parser_schema()
-        assert schema.is_multi_command is False
-
-        parser.add_command(greet)
-        schema = parser.build_parser_schema()
-        assert schema.is_multi_command is True
 
 
 class TestMethodFiltering:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_private_methods_excluded(self, parser: Interfacy):
+    def test_private_methods_excluded(self, schema_parser: Interfacy):
         """Verify private methods are excluded from subcommands."""
-        parser.add_command(TextTools)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(TextTools)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "_helper" not in subcommands
         assert "helper" not in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_dunder_methods_excluded(self, parser: Interfacy):
+    def test_dunder_methods_excluded(self, schema_parser: Interfacy):
         """Verify dunder methods are excluded from subcommands."""
-        parser.add_command(TextTools)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(TextTools)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "__init__" not in subcommands
@@ -212,99 +189,89 @@ class TestMethodFiltering:
         assert "init" not in subcommands
         assert "repr" not in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_class_with_no_public_methods(self, parser: Interfacy):
+    def test_class_with_no_public_methods(self, schema_parser: Interfacy):
         """Verify classes without public methods have no subcommands."""
-        parser.add_command(Empty)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(Empty)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("empty").subcommands or {}
 
         assert subcommands == {}
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_static_methods_as_subcommands(self, parser: Interfacy):
+    def test_static_methods_as_subcommands(self, schema_parser: Interfacy):
         """Verify static methods are exposed as subcommands."""
-        parser.add_command(TextTools)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(TextTools)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "repeat" in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_static_methods_can_be_excluded(self, parser: Interfacy):
+    def test_static_methods_can_be_excluded(self, schema_parser: Interfacy):
         """Verify static method inclusion can be disabled per command."""
-        parser.add_command(TextTools, include_staticmethods=False)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(TextTools, include_staticmethods=False)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "repeat" not in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_protected_methods_can_be_included(self, parser: Interfacy):
+    def test_protected_methods_can_be_included(self, schema_parser: Interfacy):
         """Verify protected method inclusion can be enabled per command."""
-        parser.add_command(TextTools, include_protected_methods=True)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(TextTools, include_protected_methods=True)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "helper" in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_method_skips_override_exposed_methods(self, parser: Interfacy):
+    def test_method_skips_override_exposed_methods(self, schema_parser: Interfacy):
         """Verify custom method skips exclude otherwise visible methods."""
-        parser.add_command(TextTools, method_skips=["join", "repeat"])
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(TextTools, method_skips=["join", "repeat"])
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "join" not in subcommands
         assert "repeat" not in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_class_methods_as_subcommands(self, parser: Interfacy):
+    def test_class_methods_as_subcommands(self, schema_parser: Interfacy):
         """Verify class methods are exposed as subcommands."""
-        parser.apply_setup(include_classmethods=True)
-        parser.add_command(TextTools)
-        schema = parser.build_parser_schema()
+        schema_parser.apply_setup(include_classmethods=True)
+        schema_parser.add_command(TextTools)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "tool-name" in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_class_methods_override_per_command(self, parser: Interfacy):
+    def test_class_methods_override_per_command(self, schema_parser: Interfacy):
         """Verify classmethod inclusion can be overridden per command."""
-        parser.apply_setup(include_classmethods=False)
-        parser.add_command(TextTools, include_classmethods=True)
-        schema = parser.build_parser_schema()
+        schema_parser.apply_setup(include_classmethods=False)
+        schema_parser.add_command(TextTools, include_classmethods=True)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "tool-name" in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_properties_not_commands(self, parser: Interfacy):
+    def test_properties_not_commands(self, schema_parser: Interfacy):
         """Verify properties are not treated as subcommands."""
-        parser.add_command(TextTools)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(TextTools)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("text-tools").subcommands or {}
 
         assert "label" not in subcommands
 
 
 class TestInheritance:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_inherited_methods_become_subcommands(self, parser: Interfacy):
+    def test_inherited_methods_become_subcommands(self, schema_parser: Interfacy):
         """Verify inherited methods are included as subcommands."""
-        parser.apply_setup(include_inherited_methods=True)
-        parser.add_command(DerivedOperation)
-        schema = parser.build_parser_schema()
+        schema_parser.apply_setup(include_inherited_methods=True)
+        schema_parser.add_command(DerivedOperation)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("derived-operation").subcommands or {}
 
         assert "describe" in subcommands
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_inherited_methods_override_per_command(self, parser: Interfacy):
+    def test_inherited_methods_override_per_command(self, schema_parser: Interfacy):
         """Verify inherited method inclusion can be overridden per command."""
-        parser.apply_setup(include_inherited_methods=False)
-        parser.add_command(DerivedOperation, include_inherited_methods=True)
-        schema = parser.build_parser_schema()
+        schema_parser.apply_setup(include_inherited_methods=False)
+        schema_parser.add_command(DerivedOperation, include_inherited_methods=True)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.get_command("derived-operation").subcommands or {}
 
         assert "describe" in subcommands
@@ -454,44 +421,44 @@ class TestAliases:
 
 class TestDynamicBehavior:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_adding_commands_after_build_parser_schema(self, parser: Interfacy):
-        """Verify commands added after schema build are included in later builds."""
+    def test_adding_commands_after_first_invocation(self, parser: Interfacy):
+        """Verify commands added after an invocation are routable in later invocations."""
         parser.add_command(pow)
-        schema = parser.build_parser_schema()
-        assert len(schema.commands) == 1
+        assert parser.invoke(args=["2"]) == 4
 
         parser.add_command(greet)
-        schema = parser.build_parser_schema()
-        assert len(schema.commands) == 2
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_command_specific_description_override(self, parser: Interfacy):
+        assert parser.invoke(args=["greet", "Ada"]) == "Hello, Ada!"
+        assert parser.invoke(args=["pow", "3"]) == 9
+
+    def test_command_specific_description_override(self, schema_parser: Interfacy):
         """Verify explicit descriptions override docstrings for commands."""
-        parser.add_command(greet, description="Custom greeting")
+        schema_parser.add_command(greet, description="Custom greeting")
 
-        command = parser.get_command_by_cli_name("greet")
+        command = schema_parser.get_command_by_cli_name("greet")
         assert command.raw_description == "Custom greeting"
 
 
 class TestPipeTargets:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_different_pipe_targets_per_command(self, parser: Interfacy, mocker):
+    def test_different_pipe_targets_per_command(self, parser: Interfacy, pipe_stdin):
         """Verify each command can use its own pipe targets."""
         parser.add_command(greet, pipe_targets="name")
         parser.add_command(pow, pipe_targets="base")
 
-        mocker.patch("interfacy.engine.pipes.read_piped", side_effect=["Ada", "3"])
-
+        pipe_stdin("Ada")
         assert parser.invoke(args=["greet"]) == "Hello, Ada!"
+
+        pipe_stdin("3")
         assert parser.invoke(args=["pow", "-e", "2"]) == 9
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_pipe_target_on_one_command_only(self, parser: Interfacy, mocker):
+    def test_pipe_target_on_one_command_only(self, parser: Interfacy, pipe_stdin):
         """Verify pipe targets apply only to the configured command."""
         parser.add_command(greet)
         parser.add_command(pow, pipe_targets="base")
 
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="4")
+        pipe_stdin("4")
 
         assert parser.invoke(args=["greet", "Ada"]) == "Hello, Ada!"
         assert parser.invoke(args=["pow", "-e", "2"]) == 16

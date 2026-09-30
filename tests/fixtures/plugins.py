@@ -41,10 +41,10 @@ class ArgparseAccessPlugin(BackendPlugin):
     backend = "argparse"
 
     def __init__(self) -> None:
-        self.adapter_name: str | None = None
+        self.context: BackendPluginContext | None = None
 
     def configure_backend(self, context: BackendPluginContext) -> None:
-        self.adapter_name = type(context.adapter).__name__
+        self.context = context
 
 
 class SchemaMetadataPlugin(InterfacyPlugin):

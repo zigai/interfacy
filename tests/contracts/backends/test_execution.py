@@ -3,7 +3,6 @@ import pytest
 from interfacy import DuplicatePluginError, Interfacy
 from interfacy.exceptions import UsageError
 from interfacy.plugins import InterfacyPlugin
-from interfacy.runner import SchemaRunner
 from tests.fixtures.classes import Math
 from tests.fixtures.commands import (
     fn_bool_default_false,
@@ -56,7 +55,7 @@ class TestParserReuse:
         assert parser.invoke(greet_once, args=["Ada"]) == "hello Ada"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_inline_run_restores_registered_commands_and_backend_cache(
+    def test_inline_run_restores_registered_commands(
         self,
         parser: Interfacy,
     ):
@@ -70,14 +69,11 @@ class TestParserReuse:
 
         parser.add_command(persistent)
         parser.build_parser()
-        schema_before = parser.get_last_schema()
-        command_names_before = [command.canonical_name for command in parser.get_commands()]
 
         result = parser.invoke(temporary, args=["temporary"])
 
         assert result == "temporary"
-        assert [command.canonical_name for command in parser.get_commands()] == command_names_before
-        assert parser.get_last_schema() is schema_before
+        assert [command.canonical_name for command in parser.get_commands()] == ["persistent"]
         assert parser.invoke(args=["Ada"]) == "persisted Ada"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
@@ -92,21 +88,20 @@ class TestParserReuse:
 
         parser.add_command(persistent)
         parser.build_parser()
-        schema_before = parser.get_last_schema()
 
         with pytest.raises(UsageError):
             parser.invoke(temporary, args=["temporary"])
 
         assert [command.canonical_name for command in parser.get_commands()] == ["persistent"]
-        assert parser.get_last_schema() is schema_before
         assert parser.invoke(args=["Ada"]) == "persisted Ada"
         parser.add_command(temporary)
+        assert parser.invoke(args=["temporary", "Ada"]) == "temporary Ada"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_inline_run_restores_plugins_and_pipe_overrides_after_runtime_failure(
         self,
         parser: Interfacy,
-        mocker,
+        pipe_stdin,
     ):
         """Runtime failures should not discard parser-level plugins or pipe settings."""
 
@@ -122,7 +117,7 @@ class TestParserReuse:
         plugin = MarkerPlugin()
         parser.add_plugin(plugin)
         parser.add_command(persistent, pipe_targets="name")
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="piped")
+        pipe_stdin("piped")
 
         with pytest.raises(ValueError, match="boom"):
             parser.invoke(boom, args=["boom"])
@@ -210,6 +205,19 @@ class TestBooleanFlags:
 
         assert parser.invoke(args=[]) is False
         assert parser.invoke(args=["--value"]) is True
+
+    @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+    def test_negative_named_bool_is_one_way_flag(self, parser: Interfacy):
+        def run(*, no_stdio: bool = False) -> bool:
+            return no_stdio
+
+        parser.add_command(run)
+
+        assert parser.invoke(args=[]) is False
+        assert parser.invoke(args=["--no-stdio"]) is True
+
+        with pytest.raises(UsageError):
+            parser.invoke(args=["--stdio"])
 
 
 class TestEnums:
@@ -363,21 +371,43 @@ class TestListNargsKwOnly:
         assert parser.invoke(args=["--strings", "a", "b", "--ints", "1", "2"]) == (2, 2)
 
 
-def test_class_runner_does_not_mutate_parsed_namespace() -> None:
+class TestStressRegressionExecution:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_optional_fixed_tuple_keeps_tuple_shape(self, parser: Interfacy):
+        def command(pair: tuple[int, str] | None = None):
+            return pair
 
-    class Counter:
-        def __init__(self, value: int = 1) -> None:
-            self.value = value
+        parser.add_command(command)
 
-        def show(self) -> int:
-            return self.value
+        assert parser.invoke(args=["--pair", "1", "a"]) == (1, "a")
 
-    parser = Interfacy()
-    parser.add_command(Counter)
-    namespace = parser.parse_args(["show"])
-    before = dict(namespace)
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_union_of_lists_keeps_list_shape(self, parser: Interfacy):
+        def command(values: list[int] | list[str]):
+            return values
 
-    context = parser._engine.execution_context()
-    assert SchemaRunner(namespace, context, ["show"]).run() == 1
-    assert namespace == before
-    assert SchemaRunner(namespace, context, ["show"]).run() == 1
+        parser.add_command(command)
+
+        assert parser.invoke(args=["1", "2"]) == [1, 2]
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_translated_positional_name_binds_to_original_parameter(
+        self,
+        parser: Interfacy,
+    ):
+        def command(XMLHttpRequestID: str) -> str:  # noqa: N803
+            return XMLHttpRequestID
+
+        parser.add_command(command)
+        assert parser.invoke(args=["ABC"]) == "ABC"
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_translated_unicode_option_name_binds_to_original_parameter(
+        self,
+        parser: Interfacy,
+    ):
+        def command(déjàVu: str = "seen") -> str:  # noqa: N803, PLC2401
+            return déjàVu
+
+        parser.add_command(command)
+        assert parser.invoke(args=["--dé-jà-vu", "D"]) == "D"

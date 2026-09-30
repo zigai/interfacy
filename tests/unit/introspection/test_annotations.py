@@ -2,14 +2,20 @@ import typing
 from typing import Any
 
 import pytest
+from objinspect import Method
 
-from interfacy.schema.typing import normalize_basic_annotation, simplified_type_name
+from interfacy.introspection.annotations import (
+    normalize_basic_annotation,
+    resolve_objinspect_annotations,
+    simplified_type_name,
+)
 
 
 @pytest.mark.parametrize(
     ("annotation", "expected"),
     [
         ("dict[builtins.str, mypkg.Foo]", "dict[str, Foo]"),
+        ("mypkg.Outer[mypkg.Inner]", "Outer[Inner]"),
         ("typing.Literal['a  b', 'a.b']", "Literal['a  b', 'a.b']"),
         ("Literal['a | None', 'None | b']", "Literal['a | None', 'None | b']"),
         (r"Literal['a\'  b', 'x[y],None']", r"Literal['a\'  b', 'x[y],None']"),
@@ -68,3 +74,19 @@ def test_basic_annotation_normalization_resolves_type_aliases() -> None:
         pytest.skip("PEP 695 aliases require Python 3.12+")
 
     assert normalize_basic_annotation(alias_type("Count", int)) is int
+
+
+def test_resolve_objinspect_annotations_uses_class_scope_for_methods() -> None:
+    class Container:
+        class InnerConfig:
+            pass
+
+        def configure(self, cfg: "InnerConfig") -> None:
+            pass
+
+    method = Method(Container.configure, Container)
+    assert method.params[0].type == "InnerConfig"
+
+    resolve_objinspect_annotations(method)
+
+    assert method.params[0].type is Container.InnerConfig

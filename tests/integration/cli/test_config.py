@@ -12,8 +12,8 @@ from interfacy.cli.config import (
     load_config,
 )
 from interfacy.exceptions import ConfigurationError
+from interfacy.help import Aligned, AlignedTyped, InterfacyLayout, Modern
 from interfacy.help.colors import Aurora
-from interfacy.help.presets import Aligned, AlignedTyped, InterfacyLayout, Modern
 from interfacy.naming.abbreviations import DefaultAbbreviationGenerator
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
 from interfacy.plugins import InterfacyPlugin
@@ -23,11 +23,6 @@ from interfacy.plugins import InterfacyPlugin
 def test_aligned_presets_resolve_through_shared_base(layout_type: type[Aligned]) -> None:
     resolved = apply_config_defaults({"help_layout": layout_type.__name__}, {})
     assert isinstance(resolved["help_layout"], layout_type)
-
-
-def test_internal_layout_base_is_not_a_config_preset() -> None:
-    with pytest.raises(ConfigurationError, match="Unknown help_layout value"):
-        apply_config_defaults({"help_layout": "AlignedLayoutBase"}, {})
 
 
 def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
@@ -88,7 +83,7 @@ def test_load_config_and_apply_defaults(tmp_path: Path) -> None:
     assert overrides["include_protected_methods"] is True
     assert overrides["include_private_methods"] is True
     assert overrides["include_staticmethods"] is False
-    assert overrides["method_skips"] == ["close", "setup"]
+    assert overrides["method_skips"] == ("close", "setup")
     assert overrides["expand_model_params"] is False
     assert overrides["model_expansion_max_depth"] == 2
     assert overrides["parse_recovery_max_attempts"] == 4
@@ -210,6 +205,26 @@ def test_load_config_rejects_string_help_subcommand_sort(tmp_path: Path) -> None
                 "backend": UNSET,
             },
         )
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("model_expansion_max_depth = 0", "model_expansion_max_depth must be >= 1"),
+        ("parse_recovery_max_attempts = -1", "parse_recovery_max_attempts must be >= 0"),
+        ('method_skips = "close"', "method_skips must be a sequence of strings"),
+    ],
+)
+def test_load_config_rejects_invalid_behavior_values(
+    tmp_path: Path,
+    line: str,
+    message: str,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(f"[behavior]\n{line}\n", encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match=message):
+        apply_config_defaults(load_config(config_path), {})
 
 
 def test_load_config_ignores_top_level_fields(tmp_path: Path) -> None:

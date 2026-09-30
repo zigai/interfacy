@@ -1,3 +1,7 @@
+import io
+import sys
+from collections.abc import Callable
+
 import pytest
 
 from interfacy import Interfacy
@@ -64,3 +68,29 @@ def click_kw_only() -> Interfacy:
     parser.metadata["flag_style"] = "keyword_only"
 
     return parser
+
+
+class TerminalStdin(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.fixture
+def pipe_stdin(monkeypatch: pytest.MonkeyPatch) -> Callable[[str], None]:
+    """Feed text through a non-terminal stdin; call again before each invoke that reads it."""
+
+    def feed(text: str) -> None:
+        monkeypatch.setattr(sys, "stdin", io.StringIO(text))
+
+    return feed
+
+
+@pytest.fixture
+def terminal_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", TerminalStdin())
+
+
+@pytest.fixture
+def schema_parser(argparse_req_pos: Interfacy) -> Interfacy:
+    """Parser for registration and schema assertions that do not depend on a backend."""
+    return argparse_req_pos

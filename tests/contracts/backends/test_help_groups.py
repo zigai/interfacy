@@ -1,9 +1,9 @@
 import pytest
 
 from interfacy import CommandGroup, Interfacy
+from interfacy.common.terminal import strip_ansi
 from interfacy.exceptions import ConfigurationError
-from interfacy.help.presets import ArgparseLayout, StandardLayout
-from interfacy.help.terminal import strip_ansi
+from interfacy.help import ArgparseLayout, StandardLayout
 
 
 def cmd_status() -> None:

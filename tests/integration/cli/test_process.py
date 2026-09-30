@@ -32,8 +32,8 @@ def test_sigint_runs_cleanup_and_interrupt_callback(tmp_path: Path, backend: str
             from interfacy import Interfacy
 
             def command():
-                print("READY", flush=True)
                 try:
+                    print("READY", flush=True)
                     signal.pause()
                 finally:
                     Path("cleaned").write_text("yes", encoding="utf-8")

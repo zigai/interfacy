@@ -3,8 +3,8 @@ from types import SimpleNamespace
 from stdl.st import TextStyle
 
 from interfacy.help import formatting as type_help
+from interfacy.help.colors import InterfacyColors
 from interfacy.help.formatting import format_type_for_help
-from interfacy.help.layout import InterfacyColors
 
 
 def _marker(text: str, style: TextStyle) -> str:

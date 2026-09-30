@@ -1,7 +1,7 @@
 import pytest
 
+from interfacy.declarations.groups import CommandGroup
 from interfacy.exceptions import UsageError
-from interfacy.group import CommandGroup
 
 
 @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)

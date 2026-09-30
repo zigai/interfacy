@@ -52,15 +52,7 @@ def fn_bool_default_false(value: bool = False):
     return value
 
 
-def fn_bool_short_flag(x: bool = False):
-    return x
-
-
 def fn_list_int(values: list[int]):
-    return values
-
-
-def fn_list_with_default(values: list[int] = [1, 2]):  # noqa: B006 - intentional for tests
     return values
 
 

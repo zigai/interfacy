@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import copy
-import os
 import re
-import shutil
 from enum import Enum
 from typing import Literal
 
 import pytest
+from stdl.st import TextStyle
 
+import interfacy.help.layouts.clap as clap_layout
 from interfacy import CommandGroup, Interfacy
+from interfacy.common.terminal import strip_ansi
 from interfacy.help import (
     Aligned,
     AlignedTyped,
@@ -20,7 +21,9 @@ from interfacy.help import (
     Modern,
     StandardLayout,
 )
+from interfacy.help.colors import ClapColors
 from interfacy.naming import DefaultFlagStrategy
+from tests.fixtures.terminal import freeze_terminal
 
 
 class Strategy(Enum):
@@ -200,17 +203,6 @@ def build_stress_parser(layout: HelpLayout, parser: Interfacy) -> Interfacy:
     configured.add_command(build_group())
 
     return configured
-
-
-def strip_ansi(text: str) -> str:
-    return re.sub(r"\x1b\[[0-9;]*m", "", text)
-
-
-def freeze_terminal(monkeypatch: pytest.MonkeyPatch, width: int) -> None:
-    size = os.terminal_size((width, 24))
-    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setenv("COLUMNS", str(width))
 
 
 def render_help_for_args(
@@ -597,6 +589,34 @@ def test_clap_layout_no_description_default_aligns_to_help_text_column(
     help_line = next(line for line in lines if "--help" in line and "Print help" in line)
     limit_line = next(line for line in help_text.splitlines() if "--limit <LIMIT>" in line)
     assert limit_line.index("[default:") == help_line.index("Print help")
+
+
+def test_clap_layout_styles_command_names_with_command_name_style(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def deploy() -> None:
+        """Deploy the service."""
+
+    def rollback() -> None:
+        """Roll back the service."""
+
+    freeze_terminal(monkeypatch, 80)
+    monkeypatch.setattr(
+        clap_layout,
+        "with_style",
+        lambda text, style: f"<{style.color}>{text}</{style.color}>",
+    )
+    colors = ClapColors(command_name_style=TextStyle(color="magenta"))
+    app = Interfacy(help_layout=ClapLayout(style=colors), sys_exit_enabled=False)
+    app.add_command(deploy)
+    app.add_command(rollback)
+
+    app.run(args=["--help"])
+
+    help_text = capsys.readouterr().out
+    assert "<magenta>deploy</magenta>" in help_text
+    assert "<magenta>rollback</magenta>" in help_text
 
 
 @pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])

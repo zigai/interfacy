@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 from platformdirs import user_config_path
 
-from interfacy.cli.main import ExitCode, _split_target, build_parser, main, resolve_target
+from interfacy.cli.main import ExitCode, build_parser, main
+from interfacy.cli.targets import resolve_target, split_target
 
 
 @pytest.fixture(autouse=True)
@@ -78,7 +79,7 @@ def test_resolve_target_file_path(tmp_path: Path) -> None:
 
 
 def test_split_target_windows_drive_path() -> None:
-    module_ref, symbol_ref = _split_target(r"C:\tmp\entry.py:hello")
+    module_ref, symbol_ref = split_target(r"C:\tmp\entry.py:hello")
     assert module_ref == r"C:\tmp\entry.py"
     assert symbol_ref == "hello"
 

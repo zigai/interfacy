@@ -1,11 +1,12 @@
+from __future__ import annotations
+
+from typing import Any
+
 import pytest
 
 from interfacy import Interfacy
 from interfacy.exceptions import UsageError
 from tests.fixtures.commands import (
-    fn_bool_default_false,
-    fn_bool_default_true,
-    fn_bool_required,
     fn_float_required,
     fn_str_optional,
     fn_str_required,
@@ -66,20 +67,6 @@ class TestPrimitives:
         assert parser.invoke(args=args) == 3.14
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_bool_required(self, parser: Interfacy):
-        """Verify that a required boolean argument parses --flag and --no-flag correctly."""
-        parser.add_command(fn_bool_required)
-        assert parser.invoke(args=["--value"]) is True
-        assert parser.invoke(args=["--no-value"]) is False
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_bool_default_true(self, parser: Interfacy):
-        """Verify that a boolean defaulting to True handles empty input and --no-flag."""
-        parser.add_command(fn_bool_default_true)
-        assert parser.invoke(args=[]) is True
-        assert parser.invoke(args=["--no-value"]) is False
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_single_letter_bool_default_true_accepts_negative_long_flag(self, parser: Interfacy):
         """Single-letter booleans defaulting to True should accept a --no-x form."""
 
@@ -91,9 +78,14 @@ class TestPrimitives:
         assert parser.invoke(args=[]) is True
         assert parser.invoke(args=["--no-x"]) is False
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_bool_default_false(self, parser: Interfacy):
-        """Verify that a boolean defaulting to False handles empty input and --flag."""
-        parser.add_command(fn_bool_default_false)
-        assert parser.invoke(args=[]) is False
-        assert parser.invoke(args=["--value"]) is True
+
+def test_any_and_object_parameters() -> None:
+    """Verify that parameters typed as Any or object accept CLI input without error."""
+
+    def echo(x: Any, y: object) -> dict[str, Any]:
+        return {"x": x, "y": y}
+
+    cli = Interfacy()
+    cli.add_command(echo)
+    res = cli.invoke(args=["hello", "world"])
+    assert res == {"x": "hello", "y": "world"}

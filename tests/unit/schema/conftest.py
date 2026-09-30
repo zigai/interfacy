@@ -2,23 +2,22 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-import pytest
 from objinspect import Class, Function, Method
 
-from interfacy.help.layout import HelpLayout
+from interfacy.declarations.pipes import PipeTargets, build_pipe_targets_config
+from interfacy.declarations.sorting import (
+    DEFAULT_HELP_OPTION_SORT_RULES,
+    DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
+)
+from interfacy.help import HelpLayout
 from interfacy.naming import (
     AbbreviationGenerator,
     DefaultAbbreviationGenerator,
     DefaultFlagStrategy,
     FlagStrategy,
 )
-from interfacy.pipe import PipeTargets, build_pipe_targets_config
 from interfacy.schema.builder import SchemaBuildContext
-from interfacy.schema.schema import Command
-from interfacy.schema.sorting import (
-    DEFAULT_HELP_OPTION_SORT_RULES,
-    DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
-)
+from interfacy.schema.model import Command
 
 
 class RecordingHelpLayout(HelpLayout):
@@ -28,33 +27,17 @@ class RecordingHelpLayout(HelpLayout):
         super().__init__()
 
         self.formatted_descriptions: list[str] = []
-        self.class_help_calls: list[str] = []
-        self.parameter_help_calls: list[str] = []
 
     def format_description(self, description: str) -> str:
         self.formatted_descriptions.append(description)
         return f"formatted::{description}"
 
-    def get_help_for_parameter(
-        self,
-        param,
-        flags: tuple[str, ...] | None = None,
-    ) -> str:
-        display = flags[0] if flags else param.name
-        self.parameter_help_calls.append(display)
-        return f"help::{display}"
-
-    def get_help_for_class(self, command: Class) -> str:
-        self.class_help_calls.append(command.name)
-        return f"class::{command.name}"
-
 
 class StubTypeParser:
-    """Minimal StrToTypeParser substitute tracking requested parse functions."""
+    """Minimal StrToTypeParser substitute."""
 
     def __init__(self) -> None:
         self.parsers: dict[type[Any] | None, Callable[[str], Any]] = {}
-        self.requests: list[type[Any] | None] = []
 
     def register(self, typ: type[Any] | None, func: Callable[[str], Any]) -> None:
         self.parsers[typ] = func
@@ -63,28 +46,10 @@ class StubTypeParser:
         if typ is None:
             return None
 
-        self.requests.append(typ)
-
         try:
             return self.parsers.get(typ)
         except TypeError:
             return None
-
-
-def make_command_stub(
-    obj: Class | Function | Method,
-    *,
-    canonical_name: str | None = None,
-    aliases: Sequence[str] = (),
-) -> Command:
-    canonical = canonical_name or obj.name
-    return Command(
-        obj=obj,
-        canonical_name=canonical,
-        cli_name=canonical,
-        aliases=tuple(aliases),
-        raw_description=obj.description,
-    )
 
 
 @dataclass
@@ -124,7 +89,6 @@ class SchemaSource:
             max_generated_len=self.abbreviation_max_generated_len
         )
         self.help_layout = self.help_layout or RecordingHelpLayout()
-        self.help_layout.flag_generator = self.flag_strategy
         self.type_parser = self.type_parser or StubTypeParser()
         self.pipe_targets_default = self.pipe_targets
         self.commands: dict[str, Command] = {}
@@ -215,9 +179,3 @@ class SchemaSource:
             bool_negative_prefix=self.bool_negative_prefix,
             help_flags=self.help_flags,
         )
-
-
-@pytest.fixture
-def schema_source() -> SchemaSource:
-    """Return a fresh neutral schema source for each test."""
-    return SchemaSource()

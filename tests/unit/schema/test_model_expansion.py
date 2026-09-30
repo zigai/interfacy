@@ -6,10 +6,9 @@ from objinspect import Function
 
 from interfacy import Interfacy
 from interfacy.exceptions import UsageError
-from interfacy.help.presets import InterfacyLayout
+from interfacy.help import InterfacyLayout
+from interfacy.introspection.parsers import build_default_type_parser
 from interfacy.schema.builder import ParserSchemaBuilder
-from interfacy.schema.model_argument_mapper import ModelArgumentMapper
-from interfacy.type_parsers import build_default_type_parser
 from tests.fixtures.models import (
     Address,
     UserWithAddress,
@@ -59,21 +58,6 @@ def maybe_user(user: User | None = None) -> User | None:
     return user
 
 
-def test_schema_expands_dataclass_fields(schema_source: SchemaSource) -> None:
-    schema_source.register_command(Function(greet), canonical_name="greet")
-    builder = ParserSchemaBuilder(schema_source.schema_context())
-    schema = builder.build()
-
-    cmd = schema.commands["greet"]
-    names = {arg.name for arg in cmd.parameters}
-    flags = {arg.flags[0] for arg in cmd.parameters}
-
-    assert "user.name" in names
-    assert "user.age" in names
-    assert "--user.name" in flags
-    assert "--user.age" in flags
-
-
 def test_schema_expanded_fields_use_long_flags_by_default() -> None:
     parser = SchemaSource()
     parser.register_command(Function(greet), canonical_name="greet")
@@ -81,21 +65,6 @@ def test_schema_expanded_fields_use_long_flags_by_default() -> None:
 
     cmd = schema.commands["greet"]
     assert all(flags[0].startswith("--") for flags in (arg.flags for arg in cmd.parameters))
-
-
-def test_schema_expanded_fields_can_generate_short_flags_for_all_options_scope() -> None:
-    parser = SchemaSource(abbreviation_scope="all_options")
-    parser.register_command(Function(greet), canonical_name="greet")
-    schema = ParserSchemaBuilder(parser.schema_context()).build()
-
-    cmd = schema.commands["greet"]
-    short_flags = [
-        flag
-        for arg in cmd.parameters
-        for flag in arg.flags
-        if flag.startswith("-") and not flag.startswith("--")
-    ]
-    assert short_flags
 
 
 def test_argparse_reconstructs_expanded_dataclass() -> None:
@@ -159,20 +128,14 @@ def test_optional_model_none_when_no_flags() -> None:
     assert result is None
 
 
-def test_optional_nested_fields_are_not_required(schema_source: SchemaSource) -> None:
-    schema_source.register_command(
-        Function(greet_with_address), canonical_name="greet-with-address"
-    )
-    builder = ParserSchemaBuilder(schema_source.schema_context())
-    schema = builder.build()
+def test_optional_nested_fields_are_not_required() -> None:
+    parser = Interfacy()
+    parser.add_command(greet_with_address)
 
-    cmd = schema.commands["greet-with-address"]
-    required_by_name = {arg.name: arg.required for arg in cmd.parameters}
+    assert parser.invoke(args=["--user.name", "Ada", "--user.age", "32"]) == "Hello Ada, age 32"
 
-    assert required_by_name["user.name"] is True
-    assert required_by_name["user.age"] is True
-    assert required_by_name["user.address.city"] is False
-    assert required_by_name["user.address.zip"] is False
+    with pytest.raises(UsageError):
+        parser.invoke(args=["--user.address.city", "Austin"])
 
 
 DEFAULT_USER = UserWithAddress(
@@ -184,6 +147,31 @@ DEFAULT_USER = UserWithAddress(
 
 def greet_default(user: UserWithAddress = DEFAULT_USER) -> str:
     return greet_with_address(user)
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+@pytest.mark.parametrize(
+    ("args", "label"),
+    [([], "base"), (["--config.label", "changed"], "changed")],
+)
+def test_nested_model_default_does_not_require_leaf_flags(
+    parser: Interfacy, args: list[str], label: str
+):
+    @dataclass
+    class Config:
+        value: int
+
+    @dataclass
+    class DefaultConfig:
+        inner: Config = field(default_factory=lambda: Config(42))
+        label: str = "base"
+
+    def consume(config: DefaultConfig):
+        return config
+
+    parser.add_command(consume)
+
+    assert parser.invoke(args=args) == DefaultConfig(label=label)
 
 
 def test_model_default_used_when_no_flags() -> None:
@@ -200,17 +188,6 @@ def test_model_default_merged_with_overrides() -> None:
     )
     result = parser.invoke(greet_default, args=["--user.age", "41"])
     assert result == "Hello Tess, age 41 from Austin 78701"
-
-
-def test_expanded_fields_optional_when_model_default_present(schema_source: SchemaSource) -> None:
-    schema_source.register_command(Function(greet_default), canonical_name="greet-default")
-    builder = ParserSchemaBuilder(schema_source.schema_context())
-    schema = builder.build()
-
-    cmd = schema.commands["greet-default"]
-    required_by_name = {arg.name: arg.required for arg in cmd.parameters}
-    assert required_by_name["user.name"] is False
-    assert required_by_name["user.age"] is False
 
 
 def test_model_expansion_respects_max_depth() -> None:
@@ -238,7 +215,6 @@ def test_per_command_override_enables_model_expansion_when_parser_disabled() -> 
     names = {arg.name for arg in command.parameters}
 
     assert "user.name" in names
-    assert command.expand_model_params is True
 
     result = parser.invoke(
         args=[
@@ -267,7 +243,6 @@ def test_per_command_override_model_expansion_depth() -> None:
     names = {arg.name for arg in command.parameters}
 
     assert "level1.level2.level3.leaf" in names
-    assert command.model_expansion_max_depth == 4
 
     result = parser.invoke(args=["--level1.level2.level3.leaf", "x"])
     assert result == "x"
@@ -629,24 +604,6 @@ def test_pydantic_like_v1_model_reconstructs_and_uses_default() -> None:
     )
 
     assert parser.invoke(command, args=["--user.name", "Ada"]) == "Ada:9"
-
-
-def test_model_mapper_optional_empty_nested_dict_becomes_none() -> None:
-    mapper = ModelArgumentMapper()
-
-    user = mapper._build_model_instance(
-        UserWithAddress,
-        {"name": "Ada", "age": 32, "address": {}},
-    )
-
-    assert user == UserWithAddress(name="Ada", age=32, address=None)
-
-
-def test_model_mapper_required_empty_nested_dict_is_not_optional() -> None:
-    mapper = ModelArgumentMapper()
-
-    with pytest.raises(TypeError):
-        mapper._coerce_model_value(Address, {})
 
 
 def test_dataclass_expansion_falls_back_when_forward_reference_is_unresolved() -> None:

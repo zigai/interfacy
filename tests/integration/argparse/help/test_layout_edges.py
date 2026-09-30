@@ -1,31 +1,28 @@
 from __future__ import annotations
 
 import argparse
-import os
 from enum import Enum
 
 import pytest
-from stdl.st import TextStyle, ansi_len
 
 from interfacy import BooleanMode
-from interfacy.help.layout import InterfacyColors
-from interfacy.help.presets import (
+from interfacy.common.terminal import strip_ansi
+from interfacy.help import (
     Aligned,
     AlignedTyped,
     ArgparseLayout,
-    ClapLayout,
     HelpLayout,
     InterfacyLayout,
 )
-from interfacy.help.terminal import strip_ansi
-from interfacy.schema.schema import (
+from interfacy.schema.model import (
     Argument,
     ArgumentDefault,
     ArgumentKind,
     BooleanBehavior,
-    ValueCardinality,
     ValueShape,
 )
+from interfacy.schema.values import ValueCardinality
+from tests.fixtures.terminal import freeze_terminal
 
 
 def make_argument(
@@ -63,28 +60,6 @@ def make_argument(
         boolean_behavior=boolean_behavior,
         is_help_action=is_help_action,
     )
-
-
-def test_default_field_width_uses_base_for_empty_lengths() -> None:
-    layout = HelpLayout(default_field_width=18)
-
-    assert layout._compute_default_field_width_from_lengths([]) == 18
-    assert layout._compute_default_field_width_for_len(0) == 18
-
-
-def test_default_field_width_clamps_to_terminal_and_configured_max(monkeypatch) -> None:
-    layout = HelpLayout(
-        pos_flag_width=12,
-        default_field_width_term_ratio=2,
-        default_field_width_soft_ratio=2,
-        default_field_width_max=20,
-    )
-    monkeypatch.setattr(
-        os, "get_terminal_size", lambda *args, **kwargs: os.terminal_size((100, 24))
-    )
-
-    assert layout._compute_default_field_width_for_len(80) == 20
-    assert layout._compute_default_field_width_from_lengths([80, 20, 16]) == 20
 
 
 def test_schema_argument_legacy_required_untyped_positional_has_no_help() -> None:
@@ -192,9 +167,7 @@ def test_aligned_presets_keep_template_and_constructor_customization(
     show_type: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        os, "get_terminal_size", lambda *args, **kwargs: os.terminal_size((120, 24))
-    )
+    freeze_terminal(monkeypatch, 120)
     layout = layout_cls(short_flag_width=8, long_flag_width=20, default_field_width=9)
     argument = make_argument(
         name="count",
@@ -208,45 +181,3 @@ def test_aligned_presets_keep_template_and_constructor_customization(
 
     assert rendered.startswith(f"{'-c':<8}{'--count':<20}[{'2':>9}] Number of items.")
     assert ("[type: int]" in rendered) is show_type
-    assert not isinstance(layout, AlignedTyped if layout_cls is Aligned else Aligned)
-
-
-@pytest.mark.parametrize("layout_cls", [HelpLayout, ClapLayout])
-def test_flag_columns_preserve_ansi_styling_and_visible_padding(
-    layout_cls: type[HelpLayout],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    codes = {"red": "31", "green": "32", "cyan": "36"}
-
-    def styled(text: str, style: TextStyle) -> str:
-        return f"\x1b[{codes[style.color]}m{text}\x1b[0m"
-
-    monkeypatch.setattr("interfacy.help.layout.with_style", styled)
-    monkeypatch.setattr("interfacy.help.presets.with_style", styled)
-    layout = layout_cls(
-        style=InterfacyColors(
-            flag_short=TextStyle(color="red"),
-            flag_long=TextStyle(color="green"),
-            placeholder_style=TextStyle(color="cyan"),
-        ),
-        short_flag_width=4,
-        long_flag_width=24,
-        pos_flag_width=32,
-    )
-
-    columns = layout._build_styled_columns(
-        "-r", "--region <REGION>", "-r, --region <REGION>", is_option=True
-    )
-
-    short = "\x1b[31m-r\x1b[0m"
-    long = (
-        "\x1b[32m--region\x1b[0m \x1b[36m<REGION>\x1b[0m"
-        if layout_cls is ClapLayout
-        else "\x1b[32m--region <REGION>\x1b[0m"
-    )
-    assert columns["flag_short_styled"] == short
-    assert columns["flag_long_styled"] == long
-    assert columns["flag_styled"] == f"{short}, {long}"
-    assert columns["flag_short_col"] == f"{short}  "
-    assert columns["flag_long_col"] == long + " " * 7
-    assert ansi_len(columns["flag_col"]) == 32

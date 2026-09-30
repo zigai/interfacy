@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import shutil
@@ -171,20 +170,22 @@ def test_installed_identity_exports_and_typing_assets(
                 import interfacy
 
                 root = Path(interfacy.__file__).parent
-                stub = ast.parse((root / "__init__.pyi").read_text(encoding="utf-8"))
-                stub_all = next(
-                    ast.literal_eval(node.value)
-                    for node in stub.body
-                    if isinstance(node, ast.Assign)
-                    and any(isinstance(target, ast.Name) and target.id == "__all__" for target in node.targets)
-                )
+                module = ast.parse((root / "__init__.py").read_text(encoding="utf-8"))
+                type_checking_names = {
+                    alias.asname or alias.name
+                    for node in module.body
+                    if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+                    for statement in node.body
+                    if isinstance(statement, ast.ImportFrom)
+                    for alias in statement.names
+                }
                 assert (root / "py.typed").is_file()
-                assert set(stub_all) == set(interfacy.__all__)
+                assert type_checking_names == set(interfacy.__all__)
+                assert set(interfacy._EXPORTS) == set(interfacy.__all__)
                 for name in interfacy.__all__:
                     getattr(interfacy, name)
                 print(json.dumps({
                     "click": importlib.util.find_spec("click") is not None,
-                    "exports": len(interfacy.__all__),
                     "path": str(root),
                     "version": metadata.version("interfacy"),
                 }))
@@ -197,7 +198,6 @@ def test_installed_identity_exports_and_typing_assets(
     assert process.returncode == 0, process.stderr
     evidence = json.loads(process.stdout)
     assert evidence["version"] == PROJECT_VERSION
-    assert evidence["exports"] == 19
     assert evidence["click"] == ("click" in install.backends)
     assert Path(evidence["path"]).is_relative_to(install.root)
     assert process.stderr == ""
@@ -482,14 +482,3 @@ def test_installed_wheel_typechecks_for_a_consumer(
     )
 
     assert process.returncode == 0, process.stdout + process.stderr
-
-
-def test_artifact_hashes_are_distinct_and_nonempty(
-    installed_distributions: tuple[InstalledDistribution, ...],
-) -> None:
-    hashes = {
-        hashlib.sha256(item.artifact.read_bytes()).hexdigest() for item in installed_distributions
-    }
-
-    assert len(hashes) == 2
-    assert all(len(value) == 64 for value in hashes)

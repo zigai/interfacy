@@ -1,7 +1,7 @@
 import pytest
 
 from interfacy import Interfacy
-from interfacy.help.presets import InterfacyLayout
+from interfacy.help import InterfacyLayout
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
 
 

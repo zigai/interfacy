@@ -129,21 +129,19 @@ def test_param_kind_option_forces_required_parameter_to_option(
     assert parser.invoke(args=["--value", "provided"]) == "provided"
 
 
-@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
 def test_optional_initializer_positionals_are_rejected_for_class_subcommands(
-    parser: Interfacy,
+    schema_parser: Interfacy,
 ) -> None:
-    parser.add_command(ToolWithOptionalInitializerPositional)
+    schema_parser.add_command(ToolWithOptionalInitializerPositional)
 
     with pytest.raises(ConfigurationError, match="Optional initializer positional"):
-        parser.build_parser_schema()
+        schema_parser.build_parser_schema()
 
 
-@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
 def test_optional_positionals_cannot_precede_required_positionals(
-    parser: Interfacy,
+    schema_parser: Interfacy,
 ) -> None:
-    parser.add_command(optional_before_required)
+    schema_parser.add_command(optional_before_required)
 
     with pytest.raises(ConfigurationError, match="cannot appear before positional parameter"):
-        parser.build_parser_schema()
+        schema_parser.build_parser_schema()

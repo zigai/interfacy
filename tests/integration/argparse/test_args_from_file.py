@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from interfacy import Interfacy
-from interfacy.argparse_backend.argument_parser import ArgumentParser
+from interfacy.backends.argparse.parser import ArgumentParser
 
 
 def test_argument_parser_fromfile_prefix_expands(tmp_path: Path) -> None:

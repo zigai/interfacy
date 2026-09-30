@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import shutil
 from dataclasses import dataclass
 from typing import Literal
 
@@ -9,29 +7,22 @@ import click
 import pytest
 
 from interfacy import ExecutableFlag, Interfacy
-from interfacy.click_backend.commands import (
+from interfacy.backends.click.commands import (
     InterfacyClickArgument,
     InterfacyClickCommand,
     InterfacyClickGroup,
     InterfacyClickOption,
 )
+from interfacy.declarations.groups import CommandGroup
 from interfacy.exceptions import UsageError
-from interfacy.group import CommandGroup
-from interfacy.help.presets import ArgparseLayout, StandardLayout
+from interfacy.help import ArgparseLayout, StandardLayout
 from tests.fixtures.classes import Math
 from tests.fixtures.commands import (
-    fn_bool_default_false,
     fn_bool_default_true,
     fn_list_int,
     fn_list_int_optional,
 )
-
-
-def freeze_terminal(monkeypatch: pytest.MonkeyPatch, width: int = 80) -> None:
-    size = os.terminal_size((width, 24))
-    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setenv("COLUMNS", str(width))
+from tests.fixtures.terminal import freeze_terminal
 
 
 def fn_metadata_help(
@@ -177,12 +168,6 @@ class TestClickListOptions:
 
 class TestClickBooleanFlags:
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
-    def test_bool_default_true(self, parser):
-        parser.add_command(fn_bool_default_true)
-        assert parser.invoke(args=[]) is True
-        assert parser.invoke(args=["--no-value"]) is False
-
-    @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_bool_default_true_help_keeps_negative_flag_form(self, parser):
         parser.add_command(fn_bool_default_true)
 
@@ -200,12 +185,6 @@ class TestClickBooleanFlags:
 
         assert parser.invoke(args=[]) is True
         assert parser.invoke(args=["--no-x"]) is False
-
-    @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
-    def test_bool_default_false(self, parser):
-        parser.add_command(fn_bool_default_false)
-        assert parser.invoke(args=[]) is False
-        assert parser.invoke(args=["--value"]) is True
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_negative_named_bool_help_shows_only_declared_flag(self, parser):
@@ -235,7 +214,7 @@ class TestClickBooleanFlags:
     def test_parser_help_position_keeps_long_executable_flag_help_inline(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        freeze_terminal(monkeypatch)
+        freeze_terminal(monkeypatch, 80)
         parser = Interfacy(
             backend="click",
             help_position=42,
@@ -306,7 +285,7 @@ class TestClickBooleanFlags:
 def test_interfacy_click_command_help_position_aligns_positionals_and_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    freeze_terminal(monkeypatch)
+    freeze_terminal(monkeypatch, 80)
     command = InterfacyClickCommand(
         name="deploy",
         help="Deploy an application build.",
@@ -449,20 +428,6 @@ class TestClickNestedGroups:
                 },
             },
         }
-
-
-class TestClickPipes:
-    @pytest.mark.parametrize("parser", ["click_req_pos"], indirect=True)
-    def test_pipe_single_target(self, parser, mocker):
-        parser.add_command(fn_echo, pipe_targets="msg")
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="hello")
-        assert parser.invoke(args=[]) == "hello"
-
-    @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
-    def test_pipe_priority(self, parser, mocker):
-        parser.add_command(fn_echo_cli, pipe_targets={"bindings": "msg", "priority": "pipe"})
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="piped")
-        assert parser.invoke(args=["--msg", "cli"]) == "piped"
 
 
 class TestClickModelExpansion:

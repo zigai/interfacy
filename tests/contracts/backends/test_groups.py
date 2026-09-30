@@ -1,4 +1,4 @@
-import sys
+from dataclasses import dataclass
 
 import pytest
 
@@ -9,46 +9,6 @@ from tests.fixtures.commands import attach, detach, greet, pow
 
 
 class TestBasicGroupConstruction:
-    def test_create_group_with_name(self):
-        """Verify group can be created with just a name."""
-        group = CommandGroup("workspace")
-        assert group.name == "workspace"
-        assert group.description is None
-        assert group.aliases == ()
-
-    def test_create_group_with_description(self):
-        """Verify group can have a description."""
-        group = CommandGroup("workspace", description="Workspace CLI")
-        assert group.description == "Workspace CLI"
-
-    def test_create_group_with_aliases(self):
-        """Verify group can have aliases."""
-        group = CommandGroup("workspace", aliases=["ws", "wsp"])
-        assert group.aliases == ("ws", "wsp")
-
-    def test_add_command_with_function(self):
-        """Verify function can be added to group."""
-        group = CommandGroup("cli")
-        group.add_command(attach)
-        assert group.has_commands
-        assert "attach" in group.commands
-
-    def test_add_command_with_class(self):
-        """Verify class can be added to group."""
-        group = CommandGroup("cli")
-        group.add_command(Container)
-        assert group.has_commands
-        assert "Container" in group.commands
-
-    def test_add_command_with_instance(self):
-        """Verify instance can be added to group."""
-        db = Database(host="localhost", port=5432)
-        group = CommandGroup("cli")
-        group.add_command(db, name="db")
-        assert group.has_commands
-        assert "db" in group.commands
-        assert group.commands["db"].is_instance
-
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_add_command_with_callable_instance_behaves_like_instance_group(
         self, parser: Interfacy
@@ -69,20 +29,6 @@ class TestBasicGroupConstruction:
 
         assert parser.invoke(args=["cli", "tool", "extra", "Ada"]) == "extra Ada"
 
-    def test_add_group_for_nesting(self):
-        """Verify subgroups can be added."""
-        parent = CommandGroup("workspace")
-        child = CommandGroup("module")
-        parent.add_group(child)
-        assert parent.has_subgroups
-        assert "module" in parent.subgroups
-
-    def test_with_args_returns_self(self):
-        """Verify with_args returns self for chaining."""
-        group = CommandGroup("cli")
-        result = group.with_args(Container)
-        assert result is group
-
     def test_is_empty_property(self):
         """Verify is_empty is True when no commands or subgroups."""
         group = CommandGroup("cli")
@@ -90,26 +36,25 @@ class TestBasicGroupConstruction:
         group.add_command(attach)
         assert not group.is_empty
 
-    def test_fluent_api_chaining(self):
-        """Verify fluent API allows chaining."""
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    def test_fluent_api_chaining(self, parser: Interfacy):
+        """Verify chained group construction produces a runnable command tree."""
+
+        def cli_options(verbose: bool = False) -> None:
+            return None
+
         group = (
             CommandGroup("cli")
+            .with_args(cli_options)
             .add_command(attach)
             .add_command(detach)
-            .add_group(CommandGroup("sub"))
+            .add_group(CommandGroup("sub").add_command(greet))
         )
-        assert len(group.commands) == 2
-        assert len(group.subgroups) == 1
+        parser.add_command(group)
 
-    def test_repr(self):
-        """Verify repr shows commands and subgroups."""
-        group = CommandGroup("cli")
-        group.add_command(attach)
-        group.add_group(CommandGroup("sub"))
-        repr_str = repr(group)
-        assert "cli" in repr_str
-        assert "attach" in repr_str
-        assert "sub" in repr_str
+        assert parser.invoke(args=["cli", "--verbose", "attach", "web"]) == "Attached to web"
+        assert parser.invoke(args=["cli", "detach", "web"]) == "Detached from web"
+        assert parser.invoke(args=["cli", "sub", "greet", "Ada"]) == "Hello, Ada!"
 
 
 class TestGroupKeyCollisions:
@@ -132,25 +77,8 @@ class TestGroupKeyCollisions:
         with pytest.raises(DuplicateCommandError):
             parent.add_group(second)
 
-    def test_add_command_duplicate_name_raises_duplicate_command_error(self) -> None:
-        """Duplicate command names within a group should be rejected."""
-        group = CommandGroup("cli")
-        group.add_command(attach, name="task")
-
-        with pytest.raises(DuplicateCommandError):
-            group.add_command(detach, name="task")
-
-    def test_add_group_duplicate_name_raises_duplicate_command_error(self) -> None:
-        """Duplicate subgroup names within a group should be rejected."""
-        parent = CommandGroup("workspace")
-        parent.add_group(CommandGroup("module"))
-
-        with pytest.raises(DuplicateCommandError):
-            parent.add_group(CommandGroup("module"))
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_translated_group_child_name_collision_raises_duplicate_command_error(
-        self, parser: Interfacy
+        self, schema_parser: Interfacy
     ) -> None:
         """Translated child names that collapse to the same CLI name should be rejected."""
 
@@ -165,10 +93,9 @@ class TestGroupKeyCollisions:
         group.add_command(second, name="foo-bar")
 
         with pytest.raises(DuplicateCommandError):
-            parser.add_command(group)
+            schema_parser.add_command(group)
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_command_key_cannot_match_same_name_subgroup(self, parser: Interfacy) -> None:
+    def test_command_key_cannot_match_same_name_subgroup(self) -> None:
         """Command/subgroup key collisions should be rejected."""
         workspace = CommandGroup("workspace")
         subgroup = CommandGroup("task")
@@ -180,6 +107,29 @@ class TestGroupKeyCollisions:
 
 
 class TestGroupWithFunctions:
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("multiple", [False, True])
+    def test_group_converts_tuple_values(self, parser: Interfacy, nested: bool, multiple: bool):
+        def pair(value: tuple[int, str]):
+            return value
+
+        root = CommandGroup("root")
+        owner = root
+        if nested:
+            owner = CommandGroup("sub")
+            root.add_group(owner)
+
+        owner.add_command(pair)
+        parser.add_command(root)
+        if multiple:
+            parser.add_command(lambda: None, name="other")
+
+        path = ["root", "sub"] if nested else ["root"]
+        assert parser.invoke(args=[*path, "pair", "1", "a"]) == (1, "a")
+        with pytest.raises(UsageError):
+            parser.invoke(args=[*path, "pair", "invalid", "a"])
+
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_single_group_with_one_function(self, parser: Interfacy):
         """Verify single group with one function can be executed."""
@@ -193,15 +143,13 @@ class TestGroupWithFunctions:
     def test_group_function_command_accepts_pipe_targets(
         self,
         parser: Interfacy,
-        mocker,
-        monkeypatch: pytest.MonkeyPatch,
+        pipe_stdin,
     ):
         """Grouped function commands can receive stdin through per-command pipe config."""
         cli = CommandGroup("cli")
         cli.add_command(greet, pipe_targets="name")
         parser.add_command(cli)
-        monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="Ada")
+        pipe_stdin("Ada")
 
         assert parser.invoke(args=["cli", "greet"]) == "Hello, Ada!"
 
@@ -252,6 +200,37 @@ class TestGroupWithFunctions:
 
 class TestGroupWithClasses:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+    @pytest.mark.parametrize("defaulted", [False, True])
+    def test_group_class_preserves_expanded_constructor_values(
+        self, parser: Interfacy, defaulted: bool
+    ):
+        @dataclass
+        class Config:
+            value: int
+
+        default = Config(42)
+
+        class RequiredService:
+            def __init__(self, config: Config):
+                self.config = config
+
+            def show(self):
+                return self.config
+
+        class DefaultService:
+            def __init__(self, config: Config = default):
+                self.config = config
+
+            def show(self):
+                return self.config
+
+        root = CommandGroup("root")
+        root.add_command(DefaultService if defaulted else RequiredService, name="service")
+        parser.add_command(root)
+
+        assert parser.invoke(args=["root", "service", "--config.value", "7", "show"]) == Config(7)
+
+    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_class_in_group_methods_become_subcommands(self, parser: Interfacy):
         """Verify class methods become subcommands when class is added to group."""
         workspace = CommandGroup("workspace")
@@ -275,8 +254,7 @@ class TestGroupWithClasses:
     def test_class_pipe_targets_apply_to_initializer(
         self,
         parser: Interfacy,
-        mocker,
-        monkeypatch: pytest.MonkeyPatch,
+        pipe_stdin,
     ):
         """Grouped class pipe targets can satisfy initializer parameters."""
 
@@ -290,8 +268,7 @@ class TestGroupWithClasses:
         workspace = CommandGroup("workspace")
         workspace.add_command(PrefixTool, name="tool", pipe_targets="prefix")
         parser.add_command(workspace)
-        monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="pre-")
+        pipe_stdin("pre-")
 
         assert parser.invoke(args=["workspace", "tool", "run"]) == "pre-x"
 
@@ -311,14 +288,13 @@ class TestGroupWithClasses:
             == "Stopped mycontainer"
         )
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_classmethod_override_applies_to_group_entry(self, parser: Interfacy):
+    def test_classmethod_override_applies_to_group_entry(self, schema_parser: Interfacy):
         """Verify group entry can enable classmethods via per-command override."""
         workspace = CommandGroup("workspace")
         workspace.add_command(TextTools, name="tools", include_classmethods=True)
 
-        parser.add_command(workspace)
-        schema = parser.build_parser_schema()
+        schema_parser.add_command(workspace)
+        schema = schema_parser.build_parser_schema()
         workspace_cmd = schema.commands["workspace"]
         assert workspace_cmd.subcommands is not None
         tools_cmd = workspace_cmd.subcommands["tools"]

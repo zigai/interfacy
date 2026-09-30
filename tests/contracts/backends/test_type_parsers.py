@@ -1,59 +1,23 @@
-import datetime
 from dataclasses import dataclass
 
+import pytest
 from strto import StrToTypeParser
 
 from interfacy import Interfacy
-from interfacy.type_parsers import build_default_type_parser
 
 
-def test_build_default_type_parser_matches_interfacy_defaults_except_list():
-    """Interfacy's default parser should mirror strto defaults except for list."""
-    parser = build_default_type_parser(from_file=False)
-
-    assert parser.from_file is False
-    assert list not in parser.parsers
-    assert int in parser.parsers
-    assert tuple in parser.parsers
-    assert dict in parser.parsers
-    assert datetime.datetime in parser.parsers
-
-
-def test_argparser_custom_type_parser_without_list_is_accepted_unchanged():
-    """Interfacy should not mutate or require list support on caller parsers."""
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_custom_type_parser_without_list_is_not_mutated(backend: str) -> None:
+    """Interfacy should parse lists without adding list support to caller parsers."""
     custom = StrToTypeParser(parsers={int: int}, from_file=False)
 
-    parser = Interfacy(backend="argparse", type_parser=custom)
+    def total(values: list[int]) -> int:
+        return sum(values)
 
-    assert parser.type_parser is custom
-    assert parser.type_parser.parsers == {int: int}
-    assert list not in custom.parsers
+    parser = Interfacy(backend=backend, type_parser=custom)
 
-
-def test_clickparser_custom_type_parser_without_list_is_accepted_unchanged():
-    """Interfacy should not mutate or require list support on caller parsers."""
-    custom = StrToTypeParser(parsers={int: int}, from_file=False)
-
-    parser = Interfacy(backend="click", type_parser=custom)
-
-    assert parser.type_parser is custom
-    assert parser.type_parser.parsers == {int: int}
-    assert list not in custom.parsers
-
-
-def test_default_interfacy_parsers_omit_list_for_both_backends():
-    """Both backends should now start from the same Interfacy-owned default parser set."""
-    argparse_parser = Interfacy(
-        backend="argparse",
-    )
-    click_parser = Interfacy(
-        backend="click",
-    )
-
-    assert list not in argparse_parser.type_parser.parsers
-    assert list not in click_parser.type_parser.parsers
-    assert argparse_parser.type_parser.from_file is True
-    assert click_parser.type_parser.from_file is True
+    assert parser.invoke(total, args=["1", "2"]) == 3
+    assert custom.parsers == {int: int}
 
 
 def test_interfacy_add_type_parser_registers_custom_parser() -> None:
@@ -75,12 +39,3 @@ def test_interfacy_add_type_parser_registers_custom_parser() -> None:
     parser.add_type_parser(Repository, parse_repository)
 
     assert parser.invoke(command, args=["zigai/interfacy"]) == "zigai:interfacy"
-
-
-def test_interfacy_type_parser_argument_still_replaces_parser() -> None:
-    """The constructor still supports replacing the full type parser."""
-    custom = StrToTypeParser(parsers={int: int}, from_file=False)
-    parser = Interfacy(type_parser=custom)
-
-    assert parser.type_parser is custom
-    assert parser.type_parser.parsers == {int: int}

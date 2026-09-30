@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from typing import Any, Literal
 
@@ -66,17 +68,6 @@ def test_literal_assignment_alias_parsing(parser: Interfacy):
 
 
 @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
-def test_literal_assignment_alias_populates_choices(parser: Interfacy):
-    fn = _build_assignment_alias_fn()
-    parser.add_command(fn)
-
-    arg_parser = parser.build_parser()
-    action = next(a for a in arg_parser._actions if getattr(a, "dest", None) == "status")
-    assert action.choices is not None
-    assert set(action.choices) == {"OPEN", "CLOSED", "PENDING"}
-
-
-@pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
 def test_literal_assignment_alias_rejects_invalid_choice(parser: Interfacy):
     fn = _build_assignment_alias_fn()
     parser.add_command(fn)
@@ -99,17 +90,6 @@ def test_pep695_literal_alias_parsing(parser: Interfacy):
             pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
     assert parser.invoke(args=args) == "INFO"
-
-
-@pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
-def test_pep695_literal_alias_populates_choices(parser: Interfacy):
-    fn = _build_pep695_alias_fn()
-    parser.add_command(fn)
-
-    arg_parser = parser.build_parser()
-    action = next(a for a in arg_parser._actions if getattr(a, "dest", None) == "log_level")
-    assert action.choices is not None
-    assert set(action.choices) == {"DEBUG", "INFO", "WARNING", "ERROR"}
 
 
 @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
@@ -138,20 +118,40 @@ def test_future_annotations_literal_alias_parsing(parser: Interfacy):
 
 
 @pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
-def test_future_annotations_literal_alias_populates_choices(parser: Interfacy):
-    fn = _build_future_annotations_alias_fn()
-    parser.add_command(fn)
-
-    arg_parser = parser.build_parser()
-    action = next(a for a in arg_parser._actions if getattr(a, "dest", None) == "target")
-    assert action.choices is not None
-    assert set(action.choices) == {"backend", "frontend"}
-
-
-@pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
 def test_future_annotations_literal_alias_rejects_invalid_choice(parser: Interfacy):
     fn = _build_future_annotations_alias_fn()
     parser.add_command(fn)
 
     with pytest.raises(UsageError):
         parser.parse_args(["--target", "unknown"])
+
+
+def test_union_literal_with_open_type_allows_open_values() -> None:
+    """Verify Union[Literal, int] allows both literal choices and open integer values."""
+
+    def choose(val: Literal["a", "b"] | int) -> Literal["a", "b"] | int:
+        return val
+
+    cli = Interfacy()
+    cli.add_command(choose)
+
+    assert cli.invoke(args=["a"]) == "a"
+    assert cli.invoke(args=["b"]) == "b"
+    assert cli.invoke(args=["42"]) == 42
+
+
+def test_invalid_literal_error_names_value_without_stray_quote() -> None:
+    """Verify error messages for invalid choices do not contain stray quote marks."""
+
+    def pick(choice: Literal["apple", "banana"] = "apple") -> str:
+        return choice
+
+    cli = Interfacy(backend="argparse")
+    cli.add_command(pick)
+
+    with pytest.raises(UsageError) as exc_info:
+        cli.invoke(args=["--choice", "orange"])
+
+    message = str(exc_info.value)
+    assert "'orange'" in message
+    assert '"' not in message

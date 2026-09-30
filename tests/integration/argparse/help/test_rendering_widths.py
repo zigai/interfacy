@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
-import shutil
 from typing import Literal
 
 import pytest
 
 from interfacy import CommandGroup, Interfacy
-from interfacy.help.presets import (
+from interfacy.help import (
     Aligned,
     AlignedTyped,
     ArgparseLayout,
@@ -18,16 +16,8 @@ from interfacy.help.presets import (
     Modern,
     StandardLayout,
 )
-from interfacy.help.wrapping import expand_usage_parts
 from interfacy.naming import DefaultFlagStrategy
-
-
-@pytest.fixture
-def fixed_terminal_width(monkeypatch: pytest.MonkeyPatch) -> None:
-    size = os.terminal_size((80, 24))
-    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setenv("COLUMNS", "80")
+from tests.fixtures.terminal import freeze_terminal
 
 
 @pytest.mark.parametrize(
@@ -117,26 +107,10 @@ def test_all_layouts_render_literal_choices_for_required_flags(
     assert expected_required_flag_choices in help_text
 
 
-@pytest.mark.parametrize(
-    ("token", "expected"),
-    [
-        ("{alpha,beta,gamma}", ["{alpha,", "beta,", "gamma}"]),
-        ("[{alpha,beta,gamma}]", ["[{alpha,", "beta,", "gamma}]"]),
-        ("{single}", ["{single}"]),
-        ("{}", ["{}"]),
-        ("intrinsically-overlong-atom", ["intrinsically-overlong-atom"]),
-    ],
-)
-def test_expand_usage_parts_preserves_choice_atoms(token: str, expected: list[str]) -> None:
-    assert expand_usage_parts([token], available_width=10) == expected
-
-
 def test_argparse_layout_wraps_overwide_command_choices_without_token_loss(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    size = os.terminal_size((35, 24))
-    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
+    freeze_terminal(monkeypatch, 35)
 
     parser = Interfacy(backend="argparse", help_layout=ArgparseLayout())
     for name in ("alpha-long-command", "beta-long-command", "gamma-long-command"):
@@ -155,9 +129,7 @@ def test_argparse_layout_wraps_overwide_command_choices_without_token_loss(
 def test_argparse_layout_keeps_intrinsically_overlong_command_atom(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    size = os.terminal_size((24, 24))
-    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
+    freeze_terminal(monkeypatch, 24)
     name = "one-command-name-wider-than-the-terminal"
     parser = Interfacy(backend="argparse", help_layout=ArgparseLayout())
     parser.add_command(lambda: None, name=name)
@@ -226,35 +198,6 @@ def test_clap_layout_root_description_precedes_usage() -> None:
     description_idx = help_text.index("Project command suite.")
     usage_idx = help_text.index("Usage:")
     assert description_idx < usage_idx
-
-
-def test_clap_layout_styles_group_and_command_rows_consistently(monkeypatch) -> None:
-    ops = CommandGroup("ops")
-    nested = CommandGroup(
-        "nested-tools",
-        description="Nested subgroup with a longer name to test alignment.",
-        aliases=("nested",),
-    )
-    ops.add_group(nested)
-    ops.add_command(
-        lambda: None,
-        name="cache_prune",
-        aliases=("prune",),
-        description="Prune cache keys; bool default True should show --no-dry-run.",
-    )
-
-    layout = ClapLayout()
-    parser = Interfacy(backend="argparse", help_layout=layout, print_result=False)
-    parser.add_command(ops)
-    schema = parser.build_parser_schema()
-    ops_schema = schema.get_command("ops")
-    assert ops_schema.subcommands is not None
-
-    monkeypatch.setattr("interfacy.help.presets.with_style", lambda text, style: f"<S>{text}</S>")
-    help_text = layout.get_help_for_multiple_commands(ops_schema.subcommands)
-
-    assert "   <S>nested-tools, nested</S>" in help_text
-    assert "   <S>cache-prune, prune</S>" in help_text
 
 
 @pytest.mark.usefixtures("fixed_terminal_width")
@@ -367,14 +310,7 @@ def test_layout_class_initializer_uses_class_arg_descriptions(layout) -> None:
     ],
 )
 def test_layout_command_descriptions_wrap_to_terminal_width(layout_cls, monkeypatch) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((80, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((80, 24)),
-    )
+    freeze_terminal(monkeypatch, 80)
 
     def sync() -> None:
         """Synchronize X bookmarks and likes into the archive and return a sync summary string."""
@@ -398,14 +334,7 @@ def test_layout_command_descriptions_wrap_to_terminal_width(layout_cls, monkeypa
 
 
 def test_schema_multi_command_usage_wraps_long_windows_prog(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((80, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((80, 24)),
-    )
+    freeze_terminal(monkeypatch, 80)
 
     def sync() -> None:
         """Synchronize X bookmarks."""
@@ -425,14 +354,7 @@ def test_schema_multi_command_usage_wraps_long_windows_prog(monkeypatch) -> None
 
 
 def test_template_schema_descriptions_wrap_to_terminal_width(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((40, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((40, 24)),
-    )
+    freeze_terminal(monkeypatch, 40)
 
     def probe() -> None:
         """Probe CLI for finding help rendering defects across layouts and backends."""
@@ -448,14 +370,7 @@ def test_template_schema_descriptions_wrap_to_terminal_width(monkeypatch) -> Non
 
 
 def test_template_usage_wrapping_preserves_command_choice_tokens(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((50, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((50, 24)),
-    )
+    freeze_terminal(monkeypatch, 50)
 
     def command_with_a_really_really_long_name() -> None:
         return None
@@ -476,14 +391,7 @@ def test_template_usage_wrapping_preserves_command_choice_tokens(monkeypatch) ->
 def test_long_command_name_does_not_force_one_character_description_wrapping(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((60, 24)),
-    )
+    freeze_terminal(monkeypatch, 60)
 
     def command_with_a_really_really_long_name() -> None:
         """Long command row description remains readable."""
@@ -504,14 +412,7 @@ def test_long_command_name_does_not_force_one_character_description_wrapping(
 
 
 def test_aligned_layout_wraps_default_rows_after_metadata(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "shutil.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((100, 24)),
-    )
-    monkeypatch.setattr(
-        "os.get_terminal_size",
-        lambda *args, **kwargs: os.terminal_size((100, 24)),
-    )
+    freeze_terminal(monkeypatch, 100)
 
     def cache(
         *,

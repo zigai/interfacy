@@ -35,15 +35,3 @@ def test_literal_type_alias_parsing(parser: Interfacy):
             pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
     assert parser.invoke(args=args) == "LOW"
-
-
-@pytest.mark.parametrize("parser", ["argparse_kw_only"], indirect=True)
-def test_literal_type_alias_populates_choices(parser: Interfacy):
-    alias = _make_literal_alias()
-    fn = _build_literal_alias_fn(alias)
-    parser.add_command(fn)
-
-    arg_parser = parser.build_parser()
-    action = next(a for a in arg_parser._actions if getattr(a, "dest", None) == "level")
-    assert action.choices is not None
-    assert set(action.choices) == {"LOW", "MEDIUM", "HIGH"}

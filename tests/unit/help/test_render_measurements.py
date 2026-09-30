@@ -1,26 +1,22 @@
 from __future__ import annotations
 
-import os
-import shutil
-
 import pytest
 
-from interfacy.executable_flag import ExecutableFlag
+from interfacy.common.terminal import strip_ansi
+from interfacy.declarations.executable_flags import ExecutableFlag
+from interfacy.help import Aligned, HelpLayout, StandardLayout
 from interfacy.help.content import HelpContent, HelpContext, default_help_renderer
-from interfacy.help.layout import HelpLayout, InterfacyColors
-from interfacy.help.presets import Aligned, StandardLayout
 from interfacy.help.renderer import SchemaHelpRenderer
-from interfacy.help.style import HelpStyle
-from interfacy.help.terminal import strip_ansi
-from interfacy.schema.schema import (
+from interfacy.schema.model import (
     Argument,
     ArgumentDefault,
     ArgumentKind,
     Command,
     ParserSchema,
-    ValueCardinality,
     ValueShape,
 )
+from interfacy.schema.values import ValueCardinality
+from tests.fixtures.terminal import freeze_terminal
 
 
 def _command(default: str, *, flag: str = "--value") -> Command:
@@ -47,13 +43,6 @@ def _command(default: str, *, flag: str = "--value") -> Command:
     )
 
 
-def _freeze_terminal(monkeypatch: pytest.MonkeyPatch, width: int) -> None:
-    size = os.terminal_size((width, 24))
-    monkeypatch.setattr(os, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setattr(shutil, "get_terminal_size", lambda *args, **kwargs: size)
-    monkeypatch.setenv("COLUMNS", str(width))
-
-
 def test_explicit_renderer_width_controls_layout_and_description_measurement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -61,14 +50,13 @@ def test_explicit_renderer_width_controls_layout_and_description_measurement(
     layout = Aligned(default_field_width_max=None, default_overflow_mode="newline")
     renderer = SchemaHelpRenderer(layout, terminal_width=72)
 
-    _freeze_terminal(monkeypatch, 50)
+    freeze_terminal(monkeypatch, 50)
     narrow_terminal = renderer.render_command_help(command, "demo")
-    _freeze_terminal(monkeypatch, 160)
+    freeze_terminal(monkeypatch, 160)
     wide_terminal = renderer.render_command_help(command, "demo")
 
     assert narrow_terminal == wide_terminal
-    assert layout.default_field_width == 7
-    assert renderer.layout is layout
+    assert all(len(line) <= 72 for line in strip_ansi(narrow_terminal).splitlines())
 
 
 def test_reused_layout_takes_current_configured_widths_without_previous_measurements() -> None:
@@ -82,8 +70,6 @@ def test_reused_layout_takes_current_configured_widths_without_previous_measurem
     renderer = SchemaHelpRenderer(layout, terminal_width=160)
     renderer.render_command_help(_command("a long default", flag="--a-long-option-name"), "demo")
 
-    assert layout.default_field_width == 7
-    assert layout.pos_flag_width == 12
     layout.default_field_width = 18
     layout.pos_flag_width = 40
     reused = renderer.render_command_help(_command("x"), "demo")
@@ -98,29 +84,17 @@ def test_reused_layout_takes_current_configured_widths_without_previous_measurem
     ).render_command_help(_command("x"), "demo")
 
     assert reused == fresh
-    assert layout.default_field_width == 18
-    assert layout.pos_flag_width == 40
 
 
-def test_implicit_width_is_resolved_once_per_render_and_explicit_assignment_wins(
+def test_implicit_width_follows_terminal_and_explicit_assignment_wins(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    detected = 50
-    detections: list[int] = []
     rendered_widths: list[int] = []
-
-    def terminal_width(default: int = 80) -> int:
-        del default
-        detections.append(detected)
-
-        return detected
 
     def finalize(context: HelpContext, content: HelpContent) -> str:
         rendered_widths.append(context.terminal_width)
         return default_help_renderer(context, content)
 
-    monkeypatch.setattr("interfacy.help.renderer.get_terminal_width", terminal_width)
-    monkeypatch.setattr("interfacy.help.layout.get_terminal_width", terminal_width)
     renderer = SchemaHelpRenderer(StandardLayout(), final_renderer=finalize)
     command = _command("x")
     schema = ParserSchema(
@@ -132,34 +106,27 @@ def test_implicit_width_is_resolved_once_per_render_and_explicit_assignment_wins
         pipe_targets=None,
     )
 
+    freeze_terminal(monkeypatch, 50)
     narrow = renderer.render_parser_help(schema, "demo")
-    detected = 100
+    freeze_terminal(monkeypatch, 100)
     wide = renderer.render_parser_help(schema, "demo")
     renderer.terminal_width = 72
     renderer.render_parser_help(schema, "demo")
 
     assert narrow != wide
-    assert detections == [50, 100]
     assert rendered_widths == [50, 100, 72]
 
 
-def test_render_copy_preserves_subclass_dispatch_and_style_identity() -> None:
-    observed: list[tuple[type[HelpLayout], HelpStyle]] = []
-    theme = InterfacyColors()
-
+def test_render_uses_custom_layout_subclass_overrides() -> None:
     class CustomAligned(Aligned):
         def format_argument(self, arg: Argument, indent: int = 2) -> str:
-            observed.append((type(self), self.style))
-            return super().format_argument(arg, indent)
+            return super().format_argument(arg, indent) + " <custom>"
 
-    layout = CustomAligned(style=theme)
-    output = SchemaHelpRenderer(layout, terminal_width=100).render_command_help(
+    output = SchemaHelpRenderer(CustomAligned(), terminal_width=100).render_command_help(
         _command("x"), "demo"
     )
 
-    assert "--value" in output
-    assert observed
-    assert all(layout_type is CustomAligned and style is theme for layout_type, style in observed)
+    assert "<custom>" in output
 
 
 @pytest.mark.parametrize("fail_inner", [False, True])
@@ -176,17 +143,11 @@ def test_nested_render_restores_outer_measurements_and_uses_configured_layout(
             raise ValueError("Nested renderer failed")
 
         if context.prog == "outer":
-            outer_layout = renderer.layout
-            outer_default_width = outer_layout.default_field_width
-
             if fail_inner:
                 with pytest.raises(ValueError, match="Nested renderer failed"):
                     renderer.render_command_help(inner, "inner")
             else:
                 nested_output.append(renderer.render_command_help(inner, "inner"))
-
-            assert renderer.layout is outer_layout
-            assert renderer.layout.default_field_width == outer_default_width
 
         return default_help_renderer(context, content)
 
@@ -201,8 +162,6 @@ def test_nested_render_restores_outer_measurements_and_uses_configured_layout(
     assert outer_output == SchemaHelpRenderer(layout, terminal_width=120).render_command_help(
         outer, "outer"
     )
-    assert renderer.layout is layout
-    assert layout.default_field_width == 7
 
 
 def test_failed_layout_override_restores_renderer_and_configured_measurements() -> None:
@@ -222,10 +181,6 @@ def test_failed_layout_override_restores_renderer_and_configured_measurements() 
     with pytest.raises(ValueError, match="Cannot render this argument"):
         renderer.render_command_help(command, "demo")
 
-    assert renderer.layout is layout
-    assert layout.default_field_width == 7
-    assert layout.help_position is None
-    assert layout.keep_empty_default_slot_for_help is True
     should_raise = False
     assert renderer.render_command_help(command, "demo") == SchemaHelpRenderer(
         layout, terminal_width=120

@@ -1,15 +1,5 @@
 from interfacy.help.formatting import format_default_for_help
-from interfacy.schema.typing import extract_optional_union_list, simplified_type_name
-
-
-def test_simplified_type_name_keeps_generic_shape_for_qualified_names() -> None:
-    assert simplified_type_name("dict[builtins.str, mypkg.Foo]") == "dict[str, Foo]"
-    assert simplified_type_name("mypkg.Outer[mypkg.Inner]") == "Outer[Inner]"
-    assert simplified_type_name("typing.Union[mypkg.Foo, None]") == "Foo?"
-
-
-def test_simplified_type_name_preserves_quoted_literal_values() -> None:
-    assert simplified_type_name("typing.Literal['a.b', mypkg.Foo]") == "Literal['a.b', Foo]"
+from interfacy.introspection.annotations import extract_optional_union_list
 
 
 def test_extract_optional_union_list_requires_exactly_list_or_none_union() -> None:

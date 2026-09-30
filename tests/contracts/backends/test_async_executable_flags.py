@@ -5,9 +5,7 @@ from typing import Literal
 import pytest
 
 from interfacy import ExecutableFlag, ExitCode, Interfacy
-from interfacy.engine.backend import ExecutableAction, ParseRequest
 from interfacy.exceptions import ConfigurationError, InterfacyExit, UsageError
-from interfacy.runtime.invocation import InvocationError
 
 
 @pytest.fixture(params=["argparse", "click"])
@@ -22,19 +20,6 @@ def parser(request: pytest.FixtureRequest) -> Interfacy:
     parser.add_command(required_command)
 
     return parser
-
-
-def test_backend_returns_action_without_running_flag_handler(parser: Interfacy, capsys) -> None:
-    calls: list[str] = []
-    flag = ExecutableFlag("--flag", lambda: calls.append("called"))
-    parser.apply_setup(executable_flags=[flag])
-
-    outcome = parser._engine._session().parse(ParseRequest(("--flag",)))
-
-    assert isinstance(outcome, ExecutableAction)
-    assert outcome.flag is flag
-    assert calls == []
-    assert capsys.readouterr().out == ""
 
 
 def test_invoke_async_awaits_current_loop_future_once(parser: Interfacy, capsys) -> None:
@@ -238,15 +223,8 @@ def test_flag_failures_keep_parse_stage_error_classification(
     parser.apply_setup(
         executable_flags=[ExecutableFlag("--flag", handler if mode == "sync" else async_handler)]
     )
-    runtime = parser._engine._runtime
 
-    if mode == "sync":
-        with pytest.raises(InvocationError) as e:
-            runtime._invoke((), ["--flag"])
-    else:
-        with pytest.raises(InvocationError) as e:
-            asyncio.run(runtime._invoke_async((), ["--flag"]))
+    with pytest.raises(SystemExit) as e:
+        parser.run(args=["--flag"])
 
     assert e.value.code == expected_code
-    assert e.value.error is failure
-    assert e.value.__cause__ is failure

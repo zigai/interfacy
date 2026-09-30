@@ -15,10 +15,9 @@ class TestBasicDecorator:
         assert "greet" in {command.canonical_name for command in parser.get_commands()}
         assert parser.invoke(args=["World"]) == "Hello, World!"
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_returns_function_unchanged(self, parser: Interfacy):
+    def test_decorator_returns_function_unchanged(self, schema_parser: Interfacy):
         """Verify decorated function remains callable independently."""
-        decorated = parser.command()(greet)
+        decorated = schema_parser.command()(greet)
 
         assert decorated is greet
         assert decorated("Direct") == "Hello, Direct!"
@@ -32,12 +31,11 @@ class TestBasicDecorator:
         assert "greet" not in {command.canonical_name for command in parser.get_commands()}
         assert parser.invoke(args=["World"]) == "Hello, World!"
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_with_description_override(self, parser: Interfacy):
+    def test_decorator_with_description_override(self, schema_parser: Interfacy):
         """Verify description parameter overrides the docstring."""
-        parser.command(description="Custom description")(greet)
+        schema_parser.command(description="Custom description")(greet)
 
-        command = parser.get_command_by_cli_name("greet")
+        command = schema_parser.get_command_by_cli_name("greet")
         assert command.raw_description == "Custom description"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
@@ -51,11 +49,11 @@ class TestBasicDecorator:
         assert parser.invoke(args=["hey", "World"]) == "Hello, World!"
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_with_pipe_targets(self, parser: Interfacy, mocker):
+    def test_decorator_with_pipe_targets(self, parser: Interfacy, pipe_stdin):
         """Verify pipe_targets parameter configures stdin piping."""
         parser.command(pipe_targets="name")(greet)
 
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="Piped")
+        pipe_stdin("Piped")
         assert parser.invoke(args=[]) == "Hello, Piped!"
 
 
@@ -88,10 +86,9 @@ class TestDecoratorOnClass:
         assert "math" in {command.canonical_name for command in parser.get_commands()}
         assert parser.invoke(args=["add", "2", "3"]) == 5
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorated_class_returns_class_unchanged(self, parser: Interfacy):
+    def test_decorated_class_returns_class_unchanged(self, schema_parser: Interfacy):
         """Verify decorated class is returned unchanged."""
-        decorated = parser.command()(Math)
+        decorated = schema_parser.command()(Math)
 
         assert decorated is Math
         instance = decorated()
@@ -115,75 +112,37 @@ class TestDecoratorOnClass:
         assert parser.invoke(args=["math", "add", "2", "3"]) == 5
         assert parser.invoke(args=["greet", "World"]) == "Hello, World!"
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_supports_per_command_overrides(self, parser: Interfacy):
+    def test_decorator_supports_per_command_overrides(self, schema_parser: Interfacy):
         """Verify decorator supports per-command registration overrides."""
-        parser.command(name="tools", include_classmethods=True)(TextTools)
-        parser.command()(greet)
-        schema = parser.build_parser_schema()
+        schema_parser.command(name="tools", include_classmethods=True)(TextTools)
+        schema_parser.command()(greet)
+        schema = schema_parser.build_parser_schema()
         subcommands = schema.commands["tools"].subcommands or {}
 
         assert "tool-name" in subcommands
 
 
 class TestDecoratorErrors:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_duplicate_decorator_raises_error(self, parser: Interfacy):
+    def test_duplicate_decorator_raises_error(self, schema_parser: Interfacy):
         """Verify duplicate command names raise DuplicateCommandError."""
-        parser.command(name="duplicate")(greet)
+        schema_parser.command(name="duplicate")(greet)
 
         with pytest.raises(DuplicateCommandError):
-            parser.command(name="duplicate")(pow)
+            schema_parser.command(name="duplicate")(pow)
 
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_conflicts_with_add_command(self, parser: Interfacy):
+    def test_decorator_conflicts_with_add_command(self, schema_parser: Interfacy):
         """Verify decorator and add_command conflict on same name."""
-        parser.add_command(greet)
+        schema_parser.add_command(greet)
 
         with pytest.raises(DuplicateCommandError):
-            parser.command(name="greet")(pow)
-
-
-class TestDecoratorPreservesMetadata:
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_preserves_function_name(self, parser: Interfacy):
-        """Verify decorated function retains __name__."""
-        expected_name = greet.__name__
-        decorated = parser.command()(greet)
-
-        assert decorated.__name__ == expected_name
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_preserves_function_doc(self, parser: Interfacy):
-        """Verify decorated function retains __doc__."""
-        expected_doc = greet.__doc__
-        decorated = parser.command()(greet)
-
-        assert decorated.__doc__ == expected_doc
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_preserves_class_name(self, parser: Interfacy):
-        """Verify decorated class retains __name__."""
-        expected_name = Math.__name__
-        decorated = parser.command()(Math)
-
-        assert decorated.__name__ == expected_name
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_preserves_class_doc(self, parser: Interfacy):
-        """Verify decorated class retains __doc__."""
-        expected_doc = TextTools.__doc__
-        decorated = parser.command()(TextTools)
-
-        assert decorated.__doc__ == expected_doc
+            schema_parser.command(name="greet")(pow)
 
 
 class TestDecoratorWithAllParameters:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_with_all_parameters(self, parser: Interfacy, mocker):
+    @pytest.mark.usefixtures("terminal_stdin")
+    def test_decorator_with_all_parameters(self, parser: Interfacy):
         """Verify decorator works with all parameters combined."""
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value=None)
-
         parser.command(
             name="calculate",
             description="Calculate power",
@@ -200,9 +159,9 @@ class TestDecoratorWithAllParameters:
         assert parser.invoke(args=["c", "2", "-e", "3"]) == 8
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
-    def test_decorator_with_pipe_targets_multi_command(self, parser: Interfacy, mocker):
+    def test_decorator_with_pipe_targets_multi_command(self, parser: Interfacy, pipe_stdin):
         """Verify pipe_targets work in multi-command context."""
-        mocker.patch("interfacy.engine.pipes.read_piped", return_value="3")
+        pipe_stdin("3")
 
         parser.command(name="calculate", pipe_targets="base")(pow)
         parser.command()(greet)

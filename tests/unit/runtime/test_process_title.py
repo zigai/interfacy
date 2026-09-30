@@ -1,10 +1,11 @@
+import sys
+
 import pytest
 
 from interfacy import Interfacy
 from interfacy.runtime.process import (
     derive_process_title,
     set_process_title,
-    set_process_title_from_argv,
 )
 
 
@@ -48,34 +49,19 @@ def test_set_process_title_does_not_fallback_when_setproctitle_fails(
     assert calls == [("setproctitle", "my-cli")]
 
 
-def test_set_process_title_from_argv_uses_derived_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[str] = []
-
-    monkeypatch.setattr(
-        "interfacy.runtime.process.set_process_title",
-        lambda title: seen.append(title) or True,
-    )
-
-    assert set_process_title_from_argv("/home/user/.local/bin/acme-tool") is True
-    assert seen == ["acme-tool"]
-
-
 @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
 def test_parsers_set_runtime_process_title_on_run(
     parser: Interfacy,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    called: list[str] = []
+    titles: list[str] = []
 
-    monkeypatch.setattr(
-        "interfacy.runtime.invocation.set_process_title_from_argv",
-        lambda: called.append("Interfacy") or True,
-    )
+    monkeypatch.setattr("interfacy.runtime.process.setproctitle", titles.append)
+    monkeypatch.setattr(sys, "argv", ["/home/user/.local/bin/acme-tool"])
     parser.add_command(_noop)
 
     with pytest.raises(SystemExit) as exc_info:
         parser.run(args=[])
 
     assert exc_info.value.code == 0
-
-    assert len(called) == 1
+    assert titles == ["acme-tool"]

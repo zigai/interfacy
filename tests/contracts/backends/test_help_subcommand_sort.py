@@ -1,8 +1,8 @@
 import pytest
 
 from interfacy import Interfacy
-from interfacy.help.presets import InterfacyLayout
-from interfacy.help.terminal import strip_ansi
+from interfacy.common.terminal import strip_ansi
+from interfacy.help import InterfacyLayout
 from tests.fixtures.classes import TextTools
 from tests.fixtures.commands import attach, greet, pow
 

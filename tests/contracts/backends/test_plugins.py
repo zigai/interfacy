@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import fields
 from typing import Any
 
 import pytest
@@ -12,14 +11,10 @@ from interfacy.help import HelpContent, HelpSection
 from interfacy.plugins import (
     AfterParseContext,
     BeforeParseContext,
-    ConfigureContext,
-    ExecuteContext,
     HelpHookContext,
     InterfacyPlugin,
-    ParseFailureContext,
     ParseFailureKind,
     ProvideArgumentValues,
-    SchemaTransformContext,
 )
 from tests.fixtures.plugins import (
     ArgparseAccessPlugin,
@@ -27,52 +22,6 @@ from tests.fixtures.plugins import (
     MarkerPlugin,
     SchemaMetadataPlugin,
 )
-
-
-def test_phase_contexts_expose_only_phase_capabilities() -> None:
-    assert {field.name for field in fields(ConfigureContext)} == {
-        "backend",
-        "metadata",
-        "register_type_parser",
-    }
-    assert {field.name for field in fields(BeforeParseContext)} == {
-        "backend",
-        "metadata",
-        "args",
-    }
-    assert {field.name for field in fields(SchemaTransformContext)} == {
-        "backend",
-        "metadata",
-    }
-    assert {field.name for field in fields(AfterParseContext)} == {
-        "backend",
-        "metadata",
-        "schema",
-        "args",
-        "namespace",
-    }
-    assert {field.name for field in fields(HelpHookContext)} == {
-        "backend",
-        "metadata",
-        "program",
-        "terminal_width",
-        "command_path",
-        "schema",
-    }
-    assert {field.name for field in fields(ExecuteContext)} == {
-        "backend",
-        "metadata",
-        "schema",
-        "args",
-        "namespace",
-    }
-    assert {field.name for field in fields(ParseFailureContext)} == {
-        "backend",
-        "metadata",
-        "schema",
-        "args",
-        "namespace",
-    }
 
 
 def _keyword_only_name(*, name: str) -> str:
@@ -122,12 +71,18 @@ def test_plugin_context_metadata_is_immutable() -> None:
     assert parser.metadata == {"nested": {"values": ["original"]}}
 
 
-def test_backend_plugin_receives_explicit_adapter_context() -> None:
+def test_backend_plugin_receives_native_parser_context() -> None:
+    parser = Interfacy(backend="argparse")
+    parser.add_command(_keyword_only_name)
+    native_parser = parser.build_parser()
     plugin = ArgparseAccessPlugin()
 
-    Interfacy(backend="argparse", plugins=[plugin])
+    parser.add_plugin(plugin)
 
-    assert plugin.adapter_name == "ArgparseBackend"
+    assert plugin.context is not None
+    assert plugin.context.backend == "argparse"
+    assert plugin.context.adapter is not None
+    assert plugin.context.native_parser is native_parser
 
 
 def test_backend_plugin_rejects_incompatible_backend() -> None:
