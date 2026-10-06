@@ -9,7 +9,7 @@ from strto import StrToTypeParser
 
 from interfacy.declarations.pipes import PipeTargets
 from interfacy.naming.name_mapping import NameMapping
-from interfacy.schema.model import COMMAND_KEY, Command, ParserSchema
+from interfacy.schema.nodes import COMMAND_KEY, Command, ParserSchema
 
 
 @dataclass(frozen=True)

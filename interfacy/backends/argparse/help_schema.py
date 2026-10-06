@@ -4,7 +4,7 @@ import argparse
 from collections.abc import Callable, Sequence
 
 from interfacy.declarations.params import BooleanMode
-from interfacy.schema.model import (
+from interfacy.schema.nodes import (
     Argument,
     ArgumentDefault,
     ArgumentKind,

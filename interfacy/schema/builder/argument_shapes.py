@@ -23,7 +23,7 @@ from interfacy.schema.builder.flags import (
     reserve_parameter_flags,
 )
 from interfacy.schema.builder.plans import argument_value_plan, fixed_tuple_value_plan
-from interfacy.schema.model import ArgumentDefault, BooleanBehavior, ValueShape
+from interfacy.schema.nodes import ArgumentDefault, BooleanBehavior, ValueShape
 from interfacy.schema.values import (
     FlagValue,
     RepeatedValue,

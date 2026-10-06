@@ -33,12 +33,12 @@ from interfacy.help.content import HelpRenderer
 from interfacy.help.renderer import (
     SchemaHelpRenderer,
 )
-from interfacy.schema.model import SUBCOMMANDS_KEY
+from interfacy.schema.nodes import SUBCOMMANDS_KEY
 
 if TYPE_CHECKING:
     from interfacy.backends.base import HelpPipeline
     from interfacy.help import HelpLayout
-    from interfacy.schema.model import Argument, Command, ParserSchema
+    from interfacy.schema.nodes import Argument, Command, ParserSchema
 
 logger = get_logger(__name__)
 
@@ -330,7 +330,7 @@ class ArgumentParser(argparse.ArgumentParser):
         pipeline: HelpPipeline,
         command_path: tuple[str, ...],
     ) -> None:
-        """Attach the engine-owned structured help pipeline."""
+        """Attach the core-owned structured help pipeline."""
         self._help_pipeline = pipeline
         self._help_command_path = command_path
 

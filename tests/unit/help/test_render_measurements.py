@@ -7,7 +7,7 @@ from interfacy.declarations.executable_flags import ExecutableFlag
 from interfacy.help import Aligned, HelpLayout, StandardLayout
 from interfacy.help.content import HelpContent, HelpContext, default_help_renderer
 from interfacy.help.renderer import SchemaHelpRenderer
-from interfacy.schema.model import (
+from interfacy.schema.nodes import (
     Argument,
     ArgumentDefault,
     ArgumentKind,

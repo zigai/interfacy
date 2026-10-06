@@ -13,7 +13,7 @@ from interfacy.models import parse_docstring_args
 from interfacy.schema.builder.arguments import ArgumentBuilder
 from interfacy.schema.builder.context import EffectiveCommandSettings, SchemaBuildContext
 from interfacy.schema.builder.settings import attach_command_build_settings, base_build_settings
-from interfacy.schema.model import Argument, Command
+from interfacy.schema.nodes import Argument, Command
 from interfacy.schema.validation import (
     argument_option_strings,
     validate_executable_flags_against_tokens,

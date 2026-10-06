@@ -18,6 +18,8 @@ from interfacy.declarations.settings import (
     HelpOptionSort,
     HelpSubcommandSort,
     MethodSkips,
+)
+from interfacy.declarations.validators import (
     validate_abbreviation_max_generated_len,
     validate_abbreviation_scope,
     validate_bool_negative_prefix,
@@ -47,7 +49,7 @@ ADDITIVE: Final = MappingProxyType({"update": "additive"})
 
 
 @dataclass(kw_only=True)
-class EngineSettings:
+class CoreSettings:
     description: str | None = None
     epilog: str | None = None
     type_parser: StrToTypeParser | None = field(default=None, metadata=RESETTABLE)
@@ -116,32 +118,32 @@ class EngineSettings:
         self.plugins = tuple(self.plugins) if self.plugins is not None else None
 
 
-SETTING_NAMES: Final = frozenset(setting.name for setting in fields(EngineSettings))
+SETTING_NAMES: Final = frozenset(setting.name for setting in fields(CoreSettings))
 UPDATE_POLICIES: Final[Mapping[str, str]] = MappingProxyType(
     {
         setting.name: setting.metadata["update"]
-        for setting in fields(EngineSettings)
+        for setting in fields(CoreSettings)
         if "update" in setting.metadata
     }
 )
 
 
 @dataclass(frozen=True, kw_only=True)
-class PreparedEngineSettings:
-    settings: EngineSettings
+class PreparedCoreSettings:
+    settings: CoreSettings
     plugin_additions: tuple[InterfacyPlugin, ...]
     changed_fields: frozenset[str]
     reset_fields: frozenset[str]
 
 
 def _field_default(name: str) -> Any:
-    return next(setting.default for setting in fields(EngineSettings) if setting.name == name)
+    return next(setting.default for setting in fields(CoreSettings) if setting.name == name)
 
 
 def prepare_settings_update(
-    current: EngineSettings,
+    current: CoreSettings,
     changes: Mapping[str, Any],
-) -> PreparedEngineSettings:
+) -> PreparedCoreSettings:
     """
     Validate ``apply_setup`` changes against ``current`` without mutating it.
 
@@ -179,7 +181,7 @@ def prepare_settings_update(
 
     changed_fields = frozenset(name for name, value in changes.items() if value is not UNSET)
 
-    return PreparedEngineSettings(
+    return PreparedCoreSettings(
         settings=replace(current, **replacements),
         plugin_additions=plugin_additions,
         changed_fields=changed_fields,
@@ -191,7 +193,7 @@ __all__ = [
     "MAX_PARSE_RECOVERY_ATTEMPTS",
     "SETTING_NAMES",
     "UPDATE_POLICIES",
-    "EngineSettings",
-    "PreparedEngineSettings",
+    "CoreSettings",
+    "PreparedCoreSettings",
     "prepare_settings_update",
 ]

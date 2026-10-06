@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from interfacy.declarations.executable_flags import ExecutableFlag, executable_flag_tokens
 from interfacy.exceptions import ConfigurationError, ReservedFlagError
-from interfacy.schema.model import Argument, ArgumentKind, Command, ParserSchema, ValueShape
+from interfacy.schema.nodes import Argument, ArgumentKind, Command, ParserSchema, ValueShape
 
 
 def validate_parser_schema(schema: ParserSchema) -> ParserSchema:

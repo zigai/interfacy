@@ -11,7 +11,7 @@ from interfacy.declarations.params import BooleanMode
 from interfacy.help import HelpLayout, StandardLayout
 from interfacy.help.content import HelpRenderer
 from interfacy.help.renderer import SchemaHelpRenderer
-from interfacy.schema.model import (
+from interfacy.schema.nodes import (
     Argument,
     ArgumentDefault,
     ArgumentKind,
@@ -156,7 +156,7 @@ class HelpMixin:
         pipeline: HelpPipeline,
         command_path: tuple[str, ...],
     ) -> None:
-        """Attach the engine-owned structured help pipeline."""
+        """Attach the core-owned structured help pipeline."""
         self.interfacy_help_pipeline = pipeline
         self.interfacy_help_command_path = command_path
 

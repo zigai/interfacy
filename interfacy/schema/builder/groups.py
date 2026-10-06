@@ -19,7 +19,7 @@ from interfacy.schema.builder.settings import (
     attach_command_build_settings,
     resolve_effective_command_settings,
 )
-from interfacy.schema.model import Argument, Command
+from interfacy.schema.nodes import Argument, Command
 from interfacy.schema.validation import validate_initializer_positionals
 
 

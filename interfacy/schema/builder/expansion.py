@@ -20,7 +20,7 @@ from interfacy.models import (
 from interfacy.naming.abbreviations import AbbreviationGenerator
 from interfacy.naming.flag_strategy import FlagStrategy
 from interfacy.schema.builder.context import EffectiveCommandSettings, ParamSpec
-from interfacy.schema.model import Argument
+from interfacy.schema.nodes import Argument
 
 ModelExpansionPredicate = Callable[[Any], bool]
 

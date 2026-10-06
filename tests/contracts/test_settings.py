@@ -5,10 +5,10 @@ import pytest
 
 from interfacy import CommandGroup, Interfacy
 from interfacy.cli.config import InterfacyConfig
+from interfacy.core.settings import SETTING_NAMES, UPDATE_POLICIES, CoreSettings
 from interfacy.declarations.options import COMMAND_OPTION_NAMES, OVERRIDE_NAMES
-from interfacy.engine.settings import SETTING_NAMES, UPDATE_POLICIES, EngineSettings
 
-# Constructor parameters that configure the facade itself rather than the engine settings.
+# Constructor parameters that configure the facade itself rather than the core settings.
 FACADE_ONLY_PARAMETERS = frozenset({"backend", "sys_exit_enabled"})
 # Config-file keys consumed while resolving other settings.
 CONFIG_ONLY_FIELDS = frozenset({"backend", "flag_style", "translation_mode"})
@@ -26,16 +26,16 @@ def parameters(function: object) -> dict[str, inspect.Parameter]:
     }
 
 
-def test_constructor_parameters_match_engine_settings() -> None:
+def test_constructor_parameters_match_core_settings() -> None:
     constructor = parameters(Interfacy.__init__)
 
     assert set(constructor) - FACADE_ONLY_PARAMETERS == SETTING_NAMES
 
 
-def test_constructor_defaults_match_engine_settings() -> None:
+def test_constructor_defaults_match_core_settings() -> None:
     constructor = parameters(Interfacy.__init__)
 
-    for setting in fields(EngineSettings):
+    for setting in fields(CoreSettings):
         assert constructor[setting.name].default == setting.default, setting.name
 
 
@@ -43,7 +43,7 @@ def test_apply_setup_parameters_match_update_policies() -> None:
     assert set(parameters(Interfacy.apply_setup)) == set(UPDATE_POLICIES)
 
 
-def test_config_fields_name_engine_settings() -> None:
+def test_config_fields_name_core_settings() -> None:
     config_fields = {config_field.name for config_field in fields(InterfacyConfig)}
 
     assert config_fields - CONFIG_ONLY_FIELDS <= SETTING_NAMES
@@ -57,5 +57,5 @@ def test_registration_parameters_match_command_options(register: object) -> None
     assert set(parameters(register)) - REGISTRATION_PARAMETERS == set(COMMAND_OPTION_NAMES)
 
 
-def test_command_overrides_name_engine_settings() -> None:
+def test_command_overrides_name_core_settings() -> None:
     assert set(OVERRIDE_NAMES) <= SETTING_NAMES

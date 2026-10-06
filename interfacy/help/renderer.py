@@ -21,7 +21,7 @@ from interfacy.help.content import (
 )
 from interfacy.help.layouts import HelpLayout
 from interfacy.help.wrapping import wrap_usage_parts
-from interfacy.schema.model import (
+from interfacy.schema.nodes import (
     Argument,
     ArgumentDefault,
     ArgumentKind,

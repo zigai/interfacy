@@ -4,9 +4,9 @@ from collections.abc import Mapping
 from typing import Any
 
 from interfacy.backends.base import BackendParseFailure, BackendSession, NativePresentation
+from interfacy.core.ancestor_options import InvocationState, bucket_for_command_path
+from interfacy.core.plugins import PluginManager
 from interfacy.declarations.settings import BackendName
-from interfacy.engine.parsing import InvocationState, bucket_for_command_path
-from interfacy.engine.plugins import PluginManager
 from interfacy.exceptions import ConfigurationError
 from interfacy.plugins import (
     AbortRecovery,
@@ -18,7 +18,7 @@ from interfacy.plugins import (
     ProvideArgumentValues,
     SchemaDescriptor,
 )
-from interfacy.schema.model import COMMAND_KEY, Command, ParserSchema, find_command
+from interfacy.schema.nodes import COMMAND_KEY, Command, ParserSchema, find_command
 
 
 def usage_presentation(message: str, exit_code: int = 2) -> NativePresentation:

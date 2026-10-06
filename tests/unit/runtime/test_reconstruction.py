@@ -3,12 +3,12 @@ from typing import Any
 import pytest
 
 from interfacy.common.sentinels import MODEL_DEFAULT_UNSET
-from interfacy.runtime.models import (
+from interfacy.runtime.reconstruction import (
     ExpandedModelValidationError,
     group_expanded_arguments,
     reconstruct_expanded_models,
 )
-from interfacy.schema.model import Argument, ArgumentDefault, ArgumentKind, ValueShape
+from interfacy.schema.nodes import Argument, ArgumentDefault, ArgumentKind, ValueShape
 from interfacy.schema.values import ValueCardinality
 from tests.fixtures.models import Address, UserWithAddress
 

@@ -14,7 +14,7 @@ from interfacy.help import (
     HelpLayout,
     InterfacyLayout,
 )
-from interfacy.schema.model import (
+from interfacy.schema.nodes import (
     Argument,
     ArgumentDefault,
     ArgumentKind,

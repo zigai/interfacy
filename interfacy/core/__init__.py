@@ -5,18 +5,18 @@ from interfacy.backends.base import (
 )
 from interfacy.backends.registry import create_backend_adapter
 from interfacy.common.sentinels import UNSET
-from interfacy.engine.engine import InterfacyEngine
-from interfacy.engine.parsing import InvocationState
-from interfacy.engine.pipes import PipeState
-from interfacy.engine.settings import EngineSettings
+from interfacy.core.ancestor_options import InvocationState
+from interfacy.core.core import InterfacyCore
+from interfacy.core.pipe_state import PipeState
+from interfacy.core.settings import CoreSettings
 
 __all__ = [
     "UNSET",
     "BackendAdapter",
     "BackendConfig",
     "BackendSession",
-    "EngineSettings",
-    "InterfacyEngine",
+    "CoreSettings",
+    "InterfacyCore",
     "InvocationState",
     "PipeState",
     "create_backend_adapter",

@@ -24,7 +24,7 @@ from interfacy.declarations.executable_flags import ExecutableAction, Executable
 from interfacy.declarations.settings import BackendName
 from interfacy.exceptions import ConfigurationError, UsageError
 from interfacy.schema.conversion import normalize_schema_values
-from interfacy.schema.model import (
+from interfacy.schema.nodes import (
     COMMAND_KEY,
     SUBCOMMANDS_KEY,
     Argument,

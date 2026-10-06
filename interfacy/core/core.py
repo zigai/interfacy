@@ -11,40 +11,40 @@ from strto import StrToTypeParser
 from interfacy.backends.base import BackendAdapter, BackendParseFailure, BackendSession
 from interfacy.backends.registry import create_backend_adapter
 from interfacy.common.debug import get_logger
-from interfacy.declarations.executable_flags import ExecutableAction
-from interfacy.declarations.groups import CommandGroup
-from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptions
-from interfacy.declarations.pipes import PipeTargets
-from interfacy.declarations.settings import BackendName
-from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
-from interfacy.engine.commands import command_parameters, inspect_command_target
-from interfacy.engine.compiler import (
+from interfacy.core.ancestor_options import (
+    AncestorOptions,
+    InterspersedOptionValueError,
+    InvocationState,
+)
+from interfacy.core.commands import command_parameters, inspect_command_target
+from interfacy.core.compiler import (
     ParserCompiler,
     backend_config,
     generation_key,
     schema_build_context,
 )
-from interfacy.engine.help import (
+from interfacy.core.help import (
     SchemaHelpPipeline,
     configure_help_layout,
     effective_option_sort,
     effective_subcommand_sort,
     render_help,
 )
-from interfacy.engine.parsing import (
-    AncestorOptions,
-    InterspersedOptionValueError,
-    InvocationState,
-)
-from interfacy.engine.pipes import PipeState
-from interfacy.engine.plugins import PluginManager
-from interfacy.engine.recovery import recover_parse_failure, usage_presentation
-from interfacy.engine.registry import CommandRegistry
-from interfacy.engine.settings import EngineSettings, prepare_settings_update
-from interfacy.engine.snapshot import EngineSnapshot
+from interfacy.core.pipe_state import PipeState
+from interfacy.core.plugins import PluginManager
+from interfacy.core.recovery import recover_parse_failure, usage_presentation
+from interfacy.core.registry import CommandRegistry
+from interfacy.core.settings import CoreSettings, prepare_settings_update
+from interfacy.core.snapshot import CoreSnapshot
+from interfacy.declarations.executable_flags import ExecutableAction
+from interfacy.declarations.groups import CommandGroup
+from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptions
+from interfacy.declarations.pipes import PipeTargets
+from interfacy.declarations.settings import BackendName
+from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InterfacyExit
 from interfacy.help import HelpLayout, StandardLayout
-from interfacy.introspection.parsers import build_default_type_parser
+from interfacy.introspection.type_parsers import build_default_type_parser
 from interfacy.naming import (
     AbbreviationGenerator,
     DefaultAbbreviationGenerator,
@@ -73,15 +73,15 @@ from interfacy.runtime.invocation import (
 from interfacy.runtime.policy import RuntimePolicy
 from interfacy.runtime.runner import SchemaRunner
 from interfacy.schema.builder import ParserSchemaBuilder, SchemaBuildContext
-from interfacy.schema.model import COMMAND_KEY, Command, ParserSchema
+from interfacy.schema.nodes import COMMAND_KEY, Command, ParserSchema
 
 logger = get_logger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 
 @dataclass(frozen=True, slots=True)
-class EngineComponents:
-    """Collaborators derived from ``EngineSettings``; rebuilt together on every setup change."""
+class CoreComponents:
+    """Collaborators derived from ``CoreSettings``; rebuilt together on every setup change."""
 
     help_layout: HelpLayout
     flag_strategy: FlagStrategy
@@ -91,14 +91,14 @@ class EngineComponents:
 
 
 def derive_components(
-    settings: EngineSettings,
+    settings: CoreSettings,
     *,
     current_layout: HelpLayout,
     current_type_parser: StrToTypeParser | None,
     reset_fields: frozenset[str] = frozenset(),
-) -> EngineComponents:
+) -> CoreComponents:
     """
-    Build engine collaborators from ``settings``.
+    Build core collaborators from ``settings``.
 
     ``current_layout`` seeds the help layout when ``settings.help_layout`` is unset.
     ``current_type_parser`` is kept when ``settings.type_parser`` is unset; pass ``None`` to
@@ -111,7 +111,7 @@ def derive_components(
     else:
         type_parser = build_default_type_parser(from_file=settings.allow_args_from_file)
 
-    return EngineComponents(
+    return CoreComponents(
         help_layout=configure_help_layout(settings, current_layout, reset_fields),
         flag_strategy=settings.flag_strategy or DefaultFlagStrategy(),
         abbreviation_gen=settings.abbreviation_gen
@@ -128,12 +128,12 @@ def derive_components(
     )
 
 
-class InterfacyEngine:
+class InterfacyCore:
     COMMAND_KEY = COMMAND_KEY
 
     def __init__(
         self,
-        settings: EngineSettings | None = None,
+        settings: CoreSettings | None = None,
         *,
         backend: BackendName = "argparse",
         adapter: BackendAdapter[object] | None = None,
@@ -146,7 +146,7 @@ class InterfacyEngine:
 
         self.backend: BackendName = backend
         self.metadata: dict[str, Any] = {}
-        settings = settings or EngineSettings()
+        settings = settings or CoreSettings()
         components = derive_components(
             settings,
             current_layout=StandardLayout(),
@@ -504,8 +504,8 @@ class InterfacyEngine:
         self.compiler.invalidate()
         return result
 
-    def snapshot(self) -> EngineSnapshot:
-        return EngineSnapshot.capture(
+    def snapshot(self) -> CoreSnapshot:
+        return CoreSnapshot.capture(
             registry=self.registry,
             plugin_manager=self.plugin_manager,
             pipes=self.pipes,
@@ -514,7 +514,7 @@ class InterfacyEngine:
             compiled=self.compiler.compiled,
         )
 
-    def restore(self, snapshot: EngineSnapshot) -> None:
+    def restore(self, snapshot: CoreSnapshot) -> None:
         snapshot.restore_components(
             registry=self.registry,
             plugin_manager=self.plugin_manager,
@@ -595,7 +595,7 @@ class InterfacyEngine:
 
         return parse
 
-    def _install(self, settings: EngineSettings, components: EngineComponents) -> None:
+    def _install(self, settings: CoreSettings, components: CoreComponents) -> None:
         self.settings = settings
         self.help_layout = components.help_layout
         self.flag_strategy = components.flag_strategy
@@ -627,4 +627,4 @@ class InterfacyEngine:
         )
 
 
-__all__ = ["EngineComponents", "InterfacyEngine", "derive_components"]
+__all__ = ["CoreComponents", "InterfacyCore", "derive_components"]

@@ -10,9 +10,12 @@ from interfacy.common.debug import get_logger
 from interfacy.exceptions import ConfigurationError, InvalidCommandError, UsageError
 from interfacy.naming import reverse_translations
 from interfacy.runtime.context import ExecutionContext
-from interfacy.runtime.models import ExpandedModelValidationError, reconstruct_expanded_models
 from interfacy.runtime.pipes import apply_pipe_values, validate_required_pipe_targets
-from interfacy.schema.model import COMMAND_KEY, SUBCOMMANDS_KEY, Argument, Command, find_command
+from interfacy.runtime.reconstruction import (
+    ExpandedModelValidationError,
+    reconstruct_expanded_models,
+)
+from interfacy.schema.nodes import COMMAND_KEY, SUBCOMMANDS_KEY, Argument, Command, find_command
 
 logger = get_logger(__name__)
 

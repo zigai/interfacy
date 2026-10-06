@@ -28,7 +28,7 @@ from interfacy.runtime.executable_flags import (
 from interfacy.runtime.exit_codes import ExitCode
 from interfacy.runtime.policy import RuntimePolicy
 from interfacy.runtime.process import set_process_title_from_argv
-from interfacy.schema.model import ParserSchema
+from interfacy.schema.nodes import ParserSchema
 
 CommandTarget = Callable[..., Any] | type | Any
 

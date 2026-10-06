@@ -7,6 +7,8 @@ from strto import StrToTypeParser
 from typing_extensions import final
 
 from interfacy.common.sentinels import UNSET, UnsetType
+from interfacy.core import InterfacyCore
+from interfacy.core.settings import SETTING_NAMES, CoreSettings
 from interfacy.declarations.executable_flags import ExecutableFlag
 from interfacy.declarations.groups import CommandGroup
 from interfacy.declarations.options import CommandOptions
@@ -20,15 +22,13 @@ from interfacy.declarations.settings import (
     HelpFlags,
 )
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
-from interfacy.engine import InterfacyEngine
-from interfacy.engine.settings import SETTING_NAMES, EngineSettings
 from interfacy.help import HelpLayout
 from interfacy.help.colors import InterfacyColors
 from interfacy.help.content import HelpRenderer
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.plugins import InterfacyPlugin
 from interfacy.runtime.invocation import CommandTarget, resolve_args
-from interfacy.schema.model import Command, ParserSchema
+from interfacy.schema.nodes import Command, ParserSchema
 
 Backend = BackendName
 F = TypeVar("F", bound=Callable[..., object])
@@ -123,23 +123,23 @@ class Interfacy:
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int = 3,
     ) -> None:
-        # Every other parameter is an EngineSettings field of the same name;
+        # Every other parameter is an CoreSettings field of the same name;
         # tests/contracts/test_settings.py keeps the two in sync.
-        settings = EngineSettings(
+        settings = CoreSettings(
             **{name: value for name, value in locals().items() if name in SETTING_NAMES}
         )
         self._sys_exit_enabled = sys_exit_enabled
-        self._engine = InterfacyEngine(settings, backend=backend)
+        self._core = InterfacyCore(settings, backend=backend)
 
     @property
     def backend(self) -> Backend:
         """Return the selected backend name."""
-        return self._engine.backend
+        return self._core.backend
 
     @property
     def metadata(self) -> dict[str, Any]:
-        """Return the engine metadata dictionary by identity."""
-        return self._engine.metadata
+        """Return the core metadata dictionary by identity."""
+        return self._core.metadata
 
     def add_plugin(self, plugin: InterfacyPlugin) -> InterfacyPlugin:
         """
@@ -148,7 +148,7 @@ class Interfacy:
         Raises:
             DuplicatePluginError: If another plugin with the same parser-local name exists.
         """
-        return self._engine.add_plugin(plugin)
+        return self._core.add_plugin(plugin)
 
     def add_type_parser(
         self,
@@ -161,12 +161,12 @@ class Interfacy:
         The converter receives one raw CLI string and returns the value passed to
         the command callable.
         """
-        self._engine.add_type_parser(typ, parser)
+        self._core.add_type_parser(typ, parser)
 
     @property
     def type_parser(self) -> StrToTypeParser:
         """Return the active type parser registry."""
-        return self._engine.type_parser
+        return self._core.type_parser
 
     def apply_setup(
         self,
@@ -211,7 +211,7 @@ class Interfacy:
             ConfigurationError: If an update is invalid for the current parser state.
         """
         changes = {name: value for name, value in locals().items() if name != "self"}
-        self._engine.apply_setup(**changes)
+        self._core.apply_setup(**changes)
 
     def add_command(
         self,
@@ -250,7 +250,7 @@ class Interfacy:
         """
         # Every parameter after pipe_targets is a CommandOptions field of the same name;
         # tests/contracts/test_settings.py keeps the registration signatures in sync.
-        return self._engine.add_command(
+        return self._core.add_command(
             command,
             name=name,
             description=description,
@@ -286,7 +286,7 @@ class Interfacy:
         Options passed to the decorator override parser defaults for the
         decorated target only. The decorated object is returned unchanged.
         """
-        return self._engine.command(
+        return self._core.command(
             name=name,
             description=description,
             aliases=aliases,
@@ -327,7 +327,7 @@ class Interfacy:
             DuplicateCommandError: If the group name or alias already exists.
             ConfigurationError: If an override is invalid.
         """
-        return self._engine.add_group(
+        return self._core.add_group(
             group,
             name=name,
             description=description,
@@ -337,7 +337,7 @@ class Interfacy:
 
     def get_commands(self) -> list[Command]:
         """Return registered command schemas in insertion order."""
-        return self._engine.registry.all()
+        return self._core.registry.all()
 
     def get_command_by_cli_name(self, cli_name: str) -> Command:
         """
@@ -346,7 +346,7 @@ class Interfacy:
         Raises:
             InvalidCommandError: If `cli_name` does not resolve to a registered command.
         """
-        return self._engine.registry.get_by_cli_name(cli_name)
+        return self._core.registry.get_by_cli_name(cli_name)
 
     def get_args(self) -> list[str]:
         """Read the current process arguments excluding the executable name."""
@@ -370,7 +370,7 @@ class Interfacy:
         Raises:
             ConfigurationError: If the pipe target declaration is invalid.
         """
-        return self._engine.pipe_to(
+        return self._core.pipe_to(
             targets,
             command=command,
             subcommand=subcommand,
@@ -379,11 +379,11 @@ class Interfacy:
 
     def read_piped_input(self) -> str | None:
         """Read stdin data when available."""
-        return self._engine.pipes.read_input()
+        return self._core.pipes.read_input()
 
     def reset_piped_input(self) -> None:
         """Clear cached stdin data."""
-        self._engine.pipes.reset_input()
+        self._core.pipes.reset_input()
 
     def parse_args(self, args: list[str] | None = None) -> dict[str, object]:
         """
@@ -391,11 +391,11 @@ class Interfacy:
 
         If `args` is omitted, the current process arguments are used.
         """
-        return self._engine.parse_args(args)
+        return self._core.parse_args(args)
 
     def invoke(self, *commands: CommandTarget, args: list[str] | None = None) -> Any:
         """Invoke a command without rendering failures or terminating the process."""
-        return self._engine.invoke(*commands, args=args)
+        return self._core.invoke(*commands, args=args)
 
     async def invoke_async(
         self,
@@ -403,54 +403,54 @@ class Interfacy:
         args: list[str] | None = None,
     ) -> Any:
         """Invoke a command and await asynchronous execution without blocking a live loop."""
-        return await self._engine.invoke_async(*commands, args=args)
+        return await self._core.invoke_async(*commands, args=args)
 
     def run(self, *commands: CommandTarget, args: list[str] | None = None) -> Any:
         """Invoke a command and terminate unless embedded compatibility is enabled."""
         if not self._sys_exit_enabled:
-            result = self._engine.invoke(*commands, args=args)
-            if self._engine.runtime_policy.display_result:
-                self._engine.runtime_policy.display(result)
+            result = self._core.invoke(*commands, args=args)
+            if self._core.runtime_policy.display_result:
+                self._core.runtime_policy.display(result)
 
             return result
 
-        return self._engine.run(*commands, args=args)
+        return self._core.run(*commands, args=args)
 
     def build_parser(self) -> Any:
         """Build the backend parser for registered commands."""
-        return self._engine.build_parser()
+        return self._core.build_parser()
 
     def build_parser_schema(self) -> ParserSchema:
         """Build the parser schema for registered commands."""
-        return self._engine.build_parser_schema()
+        return self._core.build_parser_schema()
 
     def get_last_schema(self) -> ParserSchema | None:
         """Return the most recently built parser schema, if any."""
-        return self._engine.last_schema
+        return self._core.last_schema
 
     def refresh_help_option_sort_rules(self) -> list[HelpOptionSortRule]:
         """Recompute help option sort rules on the active backend parser."""
-        return self._engine.refresh_help_option_sort_rules()
+        return self._core.refresh_help_option_sort_rules()
 
     def refresh_help_subcommand_sort_rules(self) -> list[HelpSubcommandSortRule]:
         """Recompute help subcommand sort rules on the active backend parser."""
-        return self._engine.refresh_help_subcommand_sort_rules()
+        return self._core.refresh_help_subcommand_sort_rules()
 
     def log(self, message: str) -> None:
         """Write an informational parser log message."""
-        self._engine.runtime_policy.log(message)
+        self._core.runtime_policy.log(message)
 
     def log_error(self, message: str) -> None:
         """Write an error parser log message."""
-        self._engine.runtime_policy.log_error(message)
+        self._core.runtime_policy.log_error(message)
 
     def log_exception(self, e: BaseException) -> None:
         """Write an exception parser log message."""
-        self._engine.runtime_policy.log_exception(e)
+        self._core.runtime_policy.log_exception(e)
 
     def log_interrupt(self) -> None:
         """Write the configured interrupt log message."""
-        self._engine.runtime_policy.log_interrupt()
+        self._core.runtime_policy.log_interrupt()
 
 
 __all__ = ["Backend", "Interfacy"]

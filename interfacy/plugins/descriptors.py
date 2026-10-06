@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from interfacy.plugins.freeze import freeze
-from interfacy.schema.model import Argument, Command, ParserSchema
+from interfacy.schema.nodes import Argument, Command, ParserSchema
 
 
 @dataclass(slots=True, unsafe_hash=True)

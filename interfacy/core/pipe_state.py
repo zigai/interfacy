@@ -9,7 +9,7 @@ from stdl.fs import read_piped
 
 from interfacy.declarations.pipes import PipeTargets, build_pipe_targets_config
 from interfacy.naming import NameMapping
-from interfacy.schema.model import Command
+from interfacy.schema.nodes import Command
 
 _PIPE_UNSET = object()
 

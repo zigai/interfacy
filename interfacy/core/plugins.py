@@ -22,7 +22,7 @@ from interfacy.plugins import (
     RecoveryAction,
     SchemaTransformContext,
 )
-from interfacy.schema.model import ParserSchema
+from interfacy.schema.nodes import ParserSchema
 
 
 class PluginManager:

@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from interfacy.engine.compiler import CompiledParser
-from interfacy.engine.pipes import PipeState, PipeStateSnapshot
-from interfacy.engine.plugins import PluginManager
-from interfacy.engine.registry import CommandRegistry, NameRegistrySnapshot
+from interfacy.core.compiler import CompiledParser
+from interfacy.core.pipe_state import PipeState, PipeStateSnapshot
+from interfacy.core.plugins import PluginManager
+from interfacy.core.registry import CommandRegistry, NameRegistrySnapshot
 from interfacy.naming import FlagStrategy
 from interfacy.plugins import InterfacyPlugin
-from interfacy.schema.model import Command, ParserSchema
+from interfacy.schema.nodes import Command, ParserSchema
 
 
 @dataclass(frozen=True, slots=True)
-class EngineSnapshot:
-    """Mutable engine state captured before registration or inline invocation."""
+class CoreSnapshot:
+    """Mutable core state captured before registration or inline invocation."""
 
     registry_commands: dict[str, Command]
     registry_names: NameRegistrySnapshot
@@ -37,8 +37,8 @@ class EngineSnapshot:
         flag_strategy: FlagStrategy,
         last_schema: ParserSchema | None,
         compiled: CompiledParser | None,
-    ) -> EngineSnapshot:
-        """Capture the current state of the given engine components."""
+    ) -> CoreSnapshot:
+        """Capture the current state of the given core components."""
         commands, names, registry_generation = registry.snapshot()
         plugins, plugin_names, plugin_generation = plugin_manager.snapshot()
 
@@ -82,4 +82,4 @@ class EngineSnapshot:
         flag_strategy.argument_translator.translations.update(self.argument_translations)
 
 
-__all__ = ["EngineSnapshot"]
+__all__ = ["CoreSnapshot"]

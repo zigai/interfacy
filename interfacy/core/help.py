@@ -6,17 +6,17 @@ from typing import Any
 
 from interfacy.backends.base import HelpPipeline
 from interfacy.common.terminal import get_terminal_width
+from interfacy.core.plugins import PluginManager
+from interfacy.core.settings import CoreSettings
 from interfacy.declarations.settings import BackendName
 from interfacy.declarations.sorting import (
     HelpOptionSortRule,
     HelpSubcommandSortRule,
     default_help_option_sort_rules,
     default_help_subcommand_sort_rules,
-    resolve_help_option_sort_rules,
-    resolve_help_subcommand_sort_rules,
+    normalize_help_option_sort_rules,
+    normalize_help_subcommand_sort_rules,
 )
-from interfacy.engine.plugins import PluginManager
-from interfacy.engine.settings import EngineSettings
 from interfacy.help import (
     HelpContent,
     HelpContext,
@@ -27,13 +27,13 @@ from interfacy.help import (
 )
 from interfacy.help.renderer import SchemaHelpRenderer
 from interfacy.plugins import HelpHookContext, SchemaDescriptor
-from interfacy.schema.model import Command, ParserSchema, find_command
+from interfacy.schema.nodes import Command, ParserSchema, find_command
 
 RenderHelp = Callable[[ParserSchema, tuple[str, ...], int | None], str]
 
 
 class SchemaHelpPipeline(HelpPipeline):
-    """Help pipeline that renders one compiled schema through the engine."""
+    """Help pipeline that renders one compiled schema through the core."""
 
     def __init__(self, render: RenderHelp, schema: ParserSchema) -> None:
         self._render = render
@@ -55,7 +55,7 @@ def effective_option_sort(
     value = (
         list(help_option_sort) if help_option_sort is not None else layout.help_option_sort_default
     )
-    resolved = resolve_help_option_sort_rules(value, value_name="help_option_sort")
+    resolved = normalize_help_option_sort_rules(value, value_name="help_option_sort")
 
     return list(resolved) if resolved else default_help_option_sort_rules()
 
@@ -70,13 +70,13 @@ def effective_subcommand_sort(
         if help_subcommand_sort is not None
         else layout.help_subcommand_sort_default
     )
-    resolved = resolve_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
+    resolved = normalize_help_subcommand_sort_rules(value, value_name="help_subcommand_sort")
 
     return list(resolved) if resolved else default_help_subcommand_sort_rules()
 
 
 def configure_help_layout(
-    settings: EngineSettings,
+    settings: CoreSettings,
     current: HelpLayout,
     reset_fields: frozenset[str] = frozenset(),
 ) -> HelpLayout:

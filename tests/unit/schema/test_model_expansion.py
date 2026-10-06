@@ -7,7 +7,7 @@ from objinspect import Function
 from interfacy import Interfacy
 from interfacy.exceptions import UsageError
 from interfacy.help import InterfacyLayout
-from interfacy.introspection.parsers import build_default_type_parser
+from interfacy.introspection.type_parsers import build_default_type_parser
 from interfacy.schema.builder import ParserSchemaBuilder
 from tests.fixtures.models import (
     Address,

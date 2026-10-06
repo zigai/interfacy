@@ -13,9 +13,9 @@ from platformdirs import user_config_path
 from stdl.fs import toml_load
 
 import interfacy.help.layouts as appearance_layouts
+from interfacy.core import UNSET
+from interfacy.core.settings import SETTING_NAMES, CoreSettings
 from interfacy.declarations.settings import BACKEND_NAMES, AbbreviationScope, BackendName
-from interfacy.engine import UNSET
-from interfacy.engine.settings import SETTING_NAMES, EngineSettings
 from interfacy.exceptions import ConfigurationError
 from interfacy.help import HelpLayout
 from interfacy.help.colors import InterfacyColors
@@ -421,7 +421,7 @@ def _resolve_plugins(value: Any) -> list[InterfacyPlugin]:
 
 
 # Config values that name objects rather than hold them. Every other value is passed through,
-# and those that are engine settings are validated by EngineSettings.
+# and those that are core settings are validated by CoreSettings.
 _RESOLVERS: dict[str, Callable[[Any, dict[str, Any]], Any]] = {
     "backend": lambda value, _config: _resolve_backend(value),
     "help_layout": lambda value, _config: _resolve_named_component(
@@ -474,7 +474,7 @@ def apply_config_defaults(
         defaults[name] = value if resolver is None else resolver(value, config_data)
 
     settings = {name: value for name, value in defaults.items() if name in SETTING_NAMES}
-    validated = EngineSettings(**settings)
+    validated = CoreSettings(**settings)
     defaults.update({name: getattr(validated, name) for name in settings})
 
     return {**resolved, **defaults}

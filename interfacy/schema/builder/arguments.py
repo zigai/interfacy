@@ -15,6 +15,11 @@ from interfacy.exceptions import ConfigurationError
 from interfacy.introspection.annotations import resolve_type_alias, simplified_type_name
 from interfacy.models import unwrap_optional
 from interfacy.naming.flag_strategy import FlagAllocationState
+from interfacy.schema.builder.argument_shapes import (
+    configure_typed_state,
+    configure_var_positional_state,
+    initial_argument_state,
+)
 from interfacy.schema.builder.context import (
     ArgumentBuildState,
     EffectiveCommandSettings,
@@ -28,12 +33,7 @@ from interfacy.schema.builder.expansion import (
 )
 from interfacy.schema.builder.flags import flags_for_parameter
 from interfacy.schema.builder.settings import base_build_settings
-from interfacy.schema.builder.states import (
-    configure_typed_state,
-    configure_var_positional_state,
-    initial_argument_state,
-)
-from interfacy.schema.model import Argument, ArgumentDefault, ArgumentKind, ValueShape
+from interfacy.schema.nodes import Argument, ArgumentDefault, ArgumentKind, ValueShape
 from interfacy.schema.validation import validate_optional_positional_shape
 from interfacy.schema.values import ValueCardinality
 

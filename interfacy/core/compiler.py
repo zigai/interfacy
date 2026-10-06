@@ -7,21 +7,21 @@ from typing import Any
 from strto import StrToTypeParser
 
 from interfacy.backends.base import BackendAdapter, BackendConfig, BackendSession, HelpPipeline
+from interfacy.core.pipe_state import PipeState
+from interfacy.core.plugins import PluginManager
+from interfacy.core.settings import CoreSettings
 from interfacy.declarations.settings import BackendName, reserved_names_for_help_flags
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
-from interfacy.engine.pipes import PipeState
-from interfacy.engine.plugins import PluginManager
-from interfacy.engine.settings import EngineSettings
 from interfacy.help import HelpLayout
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.plugins import BackendPluginContext
 from interfacy.schema.builder import SchemaBuildContext
-from interfacy.schema.model import COMMAND_KEY, Command, ParserSchema
+from interfacy.schema.nodes import COMMAND_KEY, Command, ParserSchema
 
 
 @dataclass(frozen=True, slots=True)
 class CompiledGeneration:
-    """Engine state that a compiled backend session was built from."""
+    """Core state that a compiled backend session was built from."""
 
     settings: tuple[Any, ...]
     registry: int
@@ -41,7 +41,7 @@ class CompiledParser:
 
 
 def schema_build_context(
-    settings: EngineSettings,
+    settings: CoreSettings,
     *,
     commands: dict[str, Command],
     pipes: PipeState,
@@ -52,7 +52,7 @@ def schema_build_context(
     help_option_sort_effective: list[HelpOptionSortRule],
     help_subcommand_sort_effective: list[HelpSubcommandSortRule],
 ) -> SchemaBuildContext:
-    """Collect the engine state the schema builder reads."""
+    """Collect the core state the schema builder reads."""
     return SchemaBuildContext(
         pipe_target_resolver=pipes.resolve_by_names,
         description=settings.description,
@@ -92,11 +92,11 @@ def schema_build_context(
 
 
 def backend_config(
-    settings: EngineSettings,
+    settings: CoreSettings,
     help_layout: HelpLayout,
     type_parser: StrToTypeParser,
 ) -> BackendConfig:
-    """Collect the engine state a backend adapter compiles against."""
+    """Collect the core state a backend adapter compiles against."""
     return BackendConfig(
         help_flags=tuple(settings.help_flags),
         tab_completion=settings.tab_completion,
@@ -107,14 +107,14 @@ def backend_config(
 
 
 def generation_key(
-    settings: EngineSettings,
+    settings: CoreSettings,
     *,
     registry_generation: int,
     metadata: Mapping[str, Any],
     plugin_generation: int,
     backend: BackendName,
 ) -> CompiledGeneration:
-    """Return the cache key for engine state that invalidates compiled sessions."""
+    """Return the cache key for core state that invalidates compiled sessions."""
     return CompiledGeneration(
         settings=tuple(fingerprint(value) for value in vars(settings).values()),
         registry=registry_generation,

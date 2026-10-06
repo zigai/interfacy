@@ -17,7 +17,7 @@ from interfacy.naming import (
     FlagStrategy,
 )
 from interfacy.schema.builder import SchemaBuildContext
-from interfacy.schema.model import Command
+from interfacy.schema.nodes import Command
 
 
 class RecordingHelpLayout(HelpLayout):

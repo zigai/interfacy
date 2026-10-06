@@ -16,7 +16,7 @@ from interfacy.schema.builder.arguments import ArgumentBuilder
 from interfacy.schema.builder.commands import CommandBuilder, resolve_cli_name
 from interfacy.schema.builder.context import EffectiveCommandSettings, SchemaBuildContext
 from interfacy.schema.builder.settings import attach_command_build_settings, base_build_settings
-from interfacy.schema.model import Argument, Command
+from interfacy.schema.nodes import Argument, Command
 from interfacy.schema.validation import validate_initializer_positionals
 
 

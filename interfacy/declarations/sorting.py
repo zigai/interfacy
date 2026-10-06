@@ -42,7 +42,7 @@ def normalize_sort_rule_name(value: str) -> str:
     return value.replace("-", "").replace("_", "").lower()
 
 
-def resolve_sort_rules(
+def normalize_sort_rules(
     value: Any,
     *,
     value_name: str,
@@ -86,7 +86,7 @@ def resolve_sort_rules(
     return result
 
 
-def resolve_help_option_sort_rules(
+def normalize_help_option_sort_rules(
     value: Any,
     *,
     value_name: str = "help_option_sort",
@@ -94,7 +94,7 @@ def resolve_help_option_sort_rules(
     empty_means_none: bool = True,
 ) -> list[HelpOptionSortRule] | None:
     """Validate and normalize help option sort rules."""
-    return resolve_sort_rules(
+    return normalize_sort_rules(
         value,
         value_name=value_name,
         allowed_values=HELP_OPTION_SORT_RULE_VALUES,
@@ -108,7 +108,7 @@ def default_help_option_sort_rules() -> list[HelpOptionSortRule]:
     return list(DEFAULT_HELP_OPTION_SORT_RULES)
 
 
-def resolve_help_subcommand_sort_rules(
+def normalize_help_subcommand_sort_rules(
     value: Any,
     *,
     value_name: str = "help_subcommand_sort",
@@ -116,7 +116,7 @@ def resolve_help_subcommand_sort_rules(
     empty_means_none: bool = True,
 ) -> list[HelpSubcommandSortRule] | None:
     """Validate and normalize help subcommand sort rules."""
-    return resolve_sort_rules(
+    return normalize_sort_rules(
         value,
         value_name=value_name,
         allowed_values=HELP_SUBCOMMAND_SORT_RULE_VALUES,
@@ -139,8 +139,8 @@ __all__ = [
     "HelpSubcommandSortRule",
     "default_help_option_sort_rules",
     "default_help_subcommand_sort_rules",
+    "normalize_help_option_sort_rules",
+    "normalize_help_subcommand_sort_rules",
     "normalize_sort_rule_name",
-    "resolve_help_option_sort_rules",
-    "resolve_help_subcommand_sort_rules",
-    "resolve_sort_rules",
+    "normalize_sort_rules",
 ]

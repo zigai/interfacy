@@ -115,11 +115,11 @@ lines inserted between help-group sections.
 ```
 
 ```{eval-rst}
-.. autofunction:: interfacy.declarations.sorting.resolve_sort_rules
+.. autofunction:: interfacy.declarations.sorting.normalize_sort_rules
 ```
 
 ```{eval-rst}
-.. autofunction:: interfacy.declarations.sorting.resolve_help_option_sort_rules
+.. autofunction:: interfacy.declarations.sorting.normalize_help_option_sort_rules
 ```
 
 ```{eval-rst}
@@ -139,7 +139,7 @@ lines inserted between help-group sections.
 ```
 
 ```{eval-rst}
-.. autofunction:: interfacy.declarations.sorting.resolve_help_subcommand_sort_rules
+.. autofunction:: interfacy.declarations.sorting.normalize_help_subcommand_sort_rules
 ```
 
 ```{eval-rst}

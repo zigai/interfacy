@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from interfacy.schema.model import Argument, Command, ParserSchema
+from interfacy.schema.nodes import Argument, Command, ParserSchema
 
 
 class InterspersedOptionValueError(ValueError):

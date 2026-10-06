@@ -16,7 +16,7 @@ from interfacy.plugins.contexts import (
     SchemaTransformContext,
 )
 from interfacy.plugins.recovery import ParseFailure, RecoveryAction
-from interfacy.schema.model import ParserSchema
+from interfacy.schema.nodes import ParserSchema
 
 
 class InterfacyPlugin:

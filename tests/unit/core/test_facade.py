@@ -9,7 +9,7 @@ from interfacy import CommandGroup, DuplicatePluginError, Interfacy, Param
 from interfacy.exceptions import ConfigurationError, UsageError
 from interfacy.help import HelpContent, HelpContext
 from interfacy.plugins import ConfigureContext, InterfacyPlugin, SchemaTransformContext
-from interfacy.schema.model import ParserSchema
+from interfacy.schema.nodes import ParserSchema
 from tests.fixtures.help import render_help
 
 

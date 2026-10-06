@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from objinspect import Class, Function, Method, Parameter, inspect
 
+from interfacy.core.settings import CoreSettings
 from interfacy.declarations.options import CommandOverrides
-from interfacy.engine.settings import EngineSettings
 from interfacy.introspection.annotations import resolve_objinspect_annotations
 from interfacy.naming import NameMapping
 from interfacy.runtime.invocation import CommandTarget
-from interfacy.schema.model import Command
+from interfacy.schema.nodes import Command
 
 
 def inspect_command_target(
     target: CommandTarget,
-    settings: EngineSettings,
+    settings: CoreSettings,
     overrides: CommandOverrides,
 ) -> Function | Class | Method:
     """Inspect a command target, using ``settings`` for member filters ``overrides`` leave unset."""

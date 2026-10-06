@@ -8,7 +8,7 @@ from typing import Any
 from interfacy.declarations.executable_flags import ExecutableFlag
 from interfacy.declarations.pipes import PipeTargets
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
-from interfacy.schema.model import ArgumentDefault, BooleanBehavior, Command, ValueShape
+from interfacy.schema.nodes import ArgumentDefault, BooleanBehavior, Command, ValueShape
 from interfacy.schema.values import ArgumentValue, ValueCardinality
 
 

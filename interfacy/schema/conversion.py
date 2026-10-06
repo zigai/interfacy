@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from interfacy.schema.model import ParserSchema
+    from interfacy.schema.nodes import ParserSchema
 
 from interfacy.schema.values import RepeatedValue, as_sequence, plan_requires_post_conversion
 

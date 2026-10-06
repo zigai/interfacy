@@ -44,7 +44,7 @@ from interfacy.help.layouts.commands import (
     format_command_row,
     render_command_listing,
 )
-from interfacy.help.ordering import order_command_list, order_option_arguments
+from interfacy.help.sorting import sort_command_list, sort_option_arguments
 from interfacy.help.style import HelpStyle
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -309,7 +309,7 @@ class HelpLayout:
             commands (dict[str, Command]): Command map keyed by canonical name.
             rules (list[HelpSubcommandSortRule] | None): Optional explicit ordering rules.
         """
-        return order_command_list(self, list(commands.values()), rules=rules)
+        return sort_command_list(self, list(commands.values()), rules=rules)
 
     def get_commands_ljust(self, max_display_len: int) -> int:
         """
@@ -426,7 +426,7 @@ class HelpLayout:
             options (list[Argument]): Option arguments to sort.
             rules (list[HelpOptionSortRule] | None): Optional explicit ordering rules.
         """
-        return order_option_arguments(self, options, rules=rules)
+        return sort_option_arguments(self, options, rules=rules)
 
     def format_argument(self, arg: "Argument", indent: int = 2) -> str:
         """

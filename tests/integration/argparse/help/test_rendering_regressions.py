@@ -19,7 +19,7 @@ from interfacy.help import (
     Modern,
     StandardLayout,
 )
-from interfacy.schema.model import Command, ParserSchema
+from interfacy.schema.nodes import Command, ParserSchema
 from tests.fixtures.terminal import freeze_terminal
 
 

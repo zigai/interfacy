@@ -8,8 +8,8 @@ from interfacy.declarations.sorting import (
     DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
     HelpOptionSortRule,
     HelpSubcommandSortRule,
-    resolve_help_option_sort_rules,
-    resolve_help_subcommand_sort_rules,
+    normalize_help_option_sort_rules,
+    normalize_help_subcommand_sort_rules,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -42,14 +42,14 @@ def resolve_subcommand_sort_rules(
     """
     owner = layout.__class__.__name__
     if rules is not None:
-        resolved_rules = resolve_help_subcommand_sort_rules(
+        resolved_rules = normalize_help_subcommand_sort_rules(
             rules,
             value_name=f"{owner}.help_subcommand_sort_rules",
             allow_none=False,
         )
         return list(resolved_rules or ())
 
-    active_rules = resolve_help_subcommand_sort_rules(
+    active_rules = normalize_help_subcommand_sort_rules(
         layout.help_subcommand_sort_rules,
         value_name=f"{owner}.help_subcommand_sort_rules",
         allow_none=False,
@@ -57,7 +57,7 @@ def resolve_subcommand_sort_rules(
     if active_rules:
         return list(active_rules)
 
-    layout_default_rules = resolve_help_subcommand_sort_rules(
+    layout_default_rules = normalize_help_subcommand_sort_rules(
         layout.help_subcommand_sort_default,
         value_name=f"{owner}.help_subcommand_sort_default",
     )
@@ -67,7 +67,7 @@ def resolve_subcommand_sort_rules(
     return list(DEFAULT_HELP_SUBCOMMAND_SORT_RULES)
 
 
-def order_named_items(
+def sort_named_items(
     layout: "HelpLayout",
     items: list[tuple[str, NamedItemT]],
     *,
@@ -97,7 +97,7 @@ def order_named_items(
     return [pair[1] for _, pair in indexed_items]
 
 
-def order_command_list(
+def sort_command_list(
     layout: "HelpLayout",
     commands: list["Command"],
     *,
@@ -112,7 +112,7 @@ def order_command_list(
         rules (list[HelpSubcommandSortRule] | None): Explicit rules for this listing.
     """
     named_commands = [(command.cli_name, command) for command in commands]
-    return order_named_items(layout, named_commands, rules=rules)
+    return sort_named_items(layout, named_commands, rules=rules)
 
 
 def option_has_short_flag(arg: "Argument") -> bool:
@@ -162,14 +162,14 @@ def resolve_option_sort_rules(
     """
     owner = layout.__class__.__name__
     if rules is not None:
-        resolved_rules = resolve_help_option_sort_rules(
+        resolved_rules = normalize_help_option_sort_rules(
             rules,
             value_name=f"{owner}.help_option_sort_rules",
             allow_none=False,
         )
         return list(resolved_rules or ())
 
-    active_rules = resolve_help_option_sort_rules(
+    active_rules = normalize_help_option_sort_rules(
         layout.help_option_sort_rules,
         value_name=f"{owner}.help_option_sort_rules",
         allow_none=False,
@@ -177,7 +177,7 @@ def resolve_option_sort_rules(
     if active_rules:
         return list(active_rules)
 
-    layout_default_rules = resolve_help_option_sort_rules(
+    layout_default_rules = normalize_help_option_sort_rules(
         layout.help_option_sort_default,
         value_name=f"{owner}.help_option_sort_default",
     )
@@ -204,7 +204,7 @@ def option_rule_extractors(
     }
 
 
-def order_option_arguments(
+def sort_option_arguments(
     layout: "HelpLayout",
     options: list["Argument"],
     *,
@@ -240,9 +240,9 @@ __all__ = [
     "option_has_short_flag",
     "option_rule_extractors",
     "option_sort_key",
-    "order_command_list",
-    "order_named_items",
-    "order_option_arguments",
     "resolve_option_sort_rules",
     "resolve_subcommand_sort_rules",
+    "sort_command_list",
+    "sort_named_items",
+    "sort_option_arguments",
 ]

@@ -3,16 +3,16 @@
 ## Parser schema
 
 ```{eval-rst}
-.. autodata:: interfacy.schema.model.CommandType
+.. autodata:: interfacy.schema.nodes.CommandType
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.schema.model.ArgumentKind
+.. autoclass:: interfacy.schema.nodes.ArgumentKind
    :members:
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.schema.model.ValueShape
+.. autoclass:: interfacy.schema.nodes.ValueShape
    :members:
 ```
 
@@ -22,7 +22,7 @@
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.schema.model.BooleanBehavior
+.. autoclass:: interfacy.schema.nodes.BooleanBehavior
    :exclude-members: __init__, __new__
 ```
 
@@ -32,18 +32,18 @@
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.schema.model.Argument
+.. autoclass:: interfacy.schema.nodes.Argument
    :exclude-members: __init__, __new__
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.schema.model.Command
+.. autoclass:: interfacy.schema.nodes.Command
    :members: description, epilog
    :exclude-members: __init__, __new__
 ```
 
 ```{eval-rst}
-.. autoclass:: interfacy.schema.model.ParserSchema
+.. autoclass:: interfacy.schema.nodes.ParserSchema
    :members: description, epilog, is_multi_command, get_command, canonical_names
    :exclude-members: __init__, __new__
 ```

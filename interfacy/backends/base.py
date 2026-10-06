@@ -10,7 +10,7 @@ from strto import StrToTypeParser
 from interfacy.declarations.executable_flags import ExecutableAction, ExecutableFlag
 from interfacy.declarations.settings import BackendName
 from interfacy.help import HelpLayout
-from interfacy.schema.model import ParserSchema
+from interfacy.schema.nodes import ParserSchema
 
 NativeParserT_co = TypeVar("NativeParserT_co", covariant=True)
 NativePresentationKind = Literal["usage", "execution"]

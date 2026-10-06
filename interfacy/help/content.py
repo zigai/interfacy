@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from interfacy.schema.model import Command, ParserSchema
+from interfacy.schema.nodes import Command, ParserSchema
 
 HelpSectionKind = Literal[
     "usage",

@@ -19,7 +19,7 @@ from interfacy.schema.builder.settings import (
     registered_command_options,
     resolve_effective_command_settings,
 )
-from interfacy.schema.model import Command, ParserSchema
+from interfacy.schema.nodes import Command, ParserSchema
 from interfacy.schema.validation import validate_parser_schema, validate_schema_executable_flags
 
 

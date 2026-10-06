@@ -1,6 +1,6 @@
 from interfacy.declarations.executable_flags import ExecutableFlag
 from interfacy.declarations.params import BooleanMode
-from interfacy.schema.model import (
+from interfacy.schema.nodes import (
     Argument,
     ArgumentDefault,
     ArgumentKind,

@@ -11,8 +11,9 @@ from interfacy.declarations.params import (
     ParameterSettingsInput,
     normalize_parameter_settings,
 )
-from interfacy.declarations.settings import (
-    AbbreviationScope,
+from interfacy.declarations.settings import AbbreviationScope
+from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
+from interfacy.declarations.validators import (
     validate_abbreviation_scope,
     validate_help_group,
     validate_help_option_sort,
@@ -20,7 +21,6 @@ from interfacy.declarations.settings import (
     validate_method_skips,
     validate_model_expansion_max_depth,
 )
-from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
 
 
 @dataclass(frozen=True, kw_only=True)

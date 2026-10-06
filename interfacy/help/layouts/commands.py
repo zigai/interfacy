@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from stdl.st import ansi_len, with_style
 
 from interfacy.declarations.sorting import HelpSubcommandSortRule
-from interfacy.help.ordering import order_command_list
+from interfacy.help.sorting import sort_command_list
 from interfacy.help.wrapping import wrap_plain_words, wrap_text_preserving_words
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -186,10 +186,10 @@ def render_grouped_commands(
     """Render a command listing with one headed section per help group."""
     group_order, grouped_commands, ungrouped_commands = partition_commands_by_help_group(commands)
     ordered_groups = {
-        group: order_command_list(layout, grouped_commands[group], rules=rules)
+        group: sort_command_list(layout, grouped_commands[group], rules=rules)
         for group in group_order
     }
-    ordered_ungrouped = order_command_list(layout, ungrouped_commands, rules=rules)
+    ordered_ungrouped = sort_command_list(layout, ungrouped_commands, rules=rules)
 
     all_commands: list[Command] = []
     for group in group_order:

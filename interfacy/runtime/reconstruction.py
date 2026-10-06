@@ -10,7 +10,7 @@ from interfacy.models import (
     model_instance_to_values,
     unwrap_optional,
 )
-from interfacy.schema.model import Argument
+from interfacy.schema.nodes import Argument
 
 
 class ExpandedModelValidationError(ValueError):

@@ -9,11 +9,11 @@ from interfacy.declarations.sorting import (
     DEFAULT_HELP_SUBCOMMAND_SORT_RULES,
     HelpOptionSortRule,
     HelpSubcommandSortRule,
-    resolve_help_option_sort_rules,
-    resolve_help_subcommand_sort_rules,
+    normalize_help_option_sort_rules,
+    normalize_help_subcommand_sort_rules,
 )
 from interfacy.schema.builder.context import EffectiveCommandSettings, SchemaBuildContext
-from interfacy.schema.model import Command
+from interfacy.schema.nodes import Command
 
 
 def resolve_help_option_sort_value(value: Any, *, value_name: str) -> list[HelpOptionSortRule]:
@@ -24,7 +24,7 @@ def resolve_help_option_sort_value(value: Any, *, value_name: str) -> list[HelpO
         value (Any): Configured rule value.
         value_name (str): Setting name used in error messages.
     """
-    rules = resolve_help_option_sort_rules(value, value_name=value_name)
+    rules = normalize_help_option_sort_rules(value, value_name=value_name)
     if rules:
         return list(rules)
 
@@ -43,7 +43,7 @@ def resolve_help_subcommand_sort_value(
         value (Any): Configured rule value.
         value_name (str): Setting name used in error messages.
     """
-    rules = resolve_help_subcommand_sort_rules(value, value_name=value_name)
+    rules = normalize_help_subcommand_sort_rules(value, value_name=value_name)
     if rules:
         return list(rules)
 

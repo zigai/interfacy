@@ -17,7 +17,7 @@ LAYERS: tuple[tuple[str, ...], ...] = (
     ("help",),
     ("plugins",),
     ("backends", "runtime"),
-    ("engine",),
+    ("core",),
     ("app",),
     ("cli",),
 )
@@ -85,8 +85,8 @@ def owning_package(path: Path) -> str | None:
         ),
         ("from interfacy import Param", {"interfacy", "interfacy.Param"}),
         (
-            "if TYPE_CHECKING:\n    from interfacy.schema.model import Command",
-            {"interfacy.schema.model", "interfacy.schema.model.Command"},
+            "if TYPE_CHECKING:\n    from interfacy.schema.nodes import Command",
+            {"interfacy.schema.nodes", "interfacy.schema.nodes.Command"},
         ),
     ],
 )
