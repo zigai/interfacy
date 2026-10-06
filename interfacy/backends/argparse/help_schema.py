@@ -232,7 +232,7 @@ def subcommands_from_action(
             cli_name=choice_name,
             aliases=aliases,
             raw_description=raw_description,
-            parameters=implicit.parameters,
+            arguments=implicit.arguments,
             subcommands=implicit.subcommands,
             raw_epilog=parser.epilog,
             is_leaf=not bool(implicit.subcommands),
@@ -275,7 +275,7 @@ def implicit_command(
         dest_name (Callable[[str], str]): Resolves an action destination to its original name.
         child_command (ChildCommandBuilder): Builds implicit commands for child parsers.
     """
-    parameters: list[Argument] = []
+    arguments: list[Argument] = []
     subcommands: dict[str, Command] | None = None
 
     for action in actions:
@@ -286,7 +286,7 @@ def implicit_command(
             subcommands = subcommands_from_action(action, child_command)
             continue
 
-        parameters.append(argument_from_action(action, dest_name(action.dest)))
+        arguments.append(argument_from_action(action, dest_name(action.dest)))
 
     command_name = command_name_for_prog(prog)
 
@@ -296,7 +296,7 @@ def implicit_command(
         cli_name=command_name,
         aliases=(),
         raw_description=description,
-        parameters=parameters,
+        arguments=arguments,
         subcommands=subcommands,
         raw_epilog=epilog,
         is_leaf=not bool(subcommands),

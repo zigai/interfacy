@@ -8,12 +8,12 @@ from objinspect import Class, Function, Method, inspect
 
 from interfacy.declarations.groups import CommandEntry, CommandGroup
 from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptions
-from interfacy.declarations.params import Param, merge_parameter_settings
+from interfacy.declarations.params import Param, merge_params
 from interfacy.exceptions import DuplicateCommandError, InvalidCommandError
 from interfacy.introspection.annotations import resolve_objinspect_annotations
 from interfacy.schema.builder.arguments import ArgumentBuilder
-from interfacy.schema.builder.classes import ClassCommandBuilder, class_parameter_settings
-from interfacy.schema.builder.commands import CommandBuilder, callable_parameter_settings
+from interfacy.schema.builder.classes import ClassCommandBuilder, class_params
+from interfacy.schema.builder.commands import CommandBuilder, callable_params
 from interfacy.schema.builder.context import EffectiveCommandSettings, SchemaBuildContext
 from interfacy.schema.builder.settings import (
     attach_command_build_settings,
@@ -103,7 +103,7 @@ class GroupBuilder:
             initializer = self.args_from_source(
                 source,
                 settings=settings,
-                parameter_settings=options.parameter_settings,
+                params=options.params,
             )
         resolved_executable_flags = list(options.executable_flags)
         self.commands.validate_executable_flags(resolved_executable_flags, initializer)
@@ -141,7 +141,7 @@ class GroupBuilder:
             aliases=group.aliases,
             raw_description=group.description,
             help_group=options.help_group,
-            parameters=[],
+            arguments=[],
             initializer=initializer,
             subcommands=subcommands or None,
             executable_flags=resolved_executable_flags,
@@ -150,7 +150,7 @@ class GroupBuilder:
             is_leaf=False,
             parent_path=parent_path,
             metadata={},
-            parameter_settings=dict(options.parameter_settings),
+            params=dict(options.params),
         )
         attach_command_build_settings(command, settings=settings, options=options)
 
@@ -161,7 +161,7 @@ class GroupBuilder:
         source: type | Callable[..., Any],
         *,
         settings: EffectiveCommandSettings,
-        parameter_settings: Mapping[str, Param] | None = None,
+        params: Mapping[str, Param] | None = None,
     ) -> list[Argument]:
         """
         Build group arguments from a class `__init__` or a callable signature.
@@ -169,7 +169,7 @@ class GroupBuilder:
         Args:
             source (type | Callable[..., Any]): Class or callable defining the arguments.
             settings (EffectiveCommandSettings): Effective group settings.
-            parameter_settings (Mapping[str, Param] | None): Per-parameter settings.
+            params (Mapping[str, Param] | None): Param declarations by parameter name.
         """
         obj = inspect(source, init=True)
         resolve_objinspect_annotations(obj)
@@ -181,9 +181,9 @@ class GroupBuilder:
                 taken_flags,
                 set(),
                 settings=settings,
-                parameter_settings=merge_parameter_settings(
-                    class_parameter_settings(obj),
-                    parameter_settings,
+                params=merge_params(
+                    class_params(obj),
+                    params,
                 ),
             )
 
@@ -193,9 +193,9 @@ class GroupBuilder:
                 taken_flags,
                 set(),
                 settings=settings,
-                parameter_settings=merge_parameter_settings(
-                    callable_parameter_settings(obj),
-                    parameter_settings,
+                params=merge_params(
+                    callable_params(obj),
+                    params,
                 ),
             )
 

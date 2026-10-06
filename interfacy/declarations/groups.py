@@ -7,7 +7,7 @@ from typing import Any
 
 from interfacy.declarations.executable_flags import ExecutableFlag
 from interfacy.declarations.options import CommandOptions
-from interfacy.declarations.params import ParameterSettingsInput
+from interfacy.declarations.params import ParamMapInput
 from interfacy.declarations.pipes import PipeTargets, build_pipe_targets_config
 from interfacy.declarations.settings import AbbreviationScope
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
@@ -79,7 +79,7 @@ class CommandGroup:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         executable_flags: list[ExecutableFlag] | None = None,
-        parameter_settings: ParameterSettingsInput | None = None,
+        params: ParamMapInput | None = None,
     ) -> CommandGroup:
         """
         Add a command to this group.
@@ -103,7 +103,7 @@ class CommandGroup:
             help_subcommand_sort: Override help subcommand sort rules.
             help_group: Optional help-only group heading for this command in help listings.
             executable_flags: Zero-argument executable flags registered on this command node.
-            parameter_settings: Per-parameter CLI settings keyed by parameter name.
+            params: Per-parameter CLI settings keyed by parameter name.
         """
         options = CommandOptions.from_values(locals())
         resolved_pipe_targets = (

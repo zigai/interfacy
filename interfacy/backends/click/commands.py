@@ -193,12 +193,12 @@ class HelpMixin:
         if not isinstance(self, click.Command):
             raise TypeError("HelpMixin must be combined with click.Command")
 
-        parameters: list[Argument] = []
+        arguments: list[Argument] = []
         for parameter in self.get_params(ctx):
             if isinstance(parameter, click.Option) and parameter.name == "help":
                 continue
 
-            parameters.append(self._argument_from_click_parameter(parameter))
+            arguments.append(self._argument_from_click_parameter(parameter))
 
         subcommands: dict[str, Command] | None = None
         if isinstance(self, click.Group):
@@ -231,7 +231,7 @@ class HelpMixin:
             cli_name=name,
             aliases=self.interfacy_aliases,
             raw_description=self.help,
-            parameters=parameters,
+            arguments=arguments,
             subcommands=subcommands,
             raw_epilog=self.epilog,
             command_type="group" if isinstance(self, click.Group) else "function",

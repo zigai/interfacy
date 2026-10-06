@@ -28,7 +28,7 @@ def _normalize_argument_value(
 
 
 def normalize_argument_values(command: Any, bucket: dict[str, Any], *, type_parser: Any) -> None:
-    for argument in (*command.initializer, *command.parameters):
+    for argument in (*command.initializer, *command.arguments):
         _normalize_argument_value(argument, bucket, type_parser=type_parser)
 
     if not command.subcommands:

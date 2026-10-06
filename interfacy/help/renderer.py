@@ -186,7 +186,7 @@ class SchemaHelpRenderer:
         """
         with self._render_scope():
             layout = self.layout
-            all_args = command.initializer + command.parameters
+            all_args = command.initializer + command.arguments
             positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
             options = self._ordered_option_arguments(
                 [a for a in all_args if a.kind == ArgumentKind.OPTION],
@@ -430,7 +430,7 @@ class SchemaHelpRenderer:
         *,
         parser_executable_flags: list[ExecutableFlag] | None = None,
     ) -> str:
-        all_args = command.initializer + command.parameters
+        all_args = command.initializer + command.arguments
         positionals = [a for a in all_args if a.kind == ArgumentKind.POSITIONAL]
         options = self._ordered_option_arguments(
             [a for a in all_args if a.kind == ArgumentKind.OPTION],

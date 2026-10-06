@@ -144,7 +144,7 @@ def missing_required(
             bucket = {}
         missing.extend(
             ArgumentRef(path, argument.name, ArgumentDescriptor.from_argument(path, argument))
-            for argument in (*command.initializer, *command.parameters)
+            for argument in (*command.initializer, *command.arguments)
             if argument.required and argument.name not in bucket
         )
 

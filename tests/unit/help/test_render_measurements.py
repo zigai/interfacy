@@ -39,7 +39,7 @@ def _command(default: str, *, flag: str = "--value") -> Command:
         cli_name="demo",
         aliases=(),
         raw_description="Render this description consistently at the requested terminal width.",
-        parameters=[argument],
+        arguments=[argument],
     )
 
 

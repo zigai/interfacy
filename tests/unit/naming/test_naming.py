@@ -162,8 +162,8 @@ def test_required_list_positional_flag_generation_is_not_shared_across_commands(
 
     schema = parser.build_parser_schema()
 
-    ints_arg = schema.commands["ints"].parameters[0]
-    strings_arg = schema.commands["strings"].parameters[0]
+    ints_arg = schema.commands["ints"].arguments[0]
+    strings_arg = schema.commands["strings"].arguments[0]
 
     assert ints_arg.flags == ("values",)
     assert strings_arg.flags == ("items",)
@@ -181,8 +181,8 @@ def test_required_list_positional_flag_generation_is_stable_across_rebuilds():
     first_schema = parser.build_parser_schema()
     second_schema = parser.build_parser_schema()
 
-    first_arg = first_schema.commands["fn-list-int"].parameters[0]
-    second_arg = second_schema.commands["fn-list-int"].parameters[0]
+    first_arg = first_schema.commands["fn-list-int"].arguments[0]
+    second_arg = second_schema.commands["fn-list-int"].arguments[0]
 
     assert first_arg.flags == ("values",)
     assert second_arg.flags == ("values",)

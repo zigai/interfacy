@@ -153,7 +153,7 @@ class AncestorOptions:
             return None
 
         option_token = token.split("=", 1)[0] if token.startswith("--") else token
-        arguments = [*command.initializer, *command.parameters]
+        arguments = [*command.initializer, *command.arguments]
         for argument in arguments:
             flags = self._argument_option_flags(argument)
             if option_token in flags:

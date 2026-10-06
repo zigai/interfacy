@@ -85,7 +85,7 @@ class SchemaDescriptor:
             paths.append(path)
             arguments.extend(
                 ArgumentDescriptor.from_argument(path, argument)
-                for argument in (*command.initializer, *command.parameters)
+                for argument in (*command.initializer, *command.arguments)
             )
 
             for child in (command.subcommands or {}).values():

@@ -28,7 +28,7 @@ def test_dual_mode_exposes_both_values_for_false_default(
     parser = Interfacy(backend=backend)
     parser.add_command(
         command,
-        parameter_settings={"color": Param(boolean_mode="dual")},
+        params={"color": Param(boolean_mode="dual")},
     )
 
     assert parser.invoke(args=[]) is False
@@ -105,7 +105,7 @@ def test_one_way_mode_must_change_the_default(
         return enabled
 
     parser = Interfacy()
-    parser.add_command(command, parameter_settings={"enabled": Param(boolean_mode=mode)})
+    parser.add_command(command, params={"enabled": Param(boolean_mode=mode)})
 
     with pytest.raises(ConfigurationError, match=message):
         parser.build_parser_schema()
@@ -118,7 +118,7 @@ def test_boolean_settings_reject_non_boolean_parameter() -> None:
     parser = Interfacy()
     parser.add_command(
         command,
-        parameter_settings={"count": Param(boolean_mode="dual")},
+        params={"count": Param(boolean_mode="dual")},
     )
 
     with pytest.raises(ConfigurationError, match="only configure boolean parameter 'count'"):
@@ -132,7 +132,7 @@ def test_negative_mode_requires_derivable_or_explicit_negative_flag() -> None:
     parser = Interfacy()
     parser.add_command(
         command,
-        parameter_settings={"enabled": Param(flags="-e")},
+        params={"enabled": Param(flags="-e")},
     )
 
     with pytest.raises(ConfigurationError, match=r"requires Param\.negative_flags"):
@@ -146,7 +146,7 @@ def test_positive_only_mode_rejects_negative_flags() -> None:
     parser = Interfacy()
     parser.add_command(
         command,
-        parameter_settings={
+        params={
             "enabled": Param(
                 boolean_mode="positive_only",
                 negative_flags="--disabled",

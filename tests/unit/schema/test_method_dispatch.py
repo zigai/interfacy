@@ -51,7 +51,7 @@ class TestParserSchemaBuilderMethodDispatch:
         cmd = schema_builder.build_command_spec_for(unbound_method, canonical_name="multiply")
 
         assert [arg.name for arg in cmd.initializer] == ["factor"]
-        assert [arg.name for arg in cmd.parameters] == ["value"]
+        assert [arg.name for arg in cmd.arguments] == ["value"]
 
     def test_bound_method_dispatches_to_method_command_without_initializer(
         self, schema_builder: ParserSchemaBuilder
@@ -63,7 +63,7 @@ class TestParserSchemaBuilderMethodDispatch:
         cmd = schema_builder.build_command_spec_for(bound_method, canonical_name="multiply")
 
         assert cmd.initializer == []
-        assert [arg.name for arg in cmd.parameters] == ["value"]
+        assert [arg.name for arg in cmd.arguments] == ["value"]
 
     def test_method_command_is_invoked_instead_of_function_command(
         self, schema_builder: ParserSchemaBuilder, mocker: MockerFixture

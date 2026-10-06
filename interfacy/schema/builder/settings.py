@@ -145,7 +145,7 @@ def registered_command_options(command: Command) -> CommandOptions:
         **{name: getattr(command.overrides, name) for name in OVERRIDE_NAMES},
         help_group=command.help_group,
         executable_flags=command.executable_flags,
-        parameter_settings=command.parameter_settings,
+        params=command.params,
     )
 
 

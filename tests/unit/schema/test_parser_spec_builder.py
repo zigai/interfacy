@@ -50,7 +50,7 @@ def test_param_short_false_keeps_later_short_flags_available(parser: Interfacy) 
 
     schema = parser.build_parser_schema()
     command = schema.commands["fn-long-only-flags"]
-    flags = {argument.name: argument.flags for argument in command.parameters}
+    flags = {argument.name: argument.flags for argument in command.arguments}
 
     assert flags["alpha"] == ("--alpha",)
     assert flags["amount"] == ("--amount",)
@@ -61,12 +61,12 @@ def test_param_short_false_keeps_later_short_flags_available(parser: Interfacy) 
 def test_param_can_override_help_and_metavar(parser: Interfacy) -> None:
     parser.add_command(
         fn_custom_output_format,
-        parameter_settings={
+        params={
             "output_format": Param(help="Output rendering format.", metavar="FORMAT"),
         },
     )
 
-    argument = parser.build_parser_schema().commands["fn-custom-output-format"].parameters[0]
+    argument = parser.build_parser_schema().commands["fn-custom-output-format"].arguments[0]
 
     assert argument.help == "Output rendering format."
     assert argument.metavar == "FORMAT"

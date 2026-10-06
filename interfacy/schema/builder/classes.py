@@ -8,7 +8,7 @@ from objinspect import Class, Parameter, inspect
 
 from interfacy.declarations.groups import CommandEntry
 from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptions
-from interfacy.declarations.params import Param, get_parameter_settings, merge_parameter_settings
+from interfacy.declarations.params import Param, get_params, merge_params
 from interfacy.declarations.pipes import PipeTargets
 from interfacy.introspection.annotations import resolve_objinspect_annotations
 from interfacy.models import parse_docstring_args
@@ -20,39 +20,37 @@ from interfacy.schema.nodes import Argument, Command
 from interfacy.schema.validation import validate_initializer_positionals
 
 
-def class_parameter_settings(class_info: Class) -> dict[str, Param]:
+def class_params(class_info: Class) -> dict[str, Param]:
     """
-    Return parameter settings declared on a class merged with those on its `__init__`.
+    Return Params declared on a class merged with those on its `__init__`.
 
     Args:
         class_info (Class): Inspected class or instance.
     """
     class_target = class_info.cls if isinstance(class_info.cls, type) else type(class_info.cls)
-    class_settings = get_parameter_settings(class_target)
+    class_settings = get_params(class_target)
     init_settings = (
-        get_parameter_settings(class_info.init_method.func)
-        if class_info.init_method is not None
-        else {}
+        get_params(class_info.init_method.func) if class_info.init_method is not None else {}
     )
 
-    return merge_parameter_settings(class_settings, init_settings)
+    return merge_params(class_settings, init_settings)
 
 
-def pipe_config_for_params(
+def pipe_config_for_parameters(
     pipe_config: PipeTargets | None,
-    params: Sequence[Parameter],
+    parameters: Sequence[Parameter],
 ) -> PipeTargets | None:
     """
     Narrow a pipe configuration to the targets present in a parameter list.
 
     Args:
         pipe_config (PipeTargets | None): Pipe configuration to narrow.
-        params (Sequence[Parameter]): Parameters that may receive piped input.
+        parameters (Sequence[Parameter]): Parameters that may receive piped input.
     """
     if pipe_config is None:
         return None
 
-    param_names = {param.name for param in params}
+    param_names = {param.name for param in parameters}
     targets = tuple(target for target in pipe_config.targets if target in param_names)
     if not targets:
         return None
@@ -105,9 +103,9 @@ class ClassCommandBuilder:
             self.commands.resolve_pipe_config(canonical_name, cls.name, aliases, "__init__")
             or class_pipe_config
         )
-        effective_parameter_settings = merge_parameter_settings(
-            class_parameter_settings(cls),
-            options.parameter_settings,
+        effective_params = merge_params(
+            class_params(cls),
+            options.params,
         )
 
         if cls.has_init and not cls.is_initialized:
@@ -116,12 +114,12 @@ class ClassCommandBuilder:
                 self._initializer_taken_flags(),
                 init_pipe_config.targeted_parameters() if init_pipe_config else set(),
                 settings=resolved_settings,
-                parameter_settings=effective_parameter_settings,
+                params=effective_params,
                 descriptions=parse_docstring_args(cls.cls.__doc__),
             )
 
         subcommands: dict[str, Command] = {}
-        method_options = CommandOptions(parameter_settings=options.parameter_settings)
+        method_options = CommandOptions(params=options.params)
 
         for method in cls.methods:
             if method.name in resolved_settings.method_skips:
@@ -161,7 +159,7 @@ class ClassCommandBuilder:
             aliases=aliases,
             raw_description=raw_description,
             help_group=options.help_group,
-            parameters=[],
+            arguments=[],
             initializer=initializer,
             subcommands=subcommands,
             raw_epilog=None,
@@ -169,7 +167,7 @@ class ClassCommandBuilder:
             executable_flags=resolved_executable_flags,
             command_type="class",
             is_leaf=False,
-            parameter_settings=dict(effective_parameter_settings),
+            params=dict(effective_params),
         )
         attach_command_build_settings(
             command,
@@ -199,7 +197,7 @@ class ClassCommandBuilder:
         cls = self._inspect_class(type(instance), settings=settings, init=False)
 
         subcommands: dict[str, Command] = {}
-        method_options = CommandOptions(parameter_settings=options.parameter_settings)
+        method_options = CommandOptions(params=options.params)
         for method in cls.methods:
             if method.name in settings.method_skips:
                 continue
@@ -225,7 +223,7 @@ class ClassCommandBuilder:
             aliases=entry.aliases,
             raw_description=raw_description,
             help_group=options.help_group,
-            parameters=[],
+            arguments=[],
             initializer=[],
             subcommands=subcommands or None,
             executable_flags=resolved_executable_flags,
@@ -237,7 +235,7 @@ class ClassCommandBuilder:
             parent_path=parent_path,
             stored_instance=instance,
             metadata={},
-            parameter_settings=dict(options.parameter_settings),
+            params=dict(options.params),
         )
         attach_command_build_settings(
             command,
@@ -271,10 +269,10 @@ class ClassCommandBuilder:
         init_params = (
             cls.get_method("__init__").params if cls.has_init and not cls.is_initialized else []
         )
-        init_pipe_config = pipe_config_for_params(entry.pipe_targets, init_params)
-        effective_parameter_settings = merge_parameter_settings(
-            class_parameter_settings(cls),
-            options.parameter_settings,
+        init_pipe_config = pipe_config_for_parameters(entry.pipe_targets, init_params)
+        effective_params = merge_params(
+            class_params(cls),
+            options.params,
         )
 
         if init_params:
@@ -283,11 +281,11 @@ class ClassCommandBuilder:
                 self._initializer_taken_flags(),
                 init_pipe_config.targeted_parameters() if init_pipe_config else set(),
                 settings=settings,
-                parameter_settings=effective_parameter_settings,
+                params=effective_params,
             )
 
         subcommands: dict[str, Command] = {}
-        method_options = CommandOptions(parameter_settings=options.parameter_settings)
+        method_options = CommandOptions(params=options.params)
         for method in cls.methods:
             if method.name in settings.method_skips:
                 continue
@@ -296,7 +294,7 @@ class ClassCommandBuilder:
             subcommands[method_cli_name] = self.commands.function_command(
                 method,
                 cli_name_override=method_cli_name,
-                pipe_config=pipe_config_for_params(entry.pipe_targets, method.params),
+                pipe_config=pipe_config_for_parameters(entry.pipe_targets, method.params),
                 settings=settings,
                 options=method_options,
             )
@@ -334,7 +332,7 @@ class ClassCommandBuilder:
             aliases=entry.aliases,
             raw_description=raw_description,
             help_group=options.help_group,
-            parameters=[],
+            arguments=[],
             initializer=initializer,
             subcommands=subcommands or None,
             executable_flags=resolved_executable_flags,
@@ -344,7 +342,7 @@ class ClassCommandBuilder:
             is_leaf=False,
             parent_path=parent_path,
             metadata={},
-            parameter_settings=dict(effective_parameter_settings),
+            params=dict(effective_params),
         )
         attach_command_build_settings(
             command,
@@ -384,4 +382,4 @@ class ClassCommandBuilder:
         return cls
 
 
-__all__ = ["ClassCommandBuilder", "class_parameter_settings", "pipe_config_for_params"]
+__all__ = ["ClassCommandBuilder", "class_params", "pipe_config_for_parameters"]

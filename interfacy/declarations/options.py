@@ -8,8 +8,8 @@ from typing import Any, Final
 from interfacy.declarations.executable_flags import ExecutableFlag, normalize_executable_flags
 from interfacy.declarations.params import (
     Param,
-    ParameterSettingsInput,
-    normalize_parameter_settings,
+    ParamMapInput,
+    normalize_param_map,
 )
 from interfacy.declarations.settings import AbbreviationScope
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
@@ -67,15 +67,15 @@ class CommandOptions(CommandOverrides):
 
     help_group: str | None = None
     executable_flags: Sequence[ExecutableFlag] = ()
-    parameter_settings: Mapping[str, Param] = field(default_factory=lambda: MappingProxyType({}))
+    params: Mapping[str, Param] = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
         super().__post_init__()
         validate_help_group(self.help_group)
         # ``None`` is accepted for both collections, matching the public signatures.
         self._set("executable_flags", tuple(normalize_executable_flags(self.executable_flags)))
-        settings: ParameterSettingsInput | None = self.parameter_settings
-        self._set("parameter_settings", MappingProxyType(normalize_parameter_settings(settings)))
+        settings: ParamMapInput | None = self.params
+        self._set("params", MappingProxyType(normalize_param_map(settings)))
 
     @classmethod
     def from_values(cls, values: Mapping[str, Any]) -> CommandOptions:

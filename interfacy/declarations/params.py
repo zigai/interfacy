@@ -7,11 +7,11 @@ from typing import Any, Literal, TypeAlias, TypeVar
 
 from interfacy.exceptions import ConfigurationError
 
-PARAMETER_SETTINGS_ATTR = "__interfacy_parameter_settings__"
+PARAMS_ATTR = "__interfacy_params__"
 
-ParameterSettingsTarget: TypeAlias = Callable[..., Any] | type[Any]
+ParamsTarget: TypeAlias = Callable[..., Any] | type[Any]
 ParamKind: TypeAlias = Literal["auto", "option", "positional"]
-F = TypeVar("F", bound=ParameterSettingsTarget)
+F = TypeVar("F", bound=ParamsTarget)
 
 
 class BooleanMode(str, Enum):
@@ -177,46 +177,46 @@ class Param:
 
 
 ParamInput: TypeAlias = Param | Mapping[str, Any]
-ParameterSettingsInput: TypeAlias = Mapping[str, ParamInput]
+ParamMapInput: TypeAlias = Mapping[str, ParamInput]
 
 
 def normalize_param(value: ParamInput, *, name: str) -> Param:
-    """Normalize one parameter setting declaration."""
+    """Normalize one Param declaration."""
     if isinstance(value, Param):
         return value
     if isinstance(value, Mapping):
         return Param(**dict(value))
 
-    raise ConfigurationError(f"parameter_settings[{name!r}] must be a Param or mapping")
+    raise ConfigurationError(f"params[{name!r}] must be a Param or mapping")
 
 
-def normalize_parameter_settings(
-    value: ParameterSettingsInput | None,
+def normalize_param_map(
+    value: ParamMapInput | None,
 ) -> dict[str, Param]:
     """Normalize a mapping of parameter names to Param declarations."""
     if value is None:
         return {}
     if not isinstance(value, Mapping):
-        raise ConfigurationError("parameter_settings must be a mapping of parameter names to Param")
+        raise ConfigurationError("params must be a mapping of parameter names to Param")
 
     normalized: dict[str, Param] = {}
     for name, setting in value.items():
         if not isinstance(name, str) or not name:
-            raise ConfigurationError("parameter_settings keys must be non-empty parameter names")
+            raise ConfigurationError("params keys must be non-empty parameter names")
 
         normalized[name] = normalize_param(setting, name=name)
 
     return normalized
 
 
-def get_parameter_settings(target: ParameterSettingsTarget) -> dict[str, Param]:
-    """Return settings declared directly on a callable or class."""
-    raw = getattr(target, PARAMETER_SETTINGS_ATTR, None)
-    return normalize_parameter_settings(raw)
+def get_params(target: ParamsTarget) -> dict[str, Param]:
+    """Return Params declared directly on a callable or class."""
+    raw = getattr(target, PARAMS_ATTR, None)
+    return normalize_param_map(raw)
 
 
-def merge_parameter_settings(*settings: Mapping[str, Param] | None) -> dict[str, Param]:
-    """Merge parameter settings from lowest to highest precedence."""
+def merge_params(*settings: Mapping[str, Param] | None) -> dict[str, Param]:
+    """Merge Param declarations from lowest to highest precedence."""
     merged: dict[str, Param] = {}
     for setting in settings:
         if setting:
@@ -225,13 +225,13 @@ def merge_parameter_settings(*settings: Mapping[str, Param] | None) -> dict[str,
     return merged
 
 
-def params(**parameter_settings: ParamInput) -> Callable[[F], F]:
+def params(**declared: ParamInput) -> Callable[[F], F]:
     """Decorate a callable or class with per-parameter CLI settings."""
-    normalized = normalize_parameter_settings(parameter_settings)
+    normalized = normalize_param_map(declared)
 
     def decorator(target: F) -> F:
-        existing = get_parameter_settings(target)
-        setattr(target, PARAMETER_SETTINGS_ATTR, merge_parameter_settings(existing, normalized))
+        existing = get_params(target)
+        setattr(target, PARAMS_ATTR, merge_params(existing, normalized))
 
         return target
 
@@ -242,9 +242,9 @@ __all__ = [
     "BooleanMode",
     "Param",
     "ParamKind",
-    "ParameterSettingsInput",
-    "get_parameter_settings",
-    "merge_parameter_settings",
-    "normalize_parameter_settings",
+    "ParamMapInput",
+    "get_params",
+    "merge_params",
+    "normalize_param_map",
     "params",
 ]

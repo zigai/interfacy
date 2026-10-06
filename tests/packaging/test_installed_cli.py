@@ -458,7 +458,7 @@ def test_installed_wheel_typechecks_for_a_consumer(
                 return value
 
             app = Interfacy(sys_exit_enabled=False)
-            app.add_command(command, parameter_settings={"value": Param(kind="positional")})
+            app.add_command(command, params={"value": Param(kind="positional")})
             code: ExitCode = ExitCode.SUCCESS
             error: type[Exception] = PipeInputError
             """

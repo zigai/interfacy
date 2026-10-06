@@ -211,7 +211,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             )
             self._add_argument(parser, argument, argument_relaxed)
 
-        for argument in command.parameters:
+        for argument in command.arguments:
             self._add_argument(parser, argument, relaxed)
 
         if not command.subcommands:

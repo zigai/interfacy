@@ -149,7 +149,7 @@ class Command:
         raw_description (str | None): Raw docstring description.
         help_group (str | None): Optional help-only grouping label for command listings.
         pipe_targets (PipeTargets | None): Pipe target configuration for stdin.
-        parameters (list[Argument]): Argument specs for command parameters.
+        arguments (list[Argument]): Argument specs for command parameters.
         initializer (list[Argument]): Argument specs for class initialization.
         subcommands (dict[str, Command] | None): Nested subcommands, if any.
         executable_flags (list[ExecutableFlag]): Zero-argument executable flags.
@@ -159,7 +159,7 @@ class Command:
         is_instance (bool): Whether the command comes from a stored instance.
         parent_path (tuple[str, ...]): Command path for nested groups.
         stored_instance (object | None): Stored instance for instance commands.
-        parameter_settings (dict[str, Param]): Per-parameter CLI setting overrides.
+        params (dict[str, Param]): Param declarations by parameter name.
     """
 
     obj: Class | Function | Method | None
@@ -169,7 +169,7 @@ class Command:
     raw_description: str | None
     help_group: str | None = None
     pipe_targets: PipeTargets | None = None
-    parameters: list[Argument] = field(default_factory=list)
+    arguments: list[Argument] = field(default_factory=list)
     initializer: list[Argument] = field(default_factory=list)
     subcommands: dict[str, Command] | None = None
     executable_flags: list[ExecutableFlag] = field(default_factory=list)
@@ -184,7 +184,7 @@ class Command:
     help_option_sort_effective: list[HelpOptionSortRule] | None = None
     help_subcommand_sort_effective: list[HelpSubcommandSortRule] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    parameter_settings: dict[str, Param] = field(default_factory=dict)
+    params: dict[str, Param] = field(default_factory=dict)
 
     @property
     def description(self) -> str | None:

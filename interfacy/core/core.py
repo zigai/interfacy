@@ -293,7 +293,7 @@ class InterfacyCore:
                 help_group=options.help_group,
                 executable_flags=list(options.executable_flags),
                 overrides=options.overrides,
-                parameter_settings=dict(options.parameter_settings),
+                params=dict(options.params),
             )
             self.registry.add(schema_command)
             if pipe_targets is not None:

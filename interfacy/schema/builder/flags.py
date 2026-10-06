@@ -74,10 +74,10 @@ def short_flag_from_setting(
     abbreviation_gen: Any,
 ) -> str | None:
     """
-    Return the short flag requested by a parameter setting, generating one if asked.
+    Return the short flag requested by a Param declaration, generating one if asked.
 
     Args:
-        setting (Param): Parameter setting.
+        setting (Param): Param declaration.
         abbrev_name (str): Name used to generate an abbreviation.
         taken_flags (list[str]): Reserved flag keys.
         abbreviation_gen (Any): Abbreviation generator.
@@ -93,7 +93,7 @@ def short_flag_from_setting(
     return None
 
 
-def flags_from_parameter_setting(
+def flags_from_declared_param(
     *,
     translated_name: str,
     param: Parameter,
@@ -102,12 +102,12 @@ def flags_from_parameter_setting(
     abbreviation_gen: Any,
 ) -> tuple[str, ...]:
     """
-    Return and reserve option flags configured through a parameter setting.
+    Return and reserve option flags configured through a Param declaration.
 
     Args:
         translated_name (str): CLI-translated parameter name.
         param (Parameter): Inspected parameter.
-        setting (Param): Parameter setting.
+        setting (Param): Param declaration.
         taken_flags (list[str]): Reserved flag keys, updated in place.
         abbreviation_gen (Any): Abbreviation generator.
     """
@@ -144,28 +144,28 @@ def flags_for_parameter(
     param: Parameter,
     taken_flags: list[str],
     flag_allocation_state: FlagAllocationState | None,
-    parameter_setting: Param | None,
+    declared_param: Param | None,
     flag_strategy: Any,
     abbreviation_gen: Any,
 ) -> tuple[str, ...]:
     """
     Allocate and reserve the flags of one parameter.
 
-    Explicit parameter settings take precedence over the flag strategy.
+    Explicit Param declarations take precedence over the flag strategy.
 
     Args:
         translated_name (str): CLI-translated parameter name.
         param (Parameter): Inspected parameter.
         taken_flags (list[str]): Reserved flag keys, updated in place.
         flag_allocation_state (FlagAllocationState | None): Strategy allocation state.
-        parameter_setting (Param | None): Explicit parameter setting.
+        declared_param (Param | None): Param declared for the parameter.
         flag_strategy (Any): Flag strategy.
         abbreviation_gen (Any): Abbreviation generator.
 
     Raises:
         ReservedFlagError: The parameter name or one of its flags is already reserved.
     """
-    if parameter_setting is not None and parameter_setting.kind == "positional":
+    if declared_param is not None and declared_param.kind == "positional":
         if translated_name in taken_flags:
             raise ReservedFlagError(translated_name)
 
@@ -173,13 +173,13 @@ def flags_for_parameter(
 
         return (translated_name,)
 
-    if parameter_setting is not None and (
-        parameter_setting.kind == "option" or parameter_setting.has_flag_overrides
+    if declared_param is not None and (
+        declared_param.kind == "option" or declared_param.has_flag_overrides
     ):
-        return flags_from_parameter_setting(
+        return flags_from_declared_param(
             translated_name=translated_name,
             param=param,
-            setting=parameter_setting,
+            setting=declared_param,
             taken_flags=taken_flags,
             abbreviation_gen=abbreviation_gen,
         )
@@ -235,7 +235,7 @@ def generated_negative_flags(
 __all__ = [
     "flag_token_key",
     "flags_for_parameter",
-    "flags_from_parameter_setting",
+    "flags_from_declared_param",
     "generated_negative_flags",
     "release_short_flags",
     "reserve_parameter_flags",

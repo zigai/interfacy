@@ -118,7 +118,7 @@ def command_option_strings(command: Command) -> set[str]:
     Args:
         command (Command): Command to inspect.
     """
-    option_strings = argument_option_strings([*command.initializer, *command.parameters])
+    option_strings = argument_option_strings([*command.initializer, *command.arguments])
     option_strings.update(executable_flag_tokens(command.executable_flags))
 
     return option_strings

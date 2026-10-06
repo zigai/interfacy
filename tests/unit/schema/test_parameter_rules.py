@@ -74,4 +74,4 @@ def test_callable_and_annotated_unhashable_metadata_do_not_crash() -> None:
     parser = Interfacy()
     parser.add_command(cmd)
 
-    assert len(parser.build_parser_schema().commands["cmd"].parameters) == 3
+    assert len(parser.build_parser_schema().commands["cmd"].arguments) == 3

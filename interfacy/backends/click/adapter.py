@@ -174,7 +174,7 @@ class ClickSession(BackendSession[click.Command]):
         extra_flags: Sequence[ExecutableFlag] = (),
     ) -> InterfacyClickCommand | InterfacyClickGroup:
         group_like = bool(command.subcommands) or command.command_type in ("group", "instance")
-        arguments = command.initializer if group_like else command.parameters
+        arguments = command.initializer if group_like else command.arguments
         params, bindings, suppressed = self._build_params(
             arguments,
             (*extra_flags, *command.executable_flags),

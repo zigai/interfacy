@@ -210,7 +210,7 @@ class SchemaRunner:
         subcommand_spec = self._schema_subcommand_for(command, command_name)
         if subcommand_spec is not None:
             command_args = self._reconstruct_expanded_models(
-                command_args, subcommand_spec.parameters
+                command_args, subcommand_spec.arguments
             )
         method_args, method_kwargs = self._build_call_args(method, command_args)
         logger.info(
@@ -615,9 +615,9 @@ class SchemaRunner:
     def _arguments_for(self, command: Command) -> list[Argument]:
         schema_cmd = self._schema_command_for(command)
         if schema_cmd is None:
-            return command.parameters
+            return command.arguments
 
-        return schema_cmd.parameters
+        return schema_cmd.arguments
 
     def _initializer_for(self, command: Command) -> list[Argument]:
         schema_cmd = self._schema_command_for(command)

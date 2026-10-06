@@ -56,9 +56,9 @@ def test_build_parser_returns_native_backend_value(backend: str, native_type: ty
     assert isinstance(parser.build_parser(), native_type)
 
 
-def test_public_parameter_settings_type_hints_resolve() -> None:
-    assert "parameter_settings" in get_type_hints(Interfacy.add_command)
-    assert "parameter_settings" in get_type_hints(CommandGroup.add_command)
+def test_public_params_type_hints_resolve() -> None:
+    assert "params" in get_type_hints(Interfacy.add_command)
+    assert "params" in get_type_hints(CommandGroup.add_command)
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
@@ -99,7 +99,7 @@ def test_interfacy_invoke_does_not_render_result(
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
-def test_interfacy_add_command_accepts_parameter_settings(backend: str) -> None:
+def test_interfacy_add_command_accepts_params(backend: str) -> None:
     if backend == "click":
         pytest.importorskip("click")
 
@@ -109,14 +109,14 @@ def test_interfacy_add_command_accepts_parameter_settings(backend: str) -> None:
     parser = Interfacy(backend=backend)
     parser.add_command(
         choose,
-        parameter_settings={"output_format": Param(long="style", short="s")},
+        params={"output_format": Param(long="style", short="s")},
     )
 
     assert parser.invoke(args=["--style", "json"]) == "json"
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
-def test_interfacy_instance_method_accepts_parameter_settings(backend: str) -> None:
+def test_interfacy_instance_method_accepts_params(backend: str) -> None:
     if backend == "click":
         pytest.importorskip("click")
 
@@ -127,14 +127,14 @@ def test_interfacy_instance_method_accepts_parameter_settings(backend: str) -> N
     parser = Interfacy(backend=backend)
     parser.add_command(
         Tool(),
-        parameter_settings={"output_format": Param(long="style", short="s")},
+        params={"output_format": Param(long="style", short="s")},
     )
 
     assert parser.invoke(args=["render", "--style", "json"]) == "json"
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
-def test_command_group_instance_method_accepts_parameter_settings(backend: str) -> None:
+def test_command_group_instance_method_accepts_params(backend: str) -> None:
     if backend == "click":
         pytest.importorskip("click")
 
@@ -146,7 +146,7 @@ def test_command_group_instance_method_accepts_parameter_settings(backend: str) 
     group.add_command(
         Tool(),
         name="tool",
-        parameter_settings={"output_format": Param(long="style", short="s")},
+        params={"output_format": Param(long="style", short="s")},
     )
     parser = Interfacy(backend=backend)
     parser.add_command(group)

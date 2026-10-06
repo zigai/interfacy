@@ -48,23 +48,23 @@ class ArgumentBuilder:
 
     def from_parameters(
         self,
-        params: Sequence[Parameter],
+        parameters: Sequence[Parameter],
         taken_flags: list[str],
         pipe_param_names: set[str] | None,
         *,
         settings: EffectiveCommandSettings,
-        parameter_settings: dict[str, Param],
+        params: dict[str, Param],
         descriptions: dict[str, str] | None = None,
     ) -> list[Argument]:
         """
         Build the arguments of one parameter list sharing a flag allocation state.
 
         Args:
-            params (Sequence[Parameter]): Inspected parameters in declaration order.
+            parameters (Sequence[Parameter]): Inspected parameters in declaration order.
             taken_flags (list[str]): Reserved flag keys, updated in place.
             pipe_param_names (set[str] | None): Parameters that accept piped input.
             settings (EffectiveCommandSettings): Effective command settings.
-            parameter_settings (dict[str, Param]): Per-parameter settings by name.
+            params (dict[str, Param]): Param declarations by parameter name.
             descriptions (dict[str, str] | None): Fallback descriptions by parameter name.
         """
         flag_state = FlagAllocationState()
@@ -72,7 +72,7 @@ class ArgumentBuilder:
 
         return [
             argument
-            for param in params
+            for param in parameters
             for argument in self.from_parameter(
                 param,
                 taken_flags,
@@ -80,7 +80,7 @@ class ArgumentBuilder:
                 settings=settings,
                 flag_allocation_state=flag_state,
                 description_override=fallback_descriptions.get(param.name),
-                parameter_setting=parameter_settings.get(param.name),
+                declared_param=params.get(param.name),
             )
         ]
 
@@ -93,7 +93,7 @@ class ArgumentBuilder:
         settings: EffectiveCommandSettings | None = None,
         flag_allocation_state: FlagAllocationState | None = None,
         description_override: str | None = None,
-        parameter_setting: Param | None = None,
+        declared_param: Param | None = None,
     ) -> list[Argument]:
         """
         Build the arguments of one parameter; expanded models yield one per field.
@@ -105,12 +105,12 @@ class ArgumentBuilder:
             settings (EffectiveCommandSettings | None): Effective command settings.
             flag_allocation_state (FlagAllocationState | None): Strategy allocation state.
             description_override (str | None): Description used when the parameter has none.
-            parameter_setting (Param | None): Explicit parameter setting.
+            declared_param (Param | None): Param declared for the parameter.
         """
         resolved_settings = settings or base_build_settings(self.context)
         annotation = normalize_parameter_annotation(param.type)
-        if parameter_setting is not None and annotation is not bool:
-            validate_non_boolean_setting(param.name, parameter_setting)
+        if declared_param is not None and annotation is not bool:
+            validate_non_boolean_setting(param.name, declared_param)
 
         if param.is_typed:
             model_type, is_optional_model = unwrap_optional(annotation)
@@ -132,7 +132,7 @@ class ArgumentBuilder:
             param=param,
             taken_flags=taken_flags,
             flag_allocation_state=flag_allocation_state,
-            parameter_setting=parameter_setting,
+            declared_param=declared_param,
             flag_strategy=self.context.flag_strategy,
             abbreviation_gen=self.context.abbreviation_gen,
         )
@@ -147,8 +147,8 @@ class ArgumentBuilder:
             is_optional=param.is_optional,
             kind=param.kind,
             description=(
-                parameter_setting.help
-                if parameter_setting is not None and parameter_setting.help is not None
+                declared_param.help
+                if declared_param is not None and declared_param.help is not None
                 else param.description or description_override
             ),
         )
@@ -163,7 +163,7 @@ class ArgumentBuilder:
                 allow_optional_union_list=True,
                 suppress_parse_default=False,
                 settings=resolved_settings,
-                parameter_setting=parameter_setting,
+                declared_param=declared_param,
             )
         ]
 
@@ -199,7 +199,7 @@ class ArgumentBuilder:
         parent_is_optional: bool = False,
         model_default: Any = MODEL_DEFAULT_UNSET,
         settings: EffectiveCommandSettings,
-        parameter_setting: Param | None = None,
+        declared_param: Param | None = None,
     ) -> Argument:
         """
         Build one argument from a normalized parameter spec and its allocated flags.
@@ -220,7 +220,7 @@ class ArgumentBuilder:
             parent_is_optional (bool): Whether the root model parameter is optional.
             model_default (Any): Default instance of the root model parameter.
             settings (EffectiveCommandSettings): Effective command settings.
-            parameter_setting (Param | None): Explicit parameter setting.
+            declared_param (Param | None): Param declared for the parameter.
         """
         state = initial_argument_state(spec)
         should_expand_model = self._model_predicate(settings)
@@ -238,7 +238,7 @@ class ArgumentBuilder:
                 taken_flags=taken_flags,
                 allow_optional_union_list=allow_optional_union_list,
                 state=state,
-                parameter_setting=parameter_setting,
+                declared_param=declared_param,
                 type_parser=self.context.type_parser,
                 should_expand_model=should_expand_model,
                 bool_negative_prefix=self.context.bool_negative_prefix,
@@ -282,7 +282,7 @@ class ArgumentBuilder:
             help=help_text if help_text is not None else spec.description,
             type=state.parsed_type,
             parser=state.parser_func,
-            metavar=parameter_setting.metavar if parameter_setting is not None else None,
+            metavar=declared_param.metavar if declared_param is not None else None,
             boolean_behavior=state.boolean_behavior,
             choices=state.choices,
             accepts_stdin=accepts_stdin,
@@ -345,11 +345,11 @@ def normalize_parameter_annotation(annotation: Any) -> Any:
 
 def validate_non_boolean_setting(name: str, setting: Param) -> None:
     """
-    Reject boolean-only options on a parameter setting for a non-boolean parameter.
+    Reject boolean-only options on a Param declaration for a non-boolean parameter.
 
     Args:
         name (str): Parameter name used in error messages.
-        setting (Param): Parameter setting.
+        setting (Param): Param declaration.
 
     Raises:
         ConfigurationError: The setting configures a boolean mode or negative flags.

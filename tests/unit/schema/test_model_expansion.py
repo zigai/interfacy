@@ -64,7 +64,7 @@ def test_schema_expanded_fields_use_long_flags_by_default() -> None:
     schema = ParserSchemaBuilder(parser.schema_context()).build()
 
     cmd = schema.commands["greet"]
-    assert all(flags[0].startswith("--") for flags in (arg.flags for arg in cmd.parameters))
+    assert all(flags[0].startswith("--") for flags in (arg.flags for arg in cmd.arguments))
 
 
 def test_argparse_reconstructs_expanded_dataclass() -> None:
@@ -197,7 +197,7 @@ def test_model_expansion_respects_max_depth() -> None:
     schema = builder.build()
 
     cmd = schema.commands["uses-levels"]
-    names = {arg.name for arg in cmd.parameters}
+    names = {arg.name for arg in cmd.arguments}
 
     assert "level1.level2.level3" in names
     assert "level1.level2.level3.leaf" not in names
@@ -212,7 +212,7 @@ def test_per_command_override_enables_model_expansion_when_parser_disabled() -> 
 
     schema = parser.build_parser_schema()
     command = schema.commands["greet-with-address"]
-    names = {arg.name for arg in command.parameters}
+    names = {arg.name for arg in command.arguments}
 
     assert "user.name" in names
 
@@ -240,7 +240,7 @@ def test_per_command_override_model_expansion_depth() -> None:
 
     schema = parser.build_parser_schema()
     command = schema.commands["uses-levels"]
-    names = {arg.name for arg in command.parameters}
+    names = {arg.name for arg in command.arguments}
 
     assert "level1.level2.level3.leaf" in names
 
@@ -257,7 +257,7 @@ def test_per_command_override_abbreviation_scope() -> None:
     schema = parser.build_parser_schema()
     command = schema.commands["greet-with-address"]
 
-    name_arg = next(arg for arg in command.parameters if arg.name == "user.name")
+    name_arg = next(arg for arg in command.arguments if arg.name == "user.name")
     assert any(flag.startswith("-") and not flag.startswith("--") for flag in name_arg.flags)
 
 
@@ -268,7 +268,7 @@ def test_docstring_help_used_for_dataclass_fields() -> None:
     schema = builder.build()
 
     cmd = schema.commands["greet-docs"]
-    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+    help_text = {arg.name: arg.help or "" for arg in cmd.arguments}
 
     assert "Display name." in help_text["user.name"]
     assert "Age in years." in help_text["user.age"]
@@ -283,7 +283,7 @@ def test_metadata_description_used_for_dataclass_fields() -> None:
     schema = builder.build()
 
     cmd = schema.commands["greet-metadata"]
-    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+    help_text = {arg.name: arg.help or "" for arg in cmd.arguments}
 
     assert "Display name from metadata." in help_text["user.name"]
 
@@ -317,7 +317,7 @@ def test_plain_class_docstring_help_used() -> None:
     schema = builder.build()
 
     cmd = schema.commands["greet-plain"]
-    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+    help_text = {arg.name: arg.help or "" for arg in cmd.arguments}
     assert "Display name." in help_text["user.name"]
     assert "Age in years." in help_text["user.age"]
 
@@ -382,8 +382,8 @@ def test_pydantic_v2_model_expansion() -> None:
     schema = builder.build()
 
     cmd = schema.commands["greet-p"]
-    names = {arg.name for arg in cmd.parameters}
-    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+    names = {arg.name for arg in cmd.arguments}
+    help_text = {arg.name: arg.help or "" for arg in cmd.arguments}
 
     assert "user.name" in names
     assert "user.age" in names
@@ -494,9 +494,9 @@ def test_pydantic_like_v2_model_expands_without_optional_dependency() -> None:
     parser.register_command(Function(greet_fake_pydantic), canonical_name="greet-fake")
 
     cmd = ParserSchemaBuilder(parser.schema_context()).build().commands["greet-fake"]
-    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+    help_text = {arg.name: arg.help or "" for arg in cmd.arguments}
 
-    assert {arg.name for arg in cmd.parameters} == {
+    assert {arg.name for arg in cmd.arguments} == {
         "user.name",
         "user.age",
         "user.address.city",
@@ -504,7 +504,7 @@ def test_pydantic_like_v2_model_expands_without_optional_dependency() -> None:
     }
     assert "Display name." in help_text["user.name"]
     assert "City name." in help_text["user.address.city"]
-    assert {arg.name: arg.required for arg in cmd.parameters}["user.age"] is False
+    assert {arg.name: arg.required for arg in cmd.arguments}["user.age"] is False
 
 
 def test_pydantic_like_v2_model_reconstructs_nested_values() -> None:
@@ -585,11 +585,11 @@ def test_pydantic_like_v1_model_expands_field_metadata() -> None:
     parser.register_command(Function(command), canonical_name="legacy")
 
     cmd = ParserSchemaBuilder(parser.schema_context()).build().commands["legacy"]
-    help_text = {arg.name: arg.help or "" for arg in cmd.parameters}
+    help_text = {arg.name: arg.help or "" for arg in cmd.arguments}
 
-    assert {arg.name for arg in cmd.parameters} == {"user.name", "user.age"}
+    assert {arg.name for arg in cmd.arguments} == {"user.name", "user.age"}
     assert "Legacy display name." in help_text["user.name"]
-    assert {arg.name: arg.required for arg in cmd.parameters} == {
+    assert {arg.name: arg.required for arg in cmd.arguments} == {
         "user.name": True,
         "user.age": False,
     }
@@ -620,7 +620,7 @@ def test_dataclass_expansion_falls_back_when_forward_reference_is_unresolved() -
     parser.register_command(Function(command), canonical_name="broken")
     cmd = ParserSchemaBuilder(parser.schema_context()).build().commands["broken"]
 
-    arg = next(arg for arg in cmd.parameters if arg.name == "config.value")
+    arg = next(arg for arg in cmd.arguments if arg.name == "config.value")
     assert arg.type is Any
 
 

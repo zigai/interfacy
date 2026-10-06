@@ -99,7 +99,7 @@ def configure_typed_state(
     taken_flags: list[str],
     allow_optional_union_list: bool,
     state: ArgumentBuildState,
-    parameter_setting: Param | None,
+    declared_param: Param | None,
     type_parser: Any,
     should_expand_model: ModelExpansionPredicate,
     bool_negative_prefix: str | None,
@@ -113,7 +113,7 @@ def configure_typed_state(
         taken_flags (list[str]): Reserved flag keys, updated in place.
         allow_optional_union_list (bool): Whether `list[T] | None` makes it optional.
         state (ArgumentBuildState): Build state to update.
-        parameter_setting (Param | None): Explicit parameter setting.
+        declared_param (Param | None): Param declared for the parameter.
         type_parser (Any): Type parser providing parse functions.
         should_expand_model (ModelExpansionPredicate): Whether a model type is expanded.
         bool_negative_prefix (str | None): Prefix for generated negative flags.
@@ -140,7 +140,7 @@ def configure_typed_state(
         flags,
         taken_flags,
         state,
-        parameter_setting,
+        declared_param,
         bool_negative_prefix=bool_negative_prefix,
     ):
         return
@@ -304,7 +304,7 @@ def configure_bool_state(
     flags: tuple[str, ...],
     taken_flags: list[str],
     state: ArgumentBuildState,
-    parameter_setting: Param | None,
+    declared_param: Param | None,
     *,
     bool_negative_prefix: str | None,
 ) -> bool:
@@ -316,7 +316,7 @@ def configure_bool_state(
         flags (tuple[str, ...]): Allocated positive flags.
         taken_flags (list[str]): Reserved flag keys, updated in place.
         state (ArgumentBuildState): Build state to update.
-        parameter_setting (Param | None): Explicit parameter setting.
+        declared_param (Param | None): Param declared for the parameter.
         bool_negative_prefix (str | None): Prefix for generated negative flags.
 
     Raises:
@@ -332,15 +332,13 @@ def configure_bool_state(
     state.value_plan = FlagValue()
     state.cardinality = ValueCardinality(0, 0, 0)
     state.argument_default = ArgumentDefault.present(spec.default if spec.has_default else False)
-    requested_mode = (
-        parameter_setting.boolean_mode if parameter_setting is not None else BooleanMode.AUTO
-    )
+    requested_mode = declared_param.boolean_mode if declared_param is not None else BooleanMode.AUTO
     if not isinstance(requested_mode, BooleanMode):
         raise ConfigurationError(f"Boolean parameter '{spec.name}' has an invalid boolean mode")
 
     configured_negative_flags = (
-        tuple(parameter_setting.negative_flags)
-        if parameter_setting is not None and parameter_setting.negative_flags is not None
+        tuple(declared_param.negative_flags)
+        if declared_param is not None and declared_param.negative_flags is not None
         else None
     )
     mode = effective_boolean_mode(
@@ -391,7 +389,7 @@ def effective_boolean_mode(
 
     Args:
         spec (ParamSpec): Normalized parameter description.
-        requested_mode (BooleanMode): Mode requested by the parameter setting.
+        requested_mode (BooleanMode): Mode requested by the Param declaration.
         configured_negative_flags (tuple[str, ...] | None): Explicit negative flags.
         bool_negative_prefix (str | None): Prefix for generated negative flags.
     """
@@ -413,7 +411,7 @@ def resolve_boolean_mode(spec: ParamSpec, requested_mode: BooleanMode) -> Boolea
 
     Args:
         spec (ParamSpec): Normalized parameter description.
-        requested_mode (BooleanMode): Mode requested by the parameter setting.
+        requested_mode (BooleanMode): Mode requested by the Param declaration.
 
     Raises:
         ConfigurationError: An explicit mode contradicts the parameter default.

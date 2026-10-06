@@ -12,7 +12,7 @@ from interfacy.core.settings import SETTING_NAMES, CoreSettings
 from interfacy.declarations.executable_flags import ExecutableFlag
 from interfacy.declarations.groups import CommandGroup
 from interfacy.declarations.options import CommandOptions
-from interfacy.declarations.params import ParameterSettingsInput
+from interfacy.declarations.params import ParamMapInput
 from interfacy.declarations.pipes import PipeTargets
 from interfacy.declarations.settings import (
     DEFAULT_HELP_FLAGS,
@@ -233,7 +233,7 @@ class Interfacy:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: Sequence[str] | None = None,
-        parameter_settings: ParameterSettingsInput | None = None,
+        params: ParamMapInput | None = None,
     ) -> Command:
         """
         Register a function, class, instance, or command group.
@@ -278,7 +278,7 @@ class Interfacy:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: Sequence[str] | None = None,
-        parameter_settings: ParameterSettingsInput | None = None,
+        params: ParamMapInput | None = None,
     ) -> Callable[[F], F]:
         """
         Return a decorator that registers a function or class as a command.
@@ -313,7 +313,7 @@ class Interfacy:
         help_subcommand_sort: list[HelpSubcommandSortRule] | None = None,
         help_group: str | None = None,
         method_skips: Sequence[str] | None = None,
-        parameter_settings: ParameterSettingsInput | None = None,
+        params: ParamMapInput | None = None,
     ) -> Command:
         """
         Register an explicit command group.

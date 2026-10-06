@@ -21,7 +21,7 @@ def test_single_letter_parameter_short_and_long_flags() -> None:
         return c
 
     cli = Interfacy()
-    cli.add_command(configure, parameter_settings={"c": Param(flags=["-c", "--c"])})
+    cli.add_command(configure, params={"c": Param(flags=["-c", "--c"])})
 
     assert cli.invoke(args=["-c", "10"]) == 10
     assert cli.invoke(args=["--c", "20"]) == 20

@@ -7,7 +7,7 @@ from objinspect import Class, Function, Method
 
 from interfacy.declarations.executable_flags import ExecutableFlag
 from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptions
-from interfacy.declarations.params import Param, get_parameter_settings, merge_parameter_settings
+from interfacy.declarations.params import Param, get_params, merge_params
 from interfacy.declarations.pipes import PipeTargets
 from interfacy.models import parse_docstring_args
 from interfacy.schema.builder.arguments import ArgumentBuilder
@@ -21,14 +21,14 @@ from interfacy.schema.validation import (
 )
 
 
-def callable_parameter_settings(function: Function | Method) -> dict[str, Param]:
+def callable_params(function: Function | Method) -> dict[str, Param]:
     """
-    Return the parameter settings declared on a callable.
+    Return the Params declared on a callable.
 
     Args:
         function (Function | Method): Inspected callable.
     """
-    return get_parameter_settings(function.func)
+    return get_params(function.func)
 
 
 def resolve_cli_name(override: str | None, canonical_name: str | None, fallback: str) -> str:
@@ -98,21 +98,21 @@ class CommandBuilder:
         pipe_param_names = (
             effective_pipe_config.targeted_parameters() if effective_pipe_config else set()
         )
-        effective_parameter_settings = merge_parameter_settings(
-            callable_parameter_settings(function),
-            options.parameter_settings,
+        effective_params = merge_params(
+            callable_params(function),
+            options.params,
         )
-        parameters = self.arguments.from_parameters(
+        arguments = self.arguments.from_parameters(
             function.params,
             [*self.context.reserved_flags],
             pipe_param_names,
             settings=resolved_settings,
-            parameter_settings=effective_parameter_settings,
+            params=effective_params,
         )
-        validate_positional_order(parameters, owner=canonical_name or function.name)
+        validate_positional_order(arguments, owner=canonical_name or function.name)
         raw_description = description or (function.description if function.has_docstring else None)
         resolved_executable_flags = list(options.executable_flags)
-        self.validate_executable_flags(resolved_executable_flags, parameters)
+        self.validate_executable_flags(resolved_executable_flags, arguments)
 
         command = Command(
             obj=function,
@@ -121,10 +121,10 @@ class CommandBuilder:
             aliases=aliases,
             raw_description=raw_description,
             help_group=options.help_group,
-            parameters=parameters,
+            arguments=arguments,
             pipe_targets=pipe_config,
             executable_flags=resolved_executable_flags,
-            parameter_settings=dict(effective_parameter_settings),
+            params=dict(effective_params),
         )
         attach_command_build_settings(
             command,
@@ -162,9 +162,9 @@ class CommandBuilder:
         init_pipe_config = self.resolve_pipe_config(
             canonical_name, method.name, aliases, "__init__"
         )
-        method_parameter_settings = merge_parameter_settings(
-            callable_parameter_settings(method),
-            options.parameter_settings,
+        method_params = merge_params(
+            callable_params(method),
+            options.params,
         )
 
         if (init := Class(method.cls).init_method) and not is_initialized:
@@ -173,30 +173,30 @@ class CommandBuilder:
                 taken_flags,
                 init_pipe_config.targeted_parameters() if init_pipe_config else set(),
                 settings=resolved_settings,
-                parameter_settings=merge_parameter_settings(
-                    get_parameter_settings(method.cls),
-                    get_parameter_settings(init.func),
+                params=merge_params(
+                    get_params(method.cls),
+                    get_params(init.func),
                 ),
                 descriptions=parse_docstring_args(method.cls.__doc__),
             )
 
         method_pipe_config = self.resolve_pipe_config(canonical_name, method.name, aliases, None)
-        parameters = self.arguments.from_parameters(
+        arguments = self.arguments.from_parameters(
             method.params,
             taken_flags,
             method_pipe_config.targeted_parameters() if method_pipe_config else set(),
             settings=resolved_settings,
-            parameter_settings=method_parameter_settings,
+            params=method_params,
         )
         validate_positional_order(
-            [*initializer, *parameters],
+            [*initializer, *arguments],
             owner=canonical_name or method.name,
         )
 
         raw_description = description or (method.description if method.has_docstring else None)
         cli_name = resolve_cli_name(None, canonical_name, method.name)
         resolved_executable_flags = list(options.executable_flags)
-        self.validate_executable_flags(resolved_executable_flags, [*initializer, *parameters])
+        self.validate_executable_flags(resolved_executable_flags, [*initializer, *arguments])
 
         command = Command(
             obj=method,
@@ -205,11 +205,11 @@ class CommandBuilder:
             aliases=aliases,
             raw_description=raw_description,
             help_group=options.help_group,
-            parameters=parameters,
+            arguments=arguments,
             initializer=initializer,
             pipe_targets=method_pipe_config,
             executable_flags=resolved_executable_flags,
-            parameter_settings=dict(method_parameter_settings),
+            params=dict(method_params),
         )
         attach_command_build_settings(
             command,
@@ -268,4 +268,4 @@ class CommandBuilder:
         )
 
 
-__all__ = ["CommandBuilder", "callable_parameter_settings", "resolve_cli_name"]
+__all__ = ["CommandBuilder", "callable_params", "resolve_cli_name"]

@@ -68,7 +68,7 @@ def render(*, color: bool = False) -> bool:
 parser = Interfacy()
 parser.add_command(
     render,
-    parameter_settings={"color": Param(boolean_mode="dual")},
+    params={"color": Param(boolean_mode="dual")},
 )
 parser.run()
 ```
@@ -95,7 +95,7 @@ def sync(*, disable_cache: bool = False) -> bool:
 
 parser.add_command(
     sync,
-    parameter_settings={
+    params={
         "disable_cache": Param(
             boolean_mode="dual",
             negative_flags="--enable-cache",
