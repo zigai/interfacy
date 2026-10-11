@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from interfacy.models.base import ModelAdapter, ModelField, unwrap_optional
 from interfacy.models.dataclass import DataclassAdapter, dataclass_instance_values
 from interfacy.models.plain import PlainClassAdapter, is_plain_class_model, plain_instance_values
-from interfacy.models.pydantic import PydanticAdapter, dump_model_instance
+from interfacy.models.pydantic import PydanticAdapter
 
 DATACLASS_ADAPTER = DataclassAdapter()
 PYDANTIC_ADAPTER = PydanticAdapter()
@@ -115,10 +116,7 @@ def model_instance_to_values(model_type: type, instance: Any) -> dict[str, Any]:
     if DATACLASS_ADAPTER.matches(model_type):
         return dataclass_instance_values(instance)
 
-    dumped_values = dump_model_instance(instance)
-    if dumped_values is not None:
-        return dumped_values
-    if hasattr(instance, "__dict__"):
+    if PYDANTIC_ADAPTER.matches(model_type) or hasattr(instance, "__dict__"):
         return instance_attribute_values(instance)
     if is_plain_class_model(model_type):
         return plain_instance_values(model_type, instance)
@@ -133,8 +131,17 @@ def instance_attribute_values(instance: Any) -> dict[str, Any]:
     Args:
         instance (Any): Object with a `__dict__`.
     """
+    model_type = type(instance)
+    if PYDANTIC_ADAPTER.matches(model_type):
+        attributes = {
+            field.name: deepcopy(getattr(instance, field.name))
+            for field in PYDANTIC_ADAPTER.fields(model_type)
+        }
+    else:
+        attributes = vars(instance)
+
     values: dict[str, Any] = {}
-    for key, value in vars(instance).items():
+    for key, value in attributes.items():
         if is_model_type(type(value)):
             values[key] = model_instance_to_values(type(value), value)
         else:

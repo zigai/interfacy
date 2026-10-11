@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pydantic.v1
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
@@ -80,3 +81,26 @@ def test_pydantic_default_factory_is_fresh_across_invocations(backend: str) -> N
     assert first.tags == ["mutated"]
     assert second.tags == []
     assert second.address is None
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+@pytest.mark.parametrize(
+    ("model_base", "field_factory"),
+    [(BaseModel, Field), (pydantic.v1.BaseModel, pydantic.v1.Field)],
+)
+def test_excluded_default_field_survives_an_unrelated_cli_override(
+    backend: str,
+    model_base: type,
+    field_factory,
+) -> None:
+    class Config(model_base):
+        destination: str = field_factory(default="fallback", exclude=True)
+        count: int = 0
+
+    default = Config(destination="chosen")
+
+    def command(config: Config = default) -> tuple[str, int]:
+        return config.destination, config.count
+
+    assert Interfacy(backend=backend).invoke(command, args=["--config.count", "1"]) == ("chosen", 1)
+    assert (default.destination, default.count) == ("chosen", 0)

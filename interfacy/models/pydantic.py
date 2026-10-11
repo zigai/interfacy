@@ -131,29 +131,8 @@ def pydantic_v1_fields(model_type: type) -> list[ModelField]:
     return result
 
 
-def dump_model_instance(instance: Any) -> dict[str, Any] | None:
-    """
-    Return field values from a v2 `model_dump()` or v1 `dict()` method, if available.
-
-    Args:
-        instance (Any): Model instance.
-    """
-    if hasattr(instance, "model_dump"):
-        dumped = instance.model_dump()
-        if isinstance(dumped, dict):
-            return dumped
-
-    if hasattr(instance, "dict"):
-        dumped = instance.dict()
-        if isinstance(dumped, dict):
-            return dumped
-
-    return None
-
-
 __all__ = [
     "PydanticAdapter",
-    "dump_model_instance",
     "pydantic_v1_fields",
     "pydantic_v2_fields",
 ]
