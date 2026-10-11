@@ -1,5 +1,5 @@
 import argparse
-from typing import get_type_hints
+from typing import Any, get_type_hints
 
 import click
 import pytest
@@ -17,6 +17,12 @@ def test_interfacy_defaults_to_argparse_backend() -> None:
     parser = Interfacy(print_result=False)
 
     assert parser.backend == "argparse"
+
+
+@pytest.mark.parametrize("value", ["false", 0, 1, None])
+def test_sys_exit_enabled_rejects_non_boolean_values(value: Any) -> None:
+    with pytest.raises(ConfigurationError, match="sys_exit_enabled"):
+        Interfacy(sys_exit_enabled=value)
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])

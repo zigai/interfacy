@@ -23,6 +23,13 @@ ABBREVIATION_SCOPE_VALUES: tuple[AbbreviationScope, ...] = (
 )
 
 
+def validate_bool(value: bool, *, value_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigurationError(f"{value_name} must be a bool")
+
+    return value
+
+
 def validate_abbreviation_scope(value: AbbreviationScope) -> AbbreviationScope:
     if value not in ABBREVIATION_SCOPE_VALUES:
         raise ConfigurationError(
@@ -123,6 +130,7 @@ def validate_help_flags(value: HelpFlags) -> tuple[str, ...]:
 __all__ = [
     "validate_abbreviation_max_generated_len",
     "validate_abbreviation_scope",
+    "validate_bool",
     "validate_bool_negative_prefix",
     "validate_help_flags",
     "validate_help_group",

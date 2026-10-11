@@ -18,6 +18,64 @@ from interfacy.naming.abbreviations import DefaultAbbreviationGenerator
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
 from interfacy.plugins import InterfacyPlugin
 
+BOOLEAN_SETTINGS = (
+    "print_result",
+    "tab_completion",
+    "full_error_traceback",
+    "allow_args_from_file",
+    "include_inherited_methods",
+    "include_protected_methods",
+    "include_private_methods",
+    "include_staticmethods",
+    "include_classmethods",
+    "silent_interrupt",
+    "expand_model_params",
+)
+
+
+@pytest.mark.parametrize("name", BOOLEAN_SETTINGS)
+@pytest.mark.parametrize("literal", ['"false"', '"true"', "0", "1", '"null"'])
+def test_load_config_rejects_invalid_boolean_values(
+    tmp_path: Path,
+    name: str,
+    literal: str,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(f"[behavior]\n{name} = {literal}\n", encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match=rf"{name} must be a bool"):
+        apply_config_defaults(load_config(config_path), {})
+
+
+@pytest.mark.parametrize("name", BOOLEAN_SETTINGS)
+@pytest.mark.parametrize("value", [True, False])
+def test_load_config_preserves_boolean_values(tmp_path: Path, name: str, value: bool) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(f"[behavior]\n{name} = {str(value).lower()}\n", encoding="utf-8")
+
+    resolved = apply_config_defaults(load_config(config_path), {})
+
+    assert resolved[name] is value
+    assert apply_config_defaults(load_config(config_path), {name: not value})[name] is not value
+
+
+@pytest.mark.parametrize("name", BOOLEAN_SETTINGS)
+def test_load_config_rejects_null_boolean_literal(tmp_path: Path, name: str) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(f"[behavior]\n{name} = null\n", encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match="Invalid TOML"):
+        apply_config_defaults(load_config(config_path), {})
+
+
+def test_load_config_omits_absent_boolean_values(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("[behavior]\n", encoding="utf-8")
+
+    config = load_config(config_path)
+    assert all(getattr(config, name) is None for name in BOOLEAN_SETTINGS)
+    assert apply_config_defaults(config, {}) == {}
+
 
 @pytest.mark.parametrize("layout_type", [Aligned, AlignedTyped])
 def test_aligned_presets_resolve_through_shared_base(layout_type: type[Aligned]) -> None:

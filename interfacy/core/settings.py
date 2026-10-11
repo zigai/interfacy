@@ -22,6 +22,7 @@ from interfacy.declarations.settings import (
 from interfacy.declarations.validators import (
     validate_abbreviation_max_generated_len,
     validate_abbreviation_scope,
+    validate_bool,
     validate_bool_negative_prefix,
     validate_help_flags,
     validate_help_option_sort,
@@ -86,6 +87,20 @@ class CoreSettings:
     parse_recovery_max_attempts: int = field(default=MAX_PARSE_RECOVERY_ATTEMPTS, metadata=REQUIRED)
 
     def __post_init__(self) -> None:
+        for name in (
+            "print_result",
+            "tab_completion",
+            "full_error_traceback",
+            "allow_args_from_file",
+            "include_inherited_methods",
+            "include_protected_methods",
+            "include_private_methods",
+            "include_staticmethods",
+            "include_classmethods",
+            "silent_interrupt",
+            "expand_model_params",
+        ):
+            validate_bool(getattr(self, name), value_name=name)
         self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
             self.abbreviation_max_generated_len
         )

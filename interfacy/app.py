@@ -23,6 +23,7 @@ from interfacy.declarations.settings import (
     HelpFlags,
 )
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
+from interfacy.declarations.validators import validate_bool
 from interfacy.help import HelpLayout
 from interfacy.help.colors import InterfacyColors
 from interfacy.help.content import HelpRenderer
@@ -129,7 +130,7 @@ class Interfacy:
         settings = CoreSettings(
             **{name: value for name, value in locals().items() if name in SETTING_NAMES}
         )
-        self._sys_exit_enabled = sys_exit_enabled
+        self._sys_exit_enabled = validate_bool(sys_exit_enabled, value_name="sys_exit_enabled")
         self._core = InterfacyCore(settings, backend=backend)
 
     @property

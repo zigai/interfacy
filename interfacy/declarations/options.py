@@ -15,6 +15,7 @@ from interfacy.declarations.settings import AbbreviationScope
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.declarations.validators import (
     validate_abbreviation_scope,
+    validate_bool,
     validate_help_group,
     validate_help_option_sort,
     validate_help_subcommand_sort,
@@ -45,6 +46,17 @@ class CommandOverrides:
     help_subcommand_sort: list[HelpSubcommandSortRule] | None = None
 
     def __post_init__(self) -> None:
+        for name in (
+            "include_inherited_methods",
+            "include_protected_methods",
+            "include_private_methods",
+            "include_staticmethods",
+            "include_classmethods",
+            "expand_model_params",
+        ):
+            value = getattr(self, name)
+            if value is not None:
+                validate_bool(value, value_name=name)
         if self.method_skips is not None:
             self._set("method_skips", tuple(validate_method_skips(self.method_skips)))
         if self.model_expansion_max_depth is not None:

@@ -5,9 +5,88 @@ from typing import Any
 import pytest
 
 from interfacy import CommandGroup, Interfacy
+from interfacy.core.settings import CoreSettings
+from interfacy.declarations.options import CommandOverrides
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from interfacy.plugins import InterfacyPlugin
 from tests.fixtures.help import render_help
+
+BOOLEAN_SETTINGS = (
+    "print_result",
+    "tab_completion",
+    "full_error_traceback",
+    "allow_args_from_file",
+    "include_inherited_methods",
+    "include_protected_methods",
+    "include_private_methods",
+    "include_staticmethods",
+    "include_classmethods",
+    "silent_interrupt",
+    "expand_model_params",
+)
+BOOLEAN_OVERRIDES = (
+    "include_inherited_methods",
+    "include_protected_methods",
+    "include_private_methods",
+    "include_staticmethods",
+    "include_classmethods",
+    "expand_model_params",
+)
+
+
+@pytest.mark.parametrize("name", BOOLEAN_SETTINGS)
+@pytest.mark.parametrize("value", ["false", "true", 0, 1, None])
+def test_boolean_settings_reject_invalid_construction(name: str, value: Any) -> None:
+    with pytest.raises(ConfigurationError, match=rf"{name} must be a bool"):
+        CoreSettings(**{name: value})
+    with pytest.raises(ConfigurationError, match=rf"{name} must be a bool"):
+        Interfacy(**{name: value})
+
+
+@pytest.mark.parametrize("name", BOOLEAN_SETTINGS)
+@pytest.mark.parametrize("value", [True, False])
+def test_boolean_settings_preserve_values(name: str, value: bool) -> None:
+    settings = CoreSettings(**{name: value})
+    assert getattr(settings, name) is value
+
+    parser = Interfacy(**{name: not value})
+    parser.apply_setup(**{name: value})
+    assert getattr(parser._core.settings, name) is value
+
+
+@pytest.mark.parametrize("name", BOOLEAN_OVERRIDES)
+@pytest.mark.parametrize("value", ["false", "true", 0, 1])
+def test_boolean_command_overrides_reject_invalid_construction(name: str, value: Any) -> None:
+    with pytest.raises(ConfigurationError, match=rf"{name} must be a bool"):
+        CommandOverrides(**{name: value})
+
+
+@pytest.mark.parametrize("name", BOOLEAN_OVERRIDES)
+@pytest.mark.parametrize("value", [True, False, None])
+def test_boolean_command_overrides_preserve_values(name: str, value: bool | None) -> None:
+    assert getattr(CommandOverrides(**{name: value}), name) is value
+
+
+@pytest.mark.parametrize("name", BOOLEAN_SETTINGS)
+@pytest.mark.parametrize("value", ["false", "true", 0, 1, None])
+def test_invalid_boolean_update_leaves_state_unchanged(name: str, value: Any) -> None:
+    def command() -> str:
+        return "result"
+
+    parser = Interfacy(**{name: False})
+    parser.add_command(command)
+    parser.build_parser()
+    settings = parser._core.settings
+    snapshot = vars(settings).copy()
+    type_parser = parser.type_parser
+
+    with pytest.raises(ConfigurationError, match=name):
+        parser.apply_setup(**{name: value, "help_position": 5})
+
+    assert parser._core.settings is settings
+    assert vars(settings) == snapshot
+    assert parser.type_parser is type_parser
+    assert parser.invoke(args=[]) == "result"
 
 
 @pytest.fixture(params=["argparse", "click"])
