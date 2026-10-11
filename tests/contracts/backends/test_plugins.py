@@ -117,6 +117,36 @@ class FillMissingValuePlugin(InterfacyPlugin):
         return ProvideArgumentValues(values={argument_ref: "Ada"})
 
 
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_recovery_plugin_cannot_erase_unknown_option(backend: str) -> None:
+    executed: list[str] = []
+
+    def command(*, name: str) -> None:
+        executed.append(name)
+
+    parser = Interfacy(backend=backend, plugins=[FillMissingValuePlugin()])
+
+    with pytest.raises(UsageError):
+        parser.invoke(command, args=["--name", "chosen", "--bogus"])
+
+    assert executed == []
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_recovery_plugin_cannot_erase_invalid_option_value(backend: str) -> None:
+    executed: list[tuple[str, int]] = []
+
+    def command(*, name: str, count: int) -> None:
+        executed.append((name, count))
+
+    parser = Interfacy(backend=backend, plugins=[FillMissingValuePlugin()])
+
+    with pytest.raises(UsageError):
+        parser.invoke(command, args=["--count", "invalid"])
+
+    assert executed == []
+
+
 class SelectSubcommandPlugin(InterfacyPlugin):
     name = "select_subcommand"
 

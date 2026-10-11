@@ -384,7 +384,7 @@ class ClickSession(BackendSession[click.Command]):
         context = root.make_context(
             root.name or "main",
             args,
-            resilient_parsing=partial,
+            resilient_parsing=False,
         )
 
         if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
@@ -433,7 +433,7 @@ class ClickSession(BackendSession[click.Command]):
             resolved,
             command_args,
             parent=context,
-            resilient_parsing=partial,
+            resilient_parsing=False,
         )
         schema_cmd = command.interfacy_schema
         key = schema_cmd.canonical_name if schema_cmd is not None else resolved
@@ -488,8 +488,8 @@ class ClickSession(BackendSession[click.Command]):
             protected = list(getattr(context, "protected_args", []))
         return [*protected, *context.args]
 
-    def _partial_namespace(self, args: tuple[str, ...]) -> Mapping[str, Any]:
-        """Return the values given on the command line, or nothing if they do not parse."""
+    def _partial_namespace(self, args: tuple[str, ...]) -> Mapping[str, Any] | None:
+        """Return supplied values, or None when relaxing required fields still fails."""
         if self._partial_parser is None:
             self._partial_parser = self._build(self._schema, relaxed=True)
 
@@ -498,11 +498,11 @@ class ClickSession(BackendSession[click.Command]):
                 self._partial_parser, list(args), partial=True
             )
             if remaining:
-                return {}
+                return None
 
             normalize_schema_values(self._schema, supplied, type_parser=self._config.type_parser)
         except (click.UsageError, ExecutableFlagTriggeredError, ValueError):
-            return {}
+            return None
         else:
             return supplied
 

@@ -409,8 +409,8 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             if isinstance(value, dict):
                 ArgparseSession._remove_suppressed(value)
 
-    def _best_effort_partial(self, args: tuple[str, ...]) -> Mapping[str, Any]:
-        """Return the values given on the command line, or nothing if they do not parse."""
+    def _best_effort_partial(self, args: tuple[str, ...]) -> Mapping[str, Any] | None:
+        """Return supplied values, or None when relaxing required fields still fails."""
         if self._partial_parser is None:
             self._partial_parser = self._build(self._schema, relaxed=True)
 
@@ -423,7 +423,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             ValueError,
             ExecutableFlagTriggeredError,
         ):
-            return {}
+            return None
 
     @staticmethod
     def _install_tab_completion(parser: ArgumentParser) -> None:

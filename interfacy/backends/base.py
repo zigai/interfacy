@@ -72,10 +72,11 @@ class NativePresentation:
 @dataclass(slots=True, kw_only=True)
 class BackendParseFailure:
     presentation: NativePresentation
-    partial_namespace: Mapping[str, object]
+    partial_namespace: Mapping[str, object] | None
 
     def __post_init__(self) -> None:
-        self.partial_namespace = _freeze_namespace(self.partial_namespace)
+        if self.partial_namespace is not None:
+            self.partial_namespace = _freeze_namespace(self.partial_namespace)
 
 
 ParseOutcome = ParseResult | BackendParseFailure | ExecutableAction

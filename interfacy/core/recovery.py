@@ -44,6 +44,9 @@ def recover_parse_failure(
     backend presents the original failure, which does not return.
     """
     failure = initial
+    if failure.partial_namespace is None:
+        return session.present_error(failure.presentation)
+
     namespace = dict(failure.partial_namespace)
     while state.recovery_attempts < max_attempts:
         state.recovery_attempts += 1
