@@ -213,13 +213,18 @@ def render_help_for_args(
     capsys: pytest.CaptureFixture[str],
     argparse_req_pos: Interfacy,
     width: int = 80,
+    require_help_success: bool = False,
 ) -> str:
     freeze_terminal(monkeypatch, width)
     parser = build_stress_parser(layout_cls(), copy.deepcopy(argparse_req_pos))
-    try:
+    if require_help_success:
+        with pytest.raises(SystemExit) as excinfo:
+            parser.run(args=args)
+        assert excinfo.value.code == 0, (
+            f"{layout_cls.__name__} {args}: help exited with {excinfo.value.code}"
+        )
+    else:
         parser.invoke(args=args)
-    except SystemExit:
-        pass
     out = capsys.readouterr()
 
     return out.out + out.err
@@ -703,11 +708,20 @@ def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
     argparse_req_pos: Interfacy,
 ) -> None:
     failures: list[str] = []
+    comparisons = dict.fromkeys(ALIGNMENT_SECTION_TITLES, 0)
 
     for args in HELP_ALIGNMENT_MATRIX_ARGS:
         help_text = strip_ansi(
-            render_help_for_args(layout_cls, list(args), monkeypatch, capsys, argparse_req_pos)
+            render_help_for_args(
+                layout_cls,
+                list(args),
+                monkeypatch,
+                capsys,
+                argparse_req_pos,
+                require_help_success=True,
+            )
         )
+        assert "usage:" in help_text.lower(), f"{layout_cls.__name__} {args}: no help rendered"
         for section_title in ALIGNMENT_SECTION_TITLES:
             rows = _extract_section_rows(help_text, section_title)
             payload_columns: list[tuple[str, int]] = []
@@ -718,8 +732,30 @@ def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
 
                 payload_columns.append((row.strip(), payload_start))
 
+            expect_comparison = (
+                section_title == "commands:"
+                and args
+                in (
+                    ("--help",),
+                    ("report-tool", "output-dir", "--help"),
+                    ("ops", "workspace", "--help"),
+                )
+            ) or (
+                section_title == "options:"
+                and args
+                not in (
+                    ("--help",),
+                    ("ops", "workspace", "nested-tools", "--help"),
+                )
+            )
+            if expect_comparison:
+                assert len(payload_columns) >= 2, (
+                    f"{layout_cls.__name__} {args} {section_title}: "
+                    f"expected at least two comparable rows, got {payload_columns}"
+                )
             if len(payload_columns) < 2:
                 continue
+            comparisons[section_title] += 1
 
             unique_columns = sorted({col for _, col in payload_columns})
             if len(unique_columns) == 1:
@@ -732,6 +768,7 @@ def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
                 f"columns={unique_columns} rows=[{rendered_rows}]"
             )
 
+    assert all(comparisons.values()), f"{layout_cls.__name__}: no comparisons in {comparisons}"
     assert not failures, "Misaligned help payload columns:\n" + "\n".join(failures)
 
 
