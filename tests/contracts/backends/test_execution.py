@@ -1,6 +1,7 @@
 import pytest
+from pydantic import BaseModel, Field, ValidationError
 
-from interfacy import DuplicatePluginError, Interfacy
+from interfacy import CommandGroup, DuplicatePluginError, Interfacy
 from interfacy.exceptions import UsageError
 from interfacy.plugins import InterfacyPlugin
 from tests.fixtures.classes import Math
@@ -411,3 +412,65 @@ class TestStressRegressionExecution:
 
         parser.add_command(command)
         assert parser.invoke(args=["--dé-jà-vu", "D"]) == "D"
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+@pytest.mark.parametrize("grouped", [False, True])
+def test_invalid_subcommand_model_does_not_initialize_classes(backend: str, grouped: bool) -> None:
+    events: list[str] = []
+
+    class Options(BaseModel):
+        count: int = Field(ge=0)
+
+    class Actions:
+        def __init__(self) -> None:
+            events.append("initialized")
+
+        def send(self, options: Options) -> int:
+            events.append("executed")
+            return options.count
+
+    parser = Interfacy(backend=backend)
+    args = ["send", "--options.count", "-1"]
+    if grouped:
+        group = CommandGroup("workspace")
+        group.add_command(Actions, name="actions")
+        parser.add_command(group)
+        args = ["workspace", "actions", *args]
+    else:
+        parser.add_command(Actions)
+
+    with pytest.raises(ValidationError):
+        parser.invoke(args=args)
+
+    assert events == []
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+@pytest.mark.parametrize("grouped", [False, True])
+def test_valid_subcommand_model_initializes_and_executes_once(backend: str, grouped: bool) -> None:
+    events: list[str] = []
+
+    class Options(BaseModel):
+        count: int = Field(ge=0)
+
+    class Actions:
+        def __init__(self) -> None:
+            events.append("initialized")
+
+        def send(self, options: Options) -> int:
+            events.append("executed")
+            return options.count
+
+    parser = Interfacy(backend=backend)
+    args = ["send", "--options.count", "3"]
+    if grouped:
+        group = CommandGroup("workspace")
+        group.add_command(Actions, name="actions")
+        parser.add_command(group)
+        args = ["workspace", "actions", *args]
+    else:
+        parser.add_command(Actions)
+
+    assert parser.invoke(args=args) == 3
+    assert events == ["initialized", "executed"]

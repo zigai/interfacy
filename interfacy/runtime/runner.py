@@ -189,6 +189,13 @@ class SchemaRunner:
         except KeyError:
             method = runtime_cls.get_method(resolved_name)
 
+        command_args = self._apply_pipe(command, command_args, subcommand=command_name)
+        subcommand_spec = self._schema_subcommand_for(command, command_name)
+        if subcommand_spec is not None:
+            command_args = self._reconstruct_expanded_models(
+                command_args, subcommand_spec.arguments
+            )
+
         if not runtime_cls.is_initialized and not method.is_static:
             if runtime_cls.init_method:
                 args = self._apply_pipe(command, args, subcommand="__init__")
@@ -203,12 +210,6 @@ class SchemaRunner:
             else:
                 runtime_cls.init()
 
-        command_args = self._apply_pipe(command, command_args, subcommand=command_name)
-        subcommand_spec = self._schema_subcommand_for(command, command_name)
-        if subcommand_spec is not None:
-            command_args = self._reconstruct_expanded_models(
-                command_args, subcommand_spec.arguments
-            )
         method_args, method_kwargs = self._build_call_args(method, command_args)
         logger.info(
             "Calling method '%s' with %d positional arg(s) and %d keyword arg(s)",
@@ -347,50 +348,58 @@ class SchemaRunner:
         parent_instance: Any | None = None,
     ) -> Any:
         """
-        Execute a command with chain instantiation support.
+        Validate a command chain, then instantiate its classes and execute its leaf.
 
-        For groups/classes: instantiate at this level, then recurse to subcommand.
-        For leaf commands: execute with the accumulated instance chain.
+        All model arguments are reconstructed before any class is initialized.
         """
-        current_instance, normalized_args = self._prepare_chain_level(
-            command,
-            args,
-            parent_instance,
-        )
-        if command.is_leaf:
-            return self._execute_leaf(command, normalized_args, current_instance)
+        levels = self._prepare_chain(command, args, depth)
+        current_instance = parent_instance
+        for current_command, current_args in levels:
+            current_instance = self._initialize_chain_level(
+                current_command, current_args, current_instance
+            )
 
-        subcommand, subcommand_args = self._resolve_chain_subcommand(
-            command,
-            normalized_args,
-            depth,
-        )
+        leaf, leaf_args = levels[-1]
+        return self._execute_leaf(leaf, leaf_args, current_instance)
 
-        return self._run_with_chain(subcommand, subcommand_args, depth + 1, current_instance)
+    def _prepare_chain(
+        self,
+        command: Command,
+        args: dict[str, Any],
+        depth: int,
+    ) -> list[tuple[Command, dict[str, Any]]]:
+        levels: list[tuple[Command, dict[str, Any]]] = []
+        while True:
+            if command.is_leaf:
+                args = self._apply_pipe(command, args)
+                args = self._reconstruct_expanded_models(
+                    args, [*self._initializer_for(command), *self._arguments_for(command)]
+                )
+                levels.append((command, args))
+                return levels
 
-    def _prepare_chain_level(
+            if command.command_type == "class" and command.initializer:
+                args = self._apply_pipe(command, args, subcommand="__init__")
+            args = self._reconstruct_expanded_models(args, self._initializer_for(command))
+            levels.append((command, args))
+            command, args = self._resolve_chain_subcommand(command, args, depth)
+            depth += 1
+
+    def _initialize_chain_level(
         self,
         command: Command,
         args: dict[str, Any],
         parent_instance: Any | None,
-    ) -> tuple[Any | None, dict[str, Any]]:
-        current_instance = parent_instance
-        normalized_args = args
-
-        initializer = self._initializer_for(command)
-        if initializer:
-            normalized_args = self._reconstruct_expanded_models(normalized_args, initializer)
-
+    ) -> Any | None:
         if command.is_instance and command.stored_instance is not None:
-            return command.stored_instance, normalized_args
+            return command.stored_instance
 
-        instantiated = self._instantiate_chain_class(command, normalized_args)
+        instantiated = self._instantiate_chain_class(command, args)
         if instantiated is None:
-            return current_instance, normalized_args
+            return parent_instance
 
         self._attach_parent_instance(instantiated, parent_instance)
-
-        return instantiated, normalized_args
+        return instantiated
 
     def _instantiate_chain_class(
         self,
@@ -406,10 +415,6 @@ class SchemaRunner:
 
         cls.is_initialized = False
         cls.instance = None
-
-        if command.initializer:
-            args = self._apply_pipe(command, args, subcommand="__init__")
-            args = self._reconstruct_expanded_models(args, command.initializer)
 
         init_args = self._extract_init_args(args, command.initializer)
         if init_args:
@@ -520,10 +525,6 @@ class SchemaRunner:
 
         if isinstance(obj, Method):
             if instance is not None:
-                args = self._apply_pipe(command, args)
-                args = self._reconstruct_expanded_models(
-                    args, [*self._initializer_for(command), *self._arguments_for(command)]
-                )
                 method_args, method_kwargs = self._build_call_args(obj, args)
                 logger.info(
                     "Calling method '%s' on instance with %d positional arg(s) and %d keyword arg(s)",
@@ -538,16 +539,9 @@ class SchemaRunner:
 
                 return self._resolve_result(result)
 
-            args = self._apply_pipe(command, args)
-            args = self._reconstruct_expanded_models(
-                args, [*self._initializer_for(command), *self._arguments_for(command)]
-            )
-
             return self.run_method(obj, args)
 
         if isinstance(obj, Function):
-            args = self._apply_pipe(command, args)
-            args = self._reconstruct_expanded_models(args, self._arguments_for(command))
             return self.run_function(obj, args)
 
         raise InvalidCommandError(command.canonical_name)
