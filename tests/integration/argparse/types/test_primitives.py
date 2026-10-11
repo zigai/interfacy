@@ -7,9 +7,7 @@ import pytest
 from interfacy import Interfacy
 from interfacy.exceptions import UsageError
 from tests.fixtures.commands import (
-    fn_float_required,
     fn_str_optional,
-    fn_str_required,
 )
 
 
@@ -32,6 +30,10 @@ class TestPrimitives:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_str_required(self, parser: Interfacy):
         """Verify that a required string argument is correctly parsed from positional or flag input."""
+
+        def fn_str_required(name: str) -> str:
+            return name
+
         parser.add_command(fn_str_required)
 
         match parser.metadata["flag_style"]:
@@ -54,6 +56,10 @@ class TestPrimitives:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_float_required(self, parser: Interfacy):
         """Verify that a required float argument is parsed and typed correctly."""
+
+        def fn_float_required(value: float) -> float:
+            return value
+
         parser.add_command(fn_float_required)
 
         match parser.metadata["flag_style"]:

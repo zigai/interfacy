@@ -147,20 +147,6 @@ class Container:
         return f"Stopped {name}"
 
 
-class Database:
-    """Database connection for testing instances."""
-
-    def __init__(self, host: str, port: int) -> None:
-        self.host = host
-        self.port = port
-
-    def query(self, sql: str) -> str:
-        return f"Query on {self.host}:{self.port}: {sql}"
-
-    def ping(self) -> str:
-        return f"Pong from {self.host}:{self.port}"
-
-
 class TextCollector:
     """Class fixture for testing positional + varargs method execution."""
 

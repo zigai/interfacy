@@ -131,7 +131,6 @@ def test_argparse_help_option_sort_per_command_override() -> None:
 
 def test_click_help_option_sort_per_command_override() -> None:
     pytest.importorskip("click")
-    from click import Context
 
     parser = Interfacy(
         backend="click",
@@ -139,8 +138,7 @@ def test_click_help_option_sort_per_command_override() -> None:
         help_option_sort=["alphabetical"],
     )
     parser.add_command(smart_options, help_option_sort=["bool_last", "alphabetical"])
-    command = parser.build_parser()
-    help_text = command.get_help(Context(command))
+    help_text = render_help(parser)
     options_section = _help_section(help_text, "options")
 
     assert (

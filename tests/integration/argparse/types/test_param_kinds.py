@@ -1,13 +1,16 @@
 import pytest
 
 from interfacy import Interfacy
-from tests.fixtures.commands import fn_all_zones, fn_keyword_only, fn_positional_only, fn_varargs
 
 
 class TestParamKinds:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_positional_only(self, parser: Interfacy):
         """Verify positional-only arguments (slash syntax) in supported strategies."""
+
+        def fn_positional_only(a: int, b: int, /) -> int:
+            return a + b
+
         parser.add_command(fn_positional_only)  # func(a, b, /)
 
         match parser.metadata["flag_style"]:
@@ -23,6 +26,10 @@ class TestParamKinds:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_keyword_only(self, parser: Interfacy):
         """Verify keyword-only arguments (star syntax) in supported strategies."""
+
+        def fn_keyword_only(*, a: int, b: int) -> int:
+            return a + b
+
         parser.add_command(fn_keyword_only)  # func(*, a, b)
 
         match parser.metadata["flag_style"]:
@@ -38,6 +45,10 @@ class TestParamKinds:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_varargs(self, parser: Interfacy):
         """Verify *args support (variable positional arguments)."""
+
+        def fn_varargs(*args: int) -> int:
+            return sum(args)
+
         parser.add_command(fn_varargs)  # func(*args)
 
         match parser.metadata["flag_style"]:
@@ -53,6 +64,10 @@ class TestParamKinds:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_all_zones(self, parser: Interfacy):
         """Verify mixed parameter kinds (pos-only, standard, kw-only) in one signature."""
+
+        def fn_all_zones(a: int, /, b: int, *, c: int) -> int:
+            return a + b + c
+
         parser.add_command(fn_all_zones)
 
         match parser.metadata["flag_style"]:

@@ -3,11 +3,17 @@ import pytest
 from interfacy import Interfacy
 from tests.fixtures.commands import (
     fn_enum_arg,
-    fn_enum_optional,
     fn_literal_arg,
-    fn_literal_optional,
 )
-from tests.fixtures.models import Color
+from tests.fixtures.models import Color, ColorLiteral
+
+
+def fn_enum_optional(color: Color | None = None):
+    return color
+
+
+def fn_literal_optional(color: ColorLiteral | None = None):
+    return color
 
 
 class TestOptionalChoices:

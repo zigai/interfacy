@@ -9,8 +9,12 @@ from tests.fixtures.commands import (
     fn_list_int,
     fn_list_int_optional,
     fn_list_str,
-    fn_list_str_optional,
 )
+
+
+def fn_list_str_optional(items: list[str] | None = None):
+    """Optional union list of strings (defaults to None)."""
+    return items
 
 
 def fn_tuple_strs(items: tuple[str, str]):

@@ -1,13 +1,17 @@
 import pytest
 
 from interfacy import Interfacy
-from tests.fixtures.commands import fn_mixed_optional, fn_optional_int, fn_optional_str
+from tests.fixtures.commands import fn_optional_int
 
 
 class TestOptionals:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_optional_str(self, parser: Interfacy):
         """Verify that Optional[str] handles default None and provided string flag."""
+
+        def fn_optional_str(value: str | None = None) -> str | None:
+            return value
+
         parser.add_command(fn_optional_str)
         assert parser.invoke(args=[]) is None
         assert parser.invoke(args=["--value", "foo"]) == "foo"
@@ -22,6 +26,18 @@ class TestOptionals:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_mixed_optional(self, parser: Interfacy):
         """Verify that mixed required and optional arguments behave correctly across strategies."""
+
+        def fn_mixed_optional(
+            required: str,
+            optional_int: int | None = None,
+            optional_str: str = "default",
+        ) -> dict[str, object]:
+            return {
+                "required": required,
+                "optional_int": optional_int,
+                "optional_str": optional_str,
+            }
+
         parser.add_command(fn_mixed_optional)
 
         match parser.metadata["flag_style"]:

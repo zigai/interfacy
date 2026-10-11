@@ -120,15 +120,13 @@ def test_help_subcommand_sort_per_command_override(backend: Literal["argparse", 
 
 def test_click_help_subcommand_sort_nested_name_length_asc() -> None:
     pytest.importorskip("click")
-    from click import Context
 
     parser = Interfacy(
         backend="click",
         help_subcommand_sort=["name_length_asc"],
     )
     parser.add_command(TextTools, name="tools")
-    root = parser.build_parser()
-    help_text = root.get_help(Context(root))
+    help_text = render_help(parser)
 
     assert _command_rows(help_text) == ["join", "repeat", "prefix-text"]
     usage = help_text.split("\n\n", maxsplit=1)[0]

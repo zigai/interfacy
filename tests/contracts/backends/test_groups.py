@@ -4,7 +4,7 @@ import pytest
 
 from interfacy import CommandGroup, ExitCode, Interfacy
 from interfacy.exceptions import ConfigurationError, DuplicateCommandError, UsageError
-from tests.fixtures.classes import Container, Database, DerivedOperation, Math, TextTools
+from tests.fixtures.classes import Container, DerivedOperation, Math, TextTools
 from tests.fixtures.commands import attach, detach, greet, pow
 
 
@@ -311,6 +311,20 @@ class TestGroupWithClasses:
         parser.add_command(workspace)
         result = parser.invoke(args=["workspace", "ops", "describe"])
         assert result == "base"
+
+
+class Database:
+    """Database connection for testing instances."""
+
+    def __init__(self, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+
+    def query(self, sql: str) -> str:
+        return f"Query on {self.host}:{self.port}: {sql}"
+
+    def ping(self) -> str:
+        return f"Pong from {self.host}:{self.port}"
 
 
 class TestGroupWithInstances:

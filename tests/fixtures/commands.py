@@ -32,14 +32,6 @@ def fn_literal_arg(color: ColorLiteral):
     return color
 
 
-def fn_enum_optional(color: Color | None = None):
-    return color
-
-
-def fn_literal_optional(color: ColorLiteral | None = None):
-    return color
-
-
 def fn_bool_required(value: bool):
     return value
 
@@ -65,62 +57,21 @@ def fn_list_str(items: list[str]):
     return items
 
 
-def fn_list_str_optional(items: list[str] | None = None):
-    """Optional union list of strings (defaults to None)."""
-    return items
-
-
 def fn_list_int_optional(values: list[int] | None = None):
     """Optional union list of ints (defaults to None)."""
     return values
-
-
-def fn_str_required(name: str) -> str:
-    return name
 
 
 def fn_str_optional(name: str = "default") -> str:
     return name
 
 
-def fn_float_required(value: float) -> float:
-    return value
-
-
 def fn_path_required(path: File) -> File:
     return path
 
 
-def fn_optional_str(value: str | None = None) -> str | None:
-    return value
-
-
 def fn_optional_int(value: int | None = None) -> int | None:
     return value
-
-
-def fn_mixed_optional(
-    required: str,
-    optional_int: int | None = None,
-    optional_str: str = "default",
-) -> dict[str, object]:
-    return {
-        "required": required,
-        "optional_int": optional_int,
-        "optional_str": optional_str,
-    }
-
-
-def fn_positional_only(a: int, b: int, /) -> int:
-    return a + b
-
-
-def fn_keyword_only(*, a: int, b: int) -> int:
-    return a + b
-
-
-def fn_varargs(*args: int) -> int:
-    return sum(args)
 
 
 def fn_positional_varargs(head: str, *tail: str) -> tuple[str, tuple[str, ...]]:
@@ -148,10 +99,6 @@ def fn_positional_varargs_varkw(
 
 def fn_kwargs(**kwargs: str) -> dict[str, str]:
     return kwargs
-
-
-def fn_all_zones(a: int, /, b: int, *, c: int) -> int:
-    return a + b + c
 
 
 def fn_legacy_list(x: List[int]) -> List[int]:
