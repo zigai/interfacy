@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import MISSING, fields, is_dataclass
+from dataclasses import MISSING, InitVar, fields, is_dataclass
+from inspect import signature
 from typing import Any
 
 from interfacy.models.base import (
@@ -36,7 +37,10 @@ class DataclassAdapter:
         hints = resolved_type_hints(model_type)
         result: list[ModelField] = []
 
-        for field_info in fields(model_type):
+        for name in signature(model_type).parameters:
+            field_info = model_type.__dataclass_fields__.get(name)
+            if field_info is None:
+                continue
             if not field_info.init:
                 continue
 
@@ -56,10 +60,14 @@ class DataclassAdapter:
             if description is None:
                 description = arg_docs.get(field_info.name)
 
+            annotation = hints.get(field_info.name, field_info.type)
+            if isinstance(annotation, InitVar):
+                annotation = annotation.type
+
             result.append(
                 ModelField(
                     name=field_info.name,
-                    annotation=hints.get(field_info.name, field_info.type),
+                    annotation=annotation,
                     required=required,
                     default=default,
                     description=description,
@@ -82,12 +90,10 @@ class DataclassAdapter:
             values (dict[str, Any]): Field values keyed by field name.
             coerce (ValueCoercer): Coerces one field value against its annotation.
         """
-        hints = resolved_type_hints(model_type)
         kwargs: dict[str, Any] = {}
-        for field_info in fields(model_type):
-            if field_info.init and field_info.name in values:
-                annotation = hints.get(field_info.name, field_info.type)
-                kwargs[field_info.name] = coerce(annotation, values[field_info.name])
+        for field_info in self.fields(model_type):
+            if field_info.name in values:
+                kwargs[field_info.name] = coerce(field_info.annotation, values[field_info.name])
 
         return model_type(**kwargs)
 
