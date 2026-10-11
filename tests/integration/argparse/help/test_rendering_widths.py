@@ -421,8 +421,8 @@ def test_aligned_layout_wraps_default_rows_after_metadata(monkeypatch) -> None:
         """List cache entries.
 
         Args:
-            cache_dir: Directory containing the whispers cache. Defaults to the value of the
-                WHISPERS_CACHE_DIR environment variable if set.
+            cache_dir: Directory containing the demo app cache. Defaults to the value of the
+                DEMO_APP_CACHE_DIR environment variable if set.
         """
 
     parser = Interfacy(backend="argparse", help_layout=Aligned(), print_result=False)
@@ -431,7 +431,7 @@ def test_aligned_layout_wraps_default_rows_after_metadata(monkeypatch) -> None:
     help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
 
     assert all(len(line) <= 100 for line in help_text.splitlines())
-    assert "WHISPERS_CACHE_DIR" in help_text
+    assert "DEMO_APP_CACHE_DIR" in help_text
 
 
 def test_clap_layout_defaults_align_when_option_label_exceeds_base_width() -> None:

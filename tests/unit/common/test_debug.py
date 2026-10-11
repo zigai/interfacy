@@ -139,7 +139,7 @@ def test_clickable_formatter_populates_record_fields() -> None:
     record = logging.LogRecord(
         name="interfacy.schema.builder",
         level=logging.ERROR,
-        pathname=__file__,
+        pathname="/workspace/sample/task.py",
         lineno=123,
         msg="boom",
         args=(),
@@ -153,7 +153,7 @@ def test_clickable_formatter_populates_record_fields() -> None:
 
     assert "ERROR" in formatted
     assert "|schema|" in formatted
-    assert "test_debug.py:123" in formatted
+    assert "task.py:123" in formatted
     assert "boom" in formatted
 
 

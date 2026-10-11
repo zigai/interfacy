@@ -46,7 +46,7 @@ def test_interfacy_add_type_parser_registers_custom_parser() -> None:
     parser = Interfacy()
     parser.add_type_parser(Repository, parse_repository)
 
-    assert parser.invoke(command, args=["zigai/interfacy"]) == "zigai:interfacy"
+    assert parser.invoke(command, args=["sample/widget"]) == "sample:widget"
 
 
 class ManagedInput:
