@@ -2,6 +2,7 @@ import pytest
 
 from interfacy import Interfacy
 from interfacy.exceptions import UsageError
+from interfacy.naming import DefaultFlagStrategy
 from tests.fixtures.classes import Math
 from tests.fixtures.commands import (
     fn_literal_arg,
@@ -41,6 +42,28 @@ def test_late_initializer_incomplete_tuple_does_not_execute(backend: str) -> Non
 
     with pytest.raises(UsageError):
         parser.invoke(Tool, args=["show", "--pairs", "0"])
+
+    assert executed == []
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+@pytest.mark.parametrize("values", [[], ["--bogus"], ["-x"]])
+def test_late_initializer_list_rejects_missing_values_and_unknown_options(
+    backend: str, values: list[str]
+) -> None:
+    executed: list[str] = []
+
+    class Tool:
+        def __init__(self, *, tags: list[str]) -> None:
+            executed.append("constructed")
+
+        def show(self) -> None:
+            executed.append("called")
+
+    parser = Interfacy(backend=backend, flag_strategy=DefaultFlagStrategy(style="keyword_only"))
+
+    with pytest.raises(UsageError):
+        parser.invoke(Tool, args=["show", "--tags", *values])
 
     assert executed == []
 

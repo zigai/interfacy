@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -221,7 +222,11 @@ class AncestorOptions:
         index = start + 1
         while index < len(args):
             value = args[index]
-            if value == "--" or self._find_nearest_option_owner(value, command_chain):
+            if self._find_nearest_option_owner(value, command_chain) or (
+                value.startswith("-")
+                and len(value) > 1
+                and re.fullmatch(r"-\d+|-\d*\.\d+", value) is None
+            ):
                 break
 
             if (
@@ -256,6 +261,11 @@ class AncestorOptions:
     def _parse_option_values(
         argument: Argument, raw_values: Sequence[str], *, type_parser: StrToTypeParser
     ) -> Any:
+        minimum_values = argument.cardinality.minimum_values
+        if len(raw_values) < minimum_values:
+            error = ValueError(f"expected at least {minimum_values} value(s)")
+            raise InterspersedOptionValueError(argument, " ".join(raw_values), error)
+
         plan = argument.value_plan
         if plan is not None and plan_requires_post_conversion(plan, required=argument.required):
             try:
