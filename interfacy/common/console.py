@@ -30,11 +30,14 @@ def log_error(tag: str, message: str) -> None:
 def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None:
     del tag
 
-    if full_traceback:
-        error("".join(traceback.format_exception(exc)).rstrip())
+    if full_traceback and exc.__traceback__ is not None:
+        frames = [
+            f'  File "{frame.f_code.co_filename}", line {line_number}, in {frame.f_code.co_name}'
+            for frame, line_number in traceback.walk_tb(exc.__traceback__)
+        ]
+        error("\n".join(["Traceback (most recent call last):", *frames]))
 
-    exception_str = f"{type(exc).__name__}: {exc}"
-    message = colored(exception_str, color="red")
+    message = colored(type(exc).__name__, color="red")
     error(message)
 
 

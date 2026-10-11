@@ -168,6 +168,7 @@ def test_log_exception_formats_the_supplied_exception_traceback(
     log_exception("test", error, full_traceback=True)
 
     stderr = capsys.readouterr().err
-    assert "test_log_exception_formats_the_supplied_exception_traceback" in stderr
-    assert "ValueError: boom" in stderr
+    assert Path(__file__).name in stderr
+    assert "ValueError" in stderr
+    assert "boom" not in stderr
     assert "NoneType: None" not in stderr

@@ -72,7 +72,7 @@ class InvocationError(Exception):
     def __init__(self, code: ExitCode, error: Exception) -> None:
         self.code = code
         self.error = error
-        super().__init__(str(error))
+        super().__init__(type(error).__name__)
 
 
 def _execution_error_code(error: Exception) -> ExitCode:
@@ -122,13 +122,14 @@ class InvocationRuntime:
 
     def run(self, parse: ParseStep, execute: ExecuteStep) -> NoReturn:
         set_process_title_from_argv()
+        exit_code: int = ExitCode.SUCCESS
         try:
             result = self._invoke(parse, execute)
         except InterfacyExit as e:
-            raise SystemExit(e.code) from None
+            exit_code = e.code
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
             self._policy.handle_interrupt(e)
-            raise SystemExit(ExitCode.INTERRUPTED) from None
+            exit_code = ExitCode.INTERRUPTED
         except SystemExit:
             raise
         except InvocationError as e:
@@ -141,11 +142,11 @@ class InvocationRuntime:
             else:
                 self._policy.log_exception(failure)
 
-            raise SystemExit(e.code) from failure
+            exit_code = e.code
+        else:
+            self._policy.display(result)
 
-        self._policy.display(result)
-
-        raise SystemExit(ExitCode.SUCCESS)
+        raise SystemExit(exit_code)
 
     def _invoke(self, parse: ParseStep, execute: ExecuteStep) -> Any:
         try:

@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from pydantic import BaseModel, Field
 
 from interfacy import ConfigurationError, ExitCode, Interfacy, InterfacyError, UsageError
 from interfacy.naming import DefaultFlagStrategy
@@ -185,3 +186,54 @@ def test_invoke_raises_usage_error_on_invalid_enum(parser: Interfacy) -> None:
 
     with pytest.raises(UsageError):
         parser.invoke(set_color, args=["yellow"])
+
+
+@pytest.mark.parametrize("full_traceback", [False, True])
+def test_run_does_not_emit_rejected_model_input(
+    parser: Interfacy,
+    full_traceback: bool,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class Credentials(BaseModel):
+        token: str = Field(min_length=32)
+
+    def command(credentials: Credentials) -> str:
+        return credentials.token
+
+    parser.apply_setup(full_error_traceback=full_traceback)
+    rejected = "synthetic-credential"
+
+    with pytest.raises(SystemExit) as e:
+        parser.run(command, args=["--credentials.token", rejected])
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "ValidationError" in captured.err
+    assert rejected not in captured.err
+    assert e.value.__cause__ is None
+    assert e.value.__context__ is None
+
+
+@pytest.mark.parametrize("full_traceback", [False, True])
+def test_run_does_not_emit_command_exception_payloads_or_chains(
+    parser: Interfacy,
+    full_traceback: bool,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload = "synthetic-response-body"
+
+    def command() -> None:
+        cause = ValueError(payload)
+        raise RuntimeError(payload) from cause
+
+    parser.apply_setup(full_error_traceback=full_traceback)
+
+    with pytest.raises(SystemExit) as e:
+        parser.run(command, args=[])
+
+    captured = capsys.readouterr()
+    assert "RuntimeError" in captured.err
+    assert payload not in captured.err
+    assert e.value.code == ExitCode.COMMAND_FAILED
+    assert e.value.__cause__ is None
+    assert e.value.__context__ is None

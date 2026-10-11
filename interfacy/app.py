@@ -54,7 +54,7 @@ class Interfacy:
         help_colors: Color theme applied by the help layout.
         print_result: Print returned command values after execution.
         tab_completion: Install shell completion support when the backend supports it.
-        full_error_traceback: Include full tracebacks for runtime errors.
+        full_error_traceback: Include runtime traceback locations in diagnostics.
         allow_args_from_file: Enable ``@file`` argument expansion.
         sys_exit_enabled: Preserve the pre-0.8 embedded ``run()`` behavior when false.
         flag_strategy: Strategy for deriving option flags from Python names.

@@ -55,4 +55,4 @@ Use `await parser.invoke_async(...)` when a command may return an awaitable whil
 loop is already running. `run()` is the CLI boundary: it renders configured output and
 errors, maps failures to `ExitCode`, and always raises `SystemExit`.
 
-For full tracebacks during CLI development, set `full_error_traceback=True`.
+For traceback locations during CLI development, set `full_error_traceback=True`.

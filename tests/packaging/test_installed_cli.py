@@ -274,7 +274,7 @@ def test_installed_root_flags_succeed(
             [],
             1,
             "",
-            "ValueError: deliberate failure",
+            "ValueError",
         ),
         ("explicit-exit", "def command() -> None:\n    raise SystemExit(7)\n", [], 7, "", None),
     ],
@@ -289,7 +289,6 @@ def test_installed_command_contract(
     expected_stdout: str,
     error_text: str | None,
 ) -> None:
-    del case
     target = workspace / "target.py"
     target.write_text(body, encoding="utf-8")
 
@@ -302,6 +301,8 @@ def test_installed_command_contract(
 
         assert process.returncode == expected_code, (process.stdout, process.stderr)
         assert process.stdout == expected_stdout
+        if case == "failure":
+            assert "deliberate failure" not in process.stderr
 
         if error_text is None:
             assert process.stderr == ""
