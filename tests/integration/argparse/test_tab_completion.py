@@ -20,13 +20,13 @@ def _iter_actions(parser: Any) -> list[Any]:
     return actions
 
 
-def _action_by_dest(parser: Any, suffix: str) -> Any:
+def _action_by_dest(parser: Any, *path: str) -> Any:
     for action in _iter_actions(parser):
-        dest = getattr(action, "dest", "")
-        if dest == suffix or dest.endswith(f"__{suffix}"):
+        destination = parser.destination_paths.get(action.dest, ())
+        if destination[-len(path) :] == path:
             return action
 
-    raise AssertionError(f"No argparse action found for destination suffix: {suffix}")
+    raise AssertionError(f"No argparse action found for destination path: {path}")
 
 
 def deploy(
@@ -70,7 +70,7 @@ def test_completion_metadata_includes_commands_aliases_and_literal_choices() -> 
     root_command = _action_by_dest(built_parser, "command")
     assert set(root_command.choices) == {"probe"}
 
-    probe_command = _action_by_dest(built_parser, "probe__command")
+    probe_command = _action_by_dest(built_parser, "probe", "command")
     assert set(probe_command.choices) == {"deploy", "dep", "paint"}
 
     environment = _action_by_dest(built_parser, "environment")

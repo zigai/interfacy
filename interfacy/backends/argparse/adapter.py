@@ -104,7 +104,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         finally:
             parser._interfacy_raise_parse_errors = False
 
-        supplied = supplied_to_dict(parsed, parser.supplied_dests, parser.nest_separator)
+        supplied = supplied_to_dict(parsed, parser.supplied_dests, parser.destination_paths)
 
         return namespace_to_dict(parsed), supplied
 

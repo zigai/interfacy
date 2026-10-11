@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from argparse import Namespace
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from gettext import gettext
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -51,7 +51,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         option_strings (list[str]): Option strings that trigger the action.
         prog (str): Program name for help output.
         base_nest_path (list[str]): Base nesting path components.
-        nest_separator (str): Separator for nested destination keys.
+        nest_separator (str): Prefix for encoded nested destination keys.
         parser_class (type[ArgumentParser] | None): Parser class for children.
         dest (str): Destination key for the subparser.
         required (bool): Whether a subcommand is required.
@@ -60,6 +60,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         help_layout (Any | None): Layout configuration passed to children.
         sys_exit_enabled (bool): Exit policy passed to children.
         supplied_dests (set[str] | None): Supplied-destination record shared with children.
+        destination_paths (dict[str, tuple[str, ...]] | None): Shared destination paths.
     """
 
     def __init__(
@@ -78,6 +79,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         help_flags: Sequence[str] = ("--help",),
         sys_exit_enabled: bool = True,
         supplied_dests: set[str] | None = None,
+        destination_paths: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         super().__init__(
             option_strings,
@@ -96,6 +98,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         self._child_help_flags = tuple(help_flags)
         self._child_sys_exit_enabled = sys_exit_enabled
         self._child_supplied_dests = supplied_dests
+        self._child_destination_paths = destination_paths
 
     def add_parser(  # type: ignore[override]
         self,
@@ -147,6 +150,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         kwargs.setdefault("help_renderer", self._child_help_renderer)
         kwargs.setdefault("sys_exit_enabled", self._child_sys_exit_enabled)
         kwargs.setdefault("supplied_dests", self._child_supplied_dests)
+        kwargs.setdefault("destination_paths", self._child_destination_paths)
         nested_components = [*self.base_nest_path_components]
         if nested_components:
             nested_components.extend([SUBCOMMANDS_KEY, nest_dir or name])
@@ -194,7 +198,7 @@ class ArgumentParser(argparse.ArgumentParser):
         add_help (bool): Whether to add a help option.
         allow_abbrev (bool): Whether to allow abbreviations of long options.
         nest_dir (str | None): Base nesting directory label.
-        nest_separator (str): Separator for nested destinations.
+        nest_separator (str): Prefix for encoded nested destinations.
         nest_path (list[str] | None): Explicit nesting path components.
         exit_on_error (bool): Whether to exit on parse errors.
         help_layout (Any | None): Layout configuration for help rendering.
@@ -204,6 +208,7 @@ class ArgumentParser(argparse.ArgumentParser):
             argparse. When False, raise InterfacyExit or UsageError instead.
         supplied_dests (set[str] | None): Record of destinations given on the command line,
             shared with nested subparsers.
+        destination_paths (dict[str, tuple[str, ...]] | None): Shared destination paths.
     """
 
     def __init__(
@@ -231,6 +236,7 @@ class ArgumentParser(argparse.ArgumentParser):
         help_renderer: HelpRenderer | None = None,
         sys_exit_enabled: bool = True,
         supplied_dests: set[str] | None = None,
+        destination_paths: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         if parents is None:
             parents = []
@@ -239,6 +245,7 @@ class ArgumentParser(argparse.ArgumentParser):
         self.nest_dir = self.nest_path_components[-1] if self.nest_path_components else None
         self.nest_separator = nest_separator
         self._original_destinations: dict[str, str] = {}  # nested_dest: original_dest
+        self.destination_paths = {} if destination_paths is None else destination_paths
 
         base_init_kwargs: dict[str, Any] = {
             "prog": prog,
@@ -375,6 +382,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 "help_renderer": self.help_renderer,
                 "sys_exit_enabled": self.sys_exit_enabled,
                 "supplied_dests": self.supplied_dests,
+                "destination_paths": self.destination_paths,
             }
         )
 
@@ -493,7 +501,7 @@ class ArgumentParser(argparse.ArgumentParser):
         return parser._build_implicit_schema_command()
 
     def _original_dest_name(self, dest: str) -> str:
-        return original_destination(dest, self._original_destinations, self.nest_separator)
+        return original_destination(dest, self._original_destinations)
 
     def _add_container_actions(self, container: argparse._ActionsContainer) -> None:
         self._remap_container_destinations(container)
@@ -516,26 +524,34 @@ class ArgumentParser(argparse.ArgumentParser):
         return super()._get_optional_kwargs(*args, **kwargs)
 
     def _deflatten_namespace(self, namespace: Namespace) -> Namespace:
-        return deflatten_namespace(namespace, self.nest_separator)
+        return deflatten_namespace(namespace, self.destination_paths)
 
     def _remap_container_destinations(self, container: argparse._ActionsContainer) -> None:
         defaults = container_defaults(container)
         logger.info("Remapping container destination keys: %s", sorted(defaults))
+        originals = (
+            container._original_destinations if isinstance(container, ArgumentParser) else {}
+        )
         remapped_defaults = {
-            self._get_nested_destination(dest): value for dest, value in defaults.items()
+            self._get_nested_destination(originals.get(dest, dest), store=True): value
+            for dest, value in defaults.items()
         }
         container._defaults = remapped_defaults
         logger.info("Remapped container destination keys: %s", sorted(remapped_defaults))
 
         for action in container_actions(container):
-            self._remap_action_destinations(action)
+            self._remap_action_destinations(action, originals)
 
-    def _remap_action_destinations(self, action: argparse.Action) -> None:
+    def _remap_action_destinations(
+        self, action: argparse.Action, originals: Mapping[str, str]
+    ) -> None:
         logger.info("Remapping action dest: %s", action.dest)
 
         if action.dest is not None:
             old_dest = action.dest
-            action.dest = self._get_nested_destination(action.dest, store=True)
+            action.dest = self._get_nested_destination(
+                originals.get(action.dest, action.dest), store=True
+            )
             logger.info("Remapped action dest from %s to %s", old_dest, action.dest)
 
         if isinstance(action, NestedSubParsersAction) and action.choices is not None:
@@ -548,8 +564,9 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def _get_nested_destination(self, dest: str, *, store: bool = False) -> str:
         nested = nested_destination(dest, self.nest_path_components, self.nest_separator)
-        if store and self.nest_path_components:
+        if store:
             self._original_destinations[nested] = dest
+            self.destination_paths[nested] = (*self.nest_path_components, dest)
 
         return nested
 

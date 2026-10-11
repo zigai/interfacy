@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from argparse import Namespace
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -32,7 +33,7 @@ def namespace_to_dict(namespace: Namespace) -> dict[str, Any]:
 def supplied_to_dict(
     namespace: Namespace,
     supplied_dests: set[str],
-    separator: str,
+    destination_paths: Mapping[str, tuple[str, ...]],
 ) -> dict[str, Any]:
     """
     Convert a deflattened namespace into a nested dictionary of supplied values only.
@@ -43,9 +44,9 @@ def supplied_to_dict(
     Args:
         namespace (Namespace): Deflattened namespace to convert.
         supplied_dests (set[str]): Flat destinations given on the command line.
-        separator (str): Separator joining nested destination components.
+        destination_paths (Mapping[str, tuple[str, ...]]): Registered destination paths.
     """
-    paths = {tuple(dest.split(separator)) for dest in supplied_dests}
+    paths = {destination_paths[dest] for dest in supplied_dests}
 
     def convert(current: Namespace, prefix: tuple[str, ...]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -61,13 +62,15 @@ def supplied_to_dict(
     return convert(namespace, ())
 
 
-def deflatten_namespace(namespace: Namespace, separator: str) -> Namespace:
+def deflatten_namespace(
+    namespace: Namespace, destination_paths: Mapping[str, tuple[str, ...]]
+) -> Namespace:
     """
-    Expand separator-joined destination keys into nested namespaces.
+    Expand registered destination paths into nested namespaces.
 
     Args:
         namespace (Namespace): Flat namespace produced by argparse.
-        separator (str): Separator joining nested destination components.
+        destination_paths (Mapping[str, tuple[str, ...]]): Registered destination paths.
 
     Raises:
         ValueError: If two keys resolve to conflicting values at the same path.
@@ -75,7 +78,7 @@ def deflatten_namespace(namespace: Namespace, separator: str) -> Namespace:
     root = Namespace()
 
     for key, value in vars(namespace).items():
-        components = key.split(separator)
+        components = destination_paths.get(key, (key,))
         current = root
 
         # Navigate through component hierarchy
@@ -129,38 +132,28 @@ def merge_namespaces(destination: Namespace, source: Namespace) -> Namespace:
 
 def nested_destination(dest: str, nest_path: Sequence[str], separator: str) -> str:
     """
-    Prefix a destination with the parser's nesting path.
+    Encode a destination with the parser's nesting path.
 
     Args:
         dest (str): Original destination name.
         nest_path (Sequence[str]): Nesting path components of the owning parser.
-        separator (str): Separator joining nested destination components.
+        separator (str): Prefix for encoded destination keys.
     """
-    if not nest_path:
-        return dest
-
-    nested = f"{separator.join(nest_path)}{separator}{dest}"
+    nested = separator + json.dumps([*nest_path, dest])
     logger.info("Generated nested dest: %s -> %s", nested, dest)
 
     return nested
 
 
-def original_destination(dest: str, originals: Mapping[str, str], separator: str) -> str:
+def original_destination(dest: str, originals: Mapping[str, str]) -> str:
     """
     Resolve a nested destination back to its original name.
 
     Args:
         dest (str): Possibly nested destination name.
         originals (Mapping[str, str]): Known nested-to-original destination mapping.
-        separator (str): Separator joining nested destination components.
     """
-    original = originals.get(dest)
-    if original is not None:
-        return original
-    if separator in dest:
-        return dest.rsplit(separator, maxsplit=1)[-1]
-
-    return dest
+    return originals.get(dest, dest)
 
 
 def extract_destination(
