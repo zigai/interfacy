@@ -274,6 +274,10 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         if argument.kind is ArgumentKind.OPTION:
             kwargs["dest"] = argument.name
             kwargs["required"] = argument.required and not relaxed
+        else:
+            flags = (argument.name,)
+            kwargs.setdefault("metavar", argument.flags[0].replace("_", "-").upper())
+
         default = argument.argument_default
         if not default.applies_during_parse:
             kwargs["default"] = _SUPPRESSED_DEFAULT

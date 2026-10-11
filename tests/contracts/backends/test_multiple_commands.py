@@ -6,6 +6,21 @@ from tests.fixtures.classes import ConcreteProcessor, DerivedOperation, Empty, M
 from tests.fixtures.commands import fn_optional_int, fn_str_optional, greet, pow
 
 
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_colliding_argument_spellings_stay_scoped_to_the_selected_command(backend: str) -> None:
+    def first(output_path: str = "safe") -> str:
+        return output_path
+
+    def second(output__path: str = "safe") -> str:
+        return output__path
+
+    parser = Interfacy(backend=backend)
+    parser.add_command(first)
+    parser.add_command(second)
+
+    assert parser.invoke(args=["first", "--output-path", "chosen"]) == "chosen"
+
+
 class NameOps:
     def say_hello(self, name: str) -> str:
         return f"Hi {name}"

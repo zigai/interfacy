@@ -8,7 +8,6 @@ from objinspect.method import split_args_kwargs
 
 from interfacy.common.debug import get_logger
 from interfacy.exceptions import ConfigurationError, InvalidCommandError, UsageError
-from interfacy.naming import reverse_translations
 from interfacy.runtime.context import ExecutionContext
 from interfacy.runtime.pipes import apply_pipe_values, validate_required_pipe_targets
 from interfacy.runtime.reconstruction import (
@@ -106,8 +105,7 @@ class SchemaRunner:
             func (Function | Method): Callable to execute.
             args (dict): Parsed argument mapping.
         """
-        cli_args = reverse_translations(args, self.context.argument_names)
-        positional_args, keyword_args = self._build_call_args(func, cli_args)
+        positional_args, keyword_args = self._build_call_args(func, args)
 
         logger.info(
             "Calling function '%s' with %d positional arg(s) and %d keyword arg(s)",
@@ -130,16 +128,15 @@ class SchemaRunner:
             method (Method): Method to execute.
             args (dict): Parsed argument mapping.
         """
-        cli_args = reverse_translations(args, self.context.argument_names)
         instance = method.class_instance
         if instance is not None:
-            method_args, method_kwargs = self._build_call_args(method, cli_args)
+            method_args, method_kwargs = self._build_call_args(method, args)
             result = method.call(*method_args, **method_kwargs)
             return self._resolve_result(result)
 
         instance = Class(method.cls)
         if instance.init_method:
-            args_init, args_method = split_init_args(cli_args, instance, method)
+            args_init, args_method = split_init_args(args, instance, method)
             init_args, init_kwargs = split_args_kwargs(args_init, instance.init_method)
             logger.info(
                 "__init__ received %d positional arg(s) and %d keyword arg(s)",
@@ -148,7 +145,7 @@ class SchemaRunner:
             )
             instance.init(*init_args, **init_kwargs)
         else:
-            args_method = cli_args
+            args_method = args
 
             if not method.is_static:
                 instance.init()
