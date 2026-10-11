@@ -125,8 +125,6 @@ class Interfacy:
         method_skips: Sequence[str] | None = None,
         parse_recovery_max_attempts: int = 3,
     ) -> None:
-        # Every other parameter is an CoreSettings field of the same name;
-        # tests/contracts/test_settings.py keeps the two in sync.
         settings = CoreSettings(
             **{name: value for name, value in locals().items() if name in SETTING_NAMES}
         )
@@ -250,8 +248,6 @@ class Interfacy:
             InvalidCommandError: If ``command`` cannot be converted to a CLI command.
             ConfigurationError: If an override is invalid.
         """
-        # Every parameter after pipe_targets is a CommandOptions field of the same name;
-        # tests/contracts/test_settings.py keeps the registration signatures in sync.
         return self._core.add_command(
             command,
             name=name,

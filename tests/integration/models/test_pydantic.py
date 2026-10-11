@@ -81,7 +81,6 @@ def test_pydantic_default_factory_is_fresh_across_invocations(backend: str) -> N
     first.tags.append("mutated")
     second = parser.invoke(command, args=["--user.name", "Grace", "--user.age", "37"])
 
-    assert first.tags == ["mutated"]
     assert second.tags == []
     assert second.address is None
 

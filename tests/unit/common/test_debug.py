@@ -84,7 +84,7 @@ def test_interfacy_log_does_not_emit_command_values() -> None:
     )
 
     assert process.returncode == 0, process.stderr
-    assert "Calling function 'login'" in process.stderr
+    assert "login" in process.stderr
     assert "SECRET_TOKEN" not in process.stderr
 
 

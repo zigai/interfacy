@@ -64,7 +64,10 @@ def test_schema_expanded_fields_use_long_flags_by_default() -> None:
     schema = ParserSchemaBuilder(parser.schema_context()).build()
 
     cmd = schema.commands["greet"]
-    assert all(flags[0].startswith("--") for flags in (arg.flags for arg in cmd.arguments))
+    assert {arg.name: arg.flags[0] for arg in cmd.arguments} == {
+        "user.name": "--user.name",
+        "user.age": "--user.age",
+    }
 
 
 def test_argparse_reconstructs_expanded_dataclass() -> None:

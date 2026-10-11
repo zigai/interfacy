@@ -105,6 +105,20 @@ def test_interfacy_invoke_does_not_render_result(
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_configured_result_printer_receives_command_result(backend: str) -> None:
+    printed: list[object] = []
+    parser = Interfacy(
+        backend=backend,
+        print_result=True,
+        print_result_func=printed.append,
+        sys_exit_enabled=False,
+    )
+
+    assert parser.run(lambda: 7, args=[]) == 7
+    assert printed == [7]
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
 def test_interfacy_add_command_accepts_params(backend: str) -> None:
     if backend == "click":
         pytest.importorskip("click")

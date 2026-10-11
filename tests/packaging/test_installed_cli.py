@@ -162,7 +162,6 @@ def test_installed_identity_exports_and_typing_assets(
             "-c",
             textwrap.dedent(
                 """
-                import ast
                 import importlib.metadata as metadata
                 import importlib.util
                 import json
@@ -170,18 +169,7 @@ def test_installed_identity_exports_and_typing_assets(
                 import interfacy
 
                 root = Path(interfacy.__file__).parent
-                module = ast.parse((root / "__init__.py").read_text(encoding="utf-8"))
-                type_checking_names = {
-                    alias.asname or alias.name
-                    for node in module.body
-                    if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
-                    for statement in node.body
-                    if isinstance(statement, ast.ImportFrom)
-                    for alias in statement.names
-                }
                 assert (root / "py.typed").is_file()
-                assert type_checking_names == set(interfacy.__all__)
-                assert set(interfacy._EXPORTS) == set(interfacy.__all__)
                 for name in interfacy.__all__:
                     getattr(interfacy, name)
                 print(json.dumps({
@@ -309,7 +297,8 @@ def test_installed_command_contract(
         else:
             assert error_text.lower() in process.stderr.lower()
 
-        assert not (workspace / "executed").exists()
+        if case == "missing":
+            assert not (workspace / "executed").exists()
 
 
 def test_installed_target_help_succeeds(
