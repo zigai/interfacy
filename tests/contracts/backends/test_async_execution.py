@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import warnings
+from collections.abc import Awaitable, Generator
 
 import pytest
 
@@ -151,3 +152,18 @@ class TestSyncExecution:
             return await parser.invoke_async(command, args=[])
 
         assert asyncio.run(main()) == "ok"
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_sync_invocation_completes_a_custom_awaitable(backend: str) -> None:
+    class Result:
+        def __await__(self) -> Generator[object, None, str]:
+            async def resolve() -> str:
+                return "ready"
+
+            return resolve().__await__()
+
+    def command() -> Awaitable[str]:
+        return Result()
+
+    assert Interfacy(backend=backend).invoke(command, args=[]) == "ready"

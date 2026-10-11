@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from typing import Any
 
 from objinspect import Class, Function, Method
@@ -240,7 +240,7 @@ class SchemaRunner:
 
         return self.run_command(command, args)
 
-    def _run_awaitable(self, awaitable: Any) -> Any:
+    def _run_awaitable(self, awaitable: Awaitable[Any]) -> Any:
         if self._async_mode:
             return awaitable
 
@@ -255,9 +255,12 @@ class SchemaRunner:
             return loop.run_until_complete(awaitable)
 
         try:
-            asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(awaitable)
+            loop = None
+
+        if loop is None:
+            return asyncio.run(self._await_result(awaitable))
 
         if inspect.iscoroutine(awaitable):
             awaitable.close()
@@ -266,6 +269,10 @@ class SchemaRunner:
             "invoke() cannot execute an async command inside a running event loop; "
             "use 'await invoke_async(...)'"
         )
+
+    @staticmethod
+    async def _await_result(awaitable: Awaitable[Any]) -> Any:
+        return await awaitable
 
     def _resolve_result(self, value: Any) -> Any:
         if not inspect.isawaitable(value):

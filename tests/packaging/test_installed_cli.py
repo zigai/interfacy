@@ -228,6 +228,23 @@ def test_installed_root_flags_succeed(
     [
         ("integer", "def command() -> int:\n    return 7\n", [], 0, "7\n", None),
         (
+            "awaitable",
+            (
+                "from collections.abc import Awaitable, Generator\n"
+                "class Result:\n"
+                "    def __await__(self) -> Generator[object, None, int]:\n"
+                "        async def resolve() -> int:\n"
+                "            return 7\n"
+                "        return resolve().__await__()\n"
+                "def command() -> Awaitable[int]:\n"
+                "    return Result()\n"
+            ),
+            [],
+            0,
+            "7\n",
+            None,
+        ),
+        (
             "greeting",
             (
                 "def command(name: str, times: int = 1) -> str:\n"
