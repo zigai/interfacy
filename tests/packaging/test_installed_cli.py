@@ -289,6 +289,7 @@ def test_installed_command_contract(
 
         assert process.returncode == expected_code, (process.stdout, process.stderr)
         assert process.stdout == expected_stdout
+
         if case == "failure":
             assert "deliberate failure" not in process.stderr
 

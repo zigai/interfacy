@@ -101,6 +101,7 @@ class CoreSettings:
             "expand_model_params",
         ):
             validate_bool(getattr(self, name), value_name=name)
+
         self.abbreviation_max_generated_len = validate_abbreviation_max_generated_len(
             self.abbreviation_max_generated_len
         )

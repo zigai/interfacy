@@ -464,6 +464,7 @@ def apply_config_defaults(
 
     resolved = {name: value for name, value in overrides.items() if value is not UNSET}
     defaults: dict[str, Any] = {}
+
     for config_field in fields(InterfacyConfig):
         name = config_field.name
         value = config_data.get(name)

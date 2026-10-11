@@ -171,6 +171,7 @@ def _build_literal_alias_fn(alias: object):
         return level
 
     fn.__annotations__["level"] = alias
+
     return fn
 
 

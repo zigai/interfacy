@@ -57,12 +57,16 @@ class CommandOverrides:
             value = getattr(self, name)
             if value is not None:
                 validate_bool(value, value_name=name)
+
         if self.method_skips is not None:
             self._set("method_skips", tuple(validate_method_skips(self.method_skips)))
+
         if self.model_expansion_max_depth is not None:
             validate_model_expansion_max_depth(self.model_expansion_max_depth)
+
         if self.abbreviation_scope is not None:
             validate_abbreviation_scope(self.abbreviation_scope)
+
         self._set("help_option_sort", validate_help_option_sort(self.help_option_sort))
         self._set("help_subcommand_sort", validate_help_subcommand_sort(self.help_subcommand_sort))
 

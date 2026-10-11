@@ -367,6 +367,7 @@ class SchemaRunner:
             )
 
         leaf, leaf_args = levels[-1]
+
         return self._execute_leaf(leaf, leaf_args, current_instance)
 
     def _prepare_chain(
@@ -383,6 +384,7 @@ class SchemaRunner:
                     args, [*self._initializer_for(command), *self._arguments_for(command)]
                 )
                 levels.append((command, args))
+
                 return levels
 
             if command.command_type == "class" and command.initializer:
@@ -406,6 +408,7 @@ class SchemaRunner:
             return parent_instance
 
         self._attach_parent_instance(instantiated, parent_instance)
+
         return instantiated
 
     def _instantiate_chain_class(

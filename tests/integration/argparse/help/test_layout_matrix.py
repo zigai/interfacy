@@ -220,6 +220,7 @@ def render_help_for_args(
     if require_help_success:
         with pytest.raises(SystemExit) as excinfo:
             parser.run(args=args)
+
         assert excinfo.value.code == 0, (
             f"{layout_cls.__name__} {args}: help exited with {excinfo.value.code}"
         )
@@ -722,6 +723,7 @@ def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
             )
         )
         assert "usage:" in help_text.lower(), f"{layout_cls.__name__} {args}: no help rendered"
+
         for section_title in ALIGNMENT_SECTION_TITLES:
             rows = _extract_section_rows(help_text, section_title)
             payload_columns: list[tuple[str, int]] = []
@@ -753,8 +755,10 @@ def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
                     f"{layout_cls.__name__} {args} {section_title}: "
                     f"expected at least two comparable rows, got {payload_columns}"
                 )
+
             if len(payload_columns) < 2:
                 continue
+
             comparisons[section_title] += 1
 
             unique_columns = sorted({col for _, col in payload_columns})

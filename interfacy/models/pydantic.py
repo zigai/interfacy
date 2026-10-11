@@ -50,6 +50,7 @@ class PydanticAdapter:
         )
         is_v2 = hasattr(model_type, "model_fields")
         config = getattr(model_type, "model_config", {})
+
         for name, info in field_map.items():
             if name not in values:
                 continue
@@ -61,6 +62,7 @@ class PydanticAdapter:
             alias = getattr(info, "alias", None)
             if alias is None:
                 alias = name
+
             if is_v2:
                 if config.get("validate_by_alias", True):
                     validation_alias = getattr(info, "validation_alias", None)

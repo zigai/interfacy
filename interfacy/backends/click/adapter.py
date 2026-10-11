@@ -507,6 +507,7 @@ class ClickSession(BackendSession[click.Command]):
         resources.callback(context.close)
         with context.scope(cleanup=False):
             command.parse_args(context, args)
+
         return context
 
     @staticmethod

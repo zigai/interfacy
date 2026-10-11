@@ -39,6 +39,7 @@ BOOLEAN_OVERRIDES = (
 def test_boolean_settings_reject_invalid_construction(name: str, value: Any) -> None:
     with pytest.raises(ConfigurationError, match=rf"{name} must be a bool"):
         CoreSettings(**{name: value})
+
     with pytest.raises(ConfigurationError, match=rf"{name} must be a bool"):
         Interfacy(**{name: value})
 

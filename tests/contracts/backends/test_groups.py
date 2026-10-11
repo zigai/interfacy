@@ -127,6 +127,7 @@ class TestGroupWithFunctions:
 
         path = ["root", "sub"] if nested else ["root"]
         assert parser.invoke(args=[*path, "pair", "1", "a"]) == (1, "a")
+
         with pytest.raises(UsageError):
             parser.invoke(args=[*path, "pair", "invalid", "a"])
 

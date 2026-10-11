@@ -183,6 +183,7 @@ def test_pydantic_validation_aliases_preserve_validation(alias: object, backend:
     parser = Interfacy(backend=backend)
 
     assert parser.invoke(command, args=["--model.count", "3"]).count == 3
+
     with pytest.raises(ValidationError):
         parser.invoke(command, args=["--model.count", "-1"])
 
@@ -274,5 +275,6 @@ def test_pydantic_disabled_alias_validation_uses_field_names() -> None:
         model_config = {"validate_by_alias": False, "validate_by_name": True}
 
     assert build_model_instance(NameModel, {"count": 3}).count == 3
+
     with pytest.raises(ValidationError):
         build_model_instance(NameModel, {"count": -1})
