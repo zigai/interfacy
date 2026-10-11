@@ -11,6 +11,7 @@ from strto import StrToTypeParser
 from interfacy.backends.base import BackendAdapter, BackendParseFailure, BackendSession
 from interfacy.backends.registry import create_backend_adapter
 from interfacy.common.debug import get_logger
+from interfacy.common.resources import ParsedArguments, ResourceStack
 from interfacy.core.ancestor_options import (
     AncestorOptions,
     InterspersedOptionValueError,
@@ -360,9 +361,10 @@ class InterfacyCore:
     def build_parser(self) -> Any:
         return self._session().native_parser
 
-    def parse_args(self, args: Sequence[str] | None = None) -> dict[str, Any]:
+    def parse_args(self, args: Sequence[str] | None = None) -> ParsedArguments:
         try:
-            return self.parse(resolve_args(args)).namespace
+            invocation = self.parse(resolve_args(args))
+            return ParsedArguments(invocation.namespace, invocation.resources)
         except ExecutableActionPending as e:
             raise InterfacyExit(
                 execute_executable_flag(
@@ -372,65 +374,71 @@ class InterfacyCore:
             ) from None
 
     def parse(self, args: tuple[str, ...]) -> InvocationInput:
-        state = InvocationState(
-            args=args,
-            ancestor_options=AncestorOptions(),
-        )
-        schema = self.build_parser_schema()
-        session = self._session(schema)
-        transformed_args = self.plugin_manager.before_parse(
-            lambda current: BeforeParseContext(
-                backend=self.backend,
-                metadata=self.metadata,
-                args=current,
-            ),
-            args,
-        )
-        normalized_args = tuple(state.ancestor_options.normalize_args(schema, transformed_args))
-        outcome = session.parse(normalized_args)
-        if isinstance(outcome, ExecutableAction):
-            raise ExecutableActionPending(outcome)
-
-        supplied: dict[str, Any] | None = None
-        if isinstance(outcome, BackendParseFailure):
-            namespace = recover_parse_failure(
-                session,
-                schema,
-                state,
-                outcome,
-                backend=self.backend,
-                metadata=self.metadata,
-                plugin_manager=self.plugin_manager,
-                max_attempts=self.settings.parse_recovery_max_attempts,
+        with ResourceStack() as resources:
+            state = InvocationState(
+                args=args,
+                ancestor_options=AncestorOptions(),
             )
-        else:
-            namespace = dict(outcome.namespace)
-            supplied = dict(outcome.supplied)
+            schema = self.build_parser_schema()
+            session = self._session(schema)
+            transformed_args = self.plugin_manager.before_parse(
+                lambda current: BeforeParseContext(
+                    backend=self.backend,
+                    metadata=self.metadata,
+                    args=current,
+                ),
+                args,
+            )
+            normalized_args = tuple(state.ancestor_options.normalize_args(schema, transformed_args))
+            outcome = session.parse(normalized_args)
+            if isinstance(outcome, ExecutableAction):
+                raise ExecutableActionPending(outcome)
 
-        try:
-            ancestor_values = state.ancestor_options.resolve_values(type_parser=self.type_parser)
-            namespace = ancestor_values.apply_to(namespace)
-        except InterspersedOptionValueError as e:
-            session.present_error(
-                outcome.presentation
-                if isinstance(outcome, BackendParseFailure)
-                else usage_presentation(str(e))
+            resources.callback(outcome.resources.close)
+            supplied: dict[str, Any] | None = None
+            if isinstance(outcome, BackendParseFailure):
+                namespace = recover_parse_failure(
+                    session,
+                    schema,
+                    state,
+                    outcome,
+                    backend=self.backend,
+                    metadata=self.metadata,
+                    plugin_manager=self.plugin_manager,
+                    max_attempts=self.settings.parse_recovery_max_attempts,
+                )
+            else:
+                namespace = dict(outcome.namespace)
+                supplied = dict(outcome.supplied)
+
+            try:
+                ancestor_values = state.ancestor_options.resolve_values(
+                    type_parser=self.type_parser
+                )
+                namespace = ancestor_values.apply_to(namespace)
+            except InterspersedOptionValueError as e:
+                session.present_error(
+                    outcome.presentation
+                    if isinstance(outcome, BackendParseFailure)
+                    else usage_presentation(str(e))
+                )
+
+            if supplied is not None:
+                supplied = ancestor_values.apply_to(supplied)
+            namespace = self.plugin_manager.after_parse(
+                lambda current: AfterParseContext(
+                    backend=self.backend,
+                    metadata=self.metadata,
+                    schema=SchemaDescriptor.from_schema(schema),
+                    args=normalized_args,
+                    namespace=current,
+                ),
+                namespace,
             )
 
-        if supplied is not None:
-            supplied = ancestor_values.apply_to(supplied)
-        namespace = self.plugin_manager.after_parse(
-            lambda current: AfterParseContext(
-                backend=self.backend,
-                metadata=self.metadata,
-                schema=SchemaDescriptor.from_schema(schema),
-                args=normalized_args,
-                namespace=current,
-            ),
-            namespace,
-        )
-
-        return InvocationInput(normalized_args, namespace, schema, supplied)
+            return InvocationInput(
+                normalized_args, namespace, schema, supplied, resources=resources.pop_all()
+            )
 
     def invoke(
         self,

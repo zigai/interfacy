@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from interfacy.app import Interfacy as Interfacy
+    from interfacy.common.resources import ParsedArguments as ParsedArguments
     from interfacy.common.sentinels import UNSET as UNSET
     from interfacy.declarations.executable_flags import ExecutableFlag as ExecutableFlag
     from interfacy.declarations.groups import CommandGroup as CommandGroup
@@ -35,6 +36,7 @@ _EXPORTS = {
     "Interfacy": ("interfacy.app", "Interfacy"),
     "InterfacyError": ("interfacy.exceptions", "InterfacyError"),
     "Param": ("interfacy.declarations.params", "Param"),
+    "ParsedArguments": ("interfacy.common.resources", "ParsedArguments"),
     "InvalidCommandError": ("interfacy.exceptions", "InvalidCommandError"),
     "params": ("interfacy.declarations.params", "params"),
     "PipeInputError": ("interfacy.exceptions", "PipeInputError"),
@@ -74,6 +76,7 @@ __all__ = [
     "InterfacyError",
     "InvalidCommandError",
     "Param",
+    "ParsedArguments",
     "PipeInputError",
     "ReservedFlagError",
     "UnsupportedParameterTypeError",

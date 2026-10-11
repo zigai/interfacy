@@ -7,6 +7,7 @@ from typing import Literal, NoReturn, Protocol, TypeVar
 
 from strto import StrToTypeParser
 
+from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction, ExecutableFlag
 from interfacy.declarations.settings import BackendName
 from interfacy.help import HelpLayout
@@ -49,6 +50,7 @@ class ParseResult:
     args: tuple[str, ...]
     namespace: Mapping[str, object]
     supplied: Mapping[str, object] = field(default_factory=dict)
+    resources: ResourceStack = field(default_factory=ResourceStack, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.args = tuple(self.args)
@@ -73,6 +75,7 @@ class NativePresentation:
 class BackendParseFailure:
     presentation: NativePresentation
     partial_namespace: Mapping[str, object] | None
+    resources: ResourceStack = field(default_factory=ResourceStack, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.partial_namespace is not None:

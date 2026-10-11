@@ -26,6 +26,7 @@ from interfacy.backends.click.commands import (
     InterfacyListOption,
 )
 from interfacy.backends.click.types import ChoiceParamType, ClickFuncParamType
+from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction, ExecutableFlag
 from interfacy.declarations.settings import BackendName
 from interfacy.exceptions import ConfigurationError, InterfacyExit, UsageError
@@ -59,36 +60,42 @@ class ClickSession(BackendSession[click.Command]):
         return self._native_parser
 
     def parse(self, args: tuple[str, ...]) -> ParseOutcome:
-        try:
-            namespace, supplied, _ = self._parse_root(
-                self._native_parser, list(args), partial=False
-            )
-            normalize_schema_values(self._schema, namespace, type_parser=self._config.type_parser)
-            return ParseResult(args, namespace, supplied)
-        except ExecutableFlagTriggeredError as e:
-            return ExecutableAction(e.flag)
-        except click.exceptions.Exit as e:
-            raise InterfacyExit(e.exit_code) from e
-        except click.UsageError as e:
-            partial = self._partial_namespace(args)
-            message = e.format_message()
-            return BackendParseFailure(
-                presentation=NativePresentation(
-                    kind="usage",
-                    message=message,
-                    exit_code=e.exit_code,
-                ),
-                partial_namespace=partial,
-            )
-        except ValueError as e:
-            return BackendParseFailure(
-                presentation=NativePresentation(
-                    kind="usage",
-                    message=str(e),
-                    exit_code=2,
-                ),
-                partial_namespace=self._partial_namespace(args),
-            )
+        with ResourceStack() as resources:
+            try:
+                namespace, supplied, _ = self._parse_root(
+                    self._native_parser, list(args), resources, partial=False
+                )
+                normalize_schema_values(
+                    self._schema, namespace, type_parser=self._config.type_parser
+                )
+                return ParseResult(args, namespace, supplied, resources=resources.pop_all())
+            except ExecutableFlagTriggeredError as e:
+                return ExecutableAction(e.flag)
+            except click.exceptions.Exit as e:
+                raise InterfacyExit(e.exit_code) from e
+            except click.UsageError as e:
+                partial = self._partial_namespace(args, resources)
+                message = e.format_message()
+                return BackendParseFailure(
+                    presentation=NativePresentation(
+                        kind="usage",
+                        message=message,
+                        exit_code=e.exit_code,
+                    ),
+                    partial_namespace=partial,
+                    resources=resources.pop_all(),
+                )
+            except ValueError as e:
+                partial = self._partial_namespace(args, resources)
+                return BackendParseFailure(
+                    presentation=NativePresentation(
+                        kind="usage",
+                        message=str(e),
+                        exit_code=2,
+                    ),
+                    partial_namespace=partial,
+                    resources=resources.pop_all(),
+                )
 
     def present_error(self, presentation: NativePresentation) -> NoReturn:
         usage = None
@@ -377,21 +384,18 @@ class ClickSession(BackendSession[click.Command]):
         self,
         root: click.Command,
         args: list[str],
+        resources: ResourceStack,
         *,
         partial: bool,
     ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
         """Return the namespace, the part of it given on the command line, and leftovers."""
-        context = root.make_context(
-            root.name or "main",
-            args,
-            resilient_parsing=False,
-        )
+        context = self._make_context(root, root.name or "main", args, resources)
 
         if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
             raise ConfigurationError(f"Unexpected Click root: {type(root)!r}")
 
         if isinstance(root, InterfacyClickGroup) and root.interfacy_is_root:
-            child_info = self._resolve_child_context(context, root, partial=partial)
+            child_info = self._resolve_child_context(context, root, resources, partial=partial)
             if child_info is None:
                 return {}, {}, self._remaining(context)
 
@@ -399,6 +403,7 @@ class ClickSession(BackendSession[click.Command]):
             namespace, supplied = self._context_namespace(
                 child_context,
                 command,
+                resources,
                 depth=0,
                 partial=partial,
             )
@@ -409,7 +414,9 @@ class ClickSession(BackendSession[click.Command]):
                 self._remaining(child_context),
             )
 
-        namespace, supplied = self._context_namespace(context, root, depth=0, partial=partial)
+        namespace, supplied = self._context_namespace(
+            context, root, resources, depth=0, partial=partial
+        )
 
         return namespace, supplied, self._remaining(context)
 
@@ -417,6 +424,7 @@ class ClickSession(BackendSession[click.Command]):
         self,
         context: click.Context,
         group: InterfacyClickGroup,
+        resources: ResourceStack,
         *,
         partial: bool,
     ) -> tuple[str, InterfacyClickCommand | InterfacyClickGroup, click.Context] | None:
@@ -429,11 +437,12 @@ class ClickSession(BackendSession[click.Command]):
             return None
 
         resolved = name or command.name or ""
-        child_context = command.make_context(
+        child_context = self._make_context(
+            command,
             resolved,
             command_args,
+            resources,
             parent=context,
-            resilient_parsing=False,
         )
         schema_cmd = command.interfacy_schema
         key = schema_cmd.canonical_name if schema_cmd is not None else resolved
@@ -444,6 +453,7 @@ class ClickSession(BackendSession[click.Command]):
         self,
         context: click.Context,
         native: InterfacyClickCommand | InterfacyClickGroup,
+        resources: ResourceStack,
         *,
         depth: int,
         partial: bool,
@@ -463,7 +473,7 @@ class ClickSession(BackendSession[click.Command]):
         if not isinstance(native, InterfacyClickGroup) or not native.commands:
             return namespace, supplied
 
-        child_info = self._resolve_child_context(context, native, partial=partial)
+        child_info = self._resolve_child_context(context, native, resources, partial=partial)
         if child_info is None:
             return namespace, supplied
 
@@ -472,6 +482,7 @@ class ClickSession(BackendSession[click.Command]):
         child_namespace, child_supplied = self._context_namespace(
             child_context,
             child,
+            resources,
             depth=depth + 1,
             partial=partial,
         )
@@ -482,20 +493,39 @@ class ClickSession(BackendSession[click.Command]):
         return namespace, supplied
 
     @staticmethod
+    def _make_context(
+        command: click.Command,
+        name: str,
+        args: list[str],
+        resources: ResourceStack,
+        *,
+        parent: click.Context | None = None,
+    ) -> click.Context:
+        settings = dict(command.context_settings)
+        settings["resilient_parsing"] = False
+        context = command.context_class(command, info_name=name, parent=parent, **settings)
+        resources.callback(context.close)
+        with context.scope(cleanup=False):
+            command.parse_args(context, args)
+        return context
+
+    @staticmethod
     def _remaining(context: click.Context) -> list[str]:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             protected = list(getattr(context, "protected_args", []))
         return [*protected, *context.args]
 
-    def _partial_namespace(self, args: tuple[str, ...]) -> Mapping[str, Any] | None:
+    def _partial_namespace(
+        self, args: tuple[str, ...], resources: ResourceStack
+    ) -> Mapping[str, Any] | None:
         """Return supplied values, or None when relaxing required fields still fails."""
         if self._partial_parser is None:
             self._partial_parser = self._build(self._schema, relaxed=True)
 
         try:
             _, supplied, remaining = self._parse_root(
-                self._partial_parser, list(args), partial=True
+                self._partial_parser, list(args), resources, partial=True
             )
             if remaining:
                 return None

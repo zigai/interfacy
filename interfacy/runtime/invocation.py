@@ -3,11 +3,12 @@ from __future__ import annotations
 import asyncio
 import sys
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from inspect import isawaitable
 from typing import Any, NoReturn
 
 from interfacy.common.console import error
+from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction
 from interfacy.exceptions import (
     ConfigurationError,
@@ -54,6 +55,7 @@ class InvocationInput:
     namespace: dict[str, Any]
     schema: ParserSchema
     supplied: dict[str, Any] | None = None
+    resources: ResourceStack = field(default_factory=ResourceStack, repr=False, compare=False)
 
 
 ParseStep = Callable[[], InvocationInput]
@@ -188,7 +190,8 @@ class InvocationRuntime:
 
     def _execute(self, execute: ExecuteStep, invocation: InvocationInput) -> Any:
         try:
-            return execute(invocation)
+            with invocation.resources:
+                return execute(invocation)
         except Exception as e:
             raise InvocationError(_execution_error_code(e), e) from e
 
@@ -198,9 +201,10 @@ class InvocationRuntime:
         invocation: InvocationInput,
     ) -> Any:
         try:
-            result = execute(invocation)
-            if isawaitable(result):
-                result = await result
+            with invocation.resources:
+                result = execute(invocation)
+                if isawaitable(result):
+                    result = await result
         except Exception as e:
             raise InvocationError(_execution_error_code(e), e) from e
         else:

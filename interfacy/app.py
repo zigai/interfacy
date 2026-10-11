@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 from strto import StrToTypeParser
 from typing_extensions import final
 
+from interfacy.common.resources import ParsedArguments
 from interfacy.common.sentinels import UNSET, UnsetType
 from interfacy.core import InterfacyCore
 from interfacy.core.settings import SETTING_NAMES, CoreSettings
@@ -385,11 +386,11 @@ class Interfacy:
         """Clear cached stdin data."""
         self._core.pipes.reset_input()
 
-    def parse_args(self, args: list[str] | None = None) -> dict[str, object]:
+    def parse_args(self, args: list[str] | None = None) -> ParsedArguments:
         """
         Parse CLI arguments into a command argument mapping.
 
-        If `args` is omitted, the current process arguments are used.
+        Defaults to process arguments. Close the mapping or use `with` to release owned resources.
         """
         return self._core.parse_args(args)
 
