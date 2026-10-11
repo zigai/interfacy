@@ -1,7 +1,9 @@
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
+from interfacy import Interfacy
 from interfacy.common.sentinels import MODEL_DEFAULT_UNSET
 from interfacy.runtime.reconstruction import (
     ExpandedModelValidationError,
@@ -11,6 +13,28 @@ from interfacy.runtime.reconstruction import (
 from interfacy.schema.nodes import Argument, ArgumentDefault, ArgumentKind, ValueShape
 from interfacy.schema.values import ValueCardinality
 from tests.fixtures.models import Address, UserWithAddress
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_default_model_collection_preserves_nested_dataclasses(backend: str) -> None:
+    @dataclass
+    class Child:
+        value: int
+
+    @dataclass
+    class Config:
+        children: list[Child]
+        count: int = 0
+
+    default = Config(children=[Child(0)])
+
+    def command(config: Config = default) -> Config:
+        return config
+
+    result = Interfacy(backend=backend).invoke(command, args=["--config.count", "1"])
+
+    assert result == Config(children=[Child(0)], count=1)
+    assert default == Config(children=[Child(0)], count=0)
 
 
 def expanded_argument(

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import MISSING, asdict, fields, is_dataclass
+from copy import deepcopy
+from dataclasses import MISSING, fields, is_dataclass
 from typing import Any
 
 from interfacy.models.base import (
@@ -98,7 +99,14 @@ def dataclass_instance_values(instance: Any) -> dict[str, Any]:
     Args:
         instance (Any): Dataclass instance.
     """
-    return asdict(instance)
+    values: dict[str, Any] = {}
+    for field_info in fields(instance):
+        value = getattr(instance, field_info.name)
+        values[field_info.name] = (
+            dataclass_instance_values(value) if is_dataclass(value) else deepcopy(value)
+        )
+
+    return values
 
 
 __all__ = ["DataclassAdapter", "dataclass_instance_values"]
