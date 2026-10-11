@@ -5,6 +5,7 @@ import pytest
 from objinspect import Method
 
 from interfacy.introspection.annotations import (
+    extract_optional_union_list,
     normalize_basic_annotation,
     resolve_objinspect_annotations,
     simplified_type_name,
@@ -90,3 +91,8 @@ def test_resolve_objinspect_annotations_uses_class_scope_for_methods() -> None:
     resolve_objinspect_annotations(method)
 
     assert method.params[0].type is Container.InnerConfig
+
+
+def test_extract_optional_union_list_requires_exactly_list_or_none_union() -> None:
+    assert extract_optional_union_list(list[int] | None) == (list[int], int)
+    assert extract_optional_union_list(list[int] | str | None) is None

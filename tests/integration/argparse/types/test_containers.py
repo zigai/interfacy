@@ -4,6 +4,7 @@ import pytest
 
 from interfacy import Interfacy
 from interfacy.exceptions import UsageError
+from interfacy.naming import DefaultFlagStrategy
 from tests.fixtures.commands import (
     fn_legacy_list,
     fn_list_int,
@@ -263,3 +264,30 @@ class TestContainers:
                 pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
 
         assert parser.invoke(args=args) == [10, 20]
+
+
+def test_required_list_positional_usage_is_not_rendered_as_optional() -> None:
+    """Required list positionals should not render with optional brackets in usage."""
+    parser = Interfacy(flag_strategy=DefaultFlagStrategy(style="required_positional"))
+    parser.add_command(fn_list_str)
+
+    help_text = parser.build_parser().format_help()
+
+    assert "ITEMS" in help_text
+    assert "[ITEMS ...]" not in help_text
+
+
+def fn_optional_list_union(values: list[int] | None):
+    return values or []
+
+
+def test_optional_union_list_parsed_correctly() -> None:
+    parser = Interfacy(
+        backend="argparse",
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        help_layout=None,
+    )
+    parser.add_command(fn_optional_list_union)
+    assert parser.parse_args(["1"])["values"] == [1]
+    assert parser.parse_args(["1", "2"])["values"] == [1, 2]
+    assert parser.parse_args([])["values"] == []

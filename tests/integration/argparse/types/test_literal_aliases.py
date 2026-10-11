@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import typing
 from typing import Any, Literal
 
 import pytest
@@ -155,3 +156,36 @@ def test_invalid_literal_error_names_value_without_stray_quote() -> None:
     message = str(exc_info.value)
     assert "'orange'" in message
     assert '"' not in message
+
+
+def _make_literal_alias() -> object:
+    alias_type = getattr(typing, "TypeAliasType", None)
+    if alias_type is None:
+        pytest.skip("TypeAliasType not available on this Python version")
+
+    return alias_type("Level", Literal["LOW", "MEDIUM", "HIGH"])
+
+
+def _build_literal_alias_fn(alias: object):
+    def fn(level: str) -> str:
+        return level
+
+    fn.__annotations__["level"] = alias
+    return fn
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
+def test_literal_type_alias_parsing(parser: Interfacy):
+    alias = _make_literal_alias()
+    fn = _build_literal_alias_fn(alias)
+    parser.add_command(fn)
+
+    match parser.metadata["flag_style"]:
+        case "required_positional":
+            args = ["LOW"]
+        case "keyword_only":
+            args = ["--level", "LOW"]
+        case _:
+            pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
+
+    assert parser.invoke(args=args) == "LOW"

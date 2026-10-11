@@ -6,6 +6,8 @@ import pytest
 
 from interfacy import BooleanMode, Interfacy, Param, params
 from interfacy.exceptions import ConfigurationError, UsageError
+from interfacy.naming import DefaultFlagStrategy
+from tests.fixtures.commands import fn_bool_default_true
 
 
 def test_param_rejects_unknown_boolean_mode() -> None:
@@ -170,3 +172,16 @@ def test_required_boolean_flag_enforced_when_omitted(
 
     with pytest.raises(UsageError):
         parser.invoke(args=[])
+
+
+def test_boolean_negative_prefix_can_be_configured() -> None:
+    parser = Interfacy(
+        backend="argparse",
+        flag_strategy=DefaultFlagStrategy(style="required_positional"),
+        help_layout=None,
+        bool_negative_prefix="without-",
+    )
+    parser.add_command(fn_bool_default_true)
+
+    assert parser.invoke(args=[]) is True
+    assert parser.invoke(args=["--without-value"]) is False
