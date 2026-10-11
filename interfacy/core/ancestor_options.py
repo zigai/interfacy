@@ -4,11 +4,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from strto import StrToTypeParser
+
 from interfacy.schema.nodes import Argument, Command, ParserSchema
+from interfacy.schema.values import plan_requires_post_conversion
 
 
 class InterspersedOptionValueError(ValueError):
-    """Raised when a normalized interspersed option value fails conversion."""
+    """Raised when a normalized interspersed option value fails validation or conversion."""
 
     def __init__(
         self,
@@ -104,12 +107,16 @@ class AncestorOptions:
 
         return reordered
 
-    def resolve_values(self) -> AncestorOptionValues:
+    def resolve_values(self, *, type_parser: StrToTypeParser) -> AncestorOptionValues:
         pending = self._pending_values
         self._pending_values = []
         return AncestorOptionValues(
             tuple(
-                (command_path, argument.name, self._parse_option_values(argument, raw_values))
+                (
+                    command_path,
+                    argument.name,
+                    self._parse_option_values(argument, raw_values, type_parser=type_parser),
+                )
                 for command_path, argument, raw_values in pending
             )
         )
@@ -246,7 +253,16 @@ class AncestorOptions:
         return list(args[start + 1 : end])
 
     @staticmethod
-    def _parse_option_values(argument: Argument, raw_values: Sequence[str]) -> Any:
+    def _parse_option_values(
+        argument: Argument, raw_values: Sequence[str], *, type_parser: StrToTypeParser
+    ) -> Any:
+        plan = argument.value_plan
+        if plan is not None and plan_requires_post_conversion(plan, required=argument.required):
+            try:
+                return plan.convert(raw_values, type_parser=type_parser)
+            except (TypeError, ValueError) as e:
+                raise InterspersedOptionValueError(argument, " ".join(raw_values), e) from e
+
         parse = argument.parser
         values: list[Any] = []
         for raw_value in raw_values:

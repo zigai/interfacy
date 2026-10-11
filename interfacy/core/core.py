@@ -408,7 +408,7 @@ class InterfacyCore:
             supplied = dict(outcome.supplied)
 
         try:
-            ancestor_values = state.ancestor_options.resolve_values()
+            ancestor_values = state.ancestor_options.resolve_values(type_parser=self.type_parser)
             namespace = ancestor_values.apply_to(namespace)
         except InterspersedOptionValueError as e:
             session.present_error(

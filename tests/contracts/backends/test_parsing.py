@@ -9,6 +9,42 @@ from tests.fixtures.commands import (
 )
 
 
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+@pytest.mark.parametrize(("value", "expected"), [("0", [(0, "a")]), ("-1", [(-1, "a")])])
+def test_late_initializer_structured_list_is_converted(
+    backend: str, value: str, expected: list[tuple[int, str]]
+) -> None:
+    class Tool:
+        def __init__(self, pairs: list[tuple[int, str]] | None = None) -> None:
+            self.pairs = pairs
+
+        def show(self) -> list[tuple[int, str]] | None:
+            return self.pairs
+
+    parser = Interfacy(backend=backend)
+
+    assert parser.invoke(Tool, args=["show", "--pairs", value, "a"]) == expected
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_late_initializer_incomplete_tuple_does_not_execute(backend: str) -> None:
+    executed: list[str] = []
+
+    class Tool:
+        def __init__(self, pairs: list[tuple[int, str]] | None = None) -> None:
+            executed.append("constructed")
+
+        def show(self) -> None:
+            executed.append("called")
+
+    parser = Interfacy(backend=backend)
+
+    with pytest.raises(UsageError):
+        parser.invoke(Tool, args=["show", "--pairs", "0"])
+
+    assert executed == []
+
+
 class TestPowFunctionParsing:
     @pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
     def test_kw_only_abbrev_collision_skips_second_short(self, parser: Interfacy):
