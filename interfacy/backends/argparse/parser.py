@@ -6,7 +6,7 @@ from argparse import Namespace
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from gettext import gettext
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn, TextIO
 
 from interfacy.backends.argparse.argument_kwargs import (
     callable_type_name,
@@ -469,8 +469,11 @@ class ArgumentParser(argparse.ArgumentParser):
         self._print_message(f"{usage.rstrip()}\n", sys.stderr)
         self.exit(2, f"{self.prog}: error: {message}\n")
 
-    def _get_formatter(self) -> argparse.HelpFormatter:  # type: ignore[override]
-        formatter = super()._get_formatter()
+    def _get_formatter(self, file: TextIO | None = None) -> argparse.HelpFormatter:  # type: ignore[override]
+        if sys.version_info >= (3, 15):
+            formatter = super()._get_formatter(file=file)
+        else:
+            formatter = super()._get_formatter()
         set_color = getattr(formatter, "_set_color", None)
         if callable(set_color):
             set_color(getattr(self, "color", False))
