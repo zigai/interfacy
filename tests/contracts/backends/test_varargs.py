@@ -25,6 +25,20 @@ def test_catch_all_kwargs_cannot_replace_named_option(backend: str) -> None:
     assert executed == []
 
 
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_constructor_catch_all_mapping_is_unpacked(backend: str) -> None:
+    class Tool:
+        def __init__(self, **options: dict[str, str]) -> None:
+            self.options = options
+
+        def show(self) -> dict[str, str]:
+            return self.options
+
+    assert Interfacy(backend=backend).invoke(Tool, args=['{"mode":"fast"}', "show"]) == {
+        "mode": "fast",
+    }
+
+
 class TestMixedPositionalAndVarargs:
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_function_with_positional_and_varargs(self, parser: Interfacy):

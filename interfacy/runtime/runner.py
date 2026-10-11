@@ -5,7 +5,6 @@ from typing import Any
 
 from objinspect import Class, Function, Method
 from objinspect._class import split_init_args
-from objinspect.method import split_args_kwargs
 
 from interfacy.common.debug import get_logger
 from interfacy.exceptions import ConfigurationError, InvalidCommandError, UsageError
@@ -138,7 +137,7 @@ class SchemaRunner:
         instance = Class(method.cls)
         if instance.init_method:
             args_init, args_method = split_init_args(args, instance, method)
-            init_args, init_kwargs = split_args_kwargs(args_init, instance.init_method)
+            init_args, init_kwargs = self._build_call_args(instance.init_method, args_init)
             logger.info(
                 "__init__ received %d positional arg(s) and %d keyword arg(s)",
                 len(init_args),
@@ -194,7 +193,7 @@ class SchemaRunner:
             if runtime_cls.init_method:
                 args = self._apply_pipe(command, args, subcommand="__init__")
                 args = self._reconstruct_expanded_models(args, self._initializer_for(command))
-                init_args, init_kwargs = split_args_kwargs(args, runtime_cls.init_method)
+                init_args, init_kwargs = self._build_call_args(runtime_cls.init_method, args)
                 logger.info(
                     "__init__ received %d positional arg(s) and %d keyword arg(s)",
                     len(init_args),
@@ -415,7 +414,7 @@ class SchemaRunner:
         init_args = self._extract_init_args(args, command.initializer)
         if init_args:
             assert cls.init_method
-            init_a, init_kw = split_args_kwargs(init_args, cls.init_method)
+            init_a, init_kw = self._build_call_args(cls.init_method, init_args)
             cls.init(*init_a, **init_kw)
         else:
             cls.init()
