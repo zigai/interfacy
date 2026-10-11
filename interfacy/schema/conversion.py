@@ -3,21 +3,26 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from interfacy.schema.nodes import ParserSchema
+    from strto import StrToTypeParser
+
+    from interfacy.schema.nodes import Argument, Command, ParserSchema
 
 from interfacy.schema.values import RepeatedValue, as_sequence, plan_requires_post_conversion
 
 
 def _normalize_argument_value(
-    argument: Any,
+    argument: Argument,
     bucket: dict[str, Any],
     *,
-    type_parser: Any,
+    type_parser: StrToTypeParser | None,
 ) -> None:
     if argument.name not in bucket or bucket[argument.name] is None:
         return
 
     value_plan = argument.value_plan
+    if value_plan is None:
+        return
+
     if not plan_requires_post_conversion(value_plan, required=argument.required):
         if isinstance(value_plan, RepeatedValue):
             bucket[argument.name] = list(as_sequence(bucket[argument.name]))
@@ -27,7 +32,9 @@ def _normalize_argument_value(
     bucket[argument.name] = value_plan.convert(bucket[argument.name], type_parser=type_parser)
 
 
-def normalize_argument_values(command: Any, bucket: dict[str, Any], *, type_parser: Any) -> None:
+def normalize_argument_values(
+    command: Command, bucket: dict[str, Any], *, type_parser: StrToTypeParser | None
+) -> None:
     for argument in (*command.initializer, *command.arguments):
         _normalize_argument_value(argument, bucket, type_parser=type_parser)
 
@@ -44,7 +51,7 @@ def normalize_argument_values(command: Any, bucket: dict[str, Any], *, type_pars
 
 
 def normalize_schema_values(
-    schema: ParserSchema, namespace: dict[str, Any], *, type_parser: Any
+    schema: ParserSchema, namespace: dict[str, Any], *, type_parser: StrToTypeParser | None
 ) -> None:
     """Normalize present command buckets after a backend has canonicalized their names."""
     if len(schema.commands) == 1:
