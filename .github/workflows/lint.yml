@@ -33,5 +33,5 @@ jobs:
       - name: Run codespell
         run: uv run --python 3.12 codespell
 
-      - name: Verify Rattle consumer startup
-        run: uv run --python 3.12 rattle --help
+      - name: Run Rattle lint
+        run: uv run --python 3.12 rattle lint .
