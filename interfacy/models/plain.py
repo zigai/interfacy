@@ -148,10 +148,30 @@ class PlainClassAdapter:
             values (dict[str, Any]): Constructor values keyed by parameter name.
             coerce (ValueCoercer): Coerces one field value against its annotation.
         """
-        annotations = plain_class_param_annotations(model_type)
-        kwargs = {key: coerce(annotations.get(key), value) for key, value in values.items()}
+        params = list(plain_class_parameters(model_type))
+        positional = [param for param in params if param.kind is inspect.Parameter.POSITIONAL_ONLY]
+        last_supplied = max(
+            (index for index, param in enumerate(positional) if param.name in values),
+            default=-1,
+        )
+        args: list[Any] = []
+        for param in positional[: last_supplied + 1]:
+            if param.name in values:
+                args.append(coerce(param.type if param.is_typed else None, values[param.name]))
+            elif param.has_default:
+                args.append(param.default)
+            else:
+                raise TypeError(f"Missing required positional argument: {param.name}")
 
-        return model_type(**kwargs)
+        annotations = plain_class_param_annotations(model_type)
+        positional_names = {param.name for param in positional}
+        kwargs = {
+            key: coerce(annotations.get(key), value)
+            for key, value in values.items()
+            if key not in positional_names
+        }
+
+        return model_type(*args, **kwargs)
 
 
 __all__ = [
