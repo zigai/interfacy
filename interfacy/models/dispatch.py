@@ -116,10 +116,8 @@ def model_instance_to_values(model_type: type, instance: Any) -> dict[str, Any]:
     if DATACLASS_ADAPTER.matches(model_type):
         return dataclass_instance_values(instance)
 
-    if PYDANTIC_ADAPTER.matches(model_type) or hasattr(instance, "__dict__"):
+    if hasattr(instance, "__dict__") or is_model_type(model_type):
         return instance_attribute_values(instance)
-    if is_plain_class_model(model_type):
-        return plain_instance_values(model_type, instance)
 
     return {}
 
@@ -129,7 +127,7 @@ def instance_attribute_values(instance: Any) -> dict[str, Any]:
     Return instance attributes, converting nested model instances to values.
 
     Args:
-        instance (Any): Object with a `__dict__`.
+        instance (Any): Model instance or object with a `__dict__`.
     """
     model_type = type(instance)
     if PYDANTIC_ADAPTER.matches(model_type):
@@ -137,6 +135,8 @@ def instance_attribute_values(instance: Any) -> dict[str, Any]:
             field.name: deepcopy(getattr(instance, field.name))
             for field in PYDANTIC_ADAPTER.fields(model_type)
         }
+    elif not hasattr(instance, "__dict__") and is_plain_class_model(model_type):
+        attributes = plain_instance_values(model_type, instance)
     else:
         attributes = vars(instance)
 

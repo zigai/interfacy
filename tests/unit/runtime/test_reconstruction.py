@@ -37,6 +37,32 @@ def test_default_model_collection_preserves_nested_dataclasses(backend: str) -> 
     assert default == Config(children=[Child(0)], count=0)
 
 
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_slotted_nested_default_preserves_fields_not_overridden(backend: str) -> None:
+    class Inner:
+        __slots__ = ("host", "port")
+
+        def __init__(self, host: str = "fallback", port: int = 10) -> None:
+            self.host = host
+            self.port = port
+
+    class Outer:
+        __slots__ = ("inner",)
+
+        def __init__(self, inner: Inner) -> None:
+            self.inner = inner
+
+    default = Outer(Inner(host="chosen"))
+
+    def command(config: Outer = default) -> Outer:
+        return config
+
+    result = Interfacy(backend=backend).invoke(command, args=["--config.inner.port", "11"])
+
+    assert (result.inner.host, result.inner.port) == ("chosen", 11)
+    assert (default.inner.host, default.inner.port) == ("chosen", 10)
+
+
 def expanded_argument(
     *path: str,
     model_default: Any = MODEL_DEFAULT_UNSET,
