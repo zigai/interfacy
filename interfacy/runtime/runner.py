@@ -579,6 +579,10 @@ class SchemaRunner:
                 keyword[name] = val
             case inspect.Parameter.VAR_KEYWORD:
                 if isinstance(val, dict):
+                    for key in val:
+                        if key in keyword:
+                            raise UsageError(f"multiple values for argument '{key}'")
+
                     keyword.update(val)
 
     def _build_call_args(

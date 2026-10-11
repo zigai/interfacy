@@ -1,12 +1,28 @@
 import pytest
 
 from interfacy import CommandGroup, Interfacy
+from interfacy.exceptions import UsageError
 from tests.fixtures.classes import TextCollector
 from tests.fixtures.commands import (
     fn_positional_varargs,
     fn_positional_varargs_kwonly,
     fn_positional_varargs_varkw,
 )
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_catch_all_kwargs_cannot_replace_named_option(backend: str) -> None:
+    executed: list[str] = []
+
+    def command(*, mode: str = "safe", **options: dict[str, str]) -> None:
+        executed.append(mode)
+
+    parser = Interfacy(backend=backend)
+
+    with pytest.raises(UsageError, match="mode"):
+        parser.invoke(command, args=['{"mode":"a"}', "--mode", "safe"])
+
+    assert executed == []
 
 
 class TestMixedPositionalAndVarargs:
