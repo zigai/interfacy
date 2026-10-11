@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import copy
 import re
 from enum import Enum
@@ -9,7 +10,7 @@ import pytest
 from stdl.st import TextStyle
 
 import interfacy.help.layouts.clap as clap_layout
-from interfacy import CommandGroup, Interfacy
+from interfacy import CommandGroup, ExecutableFlag, Interfacy
 from interfacy.common.terminal import strip_ansi
 from interfacy.help import (
     Aligned,
@@ -732,3 +733,314 @@ def test_layout_matrix_aligns_help_payload_columns_across_layouts_and_commands(
             )
 
     assert not failures, "Misaligned help payload columns:\n" + "\n".join(failures)
+
+
+def test_standard_layout_hides_option_metavar_by_default() -> None:
+    def demo(*, level: int = 2) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=StandardLayout(), print_result=False)
+    parser.add_command(demo)
+    help_text = parser.build_parser().format_help()
+
+    assert "-l, --level LEVEL" not in help_text
+    assert "--level" in help_text
+
+
+def test_standard_layout_renders_defaults_with_bracket_default_block() -> None:
+    def demo(*, level: int = 2) -> None:
+        """Set output level."""
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=StandardLayout(), print_result=False)
+    parser.add_command(demo)
+    help_text = parser.build_parser().format_help()
+    level_line = next(line for line in help_text.splitlines() if "--level" in line)
+
+    assert "[default: 2]" in level_line
+    assert "Defaults to 2." not in level_line
+
+
+def test_standard_layout_does_not_duplicate_existing_bracket_default_block() -> None:
+    def demo(*, level: int = 2) -> None:
+        """Set output level [default: 2]."""
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=StandardLayout(), print_result=False)
+    parser.add_command(demo)
+    help_text = parser.build_parser().format_help()
+    level_line = next(line for line in help_text.splitlines() if "--level" in line)
+
+    assert level_line.count("[default: 2]") == 1
+
+
+def test_argparse_layout_root_usage_includes_subcommand_choices() -> None:
+    def dense_parameters() -> None:
+        """Exercise choices, defaults, tuples, and long descriptions."""
+
+    def path_ops() -> None:
+        """Mix positionals, varargs, and keyword-only options."""
+
+    parser = Interfacy(backend="argparse", help_layout=ArgparseLayout(), print_result=False)
+    parser.add_command(dense_parameters)
+    parser.add_command(path_ops)
+
+    help_text = parser.build_parser().format_help()
+    assert "{dense-parameters,path-ops}" in help_text
+
+
+def test_argparse_layout_uses_primary_boolean_option_form() -> None:
+    def run(flag: bool = False) -> None:
+        """No-op."""
+
+    parser = Interfacy(backend="argparse", help_layout=ArgparseLayout(), print_result=False)
+    parser.add_command(run)
+
+    help_text = parser.build_parser().format_help()
+    assert "--flag" in help_text
+    assert "--no-flag" not in help_text
+
+
+def test_argparse_layout_usage_uses_single_primary_boolean_form() -> None:
+    def run(*, dry_run: bool = False) -> None:
+        """No-op."""
+
+    parser = Interfacy(backend="argparse", help_layout=ArgparseLayout(), print_result=False)
+    parser.add_command(run)
+
+    help_text = parser.build_parser().format_help()
+    assert "[--dry-run]" in help_text
+    assert "| --dry-run" not in help_text
+
+
+def test_argparse_layout_shows_subcommand_description_rows() -> None:
+    def run_fast() -> None:
+        """Fast mode."""
+
+    def run_safe() -> None:
+        """Safe mode."""
+
+    parser = Interfacy(backend="argparse", help_layout=ArgparseLayout(), print_result=False)
+    parser.add_command(run_fast)
+    parser.add_command(run_safe)
+
+    help_text = parser.build_parser().format_help()
+    assert "run-fast" in help_text
+    assert "Fast mode." in help_text
+    assert "run-safe" in help_text
+    assert "Safe mode." in help_text
+
+
+def test_argparse_layout_root_uses_commands_section_without_choices_header_line() -> None:
+    def dense_parameters() -> None:
+        """Dense command."""
+
+    def path_ops() -> None:
+        """Path command."""
+
+    parser = Interfacy(backend="argparse", help_layout=ArgparseLayout(), print_result=False)
+    parser.add_command(dense_parameters)
+    parser.add_command(path_ops)
+
+    help_text = parser.build_parser().format_help()
+    assert "commands:" in help_text
+    assert "positional arguments:" not in help_text
+    assert "\ncommands:\n  {dense-parameters,path-ops}" not in help_text
+    assert re.search(r"^\s*dense-parameters\s+Dense command\.$", help_text, re.MULTILINE)
+    assert re.search(r"^\s*path-ops\s+Path command\.$", help_text, re.MULTILINE)
+
+
+def test_argparser_help_position_kwarg_overrides_layout_help_position() -> None:
+    parser = Interfacy(
+        backend="argparse",
+        help_layout=StandardLayout(help_position=24),
+        help_position=42,
+        executable_flags=[
+            ExecutableFlag(
+                ("-d", "--disable-job-duration-limit"),
+                lambda: None,
+                help="Disable the per-job duration limit.",
+            )
+        ],
+        print_result=False,
+    )
+
+    def serve() -> None:
+        """Run the service."""
+
+    parser.add_command(serve)
+    help_text = parser.build_parser().format_help()
+
+    assert re.search(
+        r"^\s*-d, --disable-job-duration-limit\s+Disable the per-job duration limit\.$",
+        help_text,
+        re.MULTILINE,
+    )
+
+
+def test_interfacy_layout_usage_lists_concrete_subcommand_choices() -> None:
+    class Math:
+        def add(self) -> None:
+            return None
+
+        def mul(self) -> None:
+            return None
+
+    parser = Interfacy(backend="argparse", help_layout=InterfacyLayout(), print_result=False)
+    parser.add_command(Math)
+
+    help_text = parser.build_parser().format_help()
+    assert "{add,mul}" in help_text
+
+
+def test_standard_layout_class_root_help_renders_one_commands_section() -> None:
+    class Calculator:
+        def add(self, a: float, b: float) -> float:
+            return a + b
+
+        def mul(self, a: float, b: float) -> float:
+            return a * b
+
+    parser = Interfacy(backend="argparse", help_layout=StandardLayout(), print_result=False)
+    parser.add_command(Calculator)
+
+    help_text = parser.build_parser().format_help()
+
+    assert len(re.findall(r"^commands:$", help_text, re.MULTILINE)) == 1
+    assert len(re.findall(r"^\s+add(?:\s|$)", help_text, re.MULTILINE)) == 1
+    assert len(re.findall(r"^\s+mul(?:\s|$)", help_text, re.MULTILINE)) == 1
+
+
+def test_interfacy_layout_help_and_choices_metadata_align_in_same_column() -> None:
+    def dense_parameters(
+        input_path: str,
+        output_path: str,
+        *,
+        mode: Literal["fast", "safe", "balanced"] = "balanced",
+    ) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=InterfacyLayout(), print_result=False)
+    parser.add_command(dense_parameters)
+
+    help_text = parser.build_parser().format_help()
+    help_line = next(
+        line for line in help_text.splitlines() if "--help" in line and "Show " in line
+    )
+    mode_line = next(
+        line for line in help_text.splitlines() if "--mode" in line and "[choices:" in line
+    )
+    assert help_line.index("Show") == mode_line.index("[choices:")
+
+
+def test_interfacy_layout_help_and_type_metadata_align_in_same_column() -> None:
+    def path_ops(source: str, target: str, *extras: str, level: int = 2) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=InterfacyLayout(), print_result=False)
+    parser.add_command(path_ops)
+
+    help_text = parser.build_parser().format_help()
+    help_line = next(
+        line for line in help_text.splitlines() if "--help" in line and "Show " in line
+    )
+    level_line = next(
+        line for line in help_text.splitlines() if "--level" in line and "[default=" in line
+    )
+    assert help_line.index("Show") == level_line.index("[default=")
+
+
+def test_interfacy_layout_displays_empty_string_defaults_explicitly() -> None:
+    def db_tool(*, db_path: str = "") -> None:
+        """SQLite database path. Use the configured default when empty."""
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=InterfacyLayout(), print_result=False)
+    parser.add_command(db_tool)
+
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    db_line = next(
+        line for line in help_text.splitlines() if "--db-path" in line and "[default=" in line
+    )
+
+    assert '[default="", type: str]' in db_line
+
+
+def test_aligned_layout_help_only_option_row_is_not_over_indented() -> None:
+    def dense_parameters() -> None:
+        """Dense command."""
+
+    def path_ops() -> None:
+        """Path command."""
+
+    parser = Interfacy(backend="argparse", help_layout=Aligned(), print_result=False)
+    parser.add_command(dense_parameters)
+    parser.add_command(path_ops)
+
+    help_text = parser.build_parser().format_help()
+    help_line = next(
+        line for line in help_text.splitlines() if "--help" in line and "Show " in line
+    )
+    assert help_line.startswith("  --help")
+    assert not help_line.startswith("        --help")
+
+
+def test_aligned_typed_positional_literal_choices_keep_column_padding() -> None:
+    def demo(target: Literal["dev", "prod"]) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=AlignedTyped(), print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    target_line = next(
+        line for line in help_text.splitlines() if "TARGET" in line and "[choices:" in line
+    )
+
+    assert "TARGET [choices:" not in target_line
+    assert "TARGET                   [choices: dev, prod]" in target_line
+
+
+def test_aligned_typed_help_aligns_to_metadata_column_when_options_are_metadata_only() -> None:
+    def ytmp3_like(
+        *urls: str,
+        album: str | None = None,
+        output: str = "%(title)s.%(ext)s",
+        quiet: bool = False,
+    ) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=AlignedTyped(), print_result=False)
+    parser.add_command(ytmp3_like)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    lines = help_text.splitlines()
+    help_line = next(
+        line for line in lines if "--help" in line and "Show this help message and exit" in line
+    )
+    album_line = next(line for line in lines if "--album" in line and "[type:" in line)
+    output_line = next(
+        line for line in lines if "--output" in line and "[%(title)s.%(ext)s]" in line
+    )
+
+    help_idx = help_line.index("Show this help message and exit")
+    assert help_idx == album_line.index("[type:")
+    assert help_idx == output_line.index("[")
+
+
+def test_usage_metavars_use_kebab_case_for_nested_class_commands() -> None:
+    class ReportTool:
+        def __init__(self, output_dir: str) -> None:
+            self.output_dir = output_dir
+
+        def compare(self, left: str, right: str) -> None:
+            return None
+
+    parser = Interfacy(backend="argparse", help_layout=InterfacyLayout(), print_result=False)
+    parser.add_command(ReportTool)
+    root = parser.build_parser()
+    action = next(a for a in root._actions if isinstance(a, argparse._SubParsersAction))
+    compare_parser = action.choices["compare"]
+    help_text = compare_parser.format_help()
+
+    assert "OUTPUT-DIR" in help_text
+    assert "OUTPUT_DIR" not in help_text

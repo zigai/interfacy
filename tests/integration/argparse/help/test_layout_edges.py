@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import re
+from dataclasses import dataclass
 from enum import Enum
 
 import pytest
 
-from interfacy import BooleanMode
+from interfacy import BooleanMode, Interfacy
 from interfacy.common.terminal import strip_ansi
 from interfacy.help import (
     Aligned,
@@ -181,3 +183,82 @@ def test_aligned_presets_keep_template_and_constructor_customization(
 
     assert rendered.startswith(f"{'-c':<8}{'--count':<20}[{'2':>9}] Number of items.")
     assert ("[type: int]" in rendered) is show_type
+
+
+@dataclass
+class ExpandableSettings:
+    enabled: bool = False
+
+
+DEFAULT_EXPANDABLE_SETTINGS = ExpandableSettings()
+
+
+def run_with_expandable_settings(
+    settings: ExpandableSettings = DEFAULT_EXPANDABLE_SETTINGS,
+) -> None:
+    return None
+
+
+def test_layout_constructor_rejects_unknown_setting_kwargs() -> None:
+    with pytest.raises(TypeError, match="unexpected keyword argument 'unknown_layout_setting'"):
+        ArgparseLayout(unknown_layout_setting=True)
+
+
+def test_interfacy_layout_does_not_add_extra_leading_space_for_ansi_only_description() -> None:
+    layout = InterfacyLayout()
+    values = {
+        "description": "\x1b[38;5;15m\x1b[0m",
+        "extra": "[default=3, type: int]",
+    }
+    applied = layout._apply_interfacy_columns(values)
+    assert applied["extra"] == "[default=3, type: int]"
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_keeps_true_default_for_negative_boolean_flags(
+    layout_cls: type[Aligned | AlignedTyped],
+) -> None:
+    def compress_like(*, recursive: bool = True) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=layout_cls(), print_result=False)
+    parser.add_command(compress_like)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    recursive_line = next(
+        line
+        for line in help_text.splitlines()
+        if line.lstrip().startswith("-") and "--no-recursive" in line
+    )
+    assert "true" in recursive_line.lower()
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_omits_suppressed_boolean_default_for_model_expansion(
+    layout_cls: type[Aligned | AlignedTyped],
+) -> None:
+    parser = Interfacy(backend="argparse", help_layout=layout_cls(), print_result=False)
+    parser.add_command(run_with_expandable_settings)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    assert re.search(r"--settings[._-]?enabled", help_text)
+    assert re.search(r"--settings[._-]?enabled\s+enabled", help_text)
+    assert "true" not in help_text.lower()
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_hides_false_default_for_positive_boolean_flags(
+    layout_cls: type[Aligned | AlignedTyped],
+) -> None:
+    def pull_all_like(*, quiet: bool = False) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=layout_cls(), print_result=False)
+    parser.add_command(pull_all_like)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+
+    quiet_line = next(
+        line
+        for line in help_text.splitlines()
+        if line.lstrip().startswith("-") and "--quiet" in line
+    )
+    assert "[" not in quiet_line

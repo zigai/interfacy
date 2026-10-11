@@ -565,3 +565,96 @@ def test_argparse_layout_renders_percent_defaults_without_keyerror(
     out = capsys.readouterr()
     help_text = out.out + out.err
     assert "%(title)s.%(ext)s" in help_text
+
+
+def test_standard_layout_does_not_leave_blank_metavar_slots_in_usage() -> None:
+    def demo(*, count: int = 1, delay: float = 0.5) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=StandardLayout(), print_result=False)
+    parser.add_command(demo)
+    built_parser = parser.build_parser()
+    built_parser.prog = "demo"
+    help_text = built_parser.format_help()
+    usage_block = help_text.split("\n\n", 1)[0]
+
+    assert "[-c ]" not in usage_block
+    assert "[-d ]" not in usage_block
+    assert "[-c]" in usage_block
+    assert "[-d]" in usage_block
+
+
+def test_modern_detail_continuation_uses_detail_column(monkeypatch: pytest.MonkeyPatch) -> None:
+    freeze_terminal(monkeypatch, 60)
+
+    def demo(*, mode: Literal["fast", "safe", "balanced"] = "balanced") -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=Modern(), print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--mode" in line and "choices:" in line)
+    second = next(line for line in lines if "fast, safe, balanced" in line)
+
+    assert first.index("→") == second.index("fast")
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_help_option_continuation_aligns_to_description_column(
+    layout_cls: type[Aligned | AlignedTyped],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_terminal(monkeypatch, 60)
+
+    def demo(*, delay: float = 0.5) -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=layout_cls(), print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--help" in line and "Show" in line)
+    second = next(line for line in lines if "message and exit" in line)
+
+    assert first.index("Show") == second.index("message")
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_choice_continuation_uses_metadata_column(
+    layout_cls: type[Aligned | AlignedTyped],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_terminal(monkeypatch, 60)
+
+    def demo(*, mode: Literal["fast", "safe", "balanced"] = "balanced") -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=layout_cls(), print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--mode" in line and "[choices:" in line)
+    second = next(line for line in lines if "balanced]" in line and "--mode" not in line)
+
+    assert second.index("balanced]") >= first.index("[choices:")
+
+
+@pytest.mark.parametrize("layout_cls", [Aligned, AlignedTyped])
+def test_aligned_family_help_only_option_continuation_aligns(
+    layout_cls: type[Aligned | AlignedTyped],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freeze_terminal(monkeypatch, 60)
+
+    def demo() -> None:
+        return None
+
+    parser = Interfacy(backend="argparse", help_layout=layout_cls(), print_result=False)
+    parser.add_command(demo)
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", parser.build_parser().format_help())
+    lines = help_text.splitlines()
+    first = next(line for line in lines if "--help" in line and "Show" in line)
+    second = next(line for line in lines if "message and exit" in line)
+
+    assert first.index("Show") == second.index("message")
