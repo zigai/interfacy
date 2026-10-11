@@ -465,7 +465,7 @@ class FakePydanticAddress:
         self.city = kwargs["city"]
         self.zip = kwargs["zip"]
 
-    def model_dump(self) -> dict[str, Any]:
+    def model_dump(self, *, by_alias: bool | None = None) -> dict[str, Any]:
         return {"city": self.city, "zip": self.zip}
 
 
@@ -481,7 +481,7 @@ class FakePydanticUser:
         self.age = kwargs.get("age", 7)
         self.address = kwargs["address"]
 
-    def model_dump(self) -> dict[str, Any]:
+    def model_dump(self, *, by_alias: bool | None = None) -> dict[str, Any]:
         return {"name": self.name, "age": self.age, "address": self.address.model_dump()}
 
 
@@ -573,7 +573,7 @@ class FakePydanticV1User:
         self.name = kwargs["name"]
         self.age = kwargs.get("age", 9)
 
-    def dict(self) -> dict[str, Any]:
+    def dict(self, *, by_alias: bool = False) -> dict[str, Any]:
         return {"name": self.name, "age": self.age}
 
 
