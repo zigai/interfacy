@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+from collections.abc import Mapping
 from typing import Any
 
 from objinspect import Class, Function, Method
@@ -575,7 +576,7 @@ class SchemaRunner:
             case inspect.Parameter.KEYWORD_ONLY:
                 keyword[name] = val
             case inspect.Parameter.VAR_KEYWORD:
-                if isinstance(val, dict):
+                if isinstance(val, Mapping):
                     for key in val:
                         if key in keyword:
                             raise UsageError(f"multiple values for argument '{key}'")

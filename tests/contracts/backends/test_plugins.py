@@ -118,6 +118,23 @@ class FillMissingValuePlugin(InterfacyPlugin):
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_recovery_plugin_supplied_catch_all_mapping_reaches_the_command(backend: str) -> None:
+    class FillOptionsPlugin(InterfacyPlugin):
+        def recover_parse_failure(self, context, failure):
+            if failure.kind is not ParseFailureKind.MISSING_ARGUMENTS:
+                return None
+
+            return ProvideArgumentValues(values={failure.missing_arguments[0]: {"mode": "fast"}})
+
+    def command(**options: dict[str, str]) -> dict[str, str]:
+        return options
+
+    parser = Interfacy(backend=backend, plugins=[FillOptionsPlugin()])
+
+    assert parser.invoke(command, args=[]) == {"mode": "fast"}
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
 def test_recovery_plugin_cannot_erase_unknown_option(backend: str) -> None:
     executed: list[str] = []
 
