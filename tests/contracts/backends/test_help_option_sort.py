@@ -1,8 +1,11 @@
+from typing import Literal
+
 import pytest
 
 from interfacy import Interfacy
 from interfacy.help import InterfacyLayout
 from interfacy.naming.flag_strategy import DefaultFlagStrategy
+from tests.fixtures.help import render_help
 
 
 def _help_section(help_text: str, heading: str) -> str:
@@ -33,13 +36,14 @@ def short_priority_options(
     return api_key, account_id, zeta
 
 
-def test_argparse_default_help_option_sort_smart() -> None:
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_default_help_option_sort_smart(backend: Literal["argparse", "click"]) -> None:
     parser = Interfacy(
-        backend="argparse",
+        backend=backend,
         flag_strategy=DefaultFlagStrategy(style="keyword_only"),
     )
     parser.add_command(smart_options)
-    help_text = parser.build_parser().format_help()
+    help_text = render_help(parser)
     options_section = _help_section(help_text, "options")
 
     assert (
@@ -67,15 +71,18 @@ def test_argparse_help_option_sort_short_first() -> None:
     )
 
 
-def test_argparse_help_option_sort_user_rules_override_layout_default() -> None:
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_help_option_sort_user_rules_override_layout_default(
+    backend: Literal["argparse", "click"],
+) -> None:
     parser = Interfacy(
-        backend="argparse",
+        backend=backend,
         flag_strategy=DefaultFlagStrategy(style="keyword_only"),
         help_layout=InterfacyLayout(help_option_sort_default=["alphabetical"]),
         help_option_sort=["bool_last", "alphabetical"],
     )
     parser.add_command(smart_options)
-    help_text = parser.build_parser().format_help()
+    help_text = render_help(parser)
     options_section = _help_section(help_text, "options")
 
     assert (
@@ -113,50 +120,6 @@ def test_argparse_help_option_sort_per_command_override() -> None:
     parser.add_command(smart_options, help_option_sort=["bool_last", "alphabetical"])
     help_text = parser.build_parser().format_help()
     options_section = help_text.split("options:", maxsplit=1)[1]
-
-    assert (
-        options_section.index("--environment")
-        < options_section.index("--replicas")
-        < options_section.index("--timeout")
-    )
-    assert options_section.index("--timeout") < options_section.index("--dry-run")
-
-
-def test_click_default_help_option_sort_smart() -> None:
-    pytest.importorskip("click")
-    from click import Context
-
-    parser = Interfacy(
-        backend="click",
-        flag_strategy=DefaultFlagStrategy(style="keyword_only"),
-    )
-    parser.add_command(smart_options)
-    command = parser.build_parser()
-    help_text = command.get_help(Context(command))
-    options_section = _help_section(help_text, "options")
-
-    assert (
-        options_section.index("--environment")
-        < options_section.index("--replicas")
-        < options_section.index("--timeout")
-    )
-    assert options_section.index("--timeout") < options_section.index("--dry-run")
-
-
-def test_click_help_option_sort_user_rules_override_layout_default() -> None:
-    pytest.importorskip("click")
-    from click import Context
-
-    parser = Interfacy(
-        backend="click",
-        flag_strategy=DefaultFlagStrategy(style="keyword_only"),
-        help_layout=InterfacyLayout(help_option_sort_default=["alphabetical"]),
-        help_option_sort=["bool_last", "alphabetical"],
-    )
-    parser.add_command(smart_options)
-    command = parser.build_parser()
-    help_text = command.get_help(Context(command))
-    options_section = _help_section(help_text, "options")
 
     assert (
         options_section.index("--environment")

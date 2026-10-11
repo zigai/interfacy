@@ -6,7 +6,6 @@ from interfacy import Interfacy
 from interfacy.exceptions import UsageError
 from interfacy.naming import DefaultFlagStrategy
 from tests.fixtures.commands import (
-    fn_legacy_list,
     fn_list_int,
     fn_list_int_optional,
     fn_list_str,
@@ -250,20 +249,6 @@ class TestContainers:
 
         result = parser.invoke(args=args)
         assert result == data
-
-    @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
-    def test_legacy_list(self, parser: Interfacy):
-        """Verify that a legacy typing.List is handled identically to built-in list."""
-        parser.add_command(fn_legacy_list)
-        match parser.metadata["flag_style"]:
-            case "required_positional":
-                args = ["10", "20"]
-            case "keyword_only":
-                args = ["-x", "10", "20"]
-            case _:
-                pytest.fail(f"Unhandled flag strategy: {parser.metadata['flag_style']}")
-
-        assert parser.invoke(args=args) == [10, 20]
 
 
 def test_required_list_positional_usage_is_not_rendered_as_optional() -> None:

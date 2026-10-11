@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pytest
 
 from interfacy import Interfacy
@@ -5,6 +7,7 @@ from interfacy.common.terminal import strip_ansi
 from interfacy.help import InterfacyLayout
 from tests.fixtures.classes import TextTools
 from tests.fixtures.commands import attach, greet, pow
+from tests.fixtures.help import render_help
 
 
 class TodoCommands:
@@ -46,15 +49,16 @@ def test_argparse_help_subcommand_sort_default_insert_order() -> None:
     assert help_text.index("pow") < help_text.index("greet") < help_text.index("attach")
 
 
-def test_argparse_help_subcommand_sort_alphabetical() -> None:
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_help_subcommand_sort_alphabetical(backend: Literal["argparse", "click"]) -> None:
     parser = Interfacy(
-        backend="argparse",
+        backend=backend,
         help_subcommand_sort=["alphabetical"],
     )
     parser.add_command(pow)
     parser.add_command(greet)
     parser.add_command(attach)
-    help_text = parser.build_parser().format_help()
+    help_text = render_help(parser)
 
     assert help_text.index("attach") < help_text.index("greet") < help_text.index("pow")
 
@@ -100,35 +104,18 @@ def test_argparse_help_subcommand_sort_nested_name_length_desc() -> None:
     assert usage.index("prefix-text") < usage.index("repeat") < usage.index("join")
 
 
-def test_argparse_help_subcommand_sort_per_command_override() -> None:
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_help_subcommand_sort_per_command_override(backend: Literal["argparse", "click"]) -> None:
     parser = Interfacy(
-        backend="argparse",
+        backend=backend,
         help_subcommand_sort=["insert_order"],
     )
     parser.add_command(TodoCommands, help_subcommand_sort=["alphabetical"])
-    root = parser.build_parser()
-    help_text = root.format_help()
+    help_text = render_help(parser)
 
     assert _command_rows(help_text) == ["add", "remove"]
     usage = help_text.split("\n\n", maxsplit=1)[0]
     assert usage.index("add") < usage.index("remove")
-
-
-def test_click_help_subcommand_sort_alphabetical_top_level() -> None:
-    pytest.importorskip("click")
-    from click import Context
-
-    parser = Interfacy(
-        backend="click",
-        help_subcommand_sort=["alphabetical"],
-    )
-    parser.add_command(pow)
-    parser.add_command(greet)
-    parser.add_command(attach)
-    root = parser.build_parser()
-    help_text = root.get_help(Context(root))
-
-    assert help_text.index("attach") < help_text.index("greet") < help_text.index("pow")
 
 
 def test_click_help_subcommand_sort_nested_name_length_asc() -> None:
@@ -146,20 +133,3 @@ def test_click_help_subcommand_sort_nested_name_length_asc() -> None:
     assert _command_rows(help_text) == ["join", "repeat", "prefix-text"]
     usage = help_text.split("\n\n", maxsplit=1)[0]
     assert usage.index("join") < usage.index("repeat") < usage.index("prefix-text")
-
-
-def test_click_help_subcommand_sort_per_command_override() -> None:
-    pytest.importorskip("click")
-    from click import Context
-
-    parser = Interfacy(
-        backend="click",
-        help_subcommand_sort=["insert_order"],
-    )
-    parser.add_command(TodoCommands, help_subcommand_sort=["alphabetical"])
-    root = parser.build_parser()
-    help_text = root.get_help(Context(root))
-
-    assert _command_rows(help_text) == ["add", "remove"]
-    usage = help_text.split("\n\n", maxsplit=1)[0]
-    assert usage.index("add") < usage.index("remove")
