@@ -17,8 +17,8 @@ class ClickFuncParamType(click.types.FuncParamType):
     def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
         try:
             return self.func(value)
-        except (ValueError, TypeError, KeyError) as exc:
-            self.fail(f"invalid value for configured type parser: {exc}", param, ctx)
+        except (ValueError, TypeError, KeyError) as e:
+            self.fail(f"invalid value for configured type parser: {e}", param, ctx)
 
 
 class ChoiceParamType(click.ParamType):

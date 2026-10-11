@@ -278,8 +278,8 @@ class AncestorOptions:
         for raw_value in raw_values:
             try:
                 value = parse(raw_value) if parse is not None else raw_value
-            except (TypeError, ValueError) as exc:
-                raise InterspersedOptionValueError(argument, raw_value, exc) from exc
+            except (TypeError, ValueError) as e:
+                raise InterspersedOptionValueError(argument, raw_value, e) from e
 
             values.append(value)
 

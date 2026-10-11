@@ -271,8 +271,8 @@ class ArgumentParser(argparse.ArgumentParser):
 
         try:
             super().__init__(**base_init_kwargs)
-        except TypeError as exc:
-            if "color" not in base_init_kwargs or "color" not in str(exc):
+        except TypeError as e:
+            if "color" not in base_init_kwargs or "color" not in str(e):
                 raise
 
             base_init_kwargs.pop("color")
@@ -581,12 +581,12 @@ class ArgumentParser(argparse.ArgumentParser):
         try:
             result = parse_func(arg_string)
 
-        except argparse.ArgumentTypeError as exc:
-            raise argparse.ArgumentError(action, exc.args[0]) from exc
+        except argparse.ArgumentTypeError as e:
+            raise argparse.ArgumentError(action, e.args[0]) from e
 
-        except (TypeError, ValueError, KeyError) as exc:
+        except (TypeError, ValueError, KeyError) as e:
             t_name = callable_type_name(parse_func, fallback="value")
-            raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'") from exc
+            raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'") from e
 
         return result
 

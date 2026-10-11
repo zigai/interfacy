@@ -178,8 +178,8 @@ def get_default_config_paths() -> list[Path]:
 def _load_toml(path: Path) -> dict[str, Any]:
     try:
         return toml_load(path)
-    except Exception as exc:
-        raise ConfigurationError(f"Invalid TOML in config file: {path}") from exc
+    except Exception as e:
+        raise ConfigurationError(f"Invalid TOML in config file: {path}") from e
 
 
 def _flatten_config(raw: dict[str, Any]) -> dict[str, Any]:
@@ -237,10 +237,10 @@ def _import_symbol(value: str) -> Any:
     module = import_module(module_name)
     try:
         return getattr(module, symbol_name)
-    except AttributeError as exc:
+    except AttributeError as e:
         raise ConfigurationError(
             f"Config symbol '{symbol_name}' not found in '{module_name}'."
-        ) from exc
+        ) from e
 
 
 def _resolve_symbol_value(value: str) -> Any:

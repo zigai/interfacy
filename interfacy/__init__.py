@@ -53,8 +53,8 @@ _EXPORTS = {
 def __getattr__(name: str) -> Any:
     try:
         module_name, export_name = _EXPORTS[name]
-    except KeyError as exc:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+    except KeyError as e:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from e
 
     from importlib import import_module
 

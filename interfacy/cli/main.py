@@ -217,13 +217,13 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
 
         runner = Interfacy(**build_runner_kwargs(settings))
         configure_runner_from_module(runner, module)
-    except InterfacyExit as exc:
-        return ExitCode(exc.code)
-    except UsageError as exc:
-        _render_usage_error(parser, exc)
+    except InterfacyExit as e:
+        return ExitCode(e.code)
+    except UsageError as e:
+        _render_usage_error(parser, e)
         return ExitCode.USAGE
-    except (AttributeError, FileNotFoundError, ImportError, OSError, TypeError, ValueError) as exc:
-        _render_usage_error(parser, UsageError(str(exc)))
+    except (AttributeError, FileNotFoundError, ImportError, OSError, TypeError, ValueError) as e:
+        _render_usage_error(parser, UsageError(str(e)))
         return ExitCode.USAGE
 
     runner.run(target, args=target_args)

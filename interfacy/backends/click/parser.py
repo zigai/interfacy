@@ -20,8 +20,8 @@ def _click_parser_symbol(name: str) -> Any:
     """Load a click.parser symbol by name without direct private-member access."""
     try:
         return getattr(click_parser, name)
-    except AttributeError as exc:  # pragma: no cover - Click internals unexpectedly changed
-        raise RuntimeError(f"Unsupported Click parser internals: missing {name!r}.") from exc
+    except AttributeError as e:  # pragma: no cover - Click internals unexpectedly changed
+        raise RuntimeError(f"Unsupported Click parser internals: missing {name!r}.") from e
 
 
 _BaseOptionParser: type[Any] = _click_parser_symbol("_OptionParser")
