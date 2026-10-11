@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -440,6 +440,7 @@ wheels = [
 name = "interfacy"
 version = "0.8.1"
 source = { editable = "." }
+default-groups = ["test"]
 dependencies = [
     { name = "objinspect" },
     { name = "platformdirs" },
@@ -448,6 +449,7 @@ dependencies = [
     { name = "strto" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "tomlkit" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -516,6 +518,7 @@ requires-dist = [
     { name = "strto", specifier = ">=0.2.9" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "tomlkit", specifier = ">=0.12" },
+    { name = "typing-extensions", specifier = ">=4.7.1" },
 ]
 provides-extras = ["full", "click", "docs"]
 
