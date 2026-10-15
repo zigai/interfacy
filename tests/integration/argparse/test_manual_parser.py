@@ -8,7 +8,7 @@ import pytest
 from interfacy.backends.argparse import ArgumentParser
 from interfacy.common.terminal import strip_ansi
 from interfacy.exceptions import InterfacyExit, UsageError
-from interfacy.help import Modern
+from interfacy.help import DiagnosticLayout, Modern
 
 
 def build_parser(*, sys_exit_enabled: bool = True) -> ArgumentParser:
@@ -49,12 +49,12 @@ def test_manual_parser_help_prints_help_and_exits_zero(
         (
             ["qa"],
             "usage: deploy [--help] ENVIRONMENT {status} ...",
-            "deploy: error: argument ENVIRONMENT: invalid choice: 'qa'",
+            "error: invalid choice for 'ENVIRONMENT'",
         ),
         (
             ["staging", "status", "--count", "x"],
             "usage: deploy ENVIRONMENT status [--help] [--count COUNT]",
-            "deploy ENVIRONMENT status: error: argument --count: invalid int value: 'x'",
+            "error: '--count' requires an integer",
         ),
     ],
 )
@@ -70,11 +70,11 @@ def test_manual_parser_usage_error_reports_to_stderr_and_exits_two(
         parser.parse_args(args)
 
     captured = capsys.readouterr()
-    usage_line, error_line = captured.err.splitlines()
     assert excinfo.value.code == 2
     assert captured.out == ""
-    assert usage_line == usage
-    assert error_line.startswith(error_prefix)
+    assert usage in captured.err
+    assert captured.err.splitlines()[0] == error_prefix
+    assert "[interfacy]" not in captured.err
 
 
 @pytest.mark.parametrize("args", [["--help"], ["staging", "status", "--help"]])
@@ -99,9 +99,30 @@ def test_manual_parser_without_sys_exit_raises_usage_error_from_subcommand(
     with pytest.raises(UsageError) as excinfo:
         parser.parse_args(["staging", "status", "--count", "x"])
 
-    assert str(excinfo.value) == "argument --count: invalid int value: 'x'"
+    assert str(excinfo.value) == "'--count' requires an integer"
+    assert excinfo.value.diagnostic.kind == "invalid_type"
     assert excinfo.value.usage == "usage: deploy ENVIRONMENT status [--help] [--count COUNT]\n"
     assert capsys.readouterr().err == ""
+
+
+def test_manual_parser_inherits_diagnostic_layout_without_disabled_help_hint(capsys):
+    parser = ArgumentParser(
+        prog="tool",
+        add_help=False,
+        diagnostic_layout=DiagnosticLayout(error_prefix="invalid:"),
+    )
+    child = parser.add_subparsers(dest="command").add_parser("publish", add_help=False)
+    child.add_argument("--count", type=int)
+
+    with pytest.raises(SystemExit) as failure:
+        parser.parse_args(["publish", "--count", "private-input"])
+
+    captured = capsys.readouterr()
+    assert failure.value.code == 2
+    assert captured.out == ""
+    assert captured.err.startswith("invalid: '--count' requires an integer")
+    assert "Run '" not in captured.err
+    assert "private-input" not in captured.err
 
 
 def test_nested_manual_parser_uses_leaf_metavar_for_append_action() -> None:
@@ -140,7 +161,7 @@ def test_argument_parser_disables_argparse_usage_colors_when_python_colors_force
     with pytest.raises(UsageError) as excinfo:
         parser.parse_args(["status"])
 
-    assert "invalid choice: 'status'" in str(excinfo.value)
+    assert str(excinfo.value) == "unknown command 'status'"
     assert excinfo.value.usage == strip_ansi(excinfo.value.usage or "")
 
 

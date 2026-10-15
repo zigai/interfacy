@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
 from interfacy import Interfacy
 from interfacy.exceptions import ConfigurationError, DuplicatePluginError, UsageError
-from interfacy.help import HelpContent, HelpSection
+from interfacy.help import DiagnosticContent, DiagnosticResult, HelpContent, HelpSection
+from interfacy.naming import DefaultFlagStrategy
 from interfacy.plugins import (
     AfterParseContext,
     BeforeParseContext,
+    DiagnosticHookContext,
     HelpHookContext,
     InterfacyPlugin,
     ParseFailureKind,
@@ -404,3 +407,108 @@ def test_wrap_execute_plugins_wrap_execution_in_registration_order(parser) -> No
 
     assert result == "Ada|inner|outer"
     assert order == ["outer:before", "inner:before", "inner:after", "outer:after"]
+
+
+class DiagnosticPlugin(InterfacyPlugin):
+    def __init__(self, name: str, *, render: bool = False) -> None:
+        self.name = name
+        self.render = render
+
+    def transform_diagnostic(
+        self, context: DiagnosticHookContext, content: DiagnosticContent
+    ) -> DiagnosticContent:
+        assert context.diagnostic.kind == "missing_argument"
+        return replace(content, hints=(*content.hints, self.plugin_name))
+
+    def render_diagnostic(
+        self, context: DiagnosticHookContext, content: DiagnosticContent
+    ) -> DiagnosticResult | None:
+        if not self.render:
+            return None
+
+        return DiagnosticResult(f"{self.plugin_name}: {' then '.join(content.hints)}")
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_diagnostic_transforms_compose_and_first_renderer_wins(backend, capsys):
+    parser = Interfacy(
+        backend=backend,
+        plugins=[
+            DiagnosticPlugin("first"),
+            DiagnosticPlugin("second", render=True),
+            DiagnosticPlugin("third", render=True),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as failure:
+        parser.run(_keyword_only_name, args=[])
+
+    assert failure.value.code == 2
+    assert capsys.readouterr() == ("", "second: first then second then third\n")
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_diagnostic_transform_uses_native_layout_when_renderers_defer(backend, capsys):
+    parser = Interfacy(
+        backend=backend,
+        plugins=[DiagnosticPlugin("custom guidance")],
+        flag_strategy=DefaultFlagStrategy(style="keyword_only"),
+    )
+
+    with pytest.raises(SystemExit):
+        parser.run(_keyword_only_name, args=[])
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("error: missing required argument '--name'")
+    assert "custom guidance" in captured.err
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_invoke_does_not_call_diagnostic_display_hooks(backend, capsys):
+    class FailOnDisplay(InterfacyPlugin):
+        def transform_diagnostic(self, context, content):
+            pytest.fail("Embedded invocation must not construct display content")
+
+        def render_diagnostic(self, context, content):
+            pytest.fail("Embedded invocation must not render")
+
+    parser = Interfacy(backend=backend, plugins=[FailOnDisplay()])
+
+    with pytest.raises(UsageError) as failure:
+        parser.invoke(_keyword_only_name, args=[])
+
+    assert failure.value.diagnostic.kind == "missing_argument"
+    assert capsys.readouterr() == ("", "")
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_successful_recovery_does_not_render_a_diagnostic(backend, capsys):
+    class FailOnDisplay(InterfacyPlugin):
+        def transform_diagnostic(self, context, content):
+            pytest.fail("Successful recovery must not display an error")
+
+        def render_help(self, context, content):
+            pytest.fail("Successful recovery must not render help")
+
+    parser = Interfacy(backend=backend, plugins=[FillMissingValuePlugin(), FailOnDisplay()])
+
+    with pytest.raises(SystemExit) as failure:
+        parser.run(_keyword_only_name, args=[])
+
+    assert failure.value.code == 0
+    assert capsys.readouterr() == ("", "")
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+def test_embedded_missing_command_does_not_render_help(backend, capsys):
+    class FailOnHelp(InterfacyPlugin):
+        def render_help(self, context, content):
+            pytest.fail("Embedded failure must expose facts without rendering help")
+
+    parser = Interfacy(backend=backend, plugins=[FailOnHelp()])
+    with pytest.raises(UsageError) as failure:
+        parser.invoke(Worker, args=[])
+
+    assert failure.value.diagnostic.kind == "missing_subcommand"
+    assert capsys.readouterr() == ("", "")

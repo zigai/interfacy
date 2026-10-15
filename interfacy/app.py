@@ -27,6 +27,7 @@ from interfacy.declarations.validators import validate_bool
 from interfacy.help import HelpLayout
 from interfacy.help.colors import InterfacyColors
 from interfacy.help.content import HelpRenderer
+from interfacy.help.diagnostics import DiagnosticLayout
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.plugins import InterfacyPlugin
 from interfacy.runtime.invocation import CommandTarget, resolve_args
@@ -51,6 +52,7 @@ class Interfacy:
         epilog: Text shown after generated help output.
         type_parser: Registry used to convert raw CLI strings into annotated types.
         help_layout: Layout configuration for generated help output.
+        diagnostic_layout: Presentation of parse failures, independently of help.
         backend: Parser implementation to use. Must be ``"argparse"`` or ``"click"``.
         help_colors: Color theme applied by the help layout.
         print_result: Print returned command values after execution.
@@ -95,6 +97,7 @@ class Interfacy:
         backend: Backend = "argparse",
         help_colors: InterfacyColors | None = None,
         help_renderer: HelpRenderer | None = None,
+        diagnostic_layout: DiagnosticLayout | None = None,
         print_result: bool = False,
         tab_completion: bool = False,
         full_error_traceback: bool = False,
@@ -174,6 +177,7 @@ class Interfacy:
         help_layout: HelpLayout | UnsetType | None = UNSET,
         help_colors: InterfacyColors | UnsetType | None = UNSET,
         help_renderer: HelpRenderer | UnsetType | None = UNSET,
+        diagnostic_layout: DiagnosticLayout | UnsetType | None = UNSET,
         type_parser: StrToTypeParser | UnsetType | None = UNSET,
         print_result: bool | UnsetType = UNSET,
         tab_completion: bool | UnsetType = UNSET,

@@ -141,8 +141,8 @@ def test_union_literal_with_open_type_allows_open_values() -> None:
     assert cli.invoke(args=["42"]) == 42
 
 
-def test_invalid_literal_error_names_value_without_stray_quote() -> None:
-    """Verify error messages for invalid choices do not contain stray quote marks."""
+def test_invalid_literal_error_identifies_argument_without_rejected_value() -> None:
+    """Invalid choices identify the CLI argument without echoing rejected input."""
 
     def pick(choice: Literal["apple", "banana"] = "apple") -> str:
         return choice
@@ -154,8 +154,8 @@ def test_invalid_literal_error_names_value_without_stray_quote() -> None:
         cli.invoke(args=["--choice", "orange"])
 
     message = str(exc_info.value)
-    assert "'orange'" in message
-    assert '"' not in message
+    assert message == "invalid choice for '--choice'"
+    assert exc_info.value.diagnostic.choices == ("apple", "banana")
 
 
 def _make_literal_alias() -> object:

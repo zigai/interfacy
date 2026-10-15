@@ -34,6 +34,7 @@ from interfacy.declarations.validators import (
 from interfacy.exceptions import ConfigurationError
 from interfacy.help.colors import InterfacyColors
 from interfacy.help.content import HelpRenderer
+from interfacy.help.diagnostics import DiagnosticLayout
 from interfacy.help.layouts import HelpLayout
 from interfacy.naming import AbbreviationGenerator, FlagStrategy
 from interfacy.plugins import InterfacyPlugin
@@ -57,6 +58,7 @@ class CoreSettings:
     help_layout: HelpLayout | None = field(default=None, metadata=RESETTABLE)
     help_colors: InterfacyColors | None = field(default=None, metadata=RESETTABLE)
     help_renderer: HelpRenderer | None = field(default=None, metadata=RESETTABLE)
+    diagnostic_layout: DiagnosticLayout | None = field(default=None, metadata=RESETTABLE)
     print_result: bool = field(default=False, metadata=REQUIRED)
     tab_completion: bool = field(default=False, metadata=REQUIRED)
     full_error_traceback: bool = field(default=False, metadata=REQUIRED)

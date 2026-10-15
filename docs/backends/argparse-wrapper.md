@@ -61,7 +61,7 @@ parser = ArgumentParser(help_flags=("--help", "-h"))
 
 ## Exiting
 
-Like argparse, the parser prints help and exits with status 0, and reports usage errors on stderr and exits with status 2. Pass `sys_exit_enabled=False` to handle these yourself: help raises `InterfacyExit` and usage errors raise `UsageError`. Subparsers inherit the setting.
+Help exits with status 0; native diagnostics go to stderr and exit with status 2. Customize their presentation with `diagnostic_layout=DiagnosticLayout(...)`. Pass `sys_exit_enabled=False` for silent `UsageError` exceptions with structured `.diagnostic` facts; help raises `InterfacyExit`. Subparsers inherit both settings.
 
 ```python
 from interfacy.exceptions import InterfacyExit, UsageError

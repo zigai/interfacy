@@ -14,7 +14,7 @@ from tests.fixtures.commands import (
 class TestPrimitives:
     @pytest.mark.parametrize("parser", ["argparse_req_pos"], indirect=True)
     def test_bad_int_error_uses_user_facing_type_name(self, parser: Interfacy):
-        """Invalid typed values should show argparse-style type names."""
+        """Invalid typed values identify the option and expected input without echoing it."""
 
         def greet(name: str, times: int = 1) -> str:
             return name * times
@@ -24,8 +24,9 @@ class TestPrimitives:
         with pytest.raises(UsageError) as excinfo:
             parser.parse_args(["Ada", "--times", "bad"])
 
-        assert "argument -t/--times: invalid int value: 'bad'" in str(excinfo.value)
-        assert "parser[int]" not in str(excinfo.value)
+        assert str(excinfo.value) == "'--times' requires an integer"
+        assert excinfo.value.diagnostic.argument == "--times"
+        assert "bad" not in str(excinfo.value)
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "argparse_kw_only"], indirect=True)
     def test_str_required(self, parser: Interfacy):

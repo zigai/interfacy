@@ -68,7 +68,7 @@ def test_public_params_type_hints_resolve() -> None:
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
-def test_configured_help_renderer_is_backend_neutral(backend: str) -> None:
+def test_configured_help_renderer_is_backend_neutral(backend: str, script_invocation: None) -> None:
     if backend == "click":
         pytest.importorskip("click")
 
@@ -80,9 +80,13 @@ def test_configured_help_renderer_is_backend_neutral(backend: str) -> None:
         help_renderer=lambda context, content: f"{context.prog}:{len(content.sections)}",
     )
     parser.add_command(command)
-    help_text = render_help(parser)
+    native = parser.build_parser()
+    if isinstance(native, click.Command):
+        help_text = native.get_help(click.Context(native, info_name="tool"))
+    else:
+        help_text = native.format_help()
 
-    assert help_text.startswith("main:")
+    assert help_text.startswith("tool:")
     assert help_text.endswith("\n")
     assert not help_text.endswith("\n\n")
 

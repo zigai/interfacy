@@ -5,6 +5,7 @@ import sys
 from argparse import Namespace
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass, field
 from gettext import gettext
 from typing import TYPE_CHECKING, Any, NoReturn, TextIO
 
@@ -12,7 +13,7 @@ from interfacy.backends.argparse.argument_kwargs import (
     callable_type_name,
     normalize_argument_kwargs,
 )
-from interfacy.backends.argparse.errors import ArgparseParseError, is_missing_subcommand_error
+from interfacy.backends.argparse.errors import ArgparseParseError
 from interfacy.backends.argparse.help_schema import (
     help_argument_from_actions,
     implicit_command,
@@ -27,9 +28,16 @@ from interfacy.backends.argparse.namespaces import (
     original_destination,
 )
 from interfacy.common.debug import get_logger
-from interfacy.exceptions import InterfacyExit, UsageError
+from interfacy.common.terminal import get_terminal_width
+from interfacy.exceptions import InterfacyExit, ParseDiagnostic, UsageError
 from interfacy.help import StandardLayout
 from interfacy.help.content import HelpRenderer
+from interfacy.help.diagnostics import (
+    DiagnosticLayout,
+    build_diagnostic_content,
+    diagnostic_message,
+    normalize_diagnostic_text,
+)
 from interfacy.help.renderer import (
     SchemaHelpRenderer,
 )
@@ -41,6 +49,13 @@ if TYPE_CHECKING:
     from interfacy.schema.nodes import Argument, Command, ParserSchema
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class _ParseState:
+    depth: int = 0
+    extras: dict[str, ParseDiagnostic] = field(default_factory=dict)
+    parsers: dict[tuple[str, ...], ArgumentParser] = field(default_factory=dict)
 
 
 class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[private-member-access]
@@ -80,6 +95,9 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         sys_exit_enabled: bool = True,
         supplied_dests: set[str] | None = None,
         destination_paths: dict[str, tuple[str, ...]] | None = None,
+        diagnostic_layout: DiagnosticLayout | None = None,
+        parse_state: _ParseState | None = None,
+        command_path: tuple[str, ...] = (),
     ) -> None:
         super().__init__(
             option_strings,
@@ -99,6 +117,9 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         self._child_sys_exit_enabled = sys_exit_enabled
         self._child_supplied_dests = supplied_dests
         self._child_destination_paths = destination_paths
+        self._child_diagnostic_layout = diagnostic_layout
+        self._child_parse_state = parse_state
+        self._command_path = command_path
 
     def add_parser(  # type: ignore[override]
         self,
@@ -151,6 +172,9 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         kwargs.setdefault("sys_exit_enabled", self._child_sys_exit_enabled)
         kwargs.setdefault("supplied_dests", self._child_supplied_dests)
         kwargs.setdefault("destination_paths", self._child_destination_paths)
+        kwargs.setdefault("diagnostic_layout", self._child_diagnostic_layout)
+        kwargs.setdefault("parse_state", self._child_parse_state)
+        kwargs.setdefault("command_path", (*self._command_path, name))
         nested_components = [*self.base_nest_path_components]
         if nested_components:
             nested_components.extend([SUBCOMMANDS_KEY, nest_dir or name])
@@ -237,6 +261,9 @@ class ArgumentParser(argparse.ArgumentParser):
         sys_exit_enabled: bool = True,
         supplied_dests: set[str] | None = None,
         destination_paths: dict[str, tuple[str, ...]] | None = None,
+        diagnostic_layout: DiagnosticLayout | None = None,
+        parse_state: _ParseState | None = None,
+        command_path: tuple[str, ...] = (),
     ) -> None:
         if parents is None:
             parents = []
@@ -290,7 +317,17 @@ class ArgumentParser(argparse.ArgumentParser):
         self._schema: ParserSchema | None = None
         self.help_renderer = help_renderer
         self._help_pipeline: HelpPipeline | None = None
-        self._help_command_path: tuple[str, ...] = ()
+        self._help_command_path = command_path
+        self.diagnostic_layout = (
+            deepcopy(diagnostic_layout) if diagnostic_layout else DiagnosticLayout()
+        )
+        self._parse_state = parse_state if parse_state is not None else _ParseState()
+        self._parse_state.parsers[command_path] = self
+        self._optional_tokens: dict[str, bool] = {}
+        self._unknown_arguments: list[str] = []
+        self._seen_actions: set[argparse.Action] = set()
+        self._in_native_parse = False
+        self._reading_arguments = False
         self._interfacy_raise_parse_errors = False
         self.sys_exit_enabled = sys_exit_enabled
         # Shared with every nested subparser; the owner clears it before each parse.
@@ -319,7 +356,7 @@ class ArgumentParser(argparse.ArgumentParser):
     def format_help(self) -> str:
         """Render all generated and manual help through the structured pipeline."""
         if self._help_pipeline is not None:
-            return self._help_pipeline.render(self._help_command_path)
+            return self._help_pipeline.render(self._help_command_path, program=self.prog)
 
         renderer = SchemaHelpRenderer(
             self._interfacy_help_layout,
@@ -339,7 +376,11 @@ class ArgumentParser(argparse.ArgumentParser):
     ) -> None:
         """Attach the core-owned structured help pipeline."""
         self._help_pipeline = pipeline
+        if self._parse_state.parsers.get(self._help_command_path) is self:
+            del self._parse_state.parsers[self._help_command_path]
+
         self._help_command_path = command_path
+        self._parse_state.parsers[command_path] = self
 
     def set_schema_command(self, command: Command | None) -> None:
         """
@@ -383,6 +424,9 @@ class ArgumentParser(argparse.ArgumentParser):
                 "sys_exit_enabled": self.sys_exit_enabled,
                 "supplied_dests": self.supplied_dests,
                 "destination_paths": self.destination_paths,
+                "diagnostic_layout": self.diagnostic_layout,
+                "parse_state": self._parse_state,
+                "command_path": self._help_command_path,
             }
         )
 
@@ -407,7 +451,27 @@ class ArgumentParser(argparse.ArgumentParser):
         if namespace is None:
             namespace = Namespace()
 
-        parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
+        if self._parse_state.depth == 0:
+            self._parse_state.extras.clear()
+
+        self._parse_state.depth += 1
+        self._optional_tokens.clear()
+        self._unknown_arguments.clear()
+        try:
+            parsed_args, unknown_args = super().parse_known_args(args=args, namespace=namespace)
+            self._unknown_arguments = unknown_args
+
+            for token in unknown_args:
+                optional = self._optional_tokens.get(token, False)
+                diagnostic = ParseDiagnostic(
+                    kind="unknown_option" if optional else "unexpected_argument",
+                    command_path=self._help_command_path,
+                    argument=token.partition("=")[0] if optional else None,
+                    choices=tuple(self._option_string_actions) if optional else (),
+                )
+                self._parse_state.extras.setdefault(token, diagnostic)
+        finally:
+            self._parse_state.depth -= 1
         logger.info(
             "Initial parse keys: %s, unknown count=%d",
             sorted(vars(parsed_args)),
@@ -454,20 +518,165 @@ class ArgumentParser(argparse.ArgumentParser):
 
         raise UsageError((message or "").strip(), usage=self.format_usage())
 
+    def _argument_label(self, action: argparse.Action) -> str:
+        if action.option_strings:
+            return next(
+                (flag for flag in action.option_strings if flag.startswith("--")),
+                action.option_strings[0],
+            )
+
+        metavar = action.metavar
+
+        return metavar if isinstance(metavar, str) else self._original_dest_name(action.dest)
+
+    def _missing_diagnostic(self) -> ParseDiagnostic | None:
+        if not self._in_native_parse or self._reading_arguments:
+            return None
+
+        if any(
+            type(action).__module__
+            not in ("argparse", __name__, "interfacy.backends.argparse.actions")
+            for action in self._actions
+        ):
+            return None
+
+        missing = [
+            action
+            for action in self._actions
+            if action.required and action not in self._seen_actions
+        ]
+        if not missing:
+            return None
+
+        action = missing[0]
+        subcommand = isinstance(action, NestedSubParsersAction)
+
+        return ParseDiagnostic(
+            kind="missing_subcommand" if subcommand else "missing_argument",
+            command_path=self._help_command_path,
+            argument=None if subcommand else self._argument_label(action),
+            choices=tuple(action.choices) if subcommand else (),
+        )
+
+    def _parse_known_args(self, *args: Any, **kwargs: Any) -> Any:
+        self._seen_actions.clear()
+        self._in_native_parse = True
+        diagnostic = None
+        try:
+            return super()._parse_known_args(*args, **kwargs)
+        except argparse.ArgumentError as e:
+            if e.argument_name is None:
+                diagnostic = self._missing_diagnostic()
+        finally:
+            self._in_native_parse = False
+
+        return self._fail(
+            diagnostic or ParseDiagnostic(kind="usage", command_path=self._help_command_path)
+        )
+
+    def _read_args_from_files(self, arg_strings: list[str]) -> list[str]:
+        previous = self._reading_arguments
+        self._reading_arguments = True
+        try:
+            return super()._read_args_from_files(arg_strings)
+        except argparse.ArgumentError:
+            pass
+        finally:
+            self._reading_arguments = previous
+
+        return self._fail(ParseDiagnostic(kind="usage", command_path=self._help_command_path))
+
+    def _get_option_tuples(self, option_string: str) -> Any:
+        matches = super()._get_option_tuples(option_string)
+        if len(matches) > 1:
+            self._fail(ParseDiagnostic(kind="usage", command_path=self._help_command_path))
+
+        return matches
+
+    def _parse_optional(self, arg_string: str) -> Any:
+        result = super()._parse_optional(arg_string)
+        if result is not None:
+            match = result[0] if isinstance(result, list) else result
+            self._optional_tokens[arg_string] = match[0] is None
+
+        return result
+
+    def _match_argument(self, action: argparse.Action, arg_strings_pattern: str) -> int:
+        try:
+            return super()._match_argument(action, arg_strings_pattern)
+        except argparse.ArgumentError:
+            pass
+        return self._fail(
+            ParseDiagnostic(
+                kind="missing_value",
+                command_path=self._help_command_path,
+                argument=self._argument_label(action),
+            )
+        )
+
+    def _check_value(self, action: argparse.Action, value: Any) -> None:
+        failed = False
+        try:
+            super()._check_value(action, value)
+        except argparse.ArgumentError:
+            failed = True
+
+        if failed:
+            subcommand = isinstance(action, NestedSubParsersAction)
+            self._fail(
+                ParseDiagnostic(
+                    kind="unknown_command" if subcommand else "invalid_choice",
+                    command_path=self._help_command_path,
+                    argument=None if subcommand else self._argument_label(action),
+                    token=value if subcommand and isinstance(value, str) else None,
+                    choices=tuple(str(choice) for choice in action.choices)
+                    if action.choices
+                    else (),
+                )
+            )
+
+    def _fail(self, diagnostic: ParseDiagnostic) -> NoReturn:
+        parser = self._parse_state.parsers.get(diagnostic.command_path, self)
+        if parser is not self:
+            parser._fail(diagnostic)
+
+        usage = (
+            self.format_help()
+            if diagnostic.kind == "missing_subcommand" and self._help_pipeline is None
+            else self.format_usage()
+        )
+        message = diagnostic_message(diagnostic)
+        if self._interfacy_raise_parse_errors or not self.sys_exit_enabled:
+            raise ArgparseParseError(
+                message,
+                usage=usage,
+                diagnostic=diagnostic,
+                program=self.prog,
+            )
+
+        content = build_diagnostic_content(
+            diagnostic,
+            program=self.prog,
+            help_flags=self.help_flags if self.add_help else (),
+            usage=usage,
+        )
+        text = self.diagnostic_layout.render(content, terminal_width=get_terminal_width())
+        self._print_message(normalize_diagnostic_text(text), sys.stderr)
+        self.exit(2)
+
     def error(self, message: str) -> NoReturn:
-        """Report a usage failure by exiting with status 2 or raising a structured error."""
-        usage = self.format_usage()
-        if is_missing_subcommand_error(message, self._actions, self._original_destinations):
-            usage = self.format_help()
+        """Report native failures without exposing backend messages or rejected values."""
+        diagnostic = self._missing_diagnostic()
+        if diagnostic is None and self._unknown_arguments:
+            diagnostic = self._parse_state.extras[self._unknown_arguments[0]]
 
-        if self._interfacy_raise_parse_errors:
-            raise ArgparseParseError(message, usage=usage)
-
-        if not self.sys_exit_enabled:
-            raise UsageError(message, usage=usage)
-
-        self._print_message(f"{usage.rstrip()}\n", sys.stderr)
-        self.exit(2, f"{self.prog}: error: {message}\n")
+        if diagnostic is None:
+            diagnostic = ParseDiagnostic(
+                kind="usage",
+                command_path=self._help_command_path,
+                message=message if not self._in_native_parse else "",
+            )
+        self._fail(diagnostic)
 
     def _get_formatter(self, file: TextIO | None = None) -> argparse.HelpFormatter:  # type: ignore[override]
         if sys.version_info >= (3, 15):
@@ -579,21 +788,29 @@ class ArgumentParser(argparse.ArgumentParser):
     def _get_value(self, action: argparse.Action, arg_string: str) -> Any:
         parse_func = self._registry_get("type", action.type, action.type)
         if not callable(parse_func):
-            raise argparse.ArgumentError(action, f"{parse_func!r} is not callable")
+            raise TypeError("Argument type must be callable")
 
         try:
-            result = parse_func(arg_string)
+            return parse_func(arg_string)
+        except (argparse.ArgumentTypeError, TypeError, ValueError, KeyError):
+            pass
 
-        except argparse.ArgumentTypeError as e:
-            raise argparse.ArgumentError(action, e.args[0]) from e
-
-        except (TypeError, ValueError, KeyError) as e:
-            t_name = callable_type_name(parse_func, fallback="value")
-            raise argparse.ArgumentError(action, f"invalid {t_name} value: '{arg_string}'") from e
-
-        return result
+        name = callable_type_name(parse_func, fallback="value")
+        expected = {"int": "an integer", "float": "a number", "str": "text"}.get(
+            name, "a valid value"
+        )
+        return self._fail(
+            ParseDiagnostic(
+                kind="invalid_choice" if action.choices is not None else "invalid_type",
+                command_path=self._help_command_path,
+                argument=self._argument_label(action),
+                choices=tuple(str(choice) for choice in action.choices) if action.choices else (),
+                expected=expected,
+            )
+        )
 
     def _get_values(self, action: argparse.Action, arg_strings: list[str]) -> Any:
+        self._seen_actions.add(action)
         # argparse also calls this for absent optional positionals, with no strings.
         if action.option_strings or arg_strings:
             self.supplied_dests.add(action.dest)

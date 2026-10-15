@@ -6,6 +6,7 @@ from typing import Any
 
 from interfacy.exceptions import ConfigurationError, DuplicatePluginError
 from interfacy.help.content import HelpContent, HelpResult
+from interfacy.help.diagnostics import DiagnosticContent, DiagnosticResult
 from interfacy.plugins import (
     AbortRecovery,
     AfterParseContext,
@@ -13,6 +14,7 @@ from interfacy.plugins import (
     BackendPluginContext,
     BeforeParseContext,
     ConfigureContext,
+    DiagnosticHookContext,
     ExecuteContext,
     HelpHookContext,
     InterfacyPlugin,
@@ -162,6 +164,42 @@ class PluginManager:
 
             if not isinstance(result, HelpResult):
                 self._invalid_result(plugin.plugin_name, "render_help", "HelpResult | None")
+
+            return result
+
+        return None
+
+    def transform_diagnostic(
+        self,
+        context: DiagnosticHookContext,
+        content: DiagnosticContent,
+    ) -> DiagnosticContent:
+        current = content
+        for plugin in self.plugins:
+            result = plugin.transform_diagnostic(context, current)
+            if not isinstance(result, DiagnosticContent):
+                self._invalid_result(
+                    plugin.plugin_name, "transform_diagnostic", "DiagnosticContent"
+                )
+
+            current = result
+
+        return current
+
+    def render_diagnostic(
+        self,
+        context: DiagnosticHookContext,
+        content: DiagnosticContent,
+    ) -> DiagnosticResult | None:
+        for plugin in self.plugins:
+            result = plugin.render_diagnostic(context, content)
+            if result is None:
+                continue
+
+            if not isinstance(result, DiagnosticResult):
+                self._invalid_result(
+                    plugin.plugin_name, "render_diagnostic", "DiagnosticResult | None"
+                )
 
             return result
 

@@ -130,6 +130,25 @@ class SchemaHelpRenderer:
     def terminal_width(self, value: int | None) -> None:
         self._configured_terminal_width = value
 
+    def render_usage(
+        self, schema: ParserSchema, prog: str, *, command: Command | None = None
+    ) -> str:
+        """Render only usage from the same schema and layout used for help."""
+        with self._render_scope():
+            if command is None and len(schema.commands) == 1:
+                command = next(iter(schema.commands.values()))
+
+            if command is None:
+                return self._build_parser_usage(schema, prog)
+
+            return self._build_usage(
+                command,
+                prog,
+                parser_executable_flags=schema.executable_flags
+                if command.parent_path == ()
+                else None,
+            )
+
     def render_parser_help(self, schema: ParserSchema, prog: str) -> str:
         """
         Render help text for a parser schema and program name.
@@ -354,9 +373,8 @@ class SchemaHelpRenderer:
         parts = [p for p in (command.epilog, parser_epilog) if p]
         return "\n\n".join(parts) or None
 
-    def _render_multi_command_help(self, schema: ParserSchema, prog: str) -> str:
+    def _build_parser_usage(self, schema: ParserSchema, prog: str) -> str:
         layout = self.layout
-        sections: list[HelpSection] = []
         usage_prog = self._style_usage_text(self._normalize_prog(prog))
         usage_prefix = self._get_usage_prefix()
         usage_suffix = self._usage_token_for_commands(
@@ -377,9 +395,14 @@ class SchemaHelpRenderer:
         else:
             usage = f"{usage_prefix}{usage_text}"
 
+        return usage
+
+    def _render_multi_command_help(self, schema: ParserSchema, prog: str) -> str:
+        layout = self.layout
+        sections: list[HelpSection] = []
         self._append_usage_and_description(
             sections=sections,
-            usage=usage,
+            usage=self._build_parser_usage(schema, prog),
             description=schema.description,
         )
 

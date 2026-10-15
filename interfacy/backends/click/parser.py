@@ -6,9 +6,13 @@ from typing import Any, Protocol
 import click
 import click.parser as click_parser
 
+from interfacy.backends.click.errors import ClickParseContext, ClickParseError, argument_label
+from interfacy.exceptions import ParseDiagnostic
+
 
 class OptionLike(Protocol):
     nargs: int
+    obj: click.Parameter
 
 
 class ParsingStateLike(Protocol):
@@ -25,11 +29,42 @@ def _click_parser_symbol(name: str) -> Any:
 
 
 _BaseOptionParser: type[Any] = _click_parser_symbol("_OptionParser")
+_BaseArgument: type[Any] = _click_parser_symbol("_Argument")
 _normalize_opt: Callable[[str, Any], str] = _click_parser_symbol("_normalize_opt")
+
+
+class _InterfacyParserArgument(_BaseArgument):
+    def process(self, value: Any, state: Any) -> None:
+        try:
+            super().process(value, state)
+        except click.BadArgumentUsage:
+            pass
+        else:
+            return
+
+        raise ClickParseError(
+            ParseDiagnostic(kind="missing_value", argument=argument_label(self.obj)),
+            param=self.obj,
+        )
 
 
 class InterfacyOptionParser(_BaseOptionParser):
     """Parse Click options while supporting varargs option values."""
+
+    def add_argument(self, obj: click.Argument, dest: str | None, nargs: int = 1) -> None:
+        self._args.append(_InterfacyParserArgument(obj, dest=dest, nargs=nargs))
+
+    def parse_args(
+        self, args: list[str]
+    ) -> tuple[dict[str, Any], list[str], list[click.Parameter]]:
+        if isinstance(self.ctx, ClickParseContext):
+            self.ctx.interfacy_has_extra_args = False
+
+        result = super().parse_args(args)
+        if isinstance(self.ctx, ClickParseContext):
+            self.ctx.interfacy_has_extra_args = bool(result[1])
+
+        return result
 
     def _token_looks_like_option(self, arg_text: str) -> bool:
         if arg_text == "--":
@@ -92,7 +127,15 @@ class InterfacyOptionParser(_BaseOptionParser):
         state: ParsingStateLike,
     ) -> Any:
         if option.nargs != -1:
-            return super()._get_value_from_state(option_name, option, state)
+            try:
+                return super()._get_value_from_state(option_name, option, state)
+            except click.BadOptionUsage:
+                pass
+            raise ClickParseError(
+                ParseDiagnostic(kind="missing_value", argument=option_name),
+                ctx=self.ctx,
+                param=option.obj,
+            )
 
         collected: list[str] = []
         while state.rargs:

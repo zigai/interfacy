@@ -5,6 +5,9 @@ from typing import Any
 
 import click
 
+from interfacy.backends.click.errors import ClickParseError, argument_label
+from interfacy.exceptions import ParseDiagnostic
+
 
 class ClickFuncParamType(click.types.FuncParamType):
     """Wrap a callable parser as a Click parameter type."""
@@ -17,8 +20,13 @@ class ClickFuncParamType(click.types.FuncParamType):
     def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
         try:
             return self.func(value)
-        except (ValueError, TypeError, KeyError) as e:
-            self.fail(f"invalid value for configured type parser: {e}", param, ctx)
+        except (ValueError, TypeError, KeyError):
+            pass
+        raise ClickParseError(
+            ParseDiagnostic(kind="invalid_type", argument=argument_label(param) if param else None),
+            ctx=ctx,
+            param=param,
+        )
 
 
 class ChoiceParamType(click.ParamType):
@@ -56,9 +64,12 @@ class ChoiceParamType(click.ParamType):
                 converted = value
         allowed = self._parsed_choices if self._parsed_choices is not None else self.choices
         if converted not in allowed:
-            choices_repr = ", ".join(repr(choice) for choice in self.choices)
-            raise click.BadParameter(
-                f"invalid choice: {value!r} (choose from {choices_repr})",
+            raise ClickParseError(
+                ParseDiagnostic(
+                    kind="invalid_choice",
+                    argument=argument_label(param) if param else None,
+                    choices=tuple(str(choice) for choice in self.choices),
+                ),
                 ctx=ctx,
                 param=param,
             )

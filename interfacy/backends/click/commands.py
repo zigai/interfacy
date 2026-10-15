@@ -6,8 +6,10 @@ from typing import Any
 import click
 
 from interfacy.backends.base import HelpPipeline
+from interfacy.backends.click.errors import ClickParseContext, ClickParseError
 from interfacy.backends.click.parser import InterfacyOptionParser
 from interfacy.declarations.params import BooleanMode
+from interfacy.exceptions import ParseDiagnostic
 from interfacy.help import HelpLayout, StandardLayout
 from interfacy.help.content import HelpRenderer
 from interfacy.help.renderer import SchemaHelpRenderer
@@ -25,6 +27,8 @@ from interfacy.schema.values import ValueCardinality
 
 class InterfacyClickOption(click.Option):
     """Normalize Click option help records to omit metavar suffixes."""
+
+    interfacy_argument: Argument | None = None
 
     def get_help_record(self, ctx: click.Context) -> tuple[str, str] | None:
         """
@@ -110,6 +114,8 @@ class InterfacyListOption(InterfacyClickOption):
 class InterfacyClickArgument(click.Argument):
     """Carry argument help text and normalize argument help-row names."""
 
+    interfacy_argument: Argument | None = None
+
     def __init__(
         self,
         param_decls: Sequence[str],
@@ -168,6 +174,7 @@ class HelpMixin:
             return self.interfacy_help_pipeline.render(
                 self.interfacy_help_command_path,
                 ctx.terminal_width,
+                program=ctx.command_path,
             )
 
         layout = self.interfacy_help_layout or StandardLayout()
@@ -305,6 +312,8 @@ class HelpMixin:
 class InterfacyClickCommand(HelpMixin, click.Command):
     """Render command help with Interfacy schema-aware formatting."""
 
+    context_class = ClickParseContext
+
     def __init__(
         self,
         *args: Any,
@@ -333,6 +342,8 @@ class InterfacyClickCommand(HelpMixin, click.Command):
 class InterfacyClickGroup(HelpMixin, click.Group):
     """Resolve group aliases and render group help with schema metadata."""
 
+    context_class = ClickParseContext
+
     def __init__(
         self,
         *args: Any,
@@ -356,6 +367,33 @@ class InterfacyClickGroup(HelpMixin, click.Group):
             param.add_to_parser(parser, ctx)
 
         return parser
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        if not args and self.no_args_is_help and not ctx.resilient_parsing:
+            raise ClickParseError(
+                ParseDiagnostic(kind="missing_subcommand", choices=tuple(self.list_commands(ctx))),
+                ctx=ctx,
+            )
+
+        return super().parse_args(ctx, args)
+
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError as e:
+            if type(e) is not click.UsageError:
+                raise
+
+        raise ClickParseError(
+            ParseDiagnostic(
+                kind="unknown_command",
+                token=args[0],
+                choices=tuple(self.list_commands(ctx)),
+            ),
+            ctx=ctx,
+        )
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         """

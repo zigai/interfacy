@@ -10,7 +10,9 @@ from strto import StrToTypeParser
 from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction, ExecutableFlag
 from interfacy.declarations.settings import BackendName
+from interfacy.exceptions import ParseDiagnostic
 from interfacy.help import HelpLayout
+from interfacy.help.diagnostics import DiagnosticLayout
 from interfacy.schema.nodes import ParserSchema
 
 NativeParserT_co = TypeVar("NativeParserT_co", covariant=True)
@@ -28,6 +30,7 @@ class BackendConfig:
     tab_completion: bool = False
     allow_args_from_file: bool = True
     help_layout: HelpLayout | None = None
+    diagnostic_layout: DiagnosticLayout | None = None
     type_parser: StrToTypeParser | None = None
 
     def __post_init__(self) -> None:
@@ -62,6 +65,7 @@ class ParseResult:
 class NativePresentation:
     kind: NativePresentationKind
     message: str
+    diagnostic: ParseDiagnostic | None = None
     command_path: tuple[str, ...] = ()
     exit_code: int = 2
 
@@ -92,6 +96,8 @@ class HelpPipeline(Protocol):
         self,
         command_path: tuple[str, ...],
         terminal_width: int | None = None,
+        *,
+        program: str | None = None,
     ) -> str: ...
 
 

@@ -29,7 +29,7 @@ from interfacy.help.renderer import SchemaHelpRenderer
 from interfacy.plugins import HelpHookContext, SchemaDescriptor
 from interfacy.schema.nodes import Command, ParserSchema, find_command
 
-RenderHelp = Callable[[ParserSchema, tuple[str, ...], int | None], str]
+RenderHelp = Callable[[ParserSchema, tuple[str, ...], int | None, str | None], str]
 
 
 class SchemaHelpPipeline(HelpPipeline):
@@ -43,8 +43,10 @@ class SchemaHelpPipeline(HelpPipeline):
         self,
         command_path: tuple[str, ...],
         terminal_width: int | None = None,
+        *,
+        program: str | None = None,
     ) -> str:
-        return self._render(self._schema, command_path, terminal_width)
+        return self._render(self._schema, command_path, terminal_width, program)
 
 
 def effective_option_sort(
@@ -122,6 +124,11 @@ def command_for_path(
         return None
 
     commands = schema.commands
+    if len(commands) == 1 and not schema.is_multi_command:
+        root = next(iter(commands.values()))
+        if root.command_type != "group":
+            commands = root.subcommands or {}
+
     current: Command | None = None
     for segment in command_path:
         current = find_command(commands, segment)
@@ -143,9 +150,10 @@ def render_help(
     plugin_manager: PluginManager,
     help_layout: HelpLayout,
     help_renderer: HelpRenderer | None,
+    program: str | None = None,
 ) -> str:
     """Render help for ``command_path`` through help plugins and the configured renderer."""
-    program = " ".join(command_path) or "main"
+    program = program or " ".join(command_path) or "main"
     semantic_path = command_path
     if not semantic_path and len(schema.commands) == 1 and not schema.is_multi_command:
         semantic_path = (next(iter(schema.commands.values())).canonical_name,)

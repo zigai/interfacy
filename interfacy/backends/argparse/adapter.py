@@ -22,7 +22,8 @@ from interfacy.backends.base import (
 from interfacy.common.console import warn
 from interfacy.declarations.executable_flags import ExecutableAction, ExecutableFlag
 from interfacy.declarations.settings import BackendName
-from interfacy.exceptions import ConfigurationError, UsageError
+from interfacy.exceptions import ConfigurationError, ParseDiagnostic, UsageError
+from interfacy.help.diagnostics import diagnostic_message
 from interfacy.schema.conversion import normalize_schema_values
 from interfacy.schema.nodes import (
     COMMAND_KEY,
@@ -48,6 +49,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         self._schema = schema
         self._help_pipeline = help_pipeline
         self._config = config
+        self._parsers: dict[tuple[str, ...], ArgumentParser] = {}
         self._native_parser = self._build(schema, relaxed=False)
         self._partial_parser: ArgumentParser | None = None
         self._attach_help(self._native_parser, ())
@@ -65,10 +67,14 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         except ExecutableFlagTriggeredError as e:
             return ExecutableAction(e.flag)
         except (ArgparseParseError, argparse.ArgumentError, ValueError) as e:
+            diagnostic = e.diagnostic if isinstance(e, UsageError) else None
+            diagnostic = diagnostic or ParseDiagnostic(kind="usage")
             return BackendParseFailure(
                 presentation=NativePresentation(
                     kind="usage",
-                    message=str(e),
+                    message=diagnostic_message(diagnostic),
+                    diagnostic=diagnostic,
+                    command_path=diagnostic.command_path,
                     exit_code=2,
                 ),
                 partial_namespace=self._best_effort_partial(args),
@@ -79,9 +85,18 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         return ParseResult(args=args, namespace=namespace, supplied=supplied)
 
     def present_error(self, presentation: NativePresentation) -> NoReturn:
+        diagnostic = presentation.diagnostic
+        parser = self._parsers.get(presentation.command_path, self._native_parser)
+        usage = None
+        if presentation.kind == "usage":
+            usage = parser.format_usage()
+
         raise UsageError(
             presentation.message,
-            usage=self._native_parser.format_usage() if presentation.kind == "usage" else None,
+            usage=usage,
+            diagnostic=diagnostic,
+            program=parser.prog,
+            exit_code=presentation.exit_code,
         )
 
     @staticmethod
@@ -114,6 +129,8 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         command_path: tuple[str, ...],
     ) -> None:
         parser.set_help_pipeline(self._help_pipeline, command_path)
+        self._parsers[command_path] = parser
+
         for action in parser._actions:
             if not isinstance(action, NestedSubParsersAction):
                 continue
@@ -133,6 +150,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             prog=self._config.program_name,
             fromfile_prefix_chars="@" if self._config.allow_args_from_file else None,
             help_layout=self._config.help_layout,
+            diagnostic_layout=self._config.diagnostic_layout,
             help_flags=self._config.help_flags,
             sys_exit_enabled=False,
         )

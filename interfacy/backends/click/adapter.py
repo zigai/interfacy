@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import sys
 import warnings
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
+from pathlib import Path
 from typing import Any, NoReturn
 
 import click
@@ -25,11 +28,18 @@ from interfacy.backends.click.commands import (
     InterfacyClickOption,
     InterfacyListOption,
 )
+from interfacy.backends.click.errors import (
+    ClickParseContext,
+    ClickParseError,
+    ClickPresentation,
+    argument_label,
+)
 from interfacy.backends.click.types import ChoiceParamType, ClickFuncParamType
 from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction, ExecutableFlag
 from interfacy.declarations.settings import BackendName
-from interfacy.exceptions import ConfigurationError, InterfacyExit, UsageError
+from interfacy.exceptions import ConfigurationError, InterfacyExit, ParseDiagnostic, UsageError
+from interfacy.help.diagnostics import diagnostic_message
 from interfacy.schema.conversion import normalize_schema_values
 from interfacy.schema.nodes import (
     COMMAND_KEY,
@@ -74,35 +84,130 @@ class ClickSession(BackendSession[click.Command]):
             except click.exceptions.Exit as e:
                 raise InterfacyExit(e.exit_code) from e
             except click.UsageError as e:
+                diagnostic = self._diagnostic(e)
+                presentation = ClickPresentation(
+                    kind="usage",
+                    message=diagnostic_message(diagnostic),
+                    diagnostic=diagnostic,
+                    command_path=diagnostic.command_path,
+                    exit_code=e.exit_code,
+                    context=e.ctx,
+                )
                 partial = self._partial_namespace(args, resources)
-                message = e.format_message()
                 return BackendParseFailure(
-                    presentation=NativePresentation(
-                        kind="usage",
-                        message=message,
-                        exit_code=e.exit_code,
-                    ),
+                    presentation=presentation,
                     partial_namespace=partial,
                     resources=resources.pop_all(),
                 )
-            except ValueError as e:
+            except ValueError:
                 partial = self._partial_namespace(args, resources)
+                diagnostic = ParseDiagnostic(kind="usage")
                 return BackendParseFailure(
                     presentation=NativePresentation(
                         kind="usage",
-                        message=str(e),
+                        message=diagnostic_message(diagnostic),
+                        diagnostic=diagnostic,
                         exit_code=2,
                     ),
                     partial_namespace=partial,
                     resources=resources.pop_all(),
                 )
 
-    def present_error(self, presentation: NativePresentation) -> NoReturn:
-        usage = None
-        if presentation.kind == "usage":
-            usage = self._native_parser.get_usage(click.Context(self._native_parser))
+    @staticmethod
+    def _diagnostic(error: click.UsageError) -> ParseDiagnostic:
+        context = error.ctx
+        command = context.command if context is not None else None
+        path = (
+            command.interfacy_help_command_path
+            if isinstance(command, (InterfacyClickCommand, InterfacyClickGroup))
+            else ()
+        )
+        parameter = error.param if isinstance(error, click.BadParameter) else None
+        label = argument_label(parameter) if parameter is not None else None
+        schema_argument = (
+            parameter.interfacy_argument
+            if isinstance(parameter, (InterfacyClickOption, InterfacyClickArgument))
+            else None
+        )
+        if schema_argument is not None and schema_argument.kind is ArgumentKind.POSITIONAL:
+            label = (
+                schema_argument.metavar or schema_argument.display_name.replace("_", "-").upper()
+            )
 
-        raise UsageError(presentation.message, usage=usage)
+        if isinstance(error, ClickParseError):
+            diagnostic = error.diagnostic
+        elif isinstance(error, click.exceptions.NoArgsIsHelpError):
+            diagnostic = ParseDiagnostic(
+                kind="missing_subcommand",
+                choices=tuple(command.commands) if isinstance(command, click.Group) else (),
+            )
+        elif isinstance(error, click.NoSuchOption):
+            diagnostic = ParseDiagnostic(kind="unknown_option", argument=error.option_name)
+        elif isinstance(error, click.MissingParameter):
+            diagnostic = ParseDiagnostic(kind="missing_argument", argument=label)
+        elif isinstance(error, click.BadParameter):
+            parameter_type = parameter.type if parameter is not None else None
+            is_choice = isinstance(parameter_type, (click.Choice, ChoiceParamType))
+            diagnostic = ParseDiagnostic(
+                kind="invalid_choice" if is_choice else "invalid_type",
+                argument=label,
+                choices=(
+                    tuple(str(choice) for choice in parameter_type.choices)
+                    if isinstance(parameter_type, (click.Choice, ChoiceParamType))
+                    else ()
+                ),
+            )
+        elif isinstance(error, click.BadOptionUsage):
+            diagnostic = ParseDiagnostic(kind="usage", argument=error.option_name)
+        else:
+            diagnostic = ParseDiagnostic(kind="usage")
+
+        expected = diagnostic.expected
+        if diagnostic.kind == "invalid_type" and schema_argument is not None:
+            expected_types: dict[type[Any] | None, str] = {
+                int: "an integer",
+                float: "a number",
+                str: "text",
+            }
+            expected = expected_types.get(schema_argument.type, "a valid value")
+
+        return replace(
+            diagnostic,
+            command_path=path,
+            argument=label if parameter is not None else diagnostic.argument,
+            expected=expected,
+        )
+
+    def present_error(self, presentation: NativePresentation) -> NoReturn:
+        context = presentation.context if isinstance(presentation, ClickPresentation) else None
+        if context is None:
+            command = self._native_parser
+            context = command.context_class(
+                command, info_name=self._config.program_name or Path(sys.argv[0]).name
+            )
+            for segment in presentation.command_path:
+                if not isinstance(command, click.Group):
+                    break
+
+                child = command.get_command(context, segment)
+                if child is None:
+                    break
+
+                command = child
+                context = command.context_class(command, info_name=segment, parent=context)
+
+        usage = None
+        diagnostic = presentation.diagnostic
+        if presentation.kind == "usage":
+            usage = context.get_usage()
+
+        raise UsageError(
+            presentation.message,
+            usage=usage,
+            diagnostic=diagnostic,
+            program=context.command_path,
+            exit_code=presentation.exit_code,
+        )
 
     def _attach_help(
         self,
@@ -231,6 +336,9 @@ class ClickSession(BackendSession[click.Command]):
         used: set[str] = set()
         for argument in arguments:
             param, suppress = self._make_param(argument, used, relaxed=relaxed)
+            if isinstance(param, (InterfacyClickOption, InterfacyClickArgument)):
+                param.interfacy_argument = argument
+
             params.append(param)
 
             if param.name is not None:
@@ -389,7 +497,9 @@ class ClickSession(BackendSession[click.Command]):
         partial: bool,
     ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
         """Return the namespace, the part of it given on the command line, and leftovers."""
-        context = self._make_context(root, root.name or "main", args, resources)
+        context = self._make_context(
+            root, self._config.program_name or Path(sys.argv[0]).name, args, resources
+        )
 
         if not isinstance(root, (InterfacyClickCommand, InterfacyClickGroup)):
             raise ConfigurationError(f"Unexpected Click root: {type(root)!r}")
@@ -429,8 +539,16 @@ class ClickSession(BackendSession[click.Command]):
         partial: bool,
     ) -> tuple[str, InterfacyClickCommand | InterfacyClickGroup, click.Context] | None:
         remaining = self._remaining(context)
-        if not remaining and partial:
-            return None
+        if not remaining:
+            if partial or group.invoke_without_command:
+                return None
+
+            raise ClickParseError(
+                ParseDiagnostic(
+                    kind="missing_subcommand", choices=tuple(group.list_commands(context))
+                ),
+                ctx=context,
+            )
 
         name, command, command_args = group.resolve_command(context, remaining)
         if command is None or not isinstance(command, (InterfacyClickCommand, InterfacyClickGroup)):
@@ -505,10 +623,25 @@ class ClickSession(BackendSession[click.Command]):
         settings["resilient_parsing"] = False
         context = command.context_class(command, info_name=name, parent=parent, **settings)
         resources.callback(context.close)
-        with context.scope(cleanup=False):
-            command.parse_args(context, args)
+        try:
+            with context.scope(cleanup=False):
+                command.parse_args(context, args)
+        except click.UsageError as e:
+            if e.ctx is None:
+                e.ctx = context
 
-        return context
+            if not (
+                type(e) is click.UsageError
+                and isinstance(context, ClickParseContext)
+                and context.interfacy_has_extra_args
+                and not context.allow_extra_args
+                and not context.resilient_parsing
+            ):
+                raise
+        else:
+            return context
+
+        raise ClickParseError(ParseDiagnostic(kind="unexpected_argument"), ctx=context)
 
     @staticmethod
     def _remaining(context: click.Context) -> list[str]:

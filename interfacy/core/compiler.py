@@ -102,6 +102,7 @@ def backend_config(
         tab_completion=settings.tab_completion,
         allow_args_from_file=settings.allow_args_from_file,
         help_layout=help_layout,
+        diagnostic_layout=settings.diagnostic_layout,
         type_parser=type_parser,
     )
 

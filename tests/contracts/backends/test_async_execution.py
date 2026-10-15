@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Generator
 
 import pytest
 
-from interfacy import CommandGroup, Interfacy
+from interfacy import CommandGroup, Interfacy, UsageError
 
 
 class AsyncMath:
@@ -93,6 +93,19 @@ class TestAsyncExecution:
         assert result == "math:8"
         _assert_not_awaitable(result)
         _assert_no_unawaited_runtime_warning(caught)
+
+
+@pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
+def test_async_invoke_exposes_structured_failure_without_output(parser, capsys):
+    async def command(count: int) -> None:
+        pytest.fail("Rejected input must not execute")
+
+    with pytest.raises(UsageError) as failure:
+        asyncio.run(parser.invoke_async(command, args=["private-input"]))
+
+    assert failure.value.diagnostic.kind == "invalid_type"
+    assert "private-input" not in str(failure.value)
+    assert capsys.readouterr() == ("", "")
 
 
 class TestSyncExecution:

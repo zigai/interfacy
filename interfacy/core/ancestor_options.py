@@ -7,6 +7,8 @@ from typing import Any
 
 from strto import StrToTypeParser
 
+from interfacy.exceptions import ParseDiagnostic
+from interfacy.help.diagnostics import diagnostic_message
 from interfacy.schema.nodes import Argument, Command, ParserSchema
 from interfacy.schema.values import plan_requires_post_conversion
 
@@ -14,16 +16,9 @@ from interfacy.schema.values import plan_requires_post_conversion
 class InterspersedOptionValueError(ValueError):
     """Raised when a normalized interspersed option value fails validation or conversion."""
 
-    def __init__(
-        self,
-        argument: Argument,
-        raw_value: str,
-        original: TypeError | ValueError,
-    ) -> None:
-        self.argument = argument
-        self.raw_value = raw_value
-        self.original = original
-        super().__init__(str(original))
+    def __init__(self, diagnostic: ParseDiagnostic) -> None:
+        self.diagnostic = diagnostic
+        super().__init__(diagnostic_message(diagnostic))
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,7 +111,9 @@ class AncestorOptions:
                 (
                     command_path,
                     argument.name,
-                    self._parse_option_values(argument, raw_values, type_parser=type_parser),
+                    self._parse_option_values(
+                        argument, raw_values, type_parser=type_parser, command_path=command_path
+                    ),
                 )
                 for command_path, argument, raw_values in pending
             )
@@ -259,29 +256,46 @@ class AncestorOptions:
 
     @staticmethod
     def _parse_option_values(
-        argument: Argument, raw_values: Sequence[str], *, type_parser: StrToTypeParser
+        argument: Argument,
+        raw_values: Sequence[str],
+        *,
+        type_parser: StrToTypeParser,
+        command_path: tuple[str, ...],
     ) -> Any:
-        minimum_values = argument.cardinality.minimum_values
-        if len(raw_values) < minimum_values:
-            error = ValueError(f"expected at least {minimum_values} value(s)")
-            raise InterspersedOptionValueError(argument, " ".join(raw_values), error)
+        label = next(
+            (flag for flag in argument.flags if flag.startswith("--")), argument.display_name
+        )
+        if len(raw_values) < argument.cardinality.minimum_values:
+            raise InterspersedOptionValueError(
+                ParseDiagnostic(kind="missing_value", argument=label, command_path=command_path)
+            )
 
+        diagnostic = ParseDiagnostic(
+            kind="invalid_choice" if argument.choices is not None else "invalid_type",
+            argument=label,
+            command_path=command_path,
+            choices=tuple(str(choice) for choice in argument.choices or ()),
+        )
         plan = argument.value_plan
         if plan is not None and plan_requires_post_conversion(plan, required=argument.required):
             try:
                 return plan.convert(raw_values, type_parser=type_parser)
-            except (TypeError, ValueError) as e:
-                raise InterspersedOptionValueError(argument, " ".join(raw_values), e) from e
+            except (TypeError, ValueError):
+                pass
+            raise InterspersedOptionValueError(diagnostic)
 
         parse = argument.parser
         values: list[Any] = []
         for raw_value in raw_values:
             try:
                 value = parse(raw_value) if parse is not None else raw_value
-            except (TypeError, ValueError) as e:
-                raise InterspersedOptionValueError(argument, raw_value, e) from e
+            except (TypeError, ValueError):
+                pass
+            else:
+                values.append(value)
+                continue
 
-            values.append(value)
+            raise InterspersedOptionValueError(diagnostic)
 
         if argument.value_shape.name == "LIST":
             return values

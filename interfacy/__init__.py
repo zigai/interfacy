@@ -14,10 +14,12 @@ if TYPE_CHECKING:
     from interfacy.exceptions import DuplicatePluginError as DuplicatePluginError
     from interfacy.exceptions import InterfacyError as InterfacyError
     from interfacy.exceptions import InvalidCommandError as InvalidCommandError
+    from interfacy.exceptions import ParseDiagnostic as ParseDiagnostic
     from interfacy.exceptions import PipeInputError as PipeInputError
     from interfacy.exceptions import ReservedFlagError as ReservedFlagError
     from interfacy.exceptions import UnsupportedParameterTypeError as UnsupportedParameterTypeError
     from interfacy.exceptions import UsageError as UsageError
+    from interfacy.help import DiagnosticLayout as DiagnosticLayout
     from interfacy.help import HelpRenderer as HelpRenderer
     from interfacy.help import HelpStyle as HelpStyle
     from interfacy.runtime.exit_codes import ExitCode as ExitCode
@@ -31,6 +33,8 @@ _EXPORTS = {
     "DuplicateCommandError": ("interfacy.exceptions", "DuplicateCommandError"),
     "DuplicatePluginError": ("interfacy.exceptions", "DuplicatePluginError"),
     "ExitCode": ("interfacy.runtime.exit_codes", "ExitCode"),
+    "DiagnosticLayout": ("interfacy.help", "DiagnosticLayout"),
+    "ParseDiagnostic": ("interfacy.exceptions", "ParseDiagnostic"),
     "HelpRenderer": ("interfacy.help", "HelpRenderer"),
     "HelpStyle": ("interfacy.help", "HelpStyle"),
     "Interfacy": ("interfacy.app", "Interfacy"),
@@ -66,6 +70,7 @@ __all__ = [
     "BooleanMode",
     "CommandGroup",
     "ConfigurationError",
+    "DiagnosticLayout",
     "DuplicateCommandError",
     "DuplicatePluginError",
     "ExecutableFlag",
@@ -76,6 +81,7 @@ __all__ = [
     "InterfacyError",
     "InvalidCommandError",
     "Param",
+    "ParseDiagnostic",
     "ParsedArguments",
     "PipeInputError",
     "ReservedFlagError",

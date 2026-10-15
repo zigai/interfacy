@@ -1,9 +1,16 @@
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from pydantic import BaseModel, Field
 
-from interfacy import ConfigurationError, ExitCode, Interfacy, InterfacyError, UsageError
+from interfacy import (
+    ConfigurationError,
+    DiagnosticLayout,
+    ExitCode,
+    Interfacy,
+    InterfacyError,
+    UsageError,
+)
 from interfacy.naming import DefaultFlagStrategy
 from interfacy.plugins import AfterParseContext, InterfacyPlugin
 
@@ -237,3 +244,170 @@ def test_run_does_not_emit_command_exception_payloads_or_chains(
     assert e.value.code == ExitCode.COMMAND_FAILED
     assert e.value.__cause__ is None
     assert e.value.__context__ is None
+
+
+@pytest.mark.parametrize(
+    ("args", "kind", "argument"),
+    [
+        ([], "missing_argument", "--workers"),
+        (["--workers"], "missing_value", "--workers"),
+        (["--workers", "private-input"], "invalid_type", "--workers"),
+        (["--workers", "2", "--mode", "private-input"], "invalid_choice", "--mode"),
+        (["--workers", "2", "--unknown"], "unknown_option", "--unknown"),
+        (["--workers", "2", "private-input"], "unexpected_argument", None),
+    ],
+)
+def test_parse_diagnostic_classifies_input_without_exposing_values(
+    parser: Interfacy,
+    args: list[str],
+    kind: str,
+    argument: str | None,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parser.apply_setup(flag_strategy=DefaultFlagStrategy(style="keyword_only"))
+
+    def command(*, workers: int, mode: Literal["fast", "slow"] = "fast") -> None:
+        pytest.fail("Rejected input must not execute the command")
+
+    with pytest.raises(UsageError) as failure:
+        parser.invoke(command, args=args)
+
+    diagnostic = failure.value.diagnostic
+    assert diagnostic is not None
+    assert diagnostic.kind == kind
+    assert diagnostic.argument == argument
+    assert "private-input" not in str(failure.value)
+    assert capsys.readouterr() == ("", "")
+
+
+def test_positional_diagnostic_uses_the_displayed_metavar(
+    parser: Interfacy,
+) -> None:
+    def command(count: int) -> None:
+        pytest.fail("Rejected input must not execute")
+
+    with pytest.raises(UsageError) as failure:
+        parser.invoke(command, args=["private-input"])
+
+    assert failure.value.diagnostic.argument == "COUNT"
+    assert failure.value.diagnostic.kind == "invalid_type"
+    assert "private-input" not in str(failure.value)
+
+
+def test_unknown_command_is_concise_and_suggests_without_executing(
+    parser: Interfacy,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    script_invocation: None,
+) -> None:
+    monkeypatch.setenv("NO_COLOR", "1")
+
+    def command() -> None:
+        pytest.fail("A spelling suggestion must not execute the command")
+
+    parser.add_command(command, name="publish")
+    parser.add_command(command, name="inspect")
+    with pytest.raises(SystemExit) as failure:
+        parser.run(args=["publsih"])
+
+    captured = capsys.readouterr()
+    assert failure.value.code == 2
+    assert captured.out == ""
+    assert captured.err == (
+        "error: unknown command 'publsih'\n\n"
+        "Did you mean 'publish'?\n"
+        "Run 'tool --help' for usage.\n"
+    )
+
+
+def test_distant_unknown_command_lists_available_commands(
+    parser: Interfacy,
+    capsys: pytest.CaptureFixture[str],
+    script_invocation: None,
+) -> None:
+    parser.add_command(lambda: None, name="publish")
+    parser.add_command(lambda: None, name="inspect")
+
+    with pytest.raises(SystemExit):
+        parser.run(args=["xyz"])
+
+    captured = capsys.readouterr()
+    assert "Available commands: publish, inspect" in captured.err
+    assert "Did you mean" not in captured.err
+    assert "usage:" not in captured.err.lower()
+
+
+@pytest.mark.parametrize("help_flags", [("--assist",), ("-?", "--assist")])
+def test_error_hint_uses_only_configured_help_flags(
+    parser: Interfacy,
+    help_flags: tuple[str, ...],
+    capsys: pytest.CaptureFixture[str],
+    script_invocation: None,
+) -> None:
+    parser.apply_setup(help_flags=help_flags)
+    parser.add_command(lambda: None, name="publish")
+    parser.add_command(lambda: None, name="inspect")
+
+    with pytest.raises(SystemExit):
+        parser.run(args=["xyz"])
+
+    output = capsys.readouterr().err
+    assert "--help" not in output
+    assert f"Run 'tool {help_flags[0]}'" in output
+
+
+def test_unknown_option_does_not_echo_attached_value(
+    parser: Interfacy,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit):
+        parser.run(lambda: None, args=["--unknown=private-input"])
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "unknown option '--unknown'" in captured.err
+    assert "private-input" not in captured.err
+
+
+def test_diagnostic_layout_changes_presentation_not_failure(
+    parser: Interfacy,
+    capsys: pytest.CaptureFixture[str],
+    script_invocation: None,
+) -> None:
+    parser.apply_setup(
+        diagnostic_layout=DiagnosticLayout(
+            error_prefix="invalid:", sections=("message",), indent="  "
+        )
+    )
+    parser.add_command(lambda: None, name="publish")
+    parser.add_command(lambda: None, name="inspect")
+
+    with pytest.raises(SystemExit) as failure:
+        parser.run(args=["xyz"])
+
+    assert failure.value.code == 2
+    assert capsys.readouterr() == ("", "  invalid: unknown command 'xyz'\n")
+
+
+@pytest.mark.parametrize("environment", [{"NO_COLOR": "1"}, {"TERM": "dumb"}, {}])
+def test_redirected_diagnostics_are_plain_and_wrap_at_terminal_width(
+    parser: Interfacy,
+    environment: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("COLUMNS", "38")
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+
+    parser.add_command(lambda: None, name="publish")
+    parser.add_command(lambda: None, name="inspect")
+    parser.add_command(lambda: None, name="synchronize")
+
+    with pytest.raises(SystemExit):
+        parser.run(args=["xyz"])
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "\x1b[" not in captured.err
+    assert max(map(len, captured.err.splitlines())) <= 38
