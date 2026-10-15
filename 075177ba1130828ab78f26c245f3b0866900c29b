@@ -1,0 +1,5 @@
+- `just coverage` exercises diagnostic rendering and recovery on argparse and Click with the complete test suite
+- `coverage run -m pytest` on test_errors.py, test_help_errors.py, and test_facade.py preserves the simulated script name `tool` in usage and help hints
+- Direct pytest on Python 3.10, 3.14, and 3.15 confirms the same diagnostic and help output
+- The installed `interfacy --unknown=private-input` command exits with status 2, writes only to stderr, and omits the attached value
+- A private Ghostty capture of `tool publsih`, `tool publish --workers invalid`, and `tool xyz` shows the red error prefix and dim help hints in .github/screenshots/parse-diagnostics.png
