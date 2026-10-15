@@ -33,7 +33,7 @@ _BaseArgument: type[Any] = _click_parser_symbol("_Argument")
 _normalize_opt: Callable[[str, Any], str] = _click_parser_symbol("_normalize_opt")
 
 
-class _InterfacyParserArgument(_BaseArgument):
+class ParserArgument(_BaseArgument):
     def process(self, value: Any, state: Any) -> None:
         try:
             super().process(value, state)
@@ -52,7 +52,7 @@ class InterfacyOptionParser(_BaseOptionParser):
     """Parse Click options while supporting varargs option values."""
 
     def add_argument(self, obj: click.Argument, dest: str | None, nargs: int = 1) -> None:
-        self._args.append(_InterfacyParserArgument(obj, dest=dest, nargs=nargs))
+        self._args.append(ParserArgument(obj, dest=dest, nargs=nargs))
 
     def parse_args(
         self, args: list[str]

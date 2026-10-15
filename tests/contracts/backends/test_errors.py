@@ -308,15 +308,13 @@ def test_unknown_command_is_concise_and_suggests_without_executing(
     parser.add_command(command, name="publish")
     parser.add_command(command, name="inspect")
     with pytest.raises(SystemExit) as failure:
-        parser.run(args=["publsih"])
+        parser.run(args=["insect"])
 
     captured = capsys.readouterr()
     assert failure.value.code == 2
     assert captured.out == ""
     assert captured.err == (
-        "error: unknown command 'publsih'\n\n"
-        "Did you mean 'publish'?\n"
-        "Run 'tool --help' for usage.\n"
+        "error: unknown command 'insect'\n\nDid you mean 'inspect'?\nRun 'tool --help' for usage.\n"
     )
 
 
@@ -395,6 +393,7 @@ def test_redirected_diagnostics_are_plain_and_wrap_at_terminal_width(
     environment: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    script_invocation: None,
 ) -> None:
     monkeypatch.setenv("COLUMNS", "38")
     for name, value in environment.items():

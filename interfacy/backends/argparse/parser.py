@@ -52,7 +52,7 @@ logger = get_logger(__name__)
 
 
 @dataclass
-class _ParseState:
+class ParseState:
     depth: int = 0
     extras: dict[str, ParseDiagnostic] = field(default_factory=dict)
     parsers: dict[tuple[str, ...], ArgumentParser] = field(default_factory=dict)
@@ -96,7 +96,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         supplied_dests: set[str] | None = None,
         destination_paths: dict[str, tuple[str, ...]] | None = None,
         diagnostic_layout: DiagnosticLayout | None = None,
-        parse_state: _ParseState | None = None,
+        parse_state: ParseState | None = None,
         command_path: tuple[str, ...] = (),
     ) -> None:
         super().__init__(
@@ -262,7 +262,7 @@ class ArgumentParser(argparse.ArgumentParser):
         supplied_dests: set[str] | None = None,
         destination_paths: dict[str, tuple[str, ...]] | None = None,
         diagnostic_layout: DiagnosticLayout | None = None,
-        parse_state: _ParseState | None = None,
+        parse_state: ParseState | None = None,
         command_path: tuple[str, ...] = (),
     ) -> None:
         if parents is None:
@@ -321,7 +321,7 @@ class ArgumentParser(argparse.ArgumentParser):
         self.diagnostic_layout = (
             deepcopy(diagnostic_layout) if diagnostic_layout else DiagnosticLayout()
         )
-        self._parse_state = parse_state if parse_state is not None else _ParseState()
+        self._parse_state = parse_state if parse_state is not None else ParseState()
         self._parse_state.parsers[command_path] = self
         self._optional_tokens: dict[str, bool] = {}
         self._unknown_arguments: list[str] = []
@@ -518,6 +518,20 @@ class ArgumentParser(argparse.ArgumentParser):
 
         raise UsageError((message or "").strip(), usage=self.format_usage())
 
+    def error(self, message: str) -> NoReturn:
+        """Report native failures without exposing backend messages or rejected values."""
+        diagnostic = self._missing_diagnostic()
+        if diagnostic is None and self._unknown_arguments:
+            diagnostic = self._parse_state.extras[self._unknown_arguments[0]]
+
+        if diagnostic is None:
+            diagnostic = ParseDiagnostic(
+                kind="usage",
+                command_path=self._help_command_path,
+                message=message if not self._in_native_parse else "",
+            )
+        self._fail(diagnostic)
+
     def _argument_label(self, action: argparse.Action) -> str:
         if action.option_strings:
             return next(
@@ -663,20 +677,6 @@ class ArgumentParser(argparse.ArgumentParser):
         text = self.diagnostic_layout.render(content, terminal_width=get_terminal_width())
         self._print_message(normalize_diagnostic_text(text), sys.stderr)
         self.exit(2)
-
-    def error(self, message: str) -> NoReturn:
-        """Report native failures without exposing backend messages or rejected values."""
-        diagnostic = self._missing_diagnostic()
-        if diagnostic is None and self._unknown_arguments:
-            diagnostic = self._parse_state.extras[self._unknown_arguments[0]]
-
-        if diagnostic is None:
-            diagnostic = ParseDiagnostic(
-                kind="usage",
-                command_path=self._help_command_path,
-                message=message if not self._in_native_parse else "",
-            )
-        self._fail(diagnostic)
 
     def _get_formatter(self, file: TextIO | None = None) -> argparse.HelpFormatter:  # type: ignore[override]
         if sys.version_info >= (3, 15):

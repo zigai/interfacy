@@ -113,6 +113,37 @@ class ClickSession(BackendSession[click.Command]):
                     resources=resources.pop_all(),
                 )
 
+    def present_error(self, presentation: NativePresentation) -> NoReturn:
+        context = presentation.context if isinstance(presentation, ClickPresentation) else None
+        if context is None:
+            command = self._native_parser
+            context = command.context_class(
+                command, info_name=self._config.program_name or Path(sys.argv[0]).name
+            )
+            for segment in presentation.command_path:
+                if not isinstance(command, click.Group):
+                    break
+
+                child = command.get_command(context, segment)
+                if child is None:
+                    break
+
+                command = child
+                context = command.context_class(command, info_name=segment, parent=context)
+
+        usage = None
+        diagnostic = presentation.diagnostic
+        if presentation.kind == "usage":
+            usage = context.get_usage()
+
+        raise UsageError(
+            presentation.message,
+            usage=usage,
+            diagnostic=diagnostic,
+            program=context.command_path,
+            exit_code=presentation.exit_code,
+        )
+
     @staticmethod
     def _diagnostic(error: click.UsageError) -> ParseDiagnostic:
         context = error.ctx
@@ -176,37 +207,6 @@ class ClickSession(BackendSession[click.Command]):
             command_path=path,
             argument=label if parameter is not None else diagnostic.argument,
             expected=expected,
-        )
-
-    def present_error(self, presentation: NativePresentation) -> NoReturn:
-        context = presentation.context if isinstance(presentation, ClickPresentation) else None
-        if context is None:
-            command = self._native_parser
-            context = command.context_class(
-                command, info_name=self._config.program_name or Path(sys.argv[0]).name
-            )
-            for segment in presentation.command_path:
-                if not isinstance(command, click.Group):
-                    break
-
-                child = command.get_command(context, segment)
-                if child is None:
-                    break
-
-                command = child
-                context = command.context_class(command, info_name=segment, parent=context)
-
-        usage = None
-        diagnostic = presentation.diagnostic
-        if presentation.kind == "usage":
-            usage = context.get_usage()
-
-        raise UsageError(
-            presentation.message,
-            usage=usage,
-            diagnostic=diagnostic,
-            program=context.command_path,
-            exit_code=presentation.exit_code,
         )
 
     def _attach_help(
