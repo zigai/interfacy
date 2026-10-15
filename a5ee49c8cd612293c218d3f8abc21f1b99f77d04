@@ -1,0 +1,4 @@
+- The diagnostic width tests pass when launched with D:\a\interfacy\interfacy\.venv\Scripts\pytest and a __main__ module specification
+- `test_unknown_command_is_concise_and_suggests_without_executing` suggests `inspect` for the unknown `insect` command on both backends
+- `coverage run -m pytest -q` passes the full suite after the backend helper changes
+- The CI commands for Ruff, Pyrefly, codespell, and Rattle pass without changing their configuration
