@@ -11,27 +11,27 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install "$(cat .python-version)"
 
       - name: Install dependencies
-        run: uv sync --group dev --python 3.12
+        run: uv sync --group dev
 
       - name: Check formatting with Ruff
-        run: uv run --python 3.12 ruff format --check .
+        run: uv run --group dev ruff format --check .
 
       - name: Run Ruff lint
-        run: uv run --python 3.12 ruff check .
+        run: uv run --group dev ruff check .
 
       - name: Run tests with coverage
         run: |
-          uv run --python 3.12 coverage run -m pytest
-          uv run --python 3.12 coverage report
+          uv run --group dev coverage run -m pytest
+          uv run --group dev coverage report
 
       - name: Run Pyrefly
-        run: uv run --python 3.12 pyrefly check --min-severity warn
+        run: uv run --group dev pyrefly check --min-severity warn
 
       - name: Run codespell
-        run: uv run --python 3.12 codespell
+        run: uv run --group dev codespell
 
       - name: Run Rattle lint
-        run: uv run --python 3.12 rattle lint .
+        run: uv run --group dev rattle lint .
