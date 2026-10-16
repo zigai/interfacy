@@ -379,27 +379,8 @@ wheels = [
 
 [[package]]
 name = "filelock"
-version = "4.1.0"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version < '3.11'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/58/6fd434bec86eff7c38a3168454cb132b762b2bea9b3ac094101a2f7bc32a/filelock-4.1.0.tar.gz", hash = "sha256:ad7f724afef953e731b1cc39bcd3a09166d72ed7fcdf29e6e88b1c3235c6715d", size = 561277, upload-time = "2026-10-09T19:57:20.34Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/86/032133892a5de43b5a98200b01aadcad68cc255e274a762f08b8a76d2912/filelock-4.1.0-py3-none-any.whl", hash = "sha256:2ce9818e3e2d8f284c1a964414447ef148d42a5fd5e2a477a7118e574b293ec1", size = 133003, upload-time = "2026-10-09T19:57:18.716Z" },
-]
-
-[[package]]
-name = "filelock"
 version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.14'",
-    "python_full_version == '3.13.*'",
-    "python_full_version == '3.12.*'",
-    "python_full_version >= '3.11.5' and python_full_version < '3.12'",
-    "python_full_version >= '3.11' and python_full_version < '3.11.5'",
-]
 sdist = { url = "https://files.pythonhosted.org/packages/f4/a9/1af41b37c3279712b22cdc63aac78a52432202b6fe1f9666a2a3d2831fb4/filelock-4.2.0.tar.gz", hash = "sha256:7a60906c75227cf04d0c273afadc8219400f11aeb13cc69591d4f6cdc6c8036e", size = 569667, upload-time = "2026-10-14T20:57:13.11Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8e/a3/9bc26acff301fe1aaea1cc3d82a1d57e0a34df3e1cadbfa91ac2dbcdde5c/filelock-4.2.0-py3-none-any.whl", hash = "sha256:2ff5690882e8cdb00ef31fb3d01a3094c29f30985426c59495afb1733f3b7238", size = 135032, upload-time = "2026-10-14T20:57:11.349Z" },
@@ -496,17 +477,17 @@ full = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "argcomplete" },
-    { name = "click" },
-    { name = "codespell" },
-    { name = "coverage" },
-    { name = "pre-commit" },
-    { name = "pydantic" },
-    { name = "pyrefly" },
-    { name = "pytest" },
-    { name = "pytest-mock" },
-    { name = "rattle-lint" },
-    { name = "ruff" },
+    { name = "argcomplete", marker = "python_full_version >= '3.11'" },
+    { name = "click", marker = "python_full_version >= '3.11'" },
+    { name = "codespell", marker = "python_full_version >= '3.11'" },
+    { name = "coverage", marker = "python_full_version >= '3.11'" },
+    { name = "pre-commit", marker = "python_full_version >= '3.11'" },
+    { name = "pydantic", marker = "python_full_version >= '3.11'" },
+    { name = "pyrefly", marker = "python_full_version >= '3.11'" },
+    { name = "pytest", marker = "python_full_version >= '3.11'" },
+    { name = "pytest-mock", marker = "python_full_version >= '3.11'" },
+    { name = "rattle-lint", marker = "python_full_version >= '3.11'" },
+    { name = "ruff", marker = "python_full_version >= '3.11'" },
 ]
 test = [
     { name = "argcomplete" },
@@ -516,6 +497,9 @@ test = [
     { name = "pytest" },
     { name = "pytest-mock" },
 ]
+
+[package.group-requires-python]
+dev = ">=3.11"
 
 [package.metadata]
 requires-dist = [
@@ -545,17 +529,17 @@ provides-extras = ["full", "click", "docs"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "argcomplete" },
-    { name = "click", specifier = ">=8.3.1" },
-    { name = "codespell", specifier = ">=2.4.2" },
-    { name = "coverage", specifier = ">=7.14.1" },
-    { name = "pre-commit", specifier = ">=4.6.0" },
-    { name = "pydantic", specifier = ">=2,<3" },
-    { name = "pyrefly", specifier = ">=1.0.0" },
-    { name = "pytest", specifier = ">=9.0.3" },
-    { name = "pytest-mock" },
-    { name = "rattle-lint", specifier = ">=3.2.0" },
-    { name = "ruff", specifier = "==0.16.10" },
+    { name = "argcomplete", marker = "python_full_version >= '3.11'" },
+    { name = "click", marker = "python_full_version >= '3.11'", specifier = ">=8.3.1" },
+    { name = "codespell", marker = "python_full_version >= '3.11'", specifier = ">=2.4.2" },
+    { name = "coverage", marker = "python_full_version >= '3.11'", specifier = ">=7.14.1" },
+    { name = "pre-commit", marker = "python_full_version >= '3.11'", specifier = ">=4.6.0" },
+    { name = "pydantic", marker = "python_full_version >= '3.11'", specifier = ">=2,<3" },
+    { name = "pyrefly", marker = "python_full_version >= '3.11'", specifier = ">=1.0.0" },
+    { name = "pytest", marker = "python_full_version >= '3.11'", specifier = ">=9.0.3" },
+    { name = "pytest-mock", marker = "python_full_version >= '3.11'" },
+    { name = "rattle-lint", marker = "python_full_version >= '3.11'", specifier = ">=3.4.0" },
+    { name = "ruff", marker = "python_full_version >= '3.11'", specifier = "==0.16.10" },
 ]
 test = [
     { name = "argcomplete" },
@@ -1131,8 +1115,7 @@ name = "python-discovery"
 version = "1.6.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "filelock", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "filelock" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b0/73/54993df8fc57e906dc9b7e01d1d9b0b2d3eb0ce3190639e33dccb12853f7/python_discovery-1.6.2.tar.gz", hash = "sha256:cd1738ca1d37c86ef9d0b654dd46fcee1e41c97c6add12575e8501ced39afdb4", size = 86921, upload-time = "2026-10-10T01:24:27.912Z" }
 wheels = [
@@ -1283,7 +1266,7 @@ wheels = [
 
 [[package]]
 name = "rattle-lint"
-version = "3.2.0"
+version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "interfacy" },
@@ -1292,12 +1275,11 @@ dependencies = [
     { name = "msgspec" },
     { name = "packaging" },
     { name = "platformdirs" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "trailrunner" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/09/b5/6506759e7a9684f0ec8b504bb6528dd23d9472c3504230307ab71a0e4040/rattle_lint-3.2.0.tar.gz", hash = "sha256:88c71765fafbd455da8d6bc373c18af601f42251888f4770b95675a3336c79af", size = 342607, upload-time = "2026-10-11T21:18:25.343Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/e7/6a747a2b16fcb02bc6d2740706f612c44a66f8d7f0704e7255e9d036d77d/rattle_lint-3.4.0.tar.gz", hash = "sha256:dec9c704d22557bee42c1e3124a85710884cc6438cdd517199dd81eb0544e725", size = 330238, upload-time = "2026-10-16T08:31:33.61Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/6c/db1d9e3f48fa17f33ee73ce3119908ededf1db166b7e03143d007bc0eea4/rattle_lint-3.2.0-py3-none-any.whl", hash = "sha256:e1ee78336c82ee98064c6d2191dc00a6ca7e6298bec619b762cb3561ea0194a7", size = 213048, upload-time = "2026-10-11T21:18:23.784Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/60/a986d5af7b3d89d6e294e94910f4ec0cef3d845e36b8fe50a73cb09ff9da/rattle_lint-3.4.0-py3-none-any.whl", hash = "sha256:f3ce08665bad1d8fe289caaef20d6f8f7d9813f5e0a687a5b86716aef8a783f2", size = 212388, upload-time = "2026-10-16T08:31:32.122Z" },
 ]
 
 [[package]]
@@ -1749,12 +1731,10 @@ version = "21.14.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "distlib" },
-    { name = "filelock", version = "4.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "filelock", version = "4.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "filelock" },
     { name = "packaging" },
     { name = "platformdirs" },
     { name = "python-discovery" },
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c4/f9/f323b3b6058cff3853b31cf6a49c0425ed797bf9611572ec10d065e08bac/virtualenv-21.14.5.tar.gz", hash = "sha256:c4cb6c13e46b57225a999c7e22a09b163393878facc7ac4c059a57f46faa1647", size = 5467127, upload-time = "2026-10-02T17:42:25.613Z" }
 wheels = [

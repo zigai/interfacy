@@ -34,4 +34,4 @@ jobs:
         run: uv run --group dev codespell
 
       - name: Run Rattle lint
-        run: uv run --group dev rattle lint .
+        run: uv run --group dev rattle check .

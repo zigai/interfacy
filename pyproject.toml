@@ -291,6 +291,9 @@ convention = "google"
 [tool.uv]
 default-groups = ["test"]
 
+[tool.uv.dependency-groups]
+dev = {requires-python = ">=3.11"}
+
 [dependency-groups]
 test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pydantic>=2,<3", "argcomplete"]
-dev = [{include-group = "test"}, "ruff==0.16.10", "pre-commit>=4.6.0", "pyrefly>=1.0.0", "argcomplete", "rattle-lint>=3.2.0", "codespell>=2.4.2"]
+dev = [{include-group = "test"}, "ruff==0.16.10", "pre-commit>=4.6.0", "pyrefly>=1.0.0", "argcomplete", "rattle-lint>=3.4.0", "codespell>=2.4.2"]
