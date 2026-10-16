@@ -1,0 +1,3 @@
+- On argparse and Click, tool workspace upload bad ok exits with status 2, identifies PAIR, points to tool workspace upload --help, and omits the rejected value.
+
+- Backend contract cases reject malformed tuples supplied positionally and through --pair; invoke stays silent and run prints the failing command's usage.
