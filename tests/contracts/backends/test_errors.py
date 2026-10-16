@@ -4,6 +4,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from interfacy import (
+    CommandGroup,
     ConfigurationError,
     DiagnosticLayout,
     ExitCode,
@@ -292,6 +293,55 @@ def test_positional_diagnostic_uses_the_displayed_metavar(
     assert failure.value.diagnostic.argument == "COUNT"
     assert failure.value.diagnostic.kind == "invalid_type"
     assert "private-input" not in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    ("style", "values", "argument"),
+    [
+        ("required_positional", ["rejected-value", "label"], "PAIR"),
+        ("keyword_only", ["--pair", "rejected-value", "label"], "--pair"),
+    ],
+)
+def test_nested_structured_conversion_reports_leaf_diagnostic(
+    parser: Interfacy,
+    style: str,
+    values: list[str],
+    argument: str,
+    capsys: pytest.CaptureFixture[str],
+    script_invocation: None,
+) -> None:
+    parser.apply_setup(flag_strategy=DefaultFlagStrategy(style=style))
+
+    def upload_item(pair: tuple[int, str]) -> None:
+        pytest.fail("Rejected input must not execute")
+
+    project = CommandGroup("project")
+    project.add_command(upload_item)
+    parser.add_command(project)
+    args = ["project", "upload-item", *values]
+
+    with pytest.raises(UsageError) as failure:
+        parser.invoke(args=args)
+
+    diagnostic = failure.value.diagnostic
+    assert diagnostic is not None
+    assert diagnostic.kind == "invalid_type"
+    assert diagnostic.command_path == ("project", "upload-item")
+    assert diagnostic.argument == argument
+    assert "rejected-value" not in str(failure.value)
+    assert "tool project upload-item" in failure.value.usage
+    assert capsys.readouterr() == ("", "")
+
+    with pytest.raises(SystemExit) as failure:
+        parser.run(args=args)
+
+    captured = capsys.readouterr()
+    assert failure.value.code == 2
+    assert captured.out == ""
+    assert f"error: {argument!r} requires a valid value" in captured.err
+    assert "usage: tool project upload-item" in captured.err
+    assert "Run 'tool project upload-item --help'" in captured.err
+    assert "rejected-value" not in captured.err
 
 
 def test_unknown_command_is_concise_and_suggests_without_executing(

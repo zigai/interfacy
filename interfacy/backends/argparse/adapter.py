@@ -24,7 +24,7 @@ from interfacy.declarations.executable_flags import ExecutableAction, Executable
 from interfacy.declarations.settings import BackendName
 from interfacy.exceptions import ConfigurationError, ParseDiagnostic, UsageError
 from interfacy.help.diagnostics import diagnostic_message
-from interfacy.schema.conversion import normalize_schema_values
+from interfacy.schema.conversion import ArgumentConversionError, normalize_schema_values
 from interfacy.schema.nodes import (
     COMMAND_KEY,
     SUBCOMMANDS_KEY,
@@ -67,7 +67,9 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         except ExecutableFlagTriggeredError as e:
             return ExecutableAction(e.flag)
         except (ArgparseParseError, argparse.ArgumentError, ValueError) as e:
-            diagnostic = e.diagnostic if isinstance(e, UsageError) else None
+            diagnostic = (
+                e.diagnostic if isinstance(e, (UsageError, ArgumentConversionError)) else None
+            )
             diagnostic = diagnostic or ParseDiagnostic(kind="usage")
             return BackendParseFailure(
                 presentation=NativePresentation(

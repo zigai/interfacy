@@ -40,7 +40,7 @@ from interfacy.declarations.executable_flags import ExecutableAction, Executable
 from interfacy.declarations.settings import BackendName
 from interfacy.exceptions import ConfigurationError, InterfacyExit, ParseDiagnostic, UsageError
 from interfacy.help.diagnostics import diagnostic_message
-from interfacy.schema.conversion import normalize_schema_values
+from interfacy.schema.conversion import ArgumentConversionError, normalize_schema_values
 from interfacy.schema.nodes import (
     COMMAND_KEY,
     Argument,
@@ -99,14 +99,19 @@ class ClickSession(BackendSession[click.Command]):
                     partial_namespace=partial,
                     resources=resources.pop_all(),
                 )
-            except ValueError:
+            except ValueError as e:
                 partial = self._partial_namespace(args, resources)
-                diagnostic = ParseDiagnostic(kind="usage")
+                diagnostic = (
+                    e.diagnostic
+                    if isinstance(e, ArgumentConversionError)
+                    else ParseDiagnostic(kind="usage")
+                )
                 return BackendParseFailure(
                     presentation=NativePresentation(
                         kind="usage",
                         message=diagnostic_message(diagnostic),
                         diagnostic=diagnostic,
+                        command_path=diagnostic.command_path,
                         exit_code=2,
                     ),
                     partial_namespace=partial,
