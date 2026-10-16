@@ -133,6 +133,28 @@ def test_unknown_option_can_suggest_an_ancestor_option(backend, capsys):
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
+@pytest.mark.parametrize(
+    ("option", "suggestions"),
+    [("--count", []), ("--verbsoe", ["Did you mean '--verbose'?"])],
+)
+def test_unknown_option_suggestions_exclude_positional_names(backend, option, suggestions, capsys):
+    def command(count: int, *, verbose: bool = False) -> None:
+        pytest.fail("Rejected input must not execute")
+
+    parser = Interfacy(backend=backend)
+    with pytest.raises(SystemExit) as failure:
+        parser.run(command, args=["1", option])
+
+    captured = capsys.readouterr()
+    assert failure.value.code == 2
+    assert captured.out == ""
+    assert f"unknown option {option!r}" in captured.err
+    assert [line for line in captured.err.splitlines() if line.startswith("Did you mean")] == (
+        suggestions
+    )
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
 def test_diagnostic_usage_reuses_the_configured_help_layout(backend, capsys, script_invocation):
     def command(*, workers: int = 1) -> None:
         pytest.fail("Rejected input must not execute")

@@ -21,7 +21,7 @@ from interfacy.help.diagnostics import (
 from interfacy.help.layouts import HelpLayout
 from interfacy.help.renderer import SchemaHelpRenderer
 from interfacy.plugins import DiagnosticHookContext, SchemaDescriptor
-from interfacy.schema.nodes import Command, ParserSchema, find_command
+from interfacy.schema.nodes import ArgumentKind, Command, ParserSchema, find_command
 
 
 def render_diagnostic(
@@ -112,6 +112,9 @@ def option_flags(schema: ParserSchema, command_path: tuple[str, ...]) -> tuple[s
 
     for command in chain:
         for argument in (*command.initializer, *command.arguments):
+            if argument.kind is not ArgumentKind.OPTION:
+                continue
+
             flags.extend(argument.flags)
             if argument.boolean_behavior is not None:
                 flags.extend(argument.boolean_behavior.positive_flags)
