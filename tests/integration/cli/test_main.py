@@ -133,7 +133,7 @@ def test_main_file_target_missing_symbol_mentions_file_path(
 
     assert main([f"{module_path}:missing"]) == ExitCode.USAGE
     captured = capsys.readouterr()
-    assert f"module '{module_path}'" in captured.err
+    assert f"module '{module_path}'" in " ".join(captured.err.split())
     assert "interfacy_entry_" not in captured.err
 
 

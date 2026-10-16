@@ -5,11 +5,13 @@ from typing import Any, ClassVar
 
 from interfacy.declarations.settings import BackendName
 from interfacy.help.content import HelpContent, HelpResult
+from interfacy.help.diagnostics import DiagnosticContent, DiagnosticResult
 from interfacy.plugins.contexts import (
     AfterParseContext,
     BackendPluginContext,
     BeforeParseContext,
     ConfigureContext,
+    DiagnosticHookContext,
     ExecuteContext,
     HelpHookContext,
     ParseFailureContext,
@@ -74,6 +76,26 @@ class InterfacyPlugin:
         content: HelpContent,
     ) -> HelpResult | None:
         """Optionally provide final rendered help text."""
+        del context, content
+
+        return None
+
+    def transform_diagnostic(
+        self,
+        context: DiagnosticHookContext,
+        content: DiagnosticContent,
+    ) -> DiagnosticContent:
+        """Transform display content after recovery fails, without changing failure facts."""
+        del context
+
+        return content
+
+    def render_diagnostic(
+        self,
+        context: DiagnosticHookContext,
+        content: DiagnosticContent,
+    ) -> DiagnosticResult | None:
+        """Return diagnostic text, or defer to the next renderer and native layout."""
         del context, content
 
         return None

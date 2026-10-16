@@ -12,9 +12,11 @@ from interfacy.backends.argparse.parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
 from interfacy.cli.targets import resolve_target_with_module
 from interfacy.common.console import error, warn
+from interfacy.common.terminal import get_terminal_width
 from interfacy.declarations.groups import CommandGroup
-from interfacy.exceptions import InterfacyExit, UsageError
+from interfacy.exceptions import InterfacyExit, ParseDiagnostic, UsageError
 from interfacy.help import HelpLayout, StandardLayout
+from interfacy.help.diagnostics import build_diagnostic_content, normalize_diagnostic_text
 from interfacy.runtime.exit_codes import ExitCode
 
 
@@ -57,6 +59,7 @@ def build_parser(settings: dict[str, Any]) -> ArgumentParser:
         description=description,
         epilog=epilog,
         help_layout=_resolve_help_layout(settings),
+        diagnostic_layout=settings.get("diagnostic_layout"),
         help_flags=settings.get("help_flags") or ("--help",),
         sys_exit_enabled=False,
     )
@@ -117,6 +120,7 @@ def build_runner_kwargs(settings: dict[str, Any]) -> dict[str, Any]:
         kwargs["help_colors"] = help_colors
 
     for key in (
+        "diagnostic_layout",
         "flag_strategy",
         "abbreviation_gen",
         "abbreviation_max_generated_len",
@@ -187,9 +191,15 @@ def _validate_entrypoint_target(target: Any) -> None:
 
 
 def _render_usage_error(parser: ArgumentParser, exc: UsageError) -> None:
-    usage = exc.usage or parser.format_usage()
-    print(usage.rstrip(), file=sys.stderr)
-    error(f"{parser.prog}: error: {exc}")
+    diagnostic = exc.diagnostic or ParseDiagnostic(kind="usage", message=str(exc))
+    content = build_diagnostic_content(
+        diagnostic,
+        program=exc.program or parser.prog,
+        help_flags=parser.help_flags if parser.add_help else (),
+        usage=exc.usage or parser.format_usage(),
+    )
+    rendered = parser.diagnostic_layout.render(content, terminal_width=get_terminal_width())
+    error(normalize_diagnostic_text(rendered).rstrip())
 
 
 def main(argv: Sequence[str] | None = None) -> ExitCode:

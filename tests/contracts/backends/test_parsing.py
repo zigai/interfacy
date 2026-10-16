@@ -238,8 +238,12 @@ class TestMathClassParsing:
 
         parser.add_command(TagsTool)
 
-        with pytest.raises(UsageError):
+        with pytest.raises(UsageError) as failure:
             parser.parse_args(["run", "--tags", "bad"])
+
+        assert failure.value.diagnostic.kind == "invalid_type"
+        assert failure.value.diagnostic.argument == "--tags"
+        assert "bad" not in str(failure.value)
 
     @pytest.mark.parametrize("parser", ["click_kw_only"], indirect=True)
     def test_typed_late_initializer_list_option_parse_error_uses_click(
@@ -258,8 +262,12 @@ class TestMathClassParsing:
 
         parser.add_command(TagsTool)
 
-        with pytest.raises(UsageError):
+        with pytest.raises(UsageError) as failure:
             parser.parse_args(["run", "--tags", "bad"])
+
+        assert failure.value.diagnostic.kind == "invalid_type"
+        assert failure.value.diagnostic.argument == "--tags"
+        assert "bad" not in str(failure.value)
 
     @pytest.mark.parametrize("parser", ["argparse_req_pos", "click_req_pos"], indirect=True)
     def test_from_instance(self, parser: Interfacy):

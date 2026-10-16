@@ -35,6 +35,8 @@ Portable plugins subclass `InterfacyPlugin` and can implement these hooks:
 | `after_parse()` | rewrite the parsed namespace |
 | `transform_schema()` | replace the built schema before backend materialization |
 | `transform_help()` | replace structured help sections before terminal rendering |
+| `transform_diagnostic()` | replace diagnostic display content after recovery fails |
+| `render_diagnostic()` | return final diagnostic text, or defer to the next renderer |
 | `wrap_execute()` | wrap command execution |
 | `recover_parse_failure()` | provide values or subcommands for recoverable parse failures |
 
@@ -43,7 +45,9 @@ contexts expose only backend-neutral state and capabilities, such as the backend
 metadata, schema descriptors, raw arguments, or parsed namespaces. Metadata and namespace
 containers are copied into read-only mappings when the context is constructed. Plugins
 must return replacements from transformation hooks rather than reaching into parser
-internals.
+internals. Diagnostic transforms compose in registration order; the first renderer returning
+`DiagnosticResult` handles output. Otherwise `diagnostic_layout` renders `DiagnosticContent`.
+`DiagnosticHookContext` exposes failure facts separately. Embedded `invoke()` never renders.
 
 ## Help transformation
 

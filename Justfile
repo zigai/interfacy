@@ -114,7 +114,7 @@ spell: _require-uv
 # Run all quality checks
 check: lint test coverage typecheck spell
   uv run --group dev ruff format --check .
-  uv run --group dev rattle lint .
+  uv run --group dev rattle check .
 
 # List available recipes
 help:

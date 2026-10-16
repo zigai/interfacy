@@ -15,6 +15,12 @@ def parser(request: pytest.FixtureRequest) -> Interfacy:
 
 
 @pytest.fixture
+def script_invocation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["tool"])
+    monkeypatch.setattr("__main__.__spec__", None)
+
+
+@pytest.fixture
 def argparse_req_pos() -> Interfacy:
     parser = Interfacy(
         backend="argparse",

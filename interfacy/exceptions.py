@@ -1,3 +1,36 @@
+from dataclasses import dataclass
+from typing import Literal
+
+DiagnosticKind = Literal[
+    "unknown_command",
+    "unknown_option",
+    "missing_argument",
+    "missing_value",
+    "missing_subcommand",
+    "invalid_choice",
+    "invalid_type",
+    "unexpected_argument",
+    "usage",
+]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ParseDiagnostic:
+    """Backend-neutral failure facts; tokens contain names, never rejected parameter values."""
+
+    kind: DiagnosticKind
+    command_path: tuple[str, ...] = ()
+    argument: str | None = None
+    token: str | None = None
+    choices: tuple[str, ...] = ()
+    expected: str | None = None
+    message: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "command_path", tuple(self.command_path))
+        object.__setattr__(self, "choices", tuple(self.choices))
+
+
 class InterfacyError(Exception):
     """Base exception for Interfacy errors."""
 
@@ -57,8 +90,19 @@ class ConfigurationError(InterfacyError):
 class UsageError(InterfacyError):
     """Raise when command-line input cannot be parsed."""
 
-    def __init__(self, message: str, *, usage: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        usage: str | None = None,
+        diagnostic: ParseDiagnostic | None = None,
+        program: str | None = None,
+        exit_code: int = 2,
+    ) -> None:
         self.usage = usage
+        self.diagnostic = diagnostic
+        self.program = program
+        self.exit_code = exit_code
         super().__init__(message)
 
 
@@ -73,11 +117,13 @@ class PipeInputError(InterfacyError):
 
 __all__ = [
     "ConfigurationError",
+    "DiagnosticKind",
     "DuplicateCommandError",
     "DuplicatePluginError",
     "InterfacyError",
     "InterfacyExit",
     "InvalidCommandError",
+    "ParseDiagnostic",
     "PipeInputError",
     "ReservedFlagError",
     "UnsupportedParameterTypeError",

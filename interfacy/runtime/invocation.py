@@ -69,7 +69,7 @@ def resolve_args(args: Sequence[str] | None) -> tuple[str, ...]:
 
 
 class InvocationError(Exception):
-    def __init__(self, code: ExitCode, error: Exception) -> None:
+    def __init__(self, code: int, error: Exception) -> None:
         self.code = code
         self.error = error
         super().__init__(type(error).__name__)
@@ -85,9 +85,9 @@ def _execution_error_code(error: Exception) -> ExitCode:
     return ExitCode.COMMAND_FAILED
 
 
-def _parse_error_code(error: Exception) -> ExitCode:
+def _parse_error_code(error: Exception) -> int:
     if isinstance(error, UsageError):
-        return ExitCode.USAGE
+        return error.exit_code
     if isinstance(error, _CONFIGURATION_ERRORS):
         return ExitCode.CONFIGURATION
     return ExitCode.INTERNAL
@@ -134,19 +134,27 @@ class InvocationRuntime:
             raise
         except InvocationError as e:
             failure = e.error
+            exit_code = e.code
             if isinstance(failure, UsageError):
-                if failure.usage:
-                    error(failure.usage.rstrip())
-
-                self._policy.log_error(str(failure))
+                try:
+                    rendered = self._render_diagnostic(failure)
+                except InvocationError as rendering_error:
+                    self._policy.log_exception(rendering_error.error)
+                    exit_code = rendering_error.code
+                else:
+                    error(rendered.rstrip())
             else:
                 self._policy.log_exception(failure)
-
-            exit_code = e.code
         else:
             self._policy.display(result)
 
         raise SystemExit(exit_code)
+
+    def _render_diagnostic(self, failure: UsageError) -> str:
+        try:
+            return self._policy.format_diagnostic(failure)
+        except Exception as e:
+            raise InvocationError(_parse_error_code(e), e) from e
 
     def _invoke(self, parse: ParseStep, execute: ExecuteStep) -> Any:
         try:

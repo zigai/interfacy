@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from interfacy.declarations.settings import BackendName
+from interfacy.exceptions import ParseDiagnostic
 from interfacy.plugins.descriptors import SchemaDescriptor
 from interfacy.plugins.freeze import freeze
 
@@ -81,6 +82,21 @@ class HelpHookContext:
 
 
 @dataclass(slots=True)
+class DiagnosticHookContext:
+    """Failure facts and command context; display transforms do not alter these facts."""
+
+    backend: BackendName
+    metadata: Mapping[str, Any]
+    program: str
+    terminal_width: int
+    diagnostic: ParseDiagnostic
+    schema: SchemaDescriptor
+
+    def __post_init__(self) -> None:
+        self.metadata = freeze(self.metadata)
+
+
+@dataclass(slots=True)
 class ExecuteContext:
     """Invocation snapshot visible to execution wrappers."""
 
@@ -126,6 +142,7 @@ __all__ = [
     "BackendPluginContext",
     "BeforeParseContext",
     "ConfigureContext",
+    "DiagnosticHookContext",
     "ExecuteContext",
     "HelpHookContext",
     "ParseFailureContext",

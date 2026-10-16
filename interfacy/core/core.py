@@ -24,6 +24,7 @@ from interfacy.core.compiler import (
     generation_key,
     schema_build_context,
 )
+from interfacy.core.diagnostics import render_diagnostic
 from interfacy.core.help import (
     SchemaHelpPipeline,
     configure_help_layout,
@@ -43,8 +44,13 @@ from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptio
 from interfacy.declarations.pipes import PipeTargets
 from interfacy.declarations.settings import BackendName
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
-from interfacy.exceptions import ConfigurationError, DuplicateCommandError, InterfacyExit
-from interfacy.help import HelpLayout, StandardLayout
+from interfacy.exceptions import (
+    ConfigurationError,
+    DuplicateCommandError,
+    InterfacyExit,
+    UsageError,
+)
+from interfacy.help import DiagnosticLayout, HelpLayout, StandardLayout
 from interfacy.introspection.type_parsers import build_default_type_parser
 from interfacy.naming import (
     AbbreviationGenerator,
@@ -420,7 +426,7 @@ class InterfacyCore:
                 session.present_error(
                     outcome.presentation
                     if isinstance(outcome, BackendParseFailure)
-                    else usage_presentation(str(e))
+                    else usage_presentation(str(e), diagnostic=e.diagnostic)
                 )
 
             if supplied is not None:
@@ -537,6 +543,7 @@ class InterfacyCore:
         schema: ParserSchema,
         command_path: tuple[str, ...],
         terminal_width: int | None = None,
+        program: str | None = None,
     ) -> str:
         return render_help(
             schema,
@@ -545,6 +552,20 @@ class InterfacyCore:
             backend=self.backend,
             metadata=self.metadata,
             plugin_manager=self.plugin_manager,
+            help_layout=self.help_layout,
+            help_renderer=self.settings.help_renderer,
+            program=program,
+        )
+
+    def render_diagnostic(self, failure: UsageError) -> str:
+        schema = self.last_schema or self.build_parser_schema()
+        return render_diagnostic(
+            failure,
+            schema,
+            backend=self.backend,
+            metadata=self.metadata,
+            plugin_manager=self.plugin_manager,
+            layout=self.settings.diagnostic_layout or DiagnosticLayout(),
             help_layout=self.help_layout,
             help_renderer=self.settings.help_renderer,
         )
@@ -610,6 +631,7 @@ class InterfacyCore:
         self.abbreviation_gen = components.abbreviation_gen
         self.type_parser = components.type_parser
         self.runtime_policy = components.runtime_policy
+        self.runtime_policy.diagnostic_renderer = self.render_diagnostic
         self._runtime = InvocationRuntime(components.runtime_policy)
 
     def _schema_build_context(self) -> SchemaBuildContext:

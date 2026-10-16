@@ -8,6 +8,7 @@ from interfacy.help.content import (
     HelpSectionKind,
     default_help_renderer,
 )
+from interfacy.help.diagnostics import DiagnosticContent, DiagnosticLayout, DiagnosticResult
 from interfacy.help.layouts import (
     Aligned,
     AlignedTyped,
@@ -25,6 +26,9 @@ __all__ = [
     "AlignedTyped",
     "ArgparseLayout",
     "ClapLayout",
+    "DiagnosticContent",
+    "DiagnosticLayout",
+    "DiagnosticResult",
     "HelpContent",
     "HelpContext",
     "HelpLayout",

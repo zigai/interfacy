@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from interfacy.backends.base import BackendParseFailure, BackendSession, NativePresentation
 from interfacy.core.ancestor_options import InvocationState, bucket_for_command_path
 from interfacy.core.plugins import PluginManager
 from interfacy.declarations.settings import BackendName
-from interfacy.exceptions import ConfigurationError
+from interfacy.exceptions import ConfigurationError, ParseDiagnostic
 from interfacy.plugins import (
     AbortRecovery,
     ArgumentDescriptor,
@@ -21,9 +22,17 @@ from interfacy.plugins import (
 from interfacy.schema.nodes import COMMAND_KEY, Command, ParserSchema, find_command
 
 
-def usage_presentation(message: str, exit_code: int = 2) -> NativePresentation:
+def usage_presentation(
+    message: str, exit_code: int = 2, *, diagnostic: ParseDiagnostic | None = None
+) -> NativePresentation:
     """Return a usage-error presentation for ``message``."""
-    return NativePresentation(kind="usage", message=message, exit_code=exit_code)
+    return NativePresentation(
+        kind="usage",
+        message=message,
+        diagnostic=diagnostic,
+        command_path=diagnostic.command_path if diagnostic is not None else (),
+        exit_code=exit_code,
+    )
 
 
 def recover_parse_failure(
@@ -66,7 +75,18 @@ def recover_parse_failure(
 
         if isinstance(action, AbortRecovery):
             message = action.message or failure.presentation.message
-            session.present_error(usage_presentation(message, action.exit_code))
+            session.present_error(
+                replace(
+                    failure.presentation,
+                    message=message,
+                    exit_code=action.exit_code,
+                    diagnostic=ParseDiagnostic(
+                        kind="usage",
+                        command_path=failure.presentation.command_path,
+                        message=message,
+                    ),
+                )
+            )
 
         apply_recovery_action(schema, namespace, descriptor, action)
 
@@ -160,12 +180,12 @@ def subcommands_at_path(
 ) -> dict[str, Command]:
     """Return the subcommands selectable at ``path``, or an empty mapping if it is unknown."""
     commands = schema.commands
-    if not path:
-        if len(commands) == 1 and not schema.is_multi_command:
-            root = next(iter(commands.values()))
-            if root.command_type != "group" and root.subcommands:
-                return root.subcommands
+    if len(commands) == 1 and not schema.is_multi_command:
+        root = next(iter(commands.values()))
+        if root.command_type != "group":
+            commands = root.subcommands or {}
 
+    if not path:
         return commands
 
     for segment in path:
