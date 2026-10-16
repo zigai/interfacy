@@ -1,0 +1,3 @@
+- On argparse and Click, a positional count command invoked with 1 --count exits with status 2 without suggesting count as an option.
+
+- Backend contract cases for --verbsoe still suggest the real --verbose option.
