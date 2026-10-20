@@ -247,10 +247,15 @@ class Interfacy:
         ``description``, ``aliases``, ``pipe_targets``, and ``help_group`` customize the
         public CLI surface without changing the underlying callable.
 
+        ``command`` can also be a ``"module:object"`` or ``"path.py:object"`` import path.
+        Its name and description are then read from the source, and it is imported only
+        when the command line selects it.
+
         Raises:
             DuplicateCommandError: If the command name or alias already exists.
             InvalidCommandError: If ``command`` cannot be converted to a CLI command.
-            ConfigurationError: If an override is invalid.
+            ConfigurationError: If an override is invalid, or the name or description of an
+                import path is not a literal in its source and was not passed.
         """
         return self._core.add_command(
             command,
@@ -298,7 +303,7 @@ class Interfacy:
 
     def add_group(
         self,
-        group: CommandGroup,
+        group: CommandGroup | str,
         name: str | None = None,
         description: str | None = None,
         aliases: Sequence[str] | None = None,
@@ -325,9 +330,13 @@ class Interfacy:
         ``description``, ``aliases``, and ``help_group`` customize how the group is
         presented in generated help and command resolution.
 
+        ``group`` can also be an import path to a ``CommandGroup`` or to a function that
+        returns one; it is imported only when the command line selects it.
+
         Raises:
             DuplicateCommandError: If the group name or alias already exists.
-            ConfigurationError: If an override is invalid.
+            ConfigurationError: If an override is invalid, or the name or description of an
+                import path is not a literal in its source and was not passed.
         """
         return self._core.add_group(
             group,
@@ -423,7 +432,7 @@ class Interfacy:
         return self._core.build_parser()
 
     def build_parser_schema(self) -> ParserSchema:
-        """Build the parser schema for registered commands."""
+        """Build the full parser schema, importing every command registered by import path."""
         return self._core.build_parser_schema()
 
     def get_last_schema(self) -> ParserSchema | None:

@@ -4,6 +4,7 @@ import sys
 from types import SimpleNamespace
 from typing import Any, Literal
 
+import argcomplete
 import pytest
 
 from interfacy import CommandGroup, Interfacy
@@ -56,6 +57,45 @@ def test_tab_completion_installs_argcomplete_when_enabled(monkeypatch: pytest.Mo
     built_parser = parser.build_parser()
 
     assert calls == [built_parser]
+
+
+@pytest.mark.parametrize(
+    ("program_words", "line"),
+    [
+        ("1", "prog deploy --f"),
+        ("2", "python prog.py deploy --f"),
+        ("3", "python -m prog deploy --f"),
+    ],
+)
+def test_tab_completion_builds_the_command_on_the_completion_line(
+    monkeypatch: pytest.MonkeyPatch,
+    program_words: str,
+    line: str,
+) -> None:
+    class CompletionExitError(Exception):
+        pass
+
+    def autocomplete(parser: Any) -> None:
+        completed.append(parser)
+        raise CompletionExitError
+
+    completed: list[Any] = []
+    monkeypatch.setattr(argcomplete, "autocomplete", autocomplete)
+    monkeypatch.setenv("_ARGCOMPLETE", program_words)
+    monkeypatch.setenv("COMP_LINE", line)
+    monkeypatch.setenv("COMP_POINT", str(len(line)))
+
+    parser = Interfacy(backend="argparse", tab_completion=True, print_result=False)
+    parser.add_command(deploy)
+    parser.add_command(paint)
+
+    with pytest.raises(CompletionExitError):
+        parser.parse_args([])
+
+    assert set(_action_by_dest(completed[0], "fmt").choices) == {"json", "yaml"}
+
+    with pytest.raises(AssertionError):
+        _action_by_dest(completed[0], "colors")
 
 
 def test_completion_metadata_includes_commands_aliases_and_literal_choices() -> None:

@@ -14,9 +14,11 @@ from interfacy.declarations.options import CommandOverrides
 from interfacy.declarations.params import BooleanMode, Param
 from interfacy.declarations.pipes import PipeTargets
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
+from interfacy.introspection.targets import ImportTarget
 from interfacy.schema.values import ArgumentValue, ValueCardinality
 
-CommandType = Literal["function", "method", "class", "group", "instance"]
+CommandType = Literal["function", "method", "class", "group", "instance", "deferred"]
+DeferredKind = Literal["command", "group"]
 
 # Parsed-namespace keys written by backends and read by the runtime.
 COMMAND_KEY = "command"
@@ -136,6 +138,20 @@ class Argument:
     value_plan: ArgumentValue | None = None
 
 
+@dataclass(frozen=True)
+class DeferredTarget:
+    """
+    Import target of a command registered by path.
+
+    Attributes:
+        target (ImportTarget): Where the command object is imported from.
+        kind (DeferredKind): ``"group"`` for ``add_group`` targets, which may be factories.
+    """
+
+    target: ImportTarget
+    kind: DeferredKind
+
+
 @dataclass
 class Command:
     """
@@ -154,12 +170,13 @@ class Command:
         subcommands (dict[str, Command] | None): Nested subcommands, if any.
         executable_flags (list[ExecutableFlag]): Zero-argument executable flags.
         raw_epilog (str | None): Raw epilog text for help output.
-        command_type (CommandType): Command category.
+        command_type (CommandType): Command category; "deferred" entries are listed but not built.
         is_leaf (bool): Whether this command has no subcommands.
         is_instance (bool): Whether the command comes from a stored instance.
         parent_path (tuple[str, ...]): Command path for nested groups.
         stored_instance (object | None): Stored instance for instance commands.
         params (dict[str, Param]): Param declarations by parameter name.
+        deferred (DeferredTarget | None): Import target of a command not imported yet.
     """
 
     obj: Class | Function | Method | None
@@ -185,6 +202,7 @@ class Command:
     help_subcommand_sort_effective: list[HelpSubcommandSortRule] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     params: dict[str, Param] = field(default_factory=dict)
+    deferred: DeferredTarget | None = None
 
     @property
     def description(self) -> str | None:
@@ -277,6 +295,8 @@ __all__ = [
     "BooleanBehavior",
     "Command",
     "CommandType",
+    "DeferredKind",
+    "DeferredTarget",
     "ParserSchema",
     "ValueShape",
     "find_command",

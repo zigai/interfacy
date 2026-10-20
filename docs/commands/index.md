@@ -1,6 +1,6 @@
 # Commands
 
-Command registration, groups, nesting, aliases, parent options, and executable flags.
+Command registration, lazy commands, groups, nesting, aliases, parent options, and executable flags.
 
 ## Sections
 
@@ -8,6 +8,7 @@ Command registration, groups, nesting, aliases, parent options, and executable f
 :maxdepth: 1
 
 multiple-commands
+lazy-commands
 groups
 nesting
 aliases

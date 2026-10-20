@@ -1,7 +1,16 @@
+from pathlib import Path
+from textwrap import dedent
+
 import pytest
 
 from interfacy import Interfacy
-from interfacy.exceptions import DuplicateCommandError
+from interfacy.exceptions import (
+    CommandImportError,
+    ConfigurationError,
+    DuplicateCommandError,
+    UsageError,
+)
+from interfacy.introspection.targets import ImportTarget
 from tests.fixtures.classes import Math, TextTools
 from tests.fixtures.commands import greet, pow
 
@@ -167,3 +176,178 @@ class TestDecoratorWithAllParameters:
         parser.command()(greet)
 
         assert parser.invoke(args=["calculate", "-e", "2"]) == 9
+
+
+def _write_module(directory: Path, name: str, body: str) -> Path:
+    path = directory / f"{name}.py"
+    marker = directory / f"{name}.loaded"
+    path.write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).touch()\n{dedent(body)}",
+        encoding="utf-8",
+    )
+
+    return path
+
+
+def _loaded(path: Path) -> bool:
+    return path.with_suffix(".loaded").exists()
+
+
+_GREETING_MODULE = '''
+def greet(name: str) -> str:
+    """Return a friendly greeting."""
+    return f"Hello, {name}!"
+'''
+
+_OPS_MODULE = """
+from interfacy import CommandGroup
+
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+
+def create_group() -> CommandGroup:
+    group = CommandGroup("ops", description="Arithmetic operations", aliases=("o",))
+    group.add_command(add)
+    return group
+"""
+
+
+@pytest.fixture(params=["argparse", "click"])
+def lazy_parser(request: pytest.FixtureRequest) -> Interfacy:
+    return Interfacy(backend=request.param, print_result=False, sys_exit_enabled=False)
+
+
+class TestImportPathRegistration:
+    def test_root_help_imports_nothing_and_matches_eager_help(
+        self, lazy_parser: Interfacy, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        ops = _write_module(tmp_path, "ops", _OPS_MODULE)
+        lazy_parser.add_command(f"{greeting}:greet")
+        lazy_parser.add_group(f"{ops}:create_group")
+
+        lazy_parser.invoke(args=["--help"])
+        lazy_help = capsys.readouterr().out
+
+        assert not _loaded(greeting)
+        assert not _loaded(ops)
+
+        eager = Interfacy(backend=lazy_parser.backend, print_result=False)
+        eager.add_command(ImportTarget(str(greeting), "greet").load())
+        eager.add_group(ImportTarget(str(ops), "create_group").load()())
+        eager.invoke(args=["--help"])
+
+        assert lazy_help == capsys.readouterr().out
+
+    def test_selected_command_imports_only_its_target(self, lazy_parser: Interfacy, tmp_path: Path):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        ops = _write_module(tmp_path, "ops", _OPS_MODULE)
+        lazy_parser.add_command(f"{greeting}:greet")
+        lazy_parser.add_group(f"{ops}:create_group")
+
+        assert lazy_parser.invoke(args=["o", "add", "2", "3"]) == 5
+        assert _loaded(ops)
+        assert not _loaded(greeting)
+
+    def test_unknown_command_imports_nothing(self, lazy_parser: Interfacy, tmp_path: Path):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        lazy_parser.add_command(f"{greeting}:greet")
+        lazy_parser.add_command(pow)
+
+        with pytest.raises(UsageError):
+            lazy_parser.invoke(args=["missing"])
+
+        assert not _loaded(greeting)
+
+    def test_single_registered_path_runs_without_a_command_name(
+        self, lazy_parser: Interfacy, tmp_path: Path
+    ):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        lazy_parser.add_command(f"{greeting}:greet")
+
+        assert lazy_parser.invoke(args=["World"]) == "Hello, World!"
+
+    def test_import_failure_affects_only_its_command(self, lazy_parser: Interfacy, tmp_path: Path):
+        broken = _write_module(
+            tmp_path,
+            "broken",
+            '''
+            raise RuntimeError("cannot import")
+
+            def broken() -> None:
+                """Broken command."""
+            ''',
+        )
+        lazy_parser.add_command(f"{broken}:broken")
+        lazy_parser.add_command(greet)
+
+        assert lazy_parser.invoke(args=["greet", "World"]) == "Hello, World!"
+
+        with pytest.raises(CommandImportError, match="cannot import"):
+            lazy_parser.invoke(args=["broken"])
+
+    def test_non_literal_name_requires_explicit_name_and_description(
+        self, lazy_parser: Interfacy, tmp_path: Path
+    ):
+        module = _write_module(
+            tmp_path,
+            "dynamic",
+            """
+            from interfacy import CommandGroup
+
+            NAME = "dynamic"
+
+            def create() -> CommandGroup:
+                group = CommandGroup(NAME, description=NAME.title())
+                group.add_command(len)
+                return group
+            """,
+        )
+
+        with pytest.raises(ConfigurationError, match="name="):
+            lazy_parser.add_group(f"{module}:create")
+
+        lazy_parser.add_group(f"{module}:create", name="dyn", description="Dynamic commands")
+        lazy_parser.add_command(greet)
+
+        assert lazy_parser.get_command_by_cli_name("dyn").raw_description == "Dynamic commands"
+        assert not _loaded(module)
+
+    def test_missing_symbol_fails_at_registration(self, lazy_parser: Interfacy, tmp_path: Path):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+
+        with pytest.raises(ConfigurationError, match="missing"):
+            lazy_parser.add_command(f"{greeting}:missing")
+
+    def test_path_and_object_with_the_same_name_conflict(
+        self, lazy_parser: Interfacy, tmp_path: Path
+    ):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        lazy_parser.add_command(greet)
+
+        with pytest.raises(DuplicateCommandError):
+            lazy_parser.add_command(f"{greeting}:greet")
+
+    def test_build_parser_schema_imports_every_target(self, lazy_parser: Interfacy, tmp_path: Path):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        ops = _write_module(tmp_path, "ops", _OPS_MODULE)
+        lazy_parser.add_command(f"{greeting}:greet")
+        lazy_parser.add_group(f"{ops}:create_group")
+
+        schema = lazy_parser.build_parser_schema()
+
+        assert _loaded(greeting)
+        assert _loaded(ops)
+        assert all(command.command_type != "deferred" for command in schema.commands.values())
+
+    def test_argument_file_before_the_command_can_select_a_path_target(self, tmp_path: Path):
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        args_file = tmp_path / "greet.args"
+        args_file.write_text("greet\nWorld\n", encoding="utf-8")
+        parser = Interfacy(print_result=False, allow_args_from_file=True)
+        parser.add_command(f"{greeting}:greet")
+        parser.add_command(pow)
+
+        assert parser.invoke(args=[f"@{args_file}"]) == "Hello, World!"

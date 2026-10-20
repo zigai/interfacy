@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Any
 
@@ -45,12 +45,16 @@ def recover_parse_failure(
     metadata: Mapping[str, Any],
     plugin_manager: PluginManager,
     max_attempts: int,
-) -> dict[str, Any]:
+    build_with_command: Callable[[str], ParserSchema],
+) -> tuple[dict[str, Any], ParserSchema]:
     """
     Let recovery plugins complete a partial namespace after a backend parse failure.
 
-    Returns the recovered namespace once no required argument is missing. Otherwise the
-    backend presents the original failure, which does not return.
+    When a plugin selects a top-level command that ``schema`` only lists as deferred,
+    ``build_with_command`` rebuilds the schema with that command built.
+
+    Returns the recovered namespace and its schema once no required argument is missing.
+    Otherwise the backend presents the original failure, which does not return.
     """
     failure = initial
     if failure.partial_namespace is None:
@@ -89,9 +93,17 @@ def recover_parse_failure(
             )
 
         apply_recovery_action(schema, namespace, descriptor, action)
+        selected = namespace.get(COMMAND_KEY)
+        if (
+            schema.is_multi_command
+            and isinstance(selected, str)
+            and selected in schema.commands
+            and schema.commands[selected].command_type == "deferred"
+        ):
+            schema = build_with_command(selected)
 
         if not missing_required(schema, namespace):
-            return namespace
+            return namespace, schema
 
     return session.present_error(failure.presentation)
 

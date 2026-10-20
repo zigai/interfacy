@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any, NoReturn
@@ -467,6 +468,21 @@ class ArgparseBackend:
     @property
     def name(self) -> BackendName:
         return "argparse"
+
+    def completion_args(self) -> tuple[str, ...] | None:
+        if "_ARGCOMPLETE" not in os.environ:
+            return None
+
+        try:
+            from argcomplete.lexers import split_line
+        except ImportError:
+            return None
+
+        words = split_line(os.environ["COMP_LINE"], int(os.environ["COMP_POINT"]))[3]
+        # _ARGCOMPLETE is 1 for `prog`, 2 for `python prog.py`, and 3 for `python -m prog`.
+        program_words = int(os.environ["_ARGCOMPLETE"])
+
+        return tuple(words[program_words:])
 
     def compile(
         self,

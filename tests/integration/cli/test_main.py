@@ -9,7 +9,7 @@ import pytest
 from platformdirs import user_config_path
 
 from interfacy.cli.main import ExitCode, build_parser, main
-from interfacy.cli.targets import resolve_target, split_target
+from interfacy.introspection.targets import resolve_target, split_target
 
 
 @pytest.fixture(autouse=True)

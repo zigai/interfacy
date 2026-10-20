@@ -18,6 +18,7 @@ from interfacy.plugins import (
     InterfacyPlugin,
     ParseFailureKind,
     ProvideArgumentValues,
+    SchemaDescriptor,
 )
 from tests.fixtures.plugins import (
     ArgparseAccessPlugin,
@@ -310,6 +311,72 @@ def test_after_parse_plugin_can_rewrite_namespace(parser) -> None:
 
     assert namespace == {"name": "ADA"}
     assert plugin.backend in {"argparse", "click"}
+
+
+class SchemaRecordingPlugin(InterfacyPlugin):
+    name = "schema_recording"
+
+    def __init__(self) -> None:
+        self.schemas: list[SchemaDescriptor] = []
+
+    def after_parse(
+        self,
+        context: AfterParseContext,
+        namespace: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.schemas.append(context.schema)
+        return namespace
+
+
+@pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+def test_plugins_see_unselected_commands_as_deferred(parser) -> None:
+    plugin = SchemaRecordingPlugin()
+    parser.add_plugin(plugin)
+    parser.add_command(_keyword_only_name, name="greet")
+    parser.add_command(_two_keyword_only_values, name="pair")
+
+    parser.parse_args(["greet", "--name", "Ada"])
+
+    schema = plugin.schemas[0]
+    assert schema.deferred_paths == (("pair",),)
+    assert {argument.command_path for argument in schema.arguments} == {("greet",)}
+
+
+class SelectGreetPlugin(InterfacyPlugin):
+    name = "select_greet"
+
+    def recover_parse_failure(self, context, failure):
+        if failure.kind is ParseFailureKind.MISSING_SUBCOMMAND:
+            return ProvideArgumentValues(subcommands={(): "greet"})
+
+        return ProvideArgumentValues(values=dict.fromkeys(failure.missing_arguments, "Ada"))
+
+
+@pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+def test_recovery_can_select_a_command_the_arguments_did_not_name(parser) -> None:
+    parser.add_plugin(SelectGreetPlugin())
+    parser.apply_setup(parse_recovery_max_attempts=2)
+    parser.add_command(_keyword_only_name, name="greet")
+    parser.add_command(_two_keyword_only_values, name="pair")
+
+    assert parser.invoke(args=[]) == "Ada"
+
+
+class AliasPlugin(InterfacyPlugin):
+    name = "alias"
+
+    def transform_schema(self, context, schema):
+        schema.commands["greet"].aliases = ("hello",)
+        return schema
+
+
+@pytest.mark.parametrize("parser", ["argparse_kw_only", "click_kw_only"], indirect=True)
+def test_alias_added_by_a_schema_plugin_selects_its_command(parser) -> None:
+    parser.add_plugin(AliasPlugin())
+    parser.add_command(_keyword_only_name, name="greet")
+    parser.add_command(_two_keyword_only_values, name="pair")
+
+    assert parser.invoke(args=["hello", "--name", "Ada"]) == "Ada"
 
 
 class HelpContentPlugin(InterfacyPlugin):

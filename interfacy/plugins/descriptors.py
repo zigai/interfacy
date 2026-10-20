@@ -57,12 +57,18 @@ class ArgumentDescriptor:
 
 @dataclass(slots=True)
 class SchemaDescriptor:
-    """Schema snapshot shared by plugin phases."""
+    """
+    Schema snapshot shared by plugin phases.
+
+    ``deferred_paths`` lists the commands that are only named in this schema because the
+    command line did not select them; they have no arguments or subcommands.
+    """
 
     description: str | None
     epilog: str | None
     command_paths: tuple[tuple[str, ...], ...]
     arguments: tuple[ArgumentDescriptor, ...]
+    deferred_paths: tuple[tuple[str, ...], ...] = ()
     metadata: Mapping[str, Any] = field(
         default_factory=dict,
         compare=False,
@@ -72,6 +78,7 @@ class SchemaDescriptor:
 
     def __post_init__(self) -> None:
         self.command_paths = tuple(tuple(path) for path in self.command_paths)
+        self.deferred_paths = tuple(tuple(path) for path in self.deferred_paths)
         self.arguments = tuple(self.arguments)
         self.metadata = freeze(self.metadata)
 
@@ -79,10 +86,15 @@ class SchemaDescriptor:
     def from_schema(cls, schema: ParserSchema) -> SchemaDescriptor:
         """Describe every command path and argument in ``schema``."""
         paths: list[tuple[str, ...]] = []
+        deferred_paths: list[tuple[str, ...]] = []
         arguments: list[ArgumentDescriptor] = []
 
         def visit(command: Command, path: tuple[str, ...]) -> None:
             paths.append(path)
+
+            if command.command_type == "deferred":
+                deferred_paths.append(path)
+
             arguments.extend(
                 ArgumentDescriptor.from_argument(path, argument)
                 for argument in (*command.initializer, *command.arguments)
@@ -99,6 +111,7 @@ class SchemaDescriptor:
             epilog=schema.epilog,
             command_paths=tuple(paths),
             arguments=tuple(arguments),
+            deferred_paths=tuple(deferred_paths),
             metadata=schema.metadata,
         )
 

@@ -127,6 +127,10 @@ class BackendAdapter(Protocol[NativeParserT_co]):
         backend_config: BackendConfig,
     ) -> BackendSession[NativeParserT_co]: ...
 
+    def completion_args(self) -> tuple[str, ...] | None:
+        """Return the arguments before the cursor while shell completion runs, else ``None``."""
+        ...
+
 
 class ExecutableFlagTriggeredError(Exception):
     """Raised inside a backend parser when an executable flag must run instead of parsing."""

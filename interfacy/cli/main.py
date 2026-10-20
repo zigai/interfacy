@@ -10,13 +10,13 @@ from typing import Any
 from interfacy.app import Interfacy
 from interfacy.backends.argparse.parser import ArgumentParser
 from interfacy.cli.config import apply_config_defaults, get_default_config_paths, load_config
-from interfacy.cli.targets import resolve_target_with_module
 from interfacy.common.console import error, warn
 from interfacy.common.terminal import get_terminal_width
 from interfacy.declarations.groups import CommandGroup
 from interfacy.exceptions import InterfacyExit, ParseDiagnostic, UsageError
 from interfacy.help import HelpLayout, StandardLayout
 from interfacy.help.diagnostics import build_diagnostic_content, normalize_diagnostic_text
+from interfacy.introspection.targets import resolve_target_with_module
 from interfacy.runtime.exit_codes import ExitCode
 
 

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from interfacy.declarations.params import BooleanMode as BooleanMode
     from interfacy.declarations.params import Param as Param
     from interfacy.declarations.params import params as params
+    from interfacy.exceptions import CommandImportError as CommandImportError
     from interfacy.exceptions import ConfigurationError as ConfigurationError
     from interfacy.exceptions import DuplicateCommandError as DuplicateCommandError
     from interfacy.exceptions import DuplicatePluginError as DuplicatePluginError
@@ -29,6 +30,7 @@ _EXPORTS = {
     "BooleanMode": ("interfacy.declarations.params", "BooleanMode"),
     "ConfigurationError": ("interfacy.exceptions", "ConfigurationError"),
     "CommandGroup": ("interfacy.declarations.groups", "CommandGroup"),
+    "CommandImportError": ("interfacy.exceptions", "CommandImportError"),
     "ExecutableFlag": ("interfacy.declarations.executable_flags", "ExecutableFlag"),
     "DuplicateCommandError": ("interfacy.exceptions", "DuplicateCommandError"),
     "DuplicatePluginError": ("interfacy.exceptions", "DuplicatePluginError"),
@@ -69,6 +71,7 @@ __all__ = [
     "UNSET",
     "BooleanMode",
     "CommandGroup",
+    "CommandImportError",
     "ConfigurationError",
     "DiagnosticLayout",
     "DuplicateCommandError",

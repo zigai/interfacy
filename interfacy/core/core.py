@@ -12,6 +12,7 @@ from interfacy.backends.base import BackendAdapter, BackendParseFailure, Backend
 from interfacy.backends.registry import create_backend_adapter
 from interfacy.common.debug import get_logger
 from interfacy.common.resources import ParsedArguments, ResourceStack
+from interfacy.common.sentinels import UnsetType
 from interfacy.core.ancestor_options import (
     AncestorOptions,
     InterspersedOptionValueError,
@@ -36,6 +37,7 @@ from interfacy.core.pipe_state import PipeState
 from interfacy.core.plugins import PluginManager
 from interfacy.core.recovery import recover_parse_failure, usage_presentation
 from interfacy.core.registry import CommandRegistry
+from interfacy.core.routing import select_commands
 from interfacy.core.settings import CoreSettings, prepare_settings_update
 from interfacy.core.snapshot import CoreSnapshot
 from interfacy.declarations.executable_flags import ExecutableAction
@@ -45,12 +47,15 @@ from interfacy.declarations.pipes import PipeTargets
 from interfacy.declarations.settings import BackendName
 from interfacy.declarations.sorting import HelpOptionSortRule, HelpSubcommandSortRule
 from interfacy.exceptions import (
+    CommandImportError,
     ConfigurationError,
     DuplicateCommandError,
     InterfacyExit,
     UsageError,
 )
 from interfacy.help import DiagnosticLayout, HelpLayout, StandardLayout
+from interfacy.introspection.static_metadata import read_static_metadata
+from interfacy.introspection.targets import ImportTarget
 from interfacy.introspection.type_parsers import build_default_type_parser
 from interfacy.naming import (
     AbbreviationGenerator,
@@ -80,7 +85,14 @@ from interfacy.runtime.invocation import (
 from interfacy.runtime.policy import RuntimePolicy
 from interfacy.runtime.runner import SchemaRunner
 from interfacy.schema.builder import ParserSchemaBuilder, SchemaBuildContext
-from interfacy.schema.nodes import COMMAND_KEY, Command, ParserSchema
+from interfacy.schema.builder.settings import registered_command_options
+from interfacy.schema.nodes import (
+    COMMAND_KEY,
+    Command,
+    DeferredKind,
+    DeferredTarget,
+    ParserSchema,
+)
 
 logger = get_logger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
@@ -266,6 +278,17 @@ class InterfacyCore:
         pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None = None,
         options: CommandOptions = DEFAULT_COMMAND_OPTIONS,
     ) -> Command:
+        if isinstance(command, str):
+            return self._add_deferred(
+                ImportTarget.parse(command),
+                "command",
+                name=name,
+                description=description,
+                aliases=aliases,
+                pipe_targets=pipe_targets,
+                options=options,
+            )
+
         if isinstance(command, CommandGroup):
             return self.add_group(
                 command,
@@ -319,12 +342,23 @@ class InterfacyCore:
 
     def add_group(
         self,
-        group: CommandGroup,
+        group: CommandGroup | str,
         name: str | None = None,
         description: str | None = None,
         aliases: Sequence[str] | None = None,
         options: CommandOptions = DEFAULT_COMMAND_OPTIONS,
     ) -> Command:
+        if isinstance(group, str):
+            return self._add_deferred(
+                ImportTarget.parse(group),
+                "group",
+                name=name,
+                description=description,
+                aliases=aliases,
+                pipe_targets=None,
+                options=options,
+            )
+
         combined_aliases: list[str] = list(aliases or ())
         combined_aliases.extend(alias for alias in group.aliases if alias not in combined_aliases)
         with self._registration():
@@ -336,33 +370,21 @@ class InterfacyCore:
             if canonical in self.registry.commands:
                 raise DuplicateCommandError(canonical)
 
-            command = ParserSchemaBuilder(self._schema_build_context()).build_from_group(
-                group,
-                canonical_name=canonical,
-                options=options,
-            )
+            command = self._group_command(group, canonical, options)
             if description is not None:
                 command.raw_description = description
 
             command.aliases = tuple(registered_aliases)
-            command.group_source = group
             self.registry.add(command)
             self.compiler.invalidate()
 
             return command
 
     def build_parser_schema(self) -> ParserSchema:
-        builder = ParserSchemaBuilder(self._schema_build_context())
-        schema = builder.build_unfinalized()
-        context = SchemaTransformContext(
-            backend=self.backend,
-            metadata=self.metadata,
-        )
-        schema = self.plugin_manager.transform_schema(context, schema)
-        schema = builder.finalize(schema)
-        self.last_schema = schema
+        for canonical in list(self.registry.commands):
+            self._resolve_deferred(canonical)
 
-        return schema
+        return self._build_schema(None)
 
     def build_parser(self) -> Any:
         return self._session().native_parser
@@ -385,8 +407,6 @@ class InterfacyCore:
                 args=args,
                 ancestor_options=AncestorOptions(),
             )
-            schema = self.build_parser_schema()
-            session = self._session(schema)
             transformed_args = self.plugin_manager.before_parse(
                 lambda current: BeforeParseContext(
                     backend=self.backend,
@@ -395,6 +415,8 @@ class InterfacyCore:
                 ),
                 args,
             )
+            selected, schema = self._routed_schema(transformed_args)
+            session = self._session(schema)
             normalized_args = tuple(state.ancestor_options.normalize_args(schema, transformed_args))
             outcome = session.parse(normalized_args)
             if isinstance(outcome, ExecutableAction):
@@ -403,7 +425,7 @@ class InterfacyCore:
             resources.callback(outcome.resources.close)
             supplied: dict[str, Any] | None = None
             if isinstance(outcome, BackendParseFailure):
-                namespace = recover_parse_failure(
+                namespace, schema = recover_parse_failure(
                     session,
                     schema,
                     state,
@@ -412,6 +434,9 @@ class InterfacyCore:
                     metadata=self.metadata,
                     plugin_manager=self.plugin_manager,
                     max_attempts=self.settings.parse_recovery_max_attempts,
+                    build_with_command=lambda canonical: self._build_selected(
+                        selected | {canonical}
+                    ),
                 )
             else:
                 namespace = dict(outcome.namespace)
@@ -569,6 +594,164 @@ class InterfacyCore:
             help_layout=self.help_layout,
             help_renderer=self.settings.help_renderer,
         )
+
+    def _build_schema(self, selected: frozenset[str] | None) -> ParserSchema:
+        builder = ParserSchemaBuilder(self._schema_build_context())
+        schema = builder.build_unfinalized(selected)
+        context = SchemaTransformContext(
+            backend=self.backend,
+            metadata=self.metadata,
+        )
+        schema = self.plugin_manager.transform_schema(context, schema)
+        schema = builder.finalize(schema)
+        self.last_schema = schema
+
+        return schema
+
+    def _add_deferred(
+        self,
+        target: ImportTarget,
+        kind: DeferredKind,
+        *,
+        name: str | None,
+        description: str | None,
+        aliases: Sequence[str] | None,
+        pipe_targets: PipeTargets | dict[str, Any] | Sequence[str] | str | None,
+        options: CommandOptions,
+    ) -> Command:
+        metadata = read_static_metadata(target, group_factory=kind == "group")
+        if not isinstance(metadata.name, UnsetType):
+            default_name = metadata.name
+        elif name is not None:
+            default_name = name
+        else:
+            raise ConfigurationError(
+                f"Cannot read the command name of '{target}' from its source; pass name="
+            )
+
+        if description is not None:
+            raw_description: str | None = description
+        elif not isinstance(metadata.description, UnsetType):
+            raw_description = metadata.description
+        else:
+            raise ConfigurationError(
+                f"Cannot read the description of '{target}' from its source; pass description="
+            )
+
+        combined_aliases: list[str] = list(aliases or ())
+        combined_aliases.extend(a for a in metadata.aliases if a not in combined_aliases)
+        with self._registration():
+            canonical, registered_aliases = self.registry.register_name(
+                default_name=default_name,
+                explicit_name=name,
+                aliases=combined_aliases or None,
+            )
+            if canonical in self.registry.commands:
+                raise DuplicateCommandError(canonical)
+
+            command = Command(
+                obj=None,
+                canonical_name=canonical,
+                cli_name=canonical,
+                aliases=tuple(registered_aliases),
+                raw_description=raw_description,
+                help_group=options.help_group,
+                executable_flags=list(options.executable_flags),
+                command_type="deferred",
+                overrides=options.overrides,
+                params=dict(options.params),
+                deferred=DeferredTarget(target, "group" if metadata.is_group else kind),
+            )
+            self.registry.add(command)
+            if pipe_targets is not None:
+                self.pipes.configure(pipe_targets, command=canonical)
+
+            self.compiler.invalidate()
+
+            return command
+
+    def _resolve_deferred(self, canonical: str) -> None:
+        entry = self.registry.commands[canonical]
+        deferred = entry.deferred
+        if deferred is None:
+            return
+
+        try:
+            target = deferred.target.load()
+            if (
+                deferred.kind == "group"
+                and not isinstance(target, CommandGroup)
+                and callable(target)
+            ):
+                target = target()
+        except Exception as e:
+            error = CommandImportError(canonical, str(deferred.target), e)
+            raise error.with_traceback(e.__traceback__) from e
+
+        options = registered_command_options(entry)
+        if isinstance(target, CommandGroup):
+            command = self._group_command(target, canonical, options)
+            command.aliases = entry.aliases
+            command.raw_description = entry.raw_description
+        elif deferred.kind == "group":
+            raise ConfigurationError(
+                f"'{deferred.target}' must be a CommandGroup or a function that returns one"
+            )
+        else:
+            command = Command(
+                obj=inspect_command_target(target, self.settings, options),
+                canonical_name=canonical,
+                cli_name=canonical,
+                aliases=entry.aliases,
+                raw_description=entry.raw_description,
+                help_group=options.help_group,
+                executable_flags=list(options.executable_flags),
+                overrides=options.overrides,
+                params=dict(options.params),
+            )
+
+        self.registry.add(command)
+        self.compiler.invalidate()
+
+    def _group_command(
+        self,
+        group: CommandGroup,
+        canonical: str,
+        options: CommandOptions,
+    ) -> Command:
+        command = ParserSchemaBuilder(self._schema_build_context()).build_from_group(
+            group,
+            canonical_name=canonical,
+            options=options,
+        )
+        command.group_source = group
+
+        return command
+
+    def _routed_schema(self, args: tuple[str, ...]) -> tuple[frozenset[str], ParserSchema]:
+        completion = self.adapter.completion_args() if self.settings.tab_completion else None
+        routing_args = args if completion is None else completion
+        from_file = self.settings.allow_args_from_file
+        selected = select_commands(
+            self.registry.commands,
+            routing_args,
+            allow_args_from_file=from_file,
+        )
+        schema = self._build_selected(selected)
+        # Schema plugins can add names, so route again by the names the backend will see.
+        reached = select_commands(schema.commands, routing_args, allow_args_from_file=from_file)
+        if reached <= selected:
+            return selected, schema
+
+        selected |= reached
+
+        return selected, self._build_selected(selected)
+
+    def _build_selected(self, selected: frozenset[str]) -> ParserSchema:
+        for canonical in selected:
+            self._resolve_deferred(canonical)
+
+        return self._build_schema(selected)
 
     def _session(self, schema: ParserSchema | None = None) -> BackendSession[object]:
         current_schema = schema or self.build_parser_schema()

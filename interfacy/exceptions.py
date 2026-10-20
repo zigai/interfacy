@@ -67,6 +67,15 @@ class InvalidCommandError(InterfacyError):
         super().__init__(f"'{command}' is not a valid command")
 
 
+class CommandImportError(InterfacyError):
+    """Raise when the target of a command registered by import path cannot be loaded."""
+
+    def __init__(self, command: str, target: str, error: BaseException) -> None:
+        self.command = command
+        self.target = target
+        super().__init__(f"Cannot load command '{command}' from '{target}': {error}")
+
+
 class DuplicateCommandError(InterfacyError):
     """Raise when a command name is registered more than once."""
 
@@ -116,6 +125,7 @@ class PipeInputError(InterfacyError):
 
 
 __all__ = [
+    "CommandImportError",
     "ConfigurationError",
     "DiagnosticKind",
     "DuplicateCommandError",

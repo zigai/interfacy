@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -48,11 +49,22 @@ class ParserSchemaBuilder:
         self.classes = ClassCommandBuilder(self.context, self.arguments, self.commands)
         self.groups = GroupBuilder(self.context, self.arguments, self.commands, self.classes)
 
-    def build_unfinalized(self) -> ParserSchema:
-        """Build raw semantic schema data without plugins or finalization."""
+    def build_unfinalized(self, selected: Collection[str] | None = None) -> ParserSchema:
+        """
+        Build raw semantic schema data without plugins or finalization.
+
+        Only commands named in ``selected`` (all when ``None``) are built; the others, and
+        commands that are not imported yet, become ``"deferred"`` entries that only carry
+        their names, description, and help group.
+        """
         commands: dict[str, Command] = {}
         for canonical_name, command in self.context.commands.items():
-            commands[canonical_name] = self._rebuild_registered_command(command)
+            if command.deferred is not None or (
+                selected is not None and canonical_name not in selected
+            ):
+                commands[canonical_name] = _deferred_entry(command)
+            else:
+                commands[canonical_name] = self._rebuild_registered_command(command)
 
         return ParserSchema(
             raw_description=self.context.description,
@@ -181,6 +193,19 @@ class ParserSchemaBuilder:
             aliases=command.aliases,
             options=options,
         )
+
+
+def _deferred_entry(command: Command) -> Command:
+    return Command(
+        obj=None,
+        canonical_name=command.canonical_name,
+        cli_name=command.cli_name,
+        aliases=command.aliases,
+        raw_description=command.raw_description,
+        help_group=command.help_group,
+        command_type="deferred",
+        deferred=command.deferred,
+    )
 
 
 __all__ = ["ParserSchemaBuilder"]

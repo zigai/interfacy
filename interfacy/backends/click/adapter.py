@@ -681,6 +681,9 @@ class ClickBackend:
     def name(self) -> BackendName:
         return "click"
 
+    def completion_args(self) -> tuple[str, ...] | None:
+        return None
+
     def compile(
         self,
         schema: ParserSchema,
