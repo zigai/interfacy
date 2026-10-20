@@ -1,0 +1,2 @@
+- A command raising CommandError with a chained ValueError prints the CommandError message, omits the cause's text, and exits with code 1
+- The full test suite and the layer dependency contract pass
