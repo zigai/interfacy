@@ -131,7 +131,9 @@ def test_run_only_displays_explicitly_user_facing_messages(
     )
     assert "private note" not in captured.err
     assert "private cause" not in captured.err
-    assert ("Traceback" in captured.err) == full_traceback
+    assert ("Traceback" in captured.err) == (
+        full_traceback and not issubclass(failure_type, CommandError)
+    )
 
 
 @pytest.mark.parametrize("mode", ["sync", "async"])
