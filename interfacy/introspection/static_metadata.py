@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import TypeGuard
 
 import docstring_parser
 
@@ -57,7 +59,7 @@ def read_static_metadata(target: ImportTarget, *, group_factory: bool) -> Static
         raise ConfigurationError(f"'{target.symbol_ref}' is not defined in '{path}'")
 
     if isinstance(binding, (ast.Assign, ast.AnnAssign)):
-        if isinstance(binding.value, ast.Call) and _is_group_call(binding.value):
+        if _is_group_call(binding.value):
             return _group_metadata(binding.value, target)
 
         return StaticMetadata()
@@ -94,7 +96,10 @@ def _binds(node: ast.stmt, name: str) -> bool:
     return False
 
 
-def _is_group_call(node: ast.Call) -> bool:
+def _is_group_call(node: ast.expr | None) -> TypeGuard[ast.Call]:
+    if not isinstance(node, ast.Call):
+        return False
+
     func = node.func
     if isinstance(func, ast.Name):
         return func.id == _GROUP_CLASS
@@ -102,28 +107,45 @@ def _is_group_call(node: ast.Call) -> bool:
     return isinstance(func, ast.Attribute) and func.attr == _GROUP_CLASS
 
 
+def _factory_nodes(function: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.AST]:
+    pending: list[ast.AST] = list(function.body)
+    while pending:
+        node = pending.pop()
+        yield node
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            pending.extend(ast.iter_child_nodes(node))
+
+
 def _returned_group_call(function: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Call | None:
-    assigned: dict[str, list[ast.Call]] = {}
-    returned: list[ast.expr] = []
-    for node in ast.walk(function):
-        if isinstance(node, ast.Return) and node.value is not None:
-            returned.append(node.value)
-        elif (
-            isinstance(node, (ast.Assign, ast.AnnAssign))
-            and isinstance(node.value, ast.Call)
-            and _is_group_call(node.value)
-        ):
+    assigned: dict[str, list[ast.expr | None]] = {}
+    mutated: set[str] = set()
+    nodes = list(_factory_nodes(function))
+    returned = [node.value for node in nodes if isinstance(node, ast.Return)]
+    for node in nodes:
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for item in targets:
                 if isinstance(item, ast.Name):
-                    assigned.setdefault(item.id, []).append(node.value)
+                    assigned.setdefault(item.id, []).append(
+                        None if isinstance(node, ast.AugAssign) else node.value
+                    )
+                elif (
+                    isinstance(item, ast.Attribute)
+                    and isinstance(item.value, ast.Name)
+                    and item.attr in _GROUP_PARAMETERS
+                ):
+                    mutated.add(item.value.id)
 
     calls: list[ast.Call] = []
     for value in returned:
-        if isinstance(value, ast.Call) and _is_group_call(value):
-            calls.append(value)
-        elif isinstance(value, ast.Name):
-            calls.extend(assigned.get(value.id, ()))
+        if isinstance(value, ast.Name):
+            bindings = assigned.get(value.id, ())
+            if len(bindings) != 1 or value.id in mutated:
+                return None
+            value = bindings[0]
+        if not _is_group_call(value):
+            return None
+        calls.append(value)
 
     unique = list(dict.fromkeys(calls))
 

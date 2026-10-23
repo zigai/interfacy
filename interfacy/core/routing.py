@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from interfacy.schema.nodes import Command, find_command
 
@@ -10,6 +10,7 @@ def select_commands(
     args: Sequence[str],
     *,
     allow_args_from_file: bool,
+    root_flags: Collection[str],
 ) -> frozenset[str]:
     """
     Return the canonical names of the top-level commands that ``args`` can reach.
@@ -21,6 +22,8 @@ def select_commands(
         return frozenset(commands)
 
     for arg in args:
+        if arg in root_flags:
+            return frozenset()
         if allow_args_from_file and arg.startswith("@"):
             return frozenset(commands)
         if arg.startswith("-"):

@@ -40,7 +40,7 @@ from interfacy.core.registry import CommandRegistry
 from interfacy.core.routing import select_commands
 from interfacy.core.settings import CoreSettings, prepare_settings_update
 from interfacy.core.snapshot import CoreSnapshot
-from interfacy.declarations.executable_flags import ExecutableAction
+from interfacy.declarations.executable_flags import ExecutableAction, executable_flag_tokens
 from interfacy.declarations.groups import CommandGroup
 from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptions
 from interfacy.declarations.pipes import PipeTargets
@@ -719,27 +719,42 @@ class InterfacyCore:
         canonical: str,
         options: CommandOptions,
     ) -> Command:
-        command = ParserSchemaBuilder(self._schema_build_context()).build_from_group(
-            group,
+        return Command(
+            obj=None,
             canonical_name=canonical,
-            options=options,
+            cli_name=canonical,
+            aliases=group.aliases,
+            raw_description=group.description,
+            help_group=options.help_group,
+            executable_flags=list(options.executable_flags),
+            command_type="group",
+            is_leaf=False,
+            group_source=group,
+            overrides=options.overrides,
+            params=dict(options.params),
         )
-        command.group_source = group
-
-        return command
 
     def _routed_schema(self, args: tuple[str, ...]) -> tuple[frozenset[str], ParserSchema]:
         completion = self.adapter.completion_args() if self.settings.tab_completion else None
         routing_args = args if completion is None else completion
         from_file = self.settings.allow_args_from_file
+        root_flags = set(self.settings.help_flags) | executable_flag_tokens(
+            self.settings.executable_flags or ()
+        )
         selected = select_commands(
             self.registry.commands,
             routing_args,
             allow_args_from_file=from_file,
+            root_flags=root_flags,
         )
         schema = self._build_selected(selected)
         # Schema plugins can add names, so route again by the names the backend will see.
-        reached = select_commands(schema.commands, routing_args, allow_args_from_file=from_file)
+        reached = select_commands(
+            schema.commands,
+            routing_args,
+            allow_args_from_file=from_file,
+            root_flags=root_flags,
+        )
         if reached <= selected:
             return selected, schema
 

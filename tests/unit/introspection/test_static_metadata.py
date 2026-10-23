@@ -215,3 +215,48 @@ def test_reading_does_not_execute_the_module(tmp_path: Path) -> None:
     metadata = read_static_metadata(_target(tmp_path, source, "run"), group_factory=False)
 
     assert metadata == StaticMetadata(name="run", description="Run.")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        (
+            'group = CommandGroup("original", description="Original")\n'
+            "group = make_group()\nreturn group"
+        ),
+        (
+            'group = CommandGroup("original", description="Original")\n'
+            "if dynamic:\n    return make_group()\nreturn group"
+        ),
+        (
+            'group = CommandGroup("original", description="Original")\n'
+            "group.name = dynamic_name\nreturn group"
+        ),
+    ],
+)
+def test_group_factory_does_not_guess_metadata_from_dynamic_returns(
+    tmp_path: Path, body: str
+) -> None:
+    source = "from interfacy import CommandGroup\ndef create():\n" + "\n".join(
+        f"    {line}" for line in body.splitlines()
+    )
+    metadata = read_static_metadata(_target(tmp_path, source, "create"), group_factory=True)
+
+    assert metadata.name is UNSET
+    assert metadata.description is UNSET
+
+
+def test_group_factory_ignores_returns_inside_nested_functions(tmp_path: Path) -> None:
+    source = """
+    from interfacy import CommandGroup
+
+    def create():
+        def nested():
+            return CommandGroup("decoy", description="Not the returned group")
+
+        return nested()
+    """
+    metadata = read_static_metadata(_target(tmp_path, source, "create"), group_factory=True)
+
+    assert metadata.name is UNSET
+    assert metadata.description is UNSET

@@ -3,7 +3,7 @@ from textwrap import dedent
 
 import pytest
 
-from interfacy import Interfacy
+from interfacy import CommandGroup, ExecutableFlag, Interfacy
 from interfacy.exceptions import (
     CommandImportError,
     ConfigurationError,
@@ -351,3 +351,57 @@ class TestImportPathRegistration:
         parser.add_command(pow)
 
         assert parser.invoke(args=[f"@{args_file}"]) == "Hello, World!"
+
+    def test_single_path_help_imports_the_target_and_shows_its_parameters(
+        self, lazy_parser: Interfacy, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        lazy_parser.add_command(f"{greeting}:greet")
+
+        lazy_parser.invoke(args=["--help"])
+
+        assert _loaded(greeting)
+        assert "NAME" in capsys.readouterr().out
+
+    def test_root_executable_flag_does_not_import_unresolved_entries(
+        self, lazy_parser: Interfacy, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        ops = _write_module(tmp_path, "ops", _OPS_MODULE)
+        lazy_parser.apply_setup(executable_flags=[ExecutableFlag("--version", lambda: "1.2.3")])
+        lazy_parser.add_command(f"{greeting}:greet")
+        lazy_parser.add_group(f"{ops}:create_group")
+
+        lazy_parser.invoke(args=["--version", "ops", "add", "2", "3"])
+
+        assert "1.2.3" in capsys.readouterr().out
+        assert not _loaded(greeting)
+        assert not _loaded(ops)
+
+    def test_build_parser_for_completion_resolves_every_target(
+        self, lazy_parser: Interfacy, tmp_path: Path
+    ) -> None:
+        greeting = _write_module(tmp_path, "greeting", _GREETING_MODULE)
+        ops = _write_module(tmp_path, "ops", _OPS_MODULE)
+        lazy_parser.add_command(f"{greeting}:greet")
+        lazy_parser.add_group(f"{ops}:create_group")
+
+        lazy_parser.build_parser()
+
+        assert _loaded(greeting)
+        assert _loaded(ops)
+
+    def test_object_group_schema_is_built_only_when_selected(
+        self, lazy_parser: Interfacy, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        group = CommandGroup("broken", description="Duplicate translated child names.")
+        group.add_command(greet, name="foo_bar")
+        group.add_command(greet, name="foo-bar")
+        lazy_parser.add_group(group)
+        lazy_parser.add_command(greet)
+
+        lazy_parser.invoke(args=["--help"])
+        assert "broken" in capsys.readouterr().out
+        assert lazy_parser.invoke(args=["greet", "World"]) == "Hello, World!"
+        with pytest.raises(DuplicateCommandError):
+            lazy_parser.invoke(args=["broken", "--help"])

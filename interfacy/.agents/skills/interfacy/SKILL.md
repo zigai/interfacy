@@ -99,6 +99,13 @@ Raise `CommandError` (or subclass it) only for safe, user-facing messages. `run(
 prints that message to stderr and exits 1; other exception messages stay hidden.
 `invoke()` and `invoke_async()` raise the original exception without rendering it.
 
+For large command trees, register `"module:attr"` with `add_command()` or
+`add_group()` (the latter accepts a group factory). Source literals supply help metadata;
+pass explicit `name=` / `description=` when metadata is dynamic. Multi-entry root help
+imports no targets. A singleton parser is its command, so its root help resolves the
+target for parameter help. Use `build_parser_schema()` in a smoke test to resolve every
+path; `build_parser()` also resolves the full tree for completion generation.
+
 ## What Good Interfacy Code Looks Like
 
 - The command function can be called normally from Python tests.
