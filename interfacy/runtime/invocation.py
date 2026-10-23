@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from inspect import isawaitable
 from typing import Any, NoReturn
 
-from interfacy.common.console import error
+from interfacy.common.console import error, log_command_error
 from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction
 from interfacy.exceptions import (
@@ -77,8 +77,6 @@ class InvocationError(Exception):
 
 
 def _execution_error_code(error: Exception) -> ExitCode:
-    if isinstance(error, CommandError):
-        return ExitCode.COMMAND_FAILED
     if isinstance(error, PipeInputError):
         return ExitCode.USAGE
     if isinstance(error, _CONFIGURATION_ERRORS):
@@ -148,6 +146,8 @@ class InvocationRuntime:
                     exit_code = rendering_error.code
                 else:
                     error(rendered.rstrip())
+            elif isinstance(failure, CommandError):
+                log_command_error(failure)
             else:
                 self._policy.log_exception(failure)
         else:

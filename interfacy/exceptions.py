@@ -35,8 +35,12 @@ class InterfacyError(Exception):
     """Base exception for Interfacy errors."""
 
 
-class CommandError(InterfacyError):
-    """A command failure whose message is safe to display verbatim to the user."""
+class CommandError(Exception):
+    """Raise from a command for a failure whose message is written for the user.
+
+    ``run()`` prints the message, without chained causes, and exits with
+    ``ExitCode.COMMAND_FAILED``. Other command exceptions print only their type.
+    """
 
 
 class InterfacyExit(BaseException):
