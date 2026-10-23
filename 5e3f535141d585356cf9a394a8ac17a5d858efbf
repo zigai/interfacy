@@ -1,0 +1,4 @@
+- A command raising CommandError('Settings file is stale; run setup again.') from a ValueError prints only that message to stderr and exits 1
+- A command raising RuntimeError('secret detail') prints only 'RuntimeError' and exits 1
+- An executable flag --diagnose raising CommandError('Config is broken.') prints that message and exits 1
+- issubclass(CommandError, InterfacyError) is False from the installed package
