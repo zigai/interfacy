@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from interfacy.declarations.groups import CommandGroup
     from interfacy.declarations.params import BooleanMode, Param, params
     from interfacy.exceptions import (
+        CommandError,
         CommandImportError,
         ConfigurationError,
         DuplicateCommandError,
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
 _EXPORTS = {
     "BooleanMode": ("interfacy.declarations.params", "BooleanMode"),
     "ConfigurationError": ("interfacy.exceptions", "ConfigurationError"),
+    "CommandError": ("interfacy.exceptions", "CommandError"),
     "CommandGroup": ("interfacy.declarations.groups", "CommandGroup"),
     "CommandImportError": ("interfacy.exceptions", "CommandImportError"),
     "ExecutableFlag": ("interfacy.declarations.executable_flags", "ExecutableFlag"),
@@ -68,6 +70,7 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "UNSET",
     "BooleanMode",
+    "CommandError",
     "CommandGroup",
     "CommandImportError",
     "ConfigurationError",

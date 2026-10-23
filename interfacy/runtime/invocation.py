@@ -11,6 +11,7 @@ from interfacy.common.console import error
 from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction
 from interfacy.exceptions import (
+    CommandError,
     ConfigurationError,
     DuplicateCommandError,
     InterfacyError,
@@ -76,6 +77,8 @@ class InvocationError(Exception):
 
 
 def _execution_error_code(error: Exception) -> ExitCode:
+    if isinstance(error, CommandError):
+        return ExitCode.COMMAND_FAILED
     if isinstance(error, PipeInputError):
         return ExitCode.USAGE
     if isinstance(error, _CONFIGURATION_ERRORS):
@@ -86,6 +89,8 @@ def _execution_error_code(error: Exception) -> ExitCode:
 
 
 def _parse_error_code(error: Exception) -> int:
+    if isinstance(error, CommandError):
+        return ExitCode.COMMAND_FAILED
     if isinstance(error, UsageError):
         return error.exit_code
     if isinstance(error, _CONFIGURATION_ERRORS):

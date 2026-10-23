@@ -35,6 +35,10 @@ class InterfacyError(Exception):
     """Base exception for Interfacy errors."""
 
 
+class CommandError(InterfacyError):
+    """A command failure whose message is safe to display verbatim to the user."""
+
+
 class InterfacyExit(BaseException):
     """Request a normal non-process exit from an embedded invocation."""
 
@@ -125,6 +129,7 @@ class PipeInputError(InterfacyError):
 
 
 __all__ = [
+    "CommandError",
     "CommandImportError",
     "ConfigurationError",
     "DiagnosticKind",

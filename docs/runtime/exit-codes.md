@@ -56,3 +56,20 @@ loop is already running. `run()` is the CLI boundary: it renders configured outp
 errors, maps failures to `ExitCode`, and always raises `SystemExit`.
 
 For traceback locations during CLI development, set `full_error_traceback=True`.
+
+
+## User-facing command failures
+
+Raise `CommandError` (or an application-specific subclass) for messages intentionally
+written for the user:
+
+```python
+from interfacy import CommandError
+
+raise CommandError("Provisioning receipt is stale. Run `provision apply`.")
+```
+
+`run()` prints the message to stderr and exits with `COMMAND_FAILED` (`1`).
+Only opt in with safe messages: other exception messages, causes, and notes remain hidden,
+even with `full_error_traceback=True`. Embedded `invoke()` and `invoke_async()` still
+raise the original exception without rendering it.

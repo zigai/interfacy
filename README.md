@@ -18,6 +18,7 @@ Interfacy is a CLI framework that turns Python functions, classes, and class ins
 - Highly customizable help output with multiple layouts, color themes, and configurable ordering.
 - Stdin piping support with configurable routing to parameters.
 - Optional tab completion via `argcomplete`.
+- Import-path commands loaded on demand; opt-in user-facing failures with `CommandError`.
 
 ## Installation
 

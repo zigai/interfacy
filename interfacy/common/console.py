@@ -5,6 +5,8 @@ import traceback
 
 from stdl.st import colored
 
+from interfacy.exceptions import CommandError
+
 
 def info(message: str) -> None:
     print(message, file=sys.stdout)
@@ -37,7 +39,9 @@ def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None
         ]
         error("\n".join(["Traceback (most recent call last):", *frames]))
 
-    message = colored(type(exc).__name__, color="red")
+    message = colored(
+        str(exc) if isinstance(exc, CommandError) else type(exc).__name__, color="red"
+    )
     error(message)
 
 
