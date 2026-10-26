@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, TypeVar
+from typing import Any, TypeVar, final
 
 from strto import StrToTypeParser
-from typing_extensions import final
 
 from interfacy.common.resources import ParsedArguments
 from interfacy.common.sentinels import UNSET, UnsetType

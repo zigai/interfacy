@@ -4,11 +4,11 @@ import inspect
 from collections.abc import Iterator
 from typing import Any
 
-from objinspect import Class, Parameter
+from objinspect import Method, Parameter
 
 from interfacy.models.base import ModelField, ValueCoercer, parse_docstring_args
 
-OBJINSPECT_CLASS_ERRORS = (AttributeError, TypeError, ValueError)
+OBJINSPECT_ERRORS = (AttributeError, TypeError, ValueError)
 BUILTIN_VALUE_TYPES = frozenset({str, int, float, bool, bytes, list, dict, tuple, set})
 
 
@@ -21,22 +21,19 @@ def plain_class_parameters(model_type: type) -> Iterator[Parameter]:
     Args:
         model_type (type): Class to inspect.
     """
-    try:
-        cls_info = Class(
-            model_type,
-            init=True,
-            public=True,
-            inherited=True,
-            static_methods=True,
-            protected=False,
-            private=False,
-            classmethod=True,
-        )
-    except OBJINSPECT_CLASS_ERRORS:
+    init = getattr(model_type, "__init__", None)
+    if not (inspect.isfunction(init) or inspect.ismethod(init) or inspect.ismethoddescriptor(init)):
         return
 
-    init_method = cls_info.init_method
-    if init_method is None:
+    if getattr(init, "__name__", None) != "__init__":
+        return
+
+    if inspect.ismethoddescriptor(init) and getattr(init, "__objclass__", None) is not model_type:
+        return
+
+    try:
+        init_method = Method(init, model_type)
+    except OBJINSPECT_ERRORS:
         return
 
     for param in init_method.params:

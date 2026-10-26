@@ -10,11 +10,11 @@ jobs:
             - name: Install uv
               uses: astral-sh/setup-uv@v7
             - name: Set up Python
-              run: uv python install 3.10 3.14
+              run: uv python install 3.11 3.14 3.15
             - name: Build and verify distributions
               run: |
                   uv build
-                  INTERFACY_TEST_ARTIFACTS=1 uv run --python 3.14 --group test pytest tests/packaging -ra
+                  INTERFACY_TEST_ARTIFACTS=1 uv run --python 3.15 --group test pytest tests/packaging -ra
             - name: Publish distributions
               env:
                   TWINE_USERNAME: __token__

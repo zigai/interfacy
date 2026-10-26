@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal, TypeAlias, TypeVar
 
 from interfacy.exceptions import ConfigurationError
@@ -14,7 +14,7 @@ ParamKind: TypeAlias = Literal["auto", "option", "positional"]
 F = TypeVar("F", bound=ParamsTarget)
 
 
-class BooleanMode(str, Enum):
+class BooleanMode(StrEnum):
     """Policy controlling which boolean flag polarities are exposed."""
 
     AUTO = "auto"

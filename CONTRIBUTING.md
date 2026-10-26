@@ -2,7 +2,7 @@
 
 ## Environment
 
-For local development, you need Python 3.10 or later installed.
+For local development, you need Python 3.11 or later installed.
 We use [uv](https://docs.astral.sh/uv/) for project and environment management, and [just](https://github.com/casey/just) as our command runner.
 
 ## Dependencies
@@ -55,9 +55,15 @@ We use [pytest](https://docs.pytest.org/en/stable/) for testing. The default Pyt
 # Run tests on the default Python version
 uv run pytest -v
 
+# Run tests on Python 3.15 without changing the project environment
+uv run --python 3.15 --isolated --group test pytest -v
+
 # Run tests across all supported Python versions
 just test
 ```
+
+Distribution checks (`just build`) exercise wheel installations on Python 3.14 and 3.15,
+including the optional Click and full extras, and source installations on Python 3.11.
 
 ## Pre-commit Hooks
 

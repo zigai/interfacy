@@ -3,7 +3,7 @@ from __future__ import annotations
 import builtins
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from objinspect import Class, Function, Method
@@ -81,14 +81,14 @@ class ArgumentDefault:
         return self.is_set and not self.suppress_help_default
 
 
-class ArgumentKind(str, Enum):
+class ArgumentKind(StrEnum):
     """Classification of how a CLI argument is provided."""
 
     POSITIONAL = "positional"
     OPTION = "option"
 
 
-class ValueShape(str, Enum):
+class ValueShape(StrEnum):
     """Shape of a parameter's parsed value."""
 
     SINGLE = "single"

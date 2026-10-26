@@ -3,15 +3,11 @@ import os
 import shutil
 import subprocess
 import textwrap
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DIST_DIRECTORY = REPOSITORY_ROOT / "dist"
@@ -109,8 +105,9 @@ def _install_artifact(
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", params=["3.14", "3.15"])
 def installed_distributions(
+    request: pytest.FixtureRequest,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> tuple[InstalledDistribution, ...]:
     if os.environ.get("INTERFACY_TEST_ARTIFACTS") != "1":
@@ -123,16 +120,16 @@ def installed_distributions(
     root = tmp_path_factory.mktemp("installed-distributions")
 
     return (
-        _install_artifact(root / "wheel-base", wheel, python="3.14"),
-        _install_artifact(root / "wheel-click", wheel, python="3.14", extras="[click]"),
+        _install_artifact(root / "wheel-base", wheel, python=request.param),
+        _install_artifact(root / "wheel-click", wheel, python=request.param, extras="[click]"),
         _install_artifact(
             root / "wheel-full",
             wheel,
-            python="3.14",
+            python=request.param,
             extras="[full]",
             additional=("pydantic>=2,<3",),
         ),
-        _install_artifact(root / "sdist-base", sdist, python="3.10"),
+        _install_artifact(root / "sdist-base", sdist, python="3.11"),
     )
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, TypeAlias
 
@@ -10,7 +10,7 @@ from interfacy.plugins.descriptors import ArgumentDescriptor
 from interfacy.plugins.freeze import freeze
 
 
-class ParseFailureKind(str, Enum):
+class ParseFailureKind(StrEnum):
     """Kinds of recoverable parse failures supported by the plugin system."""
 
     MISSING_ARGUMENTS = "missing_arguments"

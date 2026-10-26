@@ -7,16 +7,14 @@ authors = [{ name = "Žiga Ivanšek", email = "ziga.ivansek@gmail.com" }]
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-    "stdl>=0.7.1",
-    "objinspect>=0.4.3",
+    "stdl>=0.8.0",
+    "objinspect>=1.0.1",
     "strto>=0.2.9",
     "tomlkit>=0.12",
-    "tomli>=2.0; python_version < '3.11'",
     "setproctitle>=1.3.7",
     "platformdirs>=4.3.8",
-    "typing-extensions>=4.7.1",
 ]
 
 classifiers = [
@@ -26,7 +24,6 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -107,7 +104,7 @@ project-excludes = ["tests/**"]
 disable-project-excludes-heuristics = true
 search-path = ["."]
 disable-search-path-heuristics = true
-python-version = "3.10"
+python-version = "3.11"
 enabled-ignores = ["type", "pyrefly"]
 use-ignore-files = false
 check-unannotated-defs = true
@@ -290,9 +287,6 @@ convention = "google"
 
 [tool.uv]
 default-groups = ["test"]
-
-[tool.uv.dependency-groups]
-dev = {requires-python = ">=3.11"}
 
 [dependency-groups]
 test = ["pytest>=9.0.3", "pytest-mock", "coverage>=7.14.1", "click>=8.3.1", "pydantic>=2,<3", "argcomplete"]

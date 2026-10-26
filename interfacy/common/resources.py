@@ -3,9 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack
 from types import TracebackType
-from typing import Literal
-
-from typing_extensions import Self
+from typing import Literal, Self
 
 from interfacy.common.debug import get_logger
 
