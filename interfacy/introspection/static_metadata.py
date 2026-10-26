@@ -112,6 +112,7 @@ def _factory_nodes(function: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator
     while pending:
         node = pending.pop()
         yield node
+
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
             pending.extend(ast.iter_child_nodes(node))
 
@@ -121,6 +122,7 @@ def _returned_group_call(function: ast.FunctionDef | ast.AsyncFunctionDef) -> as
     mutated: set[str] = set()
     nodes = list(_factory_nodes(function))
     returned = [node.value for node in nodes if isinstance(node, ast.Return)]
+
     for node in nodes:
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
@@ -142,9 +144,12 @@ def _returned_group_call(function: ast.FunctionDef | ast.AsyncFunctionDef) -> as
             bindings = assigned.get(value.id, ())
             if len(bindings) != 1 or value.id in mutated:
                 return None
+
             value = bindings[0]
+
         if not _is_group_call(value):
             return None
+
         calls.append(value)
 
     unique = list(dict.fromkeys(calls))
