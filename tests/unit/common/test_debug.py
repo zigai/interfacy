@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from interfacy.common.console import log_exception
-from interfacy.common.debug import ClickableFormatter
+from interfacy.common.log_formatter import ClickableFormatter
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

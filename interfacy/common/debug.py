@@ -1,21 +1,9 @@
 import logging
 import os
-import sys
-from pathlib import Path
 
-from stdl.st import colored, terminal_link
+from interfacy.common.log_formatter import LOGGER_PREFIX, ClickableFormatter
 
-_LOGGER_PREFIX = "interfacy"
 ENABLED = False
-
-
-LEVEL_COLORS = {
-    "DEBUG": "cyan",
-    "INFO": "green",
-    "WARNING": "yellow",
-    "ERROR": "red",
-    "CRITICAL": "magenta",
-}
 
 
 def _get_level() -> int | None:
@@ -31,12 +19,7 @@ def _get_level() -> int | None:
     if normalized.isdigit():
         return int(normalized)
 
-    if sys.version_info >= (3, 11):
-        level_names = logging.getLevelNamesMapping()
-    else:
-        level_names = logging._nameToLevel
-
-    return level_names.get(normalized.upper(), logging.INFO)
+    return logging.getLevelNamesMapping().get(normalized.upper(), logging.INFO)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -46,8 +29,8 @@ def get_logger(name: str) -> logging.Logger:
     Args:
         name (str): Logger name or module name.
     """
-    if not name.startswith(_LOGGER_PREFIX):
-        logger_name = f"{_LOGGER_PREFIX}.{name}" if name != "__main__" else _LOGGER_PREFIX
+    if not name.startswith(LOGGER_PREFIX):
+        logger_name = f"{LOGGER_PREFIX}.{name}" if name != "__main__" else LOGGER_PREFIX
     else:
         logger_name = name
     logger = logging.getLogger(logger_name)
@@ -55,43 +38,6 @@ def get_logger(name: str) -> logging.Logger:
         _setup_logger(logger)
 
     return logger
-
-
-class ClickableFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        """
-        Format a log record with a clickable path and padded name column.
-
-        Args:
-            record (logging.LogRecord): Log record to format.
-        """
-        filename = Path(record.pathname).name
-        label = f"{filename}:{record.lineno}"
-        record.clickable_path = terminal_link(f"{record.pathname}:{record.lineno}", label)
-        colored_level = colored(record.levelname, color=LEVEL_COLORS.get(record.levelname, "white"))
-
-        max_level_width = 8
-        max_total_width = 40
-
-        padding = max_level_width - len(record.levelname)
-        record.colored_levelname = colored_level + (" " * padding)
-
-        if record.name.startswith(_LOGGER_PREFIX):
-            parts = record.name.split(".")
-            if len(parts) > 1:
-                record.short_name = parts[1]
-            else:
-                record.short_name = _LOGGER_PREFIX
-        else:
-            record.short_name = record.name
-
-        combined = f"{record.short_name}.{label}"  # type: ignore[attr-defined]
-        visible_length = len(combined)
-        combined_with_link = f"{record.short_name}.{record.clickable_path}"  # type: ignore[attr-defined]
-        padding_needed = max(0, max_total_width - visible_length)
-        record.name_location = combined_with_link + (" " * padding_needed)
-
-        return super().format(record)
 
 
 def _setup_logger(logger: logging.Logger) -> None:
