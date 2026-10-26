@@ -124,10 +124,9 @@ class InvocationRuntime:
             raise e.error.with_traceback(e.error.__traceback__) from None
 
     def run(self, parse: ParseStep, execute: ExecuteStep) -> NoReturn:
-        set_process_title_from_argv()
         exit_code: int = ExitCode.SUCCESS
         try:
-            result = self._invoke(parse, execute)
+            result = self._invoke(parse, execute, set_title=True)
         except InterfacyExit as e:
             exit_code = e.code
         except (KeyboardInterrupt, asyncio.CancelledError) as e:
@@ -161,11 +160,17 @@ class InvocationRuntime:
         except Exception as e:
             raise InvocationError(_parse_error_code(e), e) from e
 
-    def _invoke(self, parse: ParseStep, execute: ExecuteStep) -> Any:
+    def _invoke(self, parse: ParseStep, execute: ExecuteStep, *, set_title: bool = False) -> Any:
         try:
             invocation = self._parse(parse)
         except ExecutableActionPending as e:
+            if set_title:
+                set_process_title_from_argv()
+
             self._complete_action(e.action)
+
+        if set_title:
+            set_process_title_from_argv()
 
         return self._execute(execute, invocation)
 
