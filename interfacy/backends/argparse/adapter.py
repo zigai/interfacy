@@ -4,12 +4,17 @@ import argparse
 import os
 import re
 from collections.abc import Mapping, Sequence
+from functools import partial
 from typing import Any, NoReturn
 
 from interfacy.backends.argparse.actions import BooleanAction, ExecutableFlagAction
 from interfacy.backends.argparse.errors import ArgparseParseError
 from interfacy.backends.argparse.namespaces import namespace_to_dict, supplied_to_dict
-from interfacy.backends.argparse.parser import ArgumentParser, NestedSubParsersAction
+from interfacy.backends.argparse.parser import (
+    ArgumentParser,
+    DeferredParser,
+    NestedSubParsersAction,
+)
 from interfacy.backends.base import (
     BackendConfig,
     BackendParseFailure,
@@ -140,7 +145,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
 
             seen: set[int] = set()
             for name, child in action.choices.items():
-                if id(child) in seen:
+                if id(child) in seen or isinstance(child, DeferredParser):
                     continue
 
                 seen.add(id(child))
@@ -181,17 +186,17 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 title="commands",
             )
             for command in commands:
-                child = subparsers.add_parser(
+                if command.command_type != "deferred":
+                    self._add_root_command(subparsers, command, relaxed=relaxed)
+                    continue
+
+                subparsers.add_deferred_parser(
                     command.cli_name,
-                    aliases=list(command.aliases),
-                    description=command.description,
+                    aliases=command.aliases,
                     help=command.description,
-                )
-                self._apply_command(
-                    child,
-                    command,
-                    depth=0,
-                    relaxed=relaxed,
+                    build=partial(
+                        self._build_deferred_command, parser, subparsers, command, relaxed=relaxed
+                    ),
                 )
 
             self._set_metavar(subparsers)
@@ -211,6 +216,40 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         )
 
         return parser
+
+    def _add_root_command(
+        self,
+        subparsers: NestedSubParsersAction,
+        command: Command,
+        *,
+        relaxed: bool,
+    ) -> ArgumentParser:
+        child = subparsers.add_parser(
+            command.cli_name,
+            aliases=list(command.aliases),
+            description=command.description,
+            help=command.description,
+        )
+        self._apply_command(
+            child,
+            command,
+            depth=0,
+            relaxed=relaxed,
+        )
+
+        return child
+
+    def _build_deferred_command(
+        self,
+        root: ArgumentParser,
+        subparsers: NestedSubParsersAction,
+        command: Command,
+        *,
+        relaxed: bool,
+    ) -> None:
+        child = self._add_root_command(subparsers, command, relaxed=relaxed)
+        if self._parsers.get(()) is root:
+            self._attach_help(child, (command.canonical_name,))
 
     def _apply_command(
         self,

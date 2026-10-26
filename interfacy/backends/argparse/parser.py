@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from argparse import Namespace
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from gettext import gettext
@@ -58,6 +58,51 @@ class ParseState:
     parsers: dict[tuple[str, ...], ArgumentParser] = field(default_factory=dict)
 
 
+def _parser_layouts(
+    help_layout: HelpLayout | None,
+    diagnostic_layout: DiagnosticLayout | None,
+    *,
+    share: bool,
+) -> tuple[HelpLayout, DiagnosticLayout]:
+    if help_layout is None:
+        help_layout = StandardLayout(include_metavar_in_flag_display=True)
+    elif not share:
+        help_layout = deepcopy(help_layout)
+
+    if not diagnostic_layout:
+        diagnostic_layout = DiagnosticLayout()
+    elif not share:
+        diagnostic_layout = deepcopy(diagnostic_layout)
+
+    return help_layout, diagnostic_layout
+
+
+class DeferredParser:
+    """Stand-in for a subcommand parser that is built when it is first looked up."""
+
+    def __init__(self, build: Callable[[], object]) -> None:
+        self.build = build
+
+
+class SubparserMap(dict[str, "ArgumentParser | DeferredParser"]):
+    """Subcommand name map that builds deferred parsers on lookup, as argparse dispatch does."""
+
+    def __init__(self, action: NestedSubParsersAction) -> None:
+        super().__init__()
+        self._action = action
+
+    def __getitem__(self, key: str) -> ArgumentParser:
+        value = super().__getitem__(key)
+        if isinstance(value, DeferredParser):
+            self._action.build_deferred(value)
+            value = super().__getitem__(key)
+
+        if isinstance(value, DeferredParser):
+            raise TypeError(f"Deferred parser for {key!r} was not built")
+
+        return value
+
+
 class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[private-member-access]
     """
     Subparser action that supports nested destination paths.
@@ -109,6 +154,8 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             metavar=metavar,
         )
 
+        self._name_parser_map = SubparserMap(self)
+        self.choices = self._name_parser_map
         self.base_nest_path_components = base_nest_path
         self.nest_separator = nest_separator
         self._child_help_layout = help_layout
@@ -120,6 +167,50 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         self._child_diagnostic_layout = diagnostic_layout
         self._child_parse_state = parse_state
         self._command_path = command_path
+
+    def add_deferred_parser(
+        self,
+        name: str,
+        *,
+        aliases: Sequence[str] = (),
+        help: str | None = None,  # noqa: A002 - argparse API compatibility
+        build: Callable[[], object],
+    ) -> None:
+        """
+        Register a subcommand whose parser is built only when it is looked up.
+
+        Args:
+            name (str): Name of the subcommand.
+            aliases (Sequence[str]): Alternative names for the subcommand.
+            help (str | None): Help message for the subcommand.
+            build (Callable[[], object]): Adds the real parser with `add_parser`, under the
+                same name and aliases.
+        """
+        deferred = DeferredParser(build)
+        for key in (name, *aliases):
+            self._name_parser_map[key] = deferred
+
+        self._choices_actions.append(self._ChoicesPseudoAction(name, list(aliases), help))
+
+    def build_deferred(self, deferred: DeferredParser) -> None:
+        """
+        Replace a deferred stand-in with its real parser, keeping name and help order.
+
+        Args:
+            deferred (DeferredParser): Stand-in registered by `add_deferred_parser`.
+        """
+        parsers = self._name_parser_map
+        order = list(parsers)
+        choices_actions = list(self._choices_actions)
+
+        for key in [key for key, value in parsers.items() if value is deferred]:
+            del parsers[key]
+
+        deferred.build()
+        built = {key: dict.__getitem__(parsers, key) for key in order}
+        parsers.clear()
+        parsers.update(built)
+        self._choices_actions[:] = choices_actions
 
     def add_parser(  # type: ignore[override]
         self,
@@ -167,6 +258,9 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         Returns:
             NestedArgumentParser: A new parser for the subcommand.
         """
+        if not {"help_layout", "diagnostic_layout", "help_position"} & kwargs.keys():
+            kwargs.setdefault("share_layouts", True)
+
         kwargs.setdefault("help_layout", self._child_help_layout)
         kwargs.setdefault("help_renderer", self._child_help_renderer)
         kwargs.setdefault("sys_exit_enabled", self._child_sys_exit_enabled)
@@ -233,6 +327,8 @@ class ArgumentParser(argparse.ArgumentParser):
         supplied_dests (set[str] | None): Record of destinations given on the command line,
             shared with nested subparsers.
         destination_paths (dict[str, tuple[str, ...]] | None): Shared destination paths.
+        share_layouts (bool): Use the given help and diagnostic layouts instead of copies.
+            Child parsers use it to share their parent's private copies.
     """
 
     def __init__(
@@ -264,6 +360,7 @@ class ArgumentParser(argparse.ArgumentParser):
         diagnostic_layout: DiagnosticLayout | None = None,
         parse_state: ParseState | None = None,
         command_path: tuple[str, ...] = (),
+        share_layouts: bool = False,
     ) -> None:
         if parents is None:
             parents = []
@@ -305,10 +402,8 @@ class ArgumentParser(argparse.ArgumentParser):
             base_init_kwargs.pop("color")
             super().__init__(**base_init_kwargs)
 
-        self._interfacy_help_layout = (
-            deepcopy(help_layout)
-            if help_layout is not None
-            else StandardLayout(include_metavar_in_flag_display=True)
+        self._interfacy_help_layout, self.diagnostic_layout = _parser_layouts(
+            help_layout, diagnostic_layout, share=share_layouts
         )
         if help_position is not None:
             self._interfacy_help_layout.help_position = help_position
@@ -318,9 +413,6 @@ class ArgumentParser(argparse.ArgumentParser):
         self.help_renderer = help_renderer
         self._help_pipeline: HelpPipeline | None = None
         self._help_command_path = command_path
-        self.diagnostic_layout = (
-            deepcopy(diagnostic_layout) if diagnostic_layout else DiagnosticLayout()
-        )
         self._parse_state = parse_state if parse_state is not None else ParseState()
         self._parse_state.parsers[command_path] = self
         self._optional_tokens: dict[str, bool] = {}
