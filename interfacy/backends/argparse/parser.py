@@ -680,9 +680,10 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def _get_formatter(self, file: TextIO | None = None) -> argparse.HelpFormatter:  # type: ignore[override]
         if sys.version_info >= (3, 15):
-            formatter = super()._get_formatter(file=file)
-        else:
-            formatter = super()._get_formatter()
+            # Python 3.15 configures colors for the destination stream itself.
+            return super()._get_formatter(file=file)
+
+        formatter = super()._get_formatter()
         set_color = getattr(formatter, "_set_color", None)
         if callable(set_color):
             set_color(getattr(self, "color", False))

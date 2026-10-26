@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
+from io import StringIO
 
 import pytest
 
@@ -163,6 +165,20 @@ def test_argument_parser_disables_argparse_usage_colors_when_python_colors_force
 
     assert str(excinfo.value) == "unknown command 'status'"
     assert excinfo.value.usage == strip_ansi(excinfo.value.usage or "")
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 15), reason="stream-aware formatters require Python 3.15"
+)
+@pytest.mark.parametrize("color", [False, True])
+def test_argument_parser_formatter_preserves_output_stream(color: bool) -> None:
+    parser = ArgumentParser(prog="manual", color=color)
+    stream = StringIO()
+
+    formatter = parser._get_formatter(file=stream)
+
+    assert formatter._theme_file is stream
+    assert formatter._theme_color is color
 
 
 def test_manual_argument_parser_help_position_keeps_long_option_description_inline() -> None:
