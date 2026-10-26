@@ -85,6 +85,7 @@ from interfacy.runtime.invocation import (
 from interfacy.runtime.policy import RuntimePolicy
 from interfacy.runtime.runner import SchemaRunner
 from interfacy.schema.builder import ParserSchemaBuilder, SchemaBuildContext
+from interfacy.schema.builder.groups import validate_group_names
 from interfacy.schema.builder.settings import registered_command_options
 from interfacy.schema.nodes import (
     COMMAND_KEY,
@@ -719,6 +720,8 @@ class InterfacyCore:
         canonical: str,
         options: CommandOptions,
     ) -> Command:
+        validate_group_names(group, self.flag_strategy.command_translator.compute)
+
         return Command(
             obj=None,
             canonical_name=canonical,

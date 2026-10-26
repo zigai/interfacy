@@ -62,6 +62,16 @@ def register_child_names(taken_names: set[str], candidates: tuple[str, ...]) -> 
     taken_names.update(candidates)
 
 
+def validate_group_names(group: CommandGroup, translate: Callable[[str], str]) -> None:
+    taken_names: set[str] = set()
+    for name, entry in group.subgroup_entries.items():
+        register_child_names(taken_names, tuple(map(translate, (name, *entry.group.aliases))))
+        validate_group_names(entry.group, translate)
+
+    for name, command in group.commands.items():
+        register_child_names(taken_names, tuple(map(translate, (name, *command.aliases))))
+
+
 @dataclass
 class GroupBuilder:
     """Convert manually assembled command groups into schema command trees."""
@@ -255,4 +265,4 @@ class GroupBuilder:
         return cli_name
 
 
-__all__ = ["GroupBuilder", "group_args_source", "register_child_names"]
+__all__ = ["GroupBuilder", "group_args_source", "register_child_names", "validate_group_names"]

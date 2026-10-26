@@ -92,9 +92,8 @@ class TestGroupKeyCollisions:
         group.add_command(first, name="foo_bar")
         group.add_command(second, name="foo-bar")
 
-        schema_parser.add_command(group)
         with pytest.raises(DuplicateCommandError):
-            schema_parser.build_parser_schema()
+            schema_parser.add_command(group)
 
     def test_command_key_cannot_match_same_name_subgroup(self) -> None:
         """Command/subgroup key collisions should be rejected."""

@@ -8,6 +8,7 @@ from interfacy.exceptions import (
     CommandImportError,
     ConfigurationError,
     DuplicateCommandError,
+    ReservedFlagError,
     UsageError,
 )
 from interfacy.introspection.targets import ImportTarget
@@ -394,14 +395,17 @@ class TestImportPathRegistration:
     def test_object_group_schema_is_built_only_when_selected(
         self, lazy_parser: Interfacy, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        group = CommandGroup("broken", description="Duplicate translated child names.")
-        group.add_command(greet, name="foo_bar")
-        group.add_command(greet, name="foo-bar")
+        def reserved(help: int) -> None:
+            pass
+
+        group = CommandGroup("broken", description="Reserved argument name.")
+        group.add_command(reserved)
         lazy_parser.add_group(group)
         lazy_parser.add_command(greet)
 
         lazy_parser.invoke(args=["--help"])
         assert "broken" in capsys.readouterr().out
         assert lazy_parser.invoke(args=["greet", "World"]) == "Hello, World!"
-        with pytest.raises(DuplicateCommandError):
+
+        with pytest.raises(ReservedFlagError):
             lazy_parser.invoke(args=["broken", "--help"])
