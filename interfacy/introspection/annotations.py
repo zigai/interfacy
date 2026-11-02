@@ -104,6 +104,19 @@ def get_fixed_tuple_info(t: Any) -> tuple[int, tuple[Any, ...]] | None:
     return len(args), tuple(args)
 
 
+def is_bool_annotation(t: Any) -> bool:
+    """Return whether the annotation is `bool`, `bool | None`, or `Optional[bool]`."""
+    t = resolve_type_alias(t)
+    if t is bool:
+        return True
+    if not is_union_type(t):
+        return False
+
+    union_args = type_args(t)
+
+    return len(union_args) == 2 and NoneType in union_args and bool in union_args
+
+
 def extract_optional_union_list(t: Any) -> tuple[Any, Any | None] | None:
     """
     If the annotation represents `list[T] | None` or `Optional[list[T]]`, return the list annotation together with its element type.

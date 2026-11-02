@@ -4,7 +4,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from stdl.st import kebab_case, snake_case
 
-from interfacy.introspection.annotations import is_list_or_list_alias
+from interfacy.introspection.annotations import is_bool_annotation, is_list_or_list_alias
 from interfacy.naming.abbreviations import AbbreviationGenerator
 from interfacy.naming.name_mapping import NameMapping
 
@@ -183,7 +183,7 @@ class DefaultFlagStrategy(FlagStrategy):
             tuple[str, ...]: A tuple containing the long flag (and short flag if applicable).
         """
         effective_name = name or getattr(param, "name", "arg")
-        is_bool_flag = param.is_typed and param.type is bool
+        is_bool_flag = param.is_typed and is_bool_annotation(param.type)
         if not is_bool_flag and param.is_required and self.style == "required_positional":
             return (effective_name,)
 

@@ -6,6 +6,7 @@ from objinspect import Parameter
 
 from interfacy.declarations.params import Param
 from interfacy.exceptions import ConfigurationError, ReservedFlagError
+from interfacy.introspection.annotations import is_bool_annotation
 from interfacy.naming.flag_strategy import (
     FlagAllocationState,
     get_arg_flags_for_parameter,
@@ -119,7 +120,7 @@ def flags_from_declared_param(
     long_flag = setting.long or f"--{translated_name}"
     flags: tuple[str, ...] = (long_flag,)
     abbrev_name = long_flag.lstrip("-")
-    if param.is_typed and param.type is bool:
+    if param.is_typed and is_bool_annotation(param.type):
         default_value = param.default if param.has_default else False
         if default_value is True:
             abbrev_name = f"no-{abbrev_name}"

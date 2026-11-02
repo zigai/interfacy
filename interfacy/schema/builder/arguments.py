@@ -3,16 +3,19 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from inspect import Parameter as InspectParameter
-from types import GenericAlias, NoneType
+from types import GenericAlias
 from typing import Any
 
 from objinspect import Parameter
-from objinspect.typing import is_union_type, type_args
 
 from interfacy.common.sentinels import MODEL_DEFAULT_UNSET
 from interfacy.declarations.params import BooleanMode, Param
 from interfacy.exceptions import ConfigurationError
-from interfacy.introspection.annotations import resolve_type_alias, simplified_type_name
+from interfacy.introspection.annotations import (
+    is_bool_annotation,
+    resolve_type_alias,
+    simplified_type_name,
+)
 from interfacy.models import unwrap_optional
 from interfacy.naming.flag_strategy import FlagAllocationState
 from interfacy.schema.builder.argument_shapes import (
@@ -358,10 +361,8 @@ def normalize_parameter_annotation(annotation: Any) -> Any:
         if base_name in BUILTIN_TYPE_NAMES:
             annotation = BUILTIN_TYPE_NAMES[base_name]
 
-    if is_union_type(annotation):
-        annotation_args = type_args(annotation)
-        if len(annotation_args) == 2 and NoneType in annotation_args and bool in annotation_args:
-            annotation = bool
+    if is_bool_annotation(annotation):
+        annotation = bool
 
     return annotation
 
