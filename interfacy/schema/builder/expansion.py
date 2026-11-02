@@ -166,7 +166,8 @@ class ModelExpansionBuilder:
         if display_name in self.taken_flags:
             raise ReservedFlagError(display_name)
 
-        arg_name = nested_separator.join(path)
+        # Python names cannot contain '.', so internal names never collide with parameters.
+        arg_name = ".".join(path)
         flags = self._option_flags(
             display_name=display_name,
             annotation=annotation,
