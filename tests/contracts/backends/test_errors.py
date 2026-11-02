@@ -196,15 +196,16 @@ def test_invoke_raises_usage_error_on_invalid_enum(parser: Interfacy) -> None:
         parser.invoke(set_color, args=["yellow"])
 
 
+class Credentials(BaseModel):
+    token: str = Field(min_length=32)
+
+
 @pytest.mark.parametrize("full_traceback", [False, True])
-def test_run_does_not_emit_rejected_model_input(
+def test_run_reports_rejected_model_flag_without_its_value(
     parser: Interfacy,
     full_traceback: bool,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    class Credentials(BaseModel):
-        token: str = Field(min_length=32)
-
     def command(credentials: Credentials) -> str:
         return credentials.token
 
@@ -216,23 +217,23 @@ def test_run_does_not_emit_rejected_model_input(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "ValidationError" in captured.err
+    assert "--credentials.token" in captured.err
+    assert "at least 32 characters" in captured.err
     assert rejected not in captured.err
-    assert e.value.__cause__ is None
-    assert e.value.__context__ is None
+    assert "ValidationError" not in captured.err
+    assert e.value.code == ExitCode.USAGE
 
 
 @pytest.mark.parametrize("full_traceback", [False, True])
-def test_run_does_not_emit_command_exception_payloads_or_chains(
+def test_run_hides_input_of_validation_error_raised_by_command(
     parser: Interfacy,
     full_traceback: bool,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = "synthetic-response-body"
+    rejected = "synthetic-response-body"
 
     def command() -> None:
-        cause = ValueError(payload)
-        raise RuntimeError(payload) from cause
+        Credentials(token=rejected)
 
     parser.apply_setup(full_error_traceback=full_traceback)
 
@@ -240,8 +241,29 @@ def test_run_does_not_emit_command_exception_payloads_or_chains(
         parser.run(command, args=[])
 
     captured = capsys.readouterr()
-    assert "RuntimeError" in captured.err
-    assert payload not in captured.err
+    assert "ValidationError: token: String should have at least 32 characters" in captured.err
+    assert rejected not in captured.err
+    assert e.value.code == ExitCode.COMMAND_FAILED
+
+
+@pytest.mark.parametrize("full_traceback", [False, True])
+def test_run_prints_command_exception_message_without_its_chain(
+    parser: Interfacy,
+    full_traceback: bool,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def command() -> None:
+        cause = ValueError("chained detail")
+        raise RuntimeError("disk is full") from cause
+
+    parser.apply_setup(full_error_traceback=full_traceback)
+
+    with pytest.raises(SystemExit) as e:
+        parser.run(command, args=[])
+
+    captured = capsys.readouterr()
+    assert "RuntimeError: disk is full" in captured.err
+    assert "chained detail" not in captured.err
     assert e.value.code == ExitCode.COMMAND_FAILED
     assert e.value.__cause__ is None
     assert e.value.__context__ is None

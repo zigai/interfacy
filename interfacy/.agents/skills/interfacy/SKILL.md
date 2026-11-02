@@ -95,8 +95,8 @@ result = parser.invoke(command, args=[])
 and raises failures as exceptions. It does not return exception objects. Use
 `await parser.invoke_async(...)` for asynchronous embedded execution.
 
-Raise `CommandError` (or subclass it) only for safe, user-facing messages. `run()`
-prints that message to stderr and exits 1; other exception messages stay hidden.
+Raise `CommandError` (or subclass it) for messages written for the user. `run()`
+prints that message to stderr and exits 1; other exceptions print as `Type: message`.
 `invoke()` and `invoke_async()` raise the original exception without rendering it.
 
 For large command trees, register `"module:attr"` with `add_command()` or

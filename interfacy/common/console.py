@@ -5,6 +5,8 @@ import traceback
 
 from stdl.st import colored
 
+from interfacy.common.validation import format_validation_issue, validation_issues
+
 
 def info(message: str) -> None:
     print(message, file=sys.stdout)
@@ -37,8 +39,10 @@ def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None
         ]
         error("\n".join(["Traceback (most recent call last):", *frames]))
 
-    message = colored(type(exc).__name__, color="red")
-    error(message)
+    name = type(exc).__name__
+    issues = validation_issues(exc)
+    detail = str(exc) if issues is None else "; ".join(map(format_validation_issue, issues))
+    error(colored(f"{name}: {detail}" if detail else name, color="red"))
 
 
 def log_command_error(exc: BaseException) -> None:

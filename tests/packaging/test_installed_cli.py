@@ -259,7 +259,7 @@ def test_installed_root_flags_succeed(
             [],
             1,
             "",
-            "ValueError",
+            "ValueError: deliberate failure",
         ),
         ("explicit-exit", "def command() -> None:\n    raise SystemExit(7)\n", [], 7, "", None),
     ],
@@ -286,9 +286,6 @@ def test_installed_command_contract(
 
         assert process.returncode == expected_code, (process.stdout, process.stderr)
         assert process.stdout == expected_stdout
-
-        if case == "failure":
-            assert "deliberate failure" not in process.stderr
 
         if error_text is None:
             assert process.stderr == ""
@@ -438,8 +435,8 @@ def test_full_install_pydantic_validation_is_command_failure_without_side_effect
             ["target.py:command", "--user.name", "Ada", "--user.age", "-1"],
         )
 
-        assert process.returncode == 1
-        assert "ValidationError" in process.stderr
+        assert process.returncode == 2
+        assert "--user.age" in process.stderr
         assert not (workspace / "executed").exists()
 
 

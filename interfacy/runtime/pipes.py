@@ -257,7 +257,7 @@ def apply_pipe_values(
         except Exception as e:
             raise PipeInputError(
                 param_name,
-                f"failed to convert piped input: {e}",
+                "failed to convert piped input",
             ) from e
 
         updated[param_name] = parsed

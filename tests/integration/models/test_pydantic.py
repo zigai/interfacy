@@ -6,7 +6,7 @@ from pydantic import AliasChoices, AliasPath, BaseModel, Field, ValidationError
 from pydantic.v1 import BaseModel as LegacyBaseModel
 from pydantic.v1 import Field as LegacyField
 
-from interfacy import Interfacy
+from interfacy import Interfacy, UsageError
 from interfacy.models import build_model_instance
 
 
@@ -64,7 +64,7 @@ def test_pydantic_model_validation_prevents_command_side_effects(
 
     parser = Interfacy(backend=backend)
 
-    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+    with pytest.raises(UsageError, match="greater than or equal to 0"):
         parser.invoke(command, args=["--user.name", "Ada", "--user.age", "-1"])
 
     assert not sentinel.exists()
@@ -184,7 +184,7 @@ def test_pydantic_validation_aliases_preserve_validation(alias: object, backend:
 
     assert parser.invoke(command, args=["--model.count", "3"]).count == 3
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(UsageError):
         parser.invoke(command, args=["--model.count", "-1"])
 
 

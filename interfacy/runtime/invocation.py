@@ -76,9 +76,11 @@ class InvocationError(Exception):
         super().__init__(type(error).__name__)
 
 
-def _execution_error_code(error: Exception) -> ExitCode:
+def _execution_error_code(error: Exception) -> int:
     if isinstance(error, PipeInputError):
         return ExitCode.USAGE
+    if isinstance(error, UsageError):
+        return error.exit_code
     if isinstance(error, _CONFIGURATION_ERRORS):
         return ExitCode.CONFIGURATION
     if isinstance(error, InterfacyError):
@@ -145,7 +147,7 @@ class InvocationRuntime:
                     exit_code = rendering_error.code
                 else:
                     error(rendered.rstrip())
-            elif isinstance(failure, CommandError):
+            elif isinstance(failure, (CommandError, PipeInputError)):
                 log_command_error(failure)
             else:
                 self._policy.log_exception(failure)

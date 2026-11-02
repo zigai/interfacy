@@ -39,7 +39,7 @@ class CommandError(Exception):
     """Raise from a command for a failure whose message is written for the user.
 
     ``run()`` prints the message, without chained causes, and exits with
-    ``ExitCode.COMMAND_FAILED``. Other command exceptions print only their type.
+    ``ExitCode.COMMAND_FAILED``. Other command exceptions print ``Type: message``.
     """
 
 

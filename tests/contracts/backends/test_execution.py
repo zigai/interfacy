@@ -1,5 +1,5 @@
 import pytest
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from interfacy import CommandGroup, DuplicatePluginError, Interfacy
 from interfacy.exceptions import UsageError
@@ -440,7 +440,7 @@ def test_invalid_subcommand_model_does_not_initialize_classes(backend: str, grou
     else:
         parser.add_command(Actions)
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(UsageError):
         parser.invoke(args=args)
 
     assert events == []

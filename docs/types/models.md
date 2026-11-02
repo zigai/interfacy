@@ -101,9 +101,9 @@ $ python app.py --server.host localhost --server.port 9000
 
 Pydantic models are expanded using their fields and reconstructed before execution. Pydantic validation still belongs to the model.
 
-When Pydantic rejects reconstructed values, `invoke()` propagates its `ValidationError` and the
-command does not run. At the process boundary, `run()` reports that validation as a command
-failure and exits with status 1.
+When Pydantic rejects reconstructed values, `invoke()` raises `UsageError` and the command does
+not run. At the process boundary, `run()` reports the flag and reason without the rejected value
+and exits with status 2.
 
 ## Configuration
 

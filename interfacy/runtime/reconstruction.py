@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from interfacy.common.sentinels import MODEL_DEFAULT_UNSET
+from interfacy.common.validation import ValidationIssue, validation_issues
 from interfacy.models import (
     build_model_instance,
     is_model_type,
@@ -14,7 +15,7 @@ from interfacy.schema.nodes import Argument
 
 
 class ExpandedModelValidationError(ValueError):
-    """Raised when expanded model flags are incomplete for reconstruction."""
+    """Raised when expanded model flags are incomplete or rejected by the model."""
 
     def __init__(self, message: str) -> None:
         self.message = message
@@ -33,7 +34,7 @@ def reconstruct_expanded_models(
         arguments (list[Argument]): Command argument schemas with expansion metadata.
 
     Raises:
-        ExpandedModelValidationError: A provided model is missing required fields.
+        ExpandedModelValidationError: A model is missing required fields or rejects its values.
     """
     grouped = group_expanded_arguments(arguments)
     if not grouped:
@@ -109,18 +110,42 @@ def _reconstruct_group(args: dict[str, Any], root_name: str, group: list[Argumen
     model_default = group[0].model_default
     has_model_default = model_default is not MODEL_DEFAULT_UNSET
     values, provided, provided_paths = _collect_model_values(args, group)
-    args[root_name] = _reconstructed_model_value(
-        model_type,
-        group,
-        values,
-        provided,
-        provided_paths,
-        model_default,
-        has_model_default,
-    )
+    try:
+        args[root_name] = _reconstructed_model_value(
+            model_type,
+            group,
+            values,
+            provided,
+            provided_paths,
+            model_default,
+            has_model_default,
+        )
+    except ValueError as e:
+        issues = validation_issues(e)
+        if issues is None:
+            raise
+
+        message = "; ".join(_format_flag_issue(issue, group) for issue in issues)
+        raise ExpandedModelValidationError(message) from e
 
     for arg in group:
         args.pop(arg.name, None)
+
+
+def _format_flag_issue(issue: ValidationIssue, group: list[Argument]) -> str:
+    path, message = issue
+    if not path:
+        return message
+
+    # A nested model validates on its own, so its paths are relative to that model.
+    field_path = tuple(map(str, path))
+    flags = [
+        arg.flags[0]
+        for arg in group
+        if arg.flags and arg.expansion_path[-len(field_path) :] == field_path
+    ]
+    label = flags[0] if len(flags) == 1 else ".".join(field_path)
+    return f"{label}: {message}"
 
 
 def _reconstructed_model_value(

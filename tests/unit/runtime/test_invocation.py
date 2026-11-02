@@ -29,7 +29,7 @@ from interfacy.runtime.invocation import InvocationError
         (InvalidCommandError("command"), ExitCode.CONFIGURATION),
         (ReservedFlagError("--flag"), ExitCode.CONFIGURATION),
         (UnsupportedParameterTypeError(complex), ExitCode.CONFIGURATION),
-        (UsageError("execution failed"), ExitCode.INTERNAL),
+        (UsageError("execution failed"), ExitCode.USAGE),
         (InterfacyError("framework failed"), ExitCode.INTERNAL),
         (ValueError("command failed"), ExitCode.COMMAND_FAILED),
     ],
@@ -105,7 +105,7 @@ class DomainError(CommandError):
 @pytest.mark.parametrize("failure_type", [CommandError, DomainError, RuntimeError, InterfacyError])
 @pytest.mark.parametrize("full_traceback", [False, True])
 @pytest.mark.parametrize("backend", ["argparse", "click"])
-def test_run_only_displays_explicitly_user_facing_messages(
+def test_run_displays_messages_without_notes_or_causes(
     failure_type: type[Exception],
     full_traceback: bool,
     backend: str,
@@ -126,9 +126,8 @@ def test_run_only_displays_explicitly_user_facing_messages(
     )
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert ("Stale receipt.\nRun provision apply." in captured.err) == issubclass(
-        failure_type, CommandError
-    )
+    assert "Stale receipt.\nRun provision apply." in captured.err
+    assert (f"{failure_type.__name__}:" in captured.err) != issubclass(failure_type, CommandError)
     assert "private note" not in captured.err
     assert "private cause" not in captured.err
     assert ("Traceback" in captured.err) == (

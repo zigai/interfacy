@@ -70,6 +70,6 @@ raise CommandError("Provisioning receipt is stale. Run `provision apply`.")
 ```
 
 `run()` prints the message to stderr and exits with `COMMAND_FAILED` (`1`).
-Only opt in with safe messages: other exception messages, causes, and notes remain hidden,
-even with `full_error_traceback=True`. Embedded `invoke()` and `invoke_async()` still
-raise the original exception without rendering it.
+Other exceptions print as `Type: message`, so their messages must be safe to show. Causes and
+notes stay hidden, even with `full_error_traceback=True`. Embedded `invoke()` and
+`invoke_async()` still raise the original exception without rendering it.
