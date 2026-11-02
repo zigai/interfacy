@@ -186,6 +186,13 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             build (Callable[[], object]): Adds the real parser with `add_parser`, under the
                 same name and aliases.
         """
+        if name in self._name_parser_map:
+            raise ValueError(f"conflicting subparser: {name}")
+
+        for alias in aliases:
+            if alias in self._name_parser_map:
+                raise ValueError(f"conflicting subparser alias: {alias}")
+
         deferred = DeferredParser(build)
         for key in (name, *aliases):
             self._name_parser_map[key] = deferred

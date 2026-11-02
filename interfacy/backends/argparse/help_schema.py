@@ -202,7 +202,9 @@ def subcommands_from_action(
             parser, or returns None to skip parsers it does not understand.
     """
     parser_names: dict[int, list[str]] = {}
-    for name, parser in action.choices.items():
+    # Lookup materializes deferred parsers; snapshot names because building replaces the map.
+    for name in list(action.choices):
+        parser = action.choices[name]
         parser_names.setdefault(id(parser), []).append(name)
 
     commands: dict[str, Command] = {}

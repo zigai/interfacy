@@ -138,6 +138,77 @@ def test_nested_manual_parser_uses_leaf_metavar_for_append_action() -> None:
     assert "DEPLOY__TAG" not in help_text
 
 
+def test_manual_parser_help_includes_deferred_commands_and_aliases() -> None:
+    parser = ArgumentParser(prog="manual")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    built: list[str] = []
+
+    def build_clone() -> None:
+        built.append("clone")
+        subparsers.add_parser("clone", aliases=("cl",), help="Clone a repository.")
+
+    def build_status() -> None:
+        built.append("status")
+        subparsers.add_parser("status", help="Show current status.")
+
+    subparsers.add_deferred_parser(
+        "clone", aliases=("cl",), help="Clone a repository.", build=build_clone
+    )
+    subparsers.add_deferred_parser("status", help="Show current status.", build=build_status)
+    assert built == []
+
+    help_text = parser.format_help()
+
+    assert "{clone,status}" in help_text
+    assert "clone (cl)" in help_text
+    assert "Clone a repository." in help_text
+    assert "Show current status." in help_text
+    assert built == ["clone", "status"]
+    assert parser.format_help() == help_text
+    assert built == ["clone", "status"]
+    assert subparsers.choices["clone"] is subparsers.choices["cl"]
+    assert parser.parse_args(["cl"]).command == "cl"
+
+
+@pytest.mark.parametrize("existing_deferred", [False, True])
+@pytest.mark.parametrize(
+    ("name", "aliases"),
+    [
+        ("existing", ()),
+        ("alias", ()),
+        ("new", ("existing",)),
+        ("new", ("free", "alias")),
+    ],
+)
+def test_deferred_parser_rejects_conflicts_without_mutating_registration(
+    existing_deferred: bool, name: str, aliases: tuple[str, ...]
+) -> None:
+    parser = ArgumentParser(prog="manual")
+    subparsers = parser.add_subparsers(dest="command")
+    built: list[str] = []
+
+    def build_existing() -> None:
+        built.append("existing")
+        subparsers.add_parser("existing", aliases=("alias",)).set_defaults(marker="original")
+
+    if existing_deferred:
+        subparsers.add_deferred_parser("existing", aliases=("alias",), build=build_existing)
+    else:
+        build_existing()
+
+    original_choices = dict(subparsers.choices)
+    original_help = list(subparsers._choices_actions)
+
+    with pytest.raises(ValueError, match="conflicting subparser"):
+        subparsers.add_deferred_parser(name, aliases=aliases, build=lambda: built.append("new"))
+
+    assert dict(subparsers.choices) == original_choices
+    assert subparsers._choices_actions == original_help
+    assert built == ([] if existing_deferred else ["existing"])
+    assert parser.parse_args(["alias"]).existing.marker == "original"
+    assert built == ["existing"]
+
+
 def test_argument_parser_defaults_to_standard_layout() -> None:
     parser = ArgumentParser(prog="manual")
     parser.add_argument("--level", type=int, default=2, help="Set output level.")
