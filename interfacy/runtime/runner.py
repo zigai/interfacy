@@ -134,7 +134,8 @@ class SchemaRunner:
             result = method.call(*method_args, **method_kwargs)
             return self._resolve_result(result)
 
-        instance = Class(method.cls)
+        # The target method was chosen explicitly, so it is callable whatever its visibility.
+        instance = Class(method.cls, protected=True, private=True)
         if instance.init_method:
             args_init, args_method = split_init_args(args, instance, method)
             init_args, init_kwargs = self._build_call_args(instance.init_method, args_init)
