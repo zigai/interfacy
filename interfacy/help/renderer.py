@@ -228,15 +228,19 @@ class SchemaHelpRenderer:
                 sections=sections, usage=usage, description=description
             )
 
-            positionals_section = self._render_argument_section("positional arguments", positionals)
+            options_with_help = [*([help_arg] if help_arg is not None else []), *options]
+            all_arguments = [*positionals, *options_with_help]
+            positionals_section = self._render_argument_section(
+                "positional arguments", positionals, aligned_arguments=all_arguments
+            )
             if positionals_section is not None:
                 sections.append(HelpSection("positionals", positionals_section))
 
-            options_with_help = [*([help_arg] if help_arg is not None else []), *options]
             options_section = self._render_argument_section(
                 "options",
                 options_with_help,
                 normalize_help_only=help_arg is not None and not options,
+                aligned_arguments=all_arguments,
             )
             if options_section is not None:
                 sections.append(HelpSection("options", options_section))
@@ -331,6 +335,7 @@ class SchemaHelpRenderer:
         arguments: list[Argument],
         *,
         normalize_help_only: bool = False,
+        aligned_arguments: list[Argument] | None = None,
     ) -> str | None:
         if not arguments:
             return None
@@ -345,7 +350,8 @@ class SchemaHelpRenderer:
                 previous_help_position if isinstance(previous_help_position, int) else 32
             )
             widest_flag = max(
-                ansi_len(self.layout._adaptive_argument_flag(argument)) for argument in arguments
+                ansi_len(self.layout._adaptive_argument_flag(argument))
+                for argument in aligned_arguments or arguments
             )
             self.layout.help_position = max(base_position, widest_flag + 2)
         lines = [self._style_section_heading(heading)]

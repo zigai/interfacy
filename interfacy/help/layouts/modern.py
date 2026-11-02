@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Literal
 
 from stdl.st import with_style
 
+from interfacy.help.layouts.arguments import argument_help_text
 from interfacy.help.layouts.default import InterfacyLayout
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -56,7 +57,7 @@ class Modern(InterfacyLayout):
 
     def _build_values_from_argument(self, arg: "Argument") -> dict[str, str]:
         values = super()._build_values_from_argument(arg)
-        return self._with_details(values, self._format_doc_text(arg.help or ""))
+        return self._with_details(values, self._format_doc_text(argument_help_text(arg)))
 
 
 __all__ = [

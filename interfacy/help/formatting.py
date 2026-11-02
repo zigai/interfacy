@@ -255,11 +255,8 @@ def format_default_for_help(value: Any) -> str:
         value (Any): Default value to render.
     """
     if isinstance(value, Enum):
-        raw = value.value
-        if isinstance(raw, (str, int, float, bool)):
-            return str(raw)
-
-        return value.name
+        # Match the accepted choice spellings: string values, otherwise member names.
+        return value.value if isinstance(value.value, str) else value.name
 
     if isinstance(value, PurePath):
         return repr(str(value))

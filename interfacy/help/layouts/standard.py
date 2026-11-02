@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from interfacy.help.colors import NoColor
 from interfacy.help.formatting import format_default_for_help
+from interfacy.help.layouts.arguments import argument_help_text
 from interfacy.help.layouts.base import HelpLayout
 from interfacy.help.style import HelpStyle
 
@@ -95,7 +96,7 @@ class StandardLayout(HelpLayout):
         arg: "Argument",
         indent: int = 2,  # noqa: ARG002 - API compatibility
     ) -> str:
-        description = self.format_description(arg.help or "")
+        description = self.format_description(argument_help_text(arg))
         has_default = (
             not arg.required
             and arg.argument_default.appears_in_help

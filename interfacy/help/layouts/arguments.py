@@ -7,6 +7,7 @@ from stdl.st import ansi_len, with_style
 
 from interfacy.help.formatting import format_default_for_help, format_type_for_help
 from interfacy.help.layouts.columns import format_templated_help_line
+from interfacy.models import unwrap_optional
 
 if TYPE_CHECKING:  # pragma: no cover
     from interfacy.help.layouts.base import HelpLayout
@@ -14,6 +15,11 @@ if TYPE_CHECKING:  # pragma: no cover
     from interfacy.schema import Argument
 
 TERMINAL_PUNCTUATION = (".", "?", "!")
+
+
+def argument_help_text(arg: "Argument") -> str:
+    """Return an argument's help on one line; docstring continuation lines are reflowed text."""
+    return " ".join((arg.help or "").split())
 
 
 def enum_matches(value: Any, member_name: str) -> bool:
@@ -57,7 +63,7 @@ def format_choice(value: Any) -> str:
 
 def format_argument_choice(arg: "Argument", value: Any) -> str:
     """Return the help text for one choice of an argument, resolving enum member names."""
-    enum_type = arg.type
+    enum_type, _ = unwrap_optional(arg.type)
     if isinstance(value, str) and isinstance(enum_type, type) and issubclass(enum_type, Enum):
         enum_member = enum_type.__members__.get(value)
         if enum_member is not None:
@@ -338,7 +344,7 @@ def build_argument_values(layout: "HelpLayout", arg: "Argument") -> dict[str, st
     flag, flag_short, flag_long, is_option = layout._build_flag_parts_from_argument(arg)
 
     is_bool = is_boolean_argument(arg)
-    description = layout._format_doc_text(arg.help or "")
+    description = layout._format_doc_text(argument_help_text(arg))
     if description and not description.endswith(TERMINAL_PUNCTUATION) and is_bool:
         description += "."
 
@@ -396,13 +402,14 @@ def format_argument_text(layout: "HelpLayout", arg: "Argument") -> str:
     parts: list[str] = []
     if is_boolean_argument(arg):
         if arg.help:
-            description = layout._format_doc_text(arg.help)
+            description = layout._format_doc_text(argument_help_text(arg))
             if not description.endswith(TERMINAL_PUNCTUATION):
                 description += "."
             parts.append(with_style(description, style.description))
     else:
         if arg.help:
-            parts.append(f"{with_style(layout._format_doc_text(arg.help), style.description)} ")
+            description = layout._format_doc_text(argument_help_text(arg))
+            parts.append(f"{with_style(description, style.description)} ")
 
         parts.append(layout._build_extra_from_argument(arg))
 
@@ -432,7 +439,7 @@ def format_argument_row(layout: "HelpLayout", arg: "Argument", indent: int) -> s
         layout,
         template=template,
         values=layout._build_values_from_argument(arg),
-        raw_description=layout._format_doc_text(arg.help or ""),
+        raw_description=layout._format_doc_text(argument_help_text(arg)),
         indent=indent,
         is_required=arg.required and not is_varargs_positional(arg),
         is_help_option=arg.is_help_action,
