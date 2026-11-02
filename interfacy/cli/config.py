@@ -319,9 +319,16 @@ def _is_flag_strategy(value: Any) -> TypeGuard[FlagStrategy]:
     return isinstance(value, FlagStrategy) or callable(getattr(value, "get_arg_flags", None))
 
 
-def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy | None:
-    if value is None:
-        return None
+def _has_default_flag_options(config: dict[str, Any]) -> bool:
+    return bool(config.get("flag_style") or config.get("translation_mode"))
+
+
+def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy:
+    is_default_name = isinstance(value, str) and _normalize_name(value) in {"default", "standard"}
+    if _has_default_flag_options(config) and not is_default_name:
+        raise ConfigurationError(
+            "flags.style and flags.translation_mode apply only to the default flag strategy"
+        )
 
     if isinstance(value, DefaultFlagStrategy):
         return value
@@ -339,7 +346,7 @@ def _resolve_flag_strategy(value: Any, config: dict[str, Any]) -> FlagStrategy |
 
         raise ConfigurationError("flag_strategy symbol must resolve to a flag strategy")
 
-    if _normalize_name(value) in {"default", "standard"}:
+    if is_default_name:
         return DefaultFlagStrategy(
             style=config.get("flag_style") or "required_positional",
             translation_mode=config.get("translation_mode") or "kebab",
@@ -461,6 +468,9 @@ def apply_config_defaults(
         config_data = dict(config)
     else:
         raise ConfigurationError(f"Unsupported config type: {type(config)}")
+
+    if config_data.get("flag_strategy") is None and _has_default_flag_options(config_data):
+        config_data["flag_strategy"] = "default"
 
     resolved = {name: value for name, value in overrides.items() if value is not UNSET}
     defaults: dict[str, Any] = {}
