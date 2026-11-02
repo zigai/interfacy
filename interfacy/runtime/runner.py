@@ -176,7 +176,7 @@ class SchemaRunner:
 
         runtime_cls = cls
         if not cls.is_initialized:
-            runtime_cls = Class(cls.cls)
+            runtime_cls = Class(cls.cls, skip_self=cls.skip_self, **cls.extractor_kwargs)
 
         command_name = args[self.COMMAND_KEY]
         command_args = self._subcommand_bucket(args, command_name)
