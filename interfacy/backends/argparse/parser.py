@@ -736,6 +736,20 @@ class ArgumentParser(argparse.ArgumentParser):
 
         if failed:
             subcommand = isinstance(action, NestedSubParsersAction)
+            unknown_option = next(
+                (token for token, unknown in self._optional_tokens.items() if unknown), None
+            )
+            # An unknown option's value lands in the command slot; report the option instead.
+            if subcommand and unknown_option is not None:
+                self._fail(
+                    ParseDiagnostic(
+                        kind="unknown_option",
+                        command_path=self._help_command_path,
+                        argument=unknown_option.partition("=")[0],
+                        choices=tuple(self._option_string_actions),
+                    )
+                )
+
             self._fail(
                 ParseDiagnostic(
                     kind="unknown_command" if subcommand else "invalid_choice",
