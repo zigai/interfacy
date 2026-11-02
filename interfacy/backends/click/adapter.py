@@ -419,9 +419,9 @@ class ClickSession(BackendSession[click.Command]):
         suppress = not default.applies_during_parse
         if default.is_set and not suppress and not is_required:
             attrs["default"] = default.value
-        param_type = self._param_type(argument)
-        if param_type is not None and argument.value_shape is not ValueShape.FLAG:
-            attrs["type"] = param_type
+
+        if argument.value_shape is not ValueShape.FLAG:
+            attrs["type"] = self._param_type(argument)
 
         return attrs, suppress
 
@@ -440,7 +440,7 @@ class ClickSession(BackendSession[click.Command]):
         return candidate
 
     @staticmethod
-    def _param_type(argument: Argument) -> click.ParamType | None:
+    def _param_type(argument: Argument) -> click.ParamType:
         if argument.choices:
             if argument.parser is not None:
                 return ChoiceParamType(argument.choices, argument.parser)
@@ -451,7 +451,8 @@ class ClickSession(BackendSession[click.Command]):
         if argument.parser is not None:
             return ClickFuncParamType(argument.parser, f"parse_{argument.name}")
 
-        return None
+        # Without an explicit type, Click would infer one from the default value.
+        return click.UNPROCESSED
 
     def _executable_param(
         self,

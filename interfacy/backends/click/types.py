@@ -18,6 +18,10 @@ class ClickFuncParamType(click.types.FuncParamType):
         self.name = str(raw_name) if raw_name is not None else "NO_NAME"
 
     def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
+        # Click also converts defaults; like argparse, only string values are parsed.
+        if not isinstance(value, str):
+            return value
+
         try:
             return self.func(value)
         except (ValueError, TypeError, KeyError):
@@ -56,6 +60,9 @@ class ChoiceParamType(click.ParamType):
         Raises:
             click.BadParameter: If conversion fails or value is not in the allowed set.
         """
+        if not isinstance(value, str):
+            return value
+
         converted: Any = value
         if self.parser is not None:
             try:
