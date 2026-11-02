@@ -112,7 +112,7 @@ spell: _require-uv
   uv run --group dev codespell
 
 # Run all quality checks
-check: lint test coverage typecheck spell
+check: lint test coverage typecheck spell build
   uv run --group dev ruff format --check .
   uv run --group dev rattle check .
 
