@@ -142,14 +142,30 @@ def _reconstructed_model_value(
 
     if has_model_default and model_default is not None:
         base_values = model_instance_to_values(model_type, model_default)
-        merged = _deep_merge(base_values, values)
-        validate_required_model_values(model_type, group, merged, provided_paths)
+        values = _deep_merge(base_values, values)
 
-        return build_model_instance(model_type, merged)
-
+    values = _merge_field_defaults(model_type, values)
     validate_required_model_values(model_type, group, values, provided_paths)
 
     return build_model_instance(model_type, values)
+
+
+def _merge_field_defaults(model_type: type, values: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(values)
+    for field in model_fields_for_expansion(model_type):
+        value = merged.get(field.name)
+        inner, _ = unwrap_optional(field.annotation)
+        if not isinstance(value, dict) or not is_model_type(inner):
+            continue
+
+        value = _merge_field_defaults(inner, value)
+        default = field.default_value()
+        if default is not None:
+            value = _deep_merge(model_instance_to_values(inner, default), value)
+
+        merged[field.name] = value
+
+    return merged
 
 
 def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:

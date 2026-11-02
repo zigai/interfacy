@@ -139,9 +139,8 @@ def pydantic_v2_fields(model_type: type) -> list[ModelField]:
             except TypeError:
                 required = bool(info.is_required)
 
-        default = getattr(info, "default", None)
-        if required:
-            default = None
+        default_factory = None if required else getattr(info, "default_factory", None)
+        default = None if required or default_factory is not None else info.default
 
         result.append(
             ModelField(
@@ -149,6 +148,7 @@ def pydantic_v2_fields(model_type: type) -> list[ModelField]:
                 annotation=annotation,
                 required=required,
                 default=default,
+                default_factory=default_factory,
                 description=getattr(info, "description", None),
             )
         )
@@ -171,9 +171,8 @@ def pydantic_v1_fields(model_type: type) -> list[ModelField]:
             hints.get(name) or getattr(info, "outer_type_", None) or getattr(info, "type_", None)
         )
         required = bool(getattr(info, "required", False))
-        default = getattr(info, "default", None)
-        if required:
-            default = None
+        default_factory = None if required else getattr(info, "default_factory", None)
+        default = None if required or default_factory is not None else info.default
 
         description = None
         if hasattr(info, "field_info"):
@@ -185,6 +184,7 @@ def pydantic_v1_fields(model_type: type) -> list[ModelField]:
                 annotation=annotation,
                 required=required,
                 default=default,
+                default_factory=default_factory,
                 description=description,
             )
         )

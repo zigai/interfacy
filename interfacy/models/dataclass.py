@@ -45,11 +45,10 @@ class DataclassAdapter:
                 continue
 
             required = field_info.default is MISSING and field_info.default_factory is MISSING
-            default = None
-            if field_info.default is not MISSING:
-                default = field_info.default
-            elif field_info.default_factory is not MISSING:
-                default = field_info.default_factory
+            default = None if field_info.default is MISSING else field_info.default
+            default_factory = (
+                None if field_info.default_factory is MISSING else field_info.default_factory
+            )
 
             description = None
             if isinstance(field_info.metadata, Mapping):
@@ -70,6 +69,7 @@ class DataclassAdapter:
                     annotation=annotation,
                     required=required,
                     default=default,
+                    default_factory=default_factory,
                     description=description,
                 )
             )

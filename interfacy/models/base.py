@@ -21,7 +21,8 @@ class ModelField:
         name (str): Field name accepted by the model constructor.
         annotation (Any): Field annotation, or None when untyped.
         required (bool): Whether the constructor requires the field.
-        default (Any): Default value or default factory for optional fields.
+        default (Any): Default value for optional fields without a default factory.
+        default_factory (Callable[[], Any] | None): Factory that builds the default value.
         description (str | None): Field help text.
     """
 
@@ -29,7 +30,15 @@ class ModelField:
     annotation: Any
     required: bool
     default: Any = None
+    default_factory: Callable[[], Any] | None = None
     description: str | None = None
+
+    def default_value(self) -> Any:
+        """Return the field's default value, calling its default factory if it has one."""
+        if self.default_factory is not None:
+            return self.default_factory()
+
+        return self.default
 
 
 class ModelAdapter(Protocol):
