@@ -45,6 +45,19 @@ from interfacy.schema.nodes import (
 _SUPPRESSED_DEFAULT = object()
 
 
+def escape_help(text: str | None) -> str | None:
+    """
+    Escape percent signs in help text passed to argparse.
+
+    Argparse expands help strings with %-formatting. Without escaping, text such as ``100%``
+    raises an error and ``%(prog)s`` is replaced with the program name.
+
+    Args:
+        text (str | None): Help text to show literally.
+    """
+    return text.replace("%", "%%") if text else text
+
+
 class ArgparseSession(BackendSession[ArgumentParser]):
     def __init__(
         self,
@@ -193,7 +206,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 subparsers.add_deferred_parser(
                     command.cli_name,
                     aliases=command.aliases,
-                    help=command.description,
+                    help=escape_help(command.description),
                     build=partial(
                         self._build_deferred_command, parser, subparsers, command, relaxed=relaxed
                     ),
@@ -228,7 +241,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
             command.cli_name,
             aliases=list(command.aliases),
             description=command.description,
-            help=command.description,
+            help=escape_help(command.description),
         )
         self._apply_command(
             child,
@@ -287,7 +300,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 child_command.cli_name,
                 aliases=list(child_command.aliases),
                 description=child_command.description,
-                help=child_command.description,
+                help=escape_help(child_command.description),
             )
             self._apply_command(
                 child,
@@ -304,7 +317,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         argument: Argument,
         relaxed: bool,
     ) -> None:
-        kwargs: dict[str, Any] = {"help": argument.help or ""}
+        kwargs: dict[str, Any] = {"help": escape_help(argument.help or "")}
         if argument.metavar and argument.value_shape is not ValueShape.FLAG:
             kwargs["metavar"] = argument.metavar
         nargs = self._native_nargs(argument, relaxed)
@@ -380,7 +393,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
                 executable_flag=flag,
                 dest=f"_interfacy_exec_{dest or 'flag'}",
                 default=argparse.SUPPRESS,
-                help=flag.help,
+                help=escape_help(flag.help),
             )
 
     @staticmethod
