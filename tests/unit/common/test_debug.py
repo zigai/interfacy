@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from interfacy.common.console import log_exception
+from interfacy.common.debug import get_logger
 from interfacy.common.log_formatter import ClickableFormatter
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -133,6 +134,33 @@ def test_get_logger_ignores_blank_interfacy_log_env() -> None:
 
     assert process.returncode == 0, process.stderr
     assert process.stderr == ""
+
+
+@pytest.mark.parametrize("method", ["debug", "info", "warning", "error"])
+def test_get_logger_preserves_standard_logging_keyword_arguments(
+    caplog: pytest.LogCaptureFixture, method: str
+) -> None:
+    logger = get_logger(f"tests.keyword_arguments.{method}")
+    failure = ValueError("example failure")
+    logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.DEBUG, logger=logger.name):
+            getattr(logger, method)(
+                "keyword message",
+                exc_info=(ValueError, failure, None),
+                extra={"marker": "custom context"},
+                stack_info=True,
+                stacklevel=1,
+            )
+    finally:
+        logger.removeHandler(caplog.handler)
+
+    record = caplog.records[-1]
+    assert record.getMessage() == "keyword message"
+    assert record.exc_info == (ValueError, failure, None)
+    assert record.marker == "custom context"
+    assert record.stack_info
+    assert record.pathname == __file__
 
 
 def test_clickable_formatter_populates_record_fields() -> None:
