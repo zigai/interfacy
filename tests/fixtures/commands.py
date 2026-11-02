@@ -91,7 +91,7 @@ def fn_positional_varargs_kwonly(
 def fn_positional_varargs_varkw(
     head: str,
     *tail: str,
-    **options: dict[str, str],
+    **options: str,
 ) -> tuple[str, tuple[str, ...], dict[str, str]]:
     """Collect required positional + varargs + catch-all keyword mapping."""
     return head, tail, options

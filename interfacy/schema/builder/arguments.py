@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from inspect import Parameter as InspectParameter
-from types import NoneType
+from types import GenericAlias, NoneType
 from typing import Any
 
 from objinspect import Parameter
@@ -108,6 +108,9 @@ class ArgumentBuilder:
             declared_param (Param | None): Param declared for the parameter.
         """
         resolved_settings = settings or base_build_settings(self.context)
+
+        if param.kind == InspectParameter.VAR_KEYWORD:
+            param = var_keyword_mapping_parameter(param)
         annotation = normalize_parameter_annotation(param.type)
         if declared_param is not None and annotation is not bool:
             validate_non_boolean_setting(param.name, declared_param)
@@ -320,6 +323,26 @@ class ArgumentBuilder:
             settings=settings,
             pipe_param_names=pipe_param_names,
         ).build(model_type=model_type, is_optional_model=is_optional_model)
+
+
+def var_keyword_mapping_parameter(param: Parameter) -> Parameter:
+    """
+    Describe `**kwargs: T` as an optional `dict[str, T]` value, as Python types it.
+
+    Args:
+        param (Parameter): Inspected VAR_KEYWORD parameter.
+    """
+    annotation: Any = dict
+    if param.is_typed and param.type is not Any:
+        annotation = GenericAlias(dict, (str, param.type))
+
+    return Parameter(
+        name=param.name,
+        kind=param.kind,
+        annotation=annotation,
+        default=None,
+        description=param.description,
+    )
 
 
 def normalize_parameter_annotation(annotation: Any) -> Any:

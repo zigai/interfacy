@@ -14,13 +14,13 @@ from tests.fixtures.commands import (
 def test_catch_all_kwargs_cannot_replace_named_option(backend: str) -> None:
     executed: list[str] = []
 
-    def command(*, mode: str = "safe", **options: dict[str, str]) -> None:
+    def command(*, mode: str = "safe", **options: str) -> None:
         executed.append(mode)
 
     parser = Interfacy(backend=backend)
 
     with pytest.raises(UsageError, match="mode"):
-        parser.invoke(command, args=['{"mode":"a"}', "--mode", "safe"])
+        parser.invoke(command, args=["--options", '{"mode":"a"}', "--mode", "safe"])
 
     assert executed == []
 
@@ -28,13 +28,15 @@ def test_catch_all_kwargs_cannot_replace_named_option(backend: str) -> None:
 @pytest.mark.parametrize("backend", ["argparse", "click"])
 def test_constructor_catch_all_mapping_is_unpacked(backend: str) -> None:
     class Tool:
-        def __init__(self, **options: dict[str, str]) -> None:
+        def __init__(self, **options: str) -> None:
             self.options = options
 
         def show(self) -> dict[str, str]:
             return self.options
 
-    assert Interfacy(backend=backend).invoke(Tool, args=['{"mode":"fast"}', "show"]) == {
+    assert Interfacy(backend=backend).invoke(
+        Tool, args=["--options", '{"mode":"fast"}', "show"]
+    ) == {
         "mode": "fast",
     }
 
@@ -133,7 +135,9 @@ class TestMixedPositionalVarargsAndVarKeyword:
     def test_function_with_var_keyword_after_varargs(self, parser: Interfacy):
         """Verify required positional + *args + **kwargs execution."""
         parser.add_command(fn_positional_varargs_varkw)
-        assert parser.invoke(args=["primary", "alpha", '{"mode":"fast","profile":"dev"}']) == (
+        assert parser.invoke(
+            args=["primary", "alpha", "--options", '{"mode":"fast","profile":"dev"}']
+        ) == (
             "primary",
             ("alpha",),
             {"mode": "fast", "profile": "dev"},
@@ -148,6 +152,7 @@ class TestMixedPositionalVarargsAndVarKeyword:
                 "collect-with-options",
                 "primary",
                 "alpha",
+                "--options",
                 '{"mode":"fast","profile":"dev"}',
             ]
         ) == (
@@ -163,7 +168,14 @@ class TestMixedPositionalVarargsAndVarKeyword:
         workspace.add_command(fn_positional_varargs_varkw, name="collect")
         parser.add_command(workspace)
         assert parser.invoke(
-            args=["workspace", "collect", "primary", "alpha", '{"mode":"fast","profile":"dev"}']
+            args=[
+                "workspace",
+                "collect",
+                "primary",
+                "alpha",
+                "--options",
+                '{"mode":"fast","profile":"dev"}',
+            ]
         ) == (
             "primary",
             ("alpha",),

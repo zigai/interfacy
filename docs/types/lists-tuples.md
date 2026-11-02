@@ -113,4 +113,8 @@ def search(query: str, *paths: str, ignore_case: bool = False) -> None: ...
 $ python app.py timeout app.log db.log --ignore-case
 ```
 
-`**kwargs` can be supplied as a mapping value, usually a JSON object.
+`**kwargs: T` is an optional option that takes a mapping of `T` values, usually a JSON object:
+
+```console
+$ python app.py --labels '{"env": "prod"}'
+```

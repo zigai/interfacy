@@ -165,6 +165,6 @@ class TextCollector:
         self,
         head: str,
         *tail: str,
-        **options: dict[str, str],
+        **options: str,
     ) -> tuple[str, tuple[str, ...], dict[str, str]]:
         return head, tail, options
