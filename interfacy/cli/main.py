@@ -13,7 +13,7 @@ from interfacy.cli.config import apply_config_defaults, get_default_config_paths
 from interfacy.common.console import error, warn
 from interfacy.common.terminal import get_terminal_width
 from interfacy.declarations.groups import CommandGroup
-from interfacy.exceptions import InterfacyExit, ParseDiagnostic, UsageError
+from interfacy.exceptions import ConfigurationError, InterfacyExit, ParseDiagnostic, UsageError
 from interfacy.help import HelpLayout, StandardLayout
 from interfacy.help.diagnostics import build_diagnostic_content, normalize_diagnostic_text
 from interfacy.introspection.targets import resolve_target_with_module
@@ -27,7 +27,7 @@ def _is_supported_entrypoint_target(target: Any) -> bool:
     if callable(target) or isinstance(target, type):
         return True
 
-    return hasattr(target, "__dict__") or hasattr(target, "__class__")
+    return type(target).__module__ != "builtins"
 
 
 def resolve_entrypoint_settings() -> dict[str, Any]:
@@ -214,6 +214,14 @@ def main(argv: Sequence[str] | None = None) -> ExitCode:
     if early_result is not None:
         return early_result
 
+    try:
+        return _run_target(raw_args)
+    except ConfigurationError as e:
+        error(f"interfacy: {e}")
+        return ExitCode.CONFIGURATION
+
+
+def _run_target(raw_args: list[str]) -> ExitCode:
     settings = resolve_entrypoint_settings()
     parser = build_parser(settings)
     try:
