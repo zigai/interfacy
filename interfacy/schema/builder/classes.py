@@ -10,6 +10,7 @@ from interfacy.declarations.groups import CommandEntry
 from interfacy.declarations.options import DEFAULT_COMMAND_OPTIONS, CommandOptions
 from interfacy.declarations.params import Param, get_params, merge_params
 from interfacy.declarations.pipes import PipeTargets
+from interfacy.exceptions import ConfigurationError, DuplicateCommandError
 from interfacy.introspection.annotations import resolve_objinspect_annotations
 from interfacy.models import parse_docstring_args
 from interfacy.schema.builder.arguments import ArgumentBuilder
@@ -138,6 +139,9 @@ class ClassCommandBuilder:
                     or class_pipe_config
                 )
 
+            if method_cli_name in subcommands:
+                raise DuplicateCommandError(method_cli_name)
+
             subcommands[method_cli_name] = self.commands.function_command(
                 method,
                 cli_name_override=method_cli_name,
@@ -148,6 +152,9 @@ class ClassCommandBuilder:
 
         raw_description = description or (cls.description if cls.has_docstring else None)
         cli_name = resolve_cli_name(None, canonical_name, cls.name)
+        if not subcommands:
+            raise ConfigurationError(f"Class command '{cli_name}' has no methods to run")
+
         validate_initializer_positionals(initializer, owner=cli_name, subcommands=subcommands)
         resolved_executable_flags = list(options.executable_flags)
         self.commands.validate_executable_flags(resolved_executable_flags, initializer)
@@ -203,6 +210,9 @@ class ClassCommandBuilder:
                 continue
 
             method_cli_name = self.commands.translate_command_name(method.name)
+            if method_cli_name in subcommands:
+                raise DuplicateCommandError(method_cli_name)
+
             subcommands[method_cli_name] = self.commands.function_command(
                 method,
                 cli_name_override=method_cli_name,
@@ -291,6 +301,9 @@ class ClassCommandBuilder:
                 continue
 
             method_cli_name = self.commands.translate_command_name(method.name)
+            if method_cli_name in subcommands:
+                raise DuplicateCommandError(method_cli_name)
+
             subcommands[method_cli_name] = self.commands.function_command(
                 method,
                 cli_name_override=method_cli_name,
@@ -314,7 +327,11 @@ class ClassCommandBuilder:
                 aliases=(),
                 is_instance=False,
             )
-            subcommands[self.commands.translate_command_name(attr_name)] = self.class_tree_command(
+            nested_cli_name = self.commands.translate_command_name(attr_name)
+            if nested_cli_name in subcommands:
+                raise DuplicateCommandError(nested_cli_name)
+
+            subcommands[nested_cli_name] = self.class_tree_command(
                 nested_entry,
                 current_path,
                 settings=settings,

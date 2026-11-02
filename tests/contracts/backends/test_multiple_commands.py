@@ -205,12 +205,11 @@ class TestMethodFiltering:
         assert "repr" not in subcommands
 
     def test_class_with_no_public_methods(self, schema_parser: Interfacy):
-        """Verify classes without public methods have no subcommands."""
+        """Verify classes without public methods are rejected."""
         schema_parser.add_command(Empty)
-        schema = schema_parser.build_parser_schema()
-        subcommands = schema.get_command("empty").subcommands or {}
 
-        assert subcommands == {}
+        with pytest.raises(ConfigurationError, match="no methods"):
+            schema_parser.build_parser_schema()
 
     def test_static_methods_as_subcommands(self, schema_parser: Interfacy):
         """Verify static methods are exposed as subcommands."""
