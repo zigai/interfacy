@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -31,6 +32,7 @@ def _click_parser_symbol(name: str) -> Any:
 _BaseOptionParser: type[Any] = _click_parser_symbol("_OptionParser")
 _BaseArgument: type[Any] = _click_parser_symbol("_Argument")
 _normalize_opt: Callable[[str, Any], str] = _click_parser_symbol("_normalize_opt")
+_NEGATIVE_NUMBER = re.compile(r"^-\d+$|^-\d*\.\d+$")
 
 
 class ParserArgument(_BaseArgument):
@@ -65,6 +67,20 @@ class InterfacyOptionParser(_BaseOptionParser):
             self.ctx.interfacy_has_extra_args = bool(result[1])
 
         return result
+
+    def _process_opts(self, arg: str, state: ParsingStateLike) -> None:
+        # Match argparse: a negative number is a value unless an option looks like one.
+        if not _NEGATIVE_NUMBER.match(arg) or self._has_negative_number_options():
+            super()._process_opts(arg, state)
+            return
+
+        state.largs.append(arg)
+        if not self.allow_interspersed_args:
+            state.largs.extend(state.rargs)
+            state.rargs.clear()
+
+    def _has_negative_number_options(self) -> bool:
+        return any(_NEGATIVE_NUMBER.match(opt) for opt in (*self._short_opt, *self._long_opt))
 
     def _token_looks_like_option(self, arg_text: str) -> bool:
         if arg_text == "--":
