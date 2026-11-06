@@ -56,27 +56,14 @@ We use [pytest](https://docs.pytest.org/en/stable/) for testing. The default Pyt
 uv run pytest -v
 
 # Run tests on Python 3.15 without changing the project environment
-uv run --python 3.15 --isolated --group test pytest -v
+uv run --python 3.15 --isolated --group dev pytest -v
 
 # Run tests across all supported Python versions
 just test
 ```
 
-Distribution checks (`just build`) exercise wheel installations on Python 3.14 and 3.15,
+Distribution checks (`just package-test`) exercise wheel installations on Python 3.14 and 3.15,
 including the optional Click and full extras, and source installations on Python 3.11.
-
-## Pre-commit Hooks
-
-We use [pre-commit](https://pre-commit.com/) to run quality checks automatically:
-
-```sh
-# Install pre-commit hooks
-uv tool install pre-commit
-pre-commit install
-
-# Run hooks manually on all files
-pre-commit run --all-files
-```
 
 ## Documentation
 

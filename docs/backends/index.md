@@ -4,7 +4,7 @@ Backend-specific parser behavior and extension points.
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 argparse

@@ -7,8 +7,8 @@ Interfacy builds command-line interfaces from typed Python functions, methods, c
 Run a single test file or test directly:
 
 ```bash
-uv run --group test pytest tests/unit/schema/test_method_dispatch.py -q
-uv run --group test pytest tests/unit/schema/test_method_dispatch.py::test_name -q
+uv run --group dev pytest tests/unit/schema/test_method_dispatch.py -q
+uv run --group dev pytest tests/unit/schema/test_method_dispatch.py::test_name -q
 ```
 
 ## Architecture

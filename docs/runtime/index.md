@@ -4,7 +4,7 @@ Runtime behavior for stdin, argument files, completion, exit codes, and interrup
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 stdin

@@ -20,7 +20,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --group test --python ${{ matrix.python-version }}
+        run: uv sync --group dev --python ${{ matrix.python-version }}
 
       - name: Run pytest
         run: uv run --python ${{ matrix.python-version }} pytest -v
@@ -42,4 +42,4 @@ jobs:
       - name: Test installed distributions
         env:
           INTERFACY_TEST_ARTIFACTS: "1"
-        run: uv run --python 3.15 --group test pytest tests/packaging -ra
+        run: uv run --python 3.15 --group dev pytest tests/packaging -ra

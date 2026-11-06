@@ -16,7 +16,7 @@ from interfacy import Interfacy
 result = Interfacy().invoke(main, args=[])
 ```
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.Interfacy
    :members:
    :exclude-members: __init__

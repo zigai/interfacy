@@ -4,7 +4,7 @@ Command registration, lazy commands, groups, nesting, aliases, parent options, a
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 multiple-commands

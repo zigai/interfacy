@@ -4,7 +4,7 @@ Conceptual reference pages and generated API documentation.
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 API Reference <../api/index>

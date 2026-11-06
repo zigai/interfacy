@@ -20,14 +20,14 @@ schema = parser.build_parser_schema()
 
 ## Main objects
 
-| Object | Purpose |
-| --- | --- |
-| `ParserSchema` | complete CLI parser description |
-| `Command` | one command or command namespace |
-| `Argument` | one parameter or synthetic help/executable flag row |
-| `ArgumentKind` | positional vs option classification |
-| `ValueShape` | single, list, tuple, or flag value shape |
-| `BooleanBehavior` | generated boolean flag metadata |
+| Object            | Purpose                                             |
+| ----------------- | --------------------------------------------------- |
+| `ParserSchema`    | complete CLI parser description                     |
+| `Command`         | one command or command namespace                    |
+| `Argument`        | one parameter or synthetic help/executable flag row |
+| `ArgumentKind`    | positional vs option classification                 |
+| `ValueShape`      | single, list, tuple, or flag value shape            |
+| `BooleanBehavior` | generated boolean flag metadata                     |
 
 ## Backend independence
 

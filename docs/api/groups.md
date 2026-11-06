@@ -5,7 +5,7 @@ the full shape from a single callable or class.
 
 ## CommandGroup
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.CommandGroup
    :members:
    :exclude-members: __init__

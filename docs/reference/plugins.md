@@ -6,7 +6,7 @@ For a guide-style introduction, see {doc}`../backends/plugins`.
 
 ## Base class
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.InterfacyPlugin
    :members:
    :exclude-members: __init__, __new__
@@ -14,7 +14,7 @@ For a guide-style introduction, see {doc}`../backends/plugins`.
 
 ## Contexts
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.ConfigureContext
    :members:
    :exclude-members: __init__, __new__
@@ -46,7 +46,7 @@ For a guide-style introduction, see {doc}`../backends/plugins`.
 
 ## Help content
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.help.HelpContext
    :members:
    :exclude-members: __init__, __new__
@@ -60,10 +60,9 @@ For a guide-style introduction, see {doc}`../backends/plugins`.
    :exclude-members: __init__, __new__
 ```
 
-
 ## Backend-native context
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.BackendPlugin
    :members:
    :exclude-members: __init__, __new__
@@ -75,18 +74,18 @@ For a guide-style introduction, see {doc}`../backends/plugins`.
 
 ## Parse failure
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.ParseFailureKind
    :members:
 ```
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.ArgumentRef
    :members:
    :exclude-members: __init__, __new__
 ```
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.ParseFailure
    :members:
    :exclude-members: __init__, __new__
@@ -94,13 +93,13 @@ For a guide-style introduction, see {doc}`../backends/plugins`.
 
 ## Recovery actions
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.ProvideArgumentValues
    :members:
    :exclude-members: __init__, __new__
 ```
 
-```{eval-rst}
+```text {eval-rst}
 .. autoclass:: interfacy.plugins.AbortRecovery
    :members:
    :exclude-members: __init__, __new__

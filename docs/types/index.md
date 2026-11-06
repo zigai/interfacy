@@ -4,7 +4,7 @@ Type annotations and parser registrations define conversion from CLI strings to 
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 annotations

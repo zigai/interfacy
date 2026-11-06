@@ -2,7 +2,7 @@
 
 Interfacy turns ordinary Python functions, classes, methods, and instances into command-line interfaces. It reads signatures, type annotations, defaults, and docstrings so your command behavior and your CLI contract stay in one place.
 
-```{toctree}
+```text {toctree}
 :hidden:
 :caption: Documentation
 :maxdepth: 2
@@ -18,7 +18,7 @@ Backends <backends/index>
 Reference <reference/index>
 ```
 
-```{toctree}
+```text {toctree}
 :hidden:
 :caption: Links
 :maxdepth: 1

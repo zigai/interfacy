@@ -28,17 +28,17 @@ Interfacy(plugins=[TraceArgs()]).run(main)
 
 Portable plugins subclass `InterfacyPlugin` and can implement these hooks:
 
-| Hook | Purpose |
-| --- | --- |
-| `configure()` | register portable capabilities immediately after registration |
-| `before_parse()` | rewrite raw CLI args before backend parsing |
-| `after_parse()` | rewrite the parsed namespace |
-| `transform_schema()` | replace the built schema before backend materialization |
-| `transform_help()` | replace structured help sections before terminal rendering |
-| `transform_diagnostic()` | replace diagnostic display content after recovery fails |
-| `render_diagnostic()` | return final diagnostic text, or defer to the next renderer |
-| `wrap_execute()` | wrap command execution |
-| `recover_parse_failure()` | provide values or subcommands for recoverable parse failures |
+| Hook                      | Purpose                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| `configure()`             | register portable capabilities immediately after registration |
+| `before_parse()`          | rewrite raw CLI args before backend parsing                   |
+| `after_parse()`           | rewrite the parsed namespace                                  |
+| `transform_schema()`      | replace the built schema before backend materialization       |
+| `transform_help()`        | replace structured help sections before terminal rendering    |
+| `transform_diagnostic()`  | replace diagnostic display content after recovery fails       |
+| `render_diagnostic()`     | return final diagnostic text, or defer to the next renderer   |
+| `wrap_execute()`          | wrap command execution                                        |
+| `recover_parse_failure()` | provide values or subcommands for recoverable parse failures  |
 
 Each hook receives a context dataclass tailored to that lifecycle phase. Portable
 contexts expose only backend-neutral state and capabilities, such as the backend name,
@@ -75,7 +75,6 @@ Each `HelpSection` has a stable `kind` (`usage`, `description`, `positionals`, `
 `commands`, or `epilog`) and its rendered text. `HelpHookContext` identifies the program,
 terminal width, current command path, and a schema descriptor.
 
-
 ## Backend-native plugins
 
 Subclass `BackendPlugin` only when a plugin must use argparse or Click objects directly.
@@ -97,7 +96,6 @@ class ArgparseNativePlugin(BackendPlugin):
 an explicit compatibility boundary: backend-native plugins are tied to that backend's
 semantics and may require changes when its integration changes. Registering one against the
 wrong backend raises `ConfigurationError`.
-
 
 ## Execution wrappers
 

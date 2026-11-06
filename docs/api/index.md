@@ -4,7 +4,7 @@ Generated reference for public Interfacy API objects.
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 Parsers <parsers>

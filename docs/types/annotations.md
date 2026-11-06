@@ -14,18 +14,18 @@ The callable receives `path` as `str`, `limit` as `int`, and `ratio` as `float`.
 
 ## Common shapes
 
-| Annotation | CLI behavior |
-| --- | --- |
-| `str` | string value |
-| `int` / `float` | numeric conversion |
-| `bool` | flag behavior |
-| `Path` | path-like value |
-| `list[T]` | repeated values converted as `T` |
-| `tuple[A, B]` | fixed number of values converted per element |
-| `Literal[...]` | choice validation |
-| `Enum` | choice validation |
-| `T \| None` | optional value |
-| dataclass / Pydantic / plain class | structured model flags |
+| Annotation                         | CLI behavior                                 |
+| ---------------------------------- | -------------------------------------------- |
+| `str`                              | string value                                 |
+| `int` / `float`                    | numeric conversion                           |
+| `bool`                             | flag behavior                                |
+| `Path`                             | path-like value                              |
+| `list[T]`                          | repeated values converted as `T`             |
+| `tuple[A, B]`                      | fixed number of values converted per element |
+| `Literal[...]`                     | choice validation                            |
+| `Enum`                             | choice validation                            |
+| `T \| None`                        | optional value                               |
+| dataclass / Pydantic / plain class | structured model flags                       |
 
 Out of the box, Interfacy also parses a few standard-library types: {class}`datetime.date`, {class}`datetime.datetime`, {class}`datetime.time`, {class}`datetime.timedelta`, {class}`decimal.Decimal`, {class}`fractions.Fraction`, {class}`dict`, {class}`range`, and {class}`slice`.
 

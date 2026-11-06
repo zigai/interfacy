@@ -4,7 +4,7 @@ The packaged `interfacy` command, configuration file, and setup hook.
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 entrypoint

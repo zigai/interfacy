@@ -20,14 +20,14 @@ This prints `7` and exits with code `0`.
 
 Exit codes are available from `interfacy.ExitCode`.
 
-| Name | Code | Meaning |
-| --- | ---: | --- |
-| `SUCCESS` | 0 | Command completed, or help/version exited normally |
-| `COMMAND_FAILED` | 1 | The selected command raised an exception |
-| `USAGE` | 2 | Command-line input could not be parsed |
-| `INTERNAL` | 70 | An unexpected Interfacy/backend invariant failed |
-| `CONFIGURATION` | 78 | Command schema, setup, or plugin configuration is invalid |
-| `INTERRUPTED` | 130 | The command was interrupted with Ctrl-C |
+| Name             | Code | Meaning                                                   |
+| ---------------- | ---: | --------------------------------------------------------- |
+| `SUCCESS`        |    0 | Command completed, or help/version exited normally        |
+| `COMMAND_FAILED` |    1 | The selected command raised an exception                  |
+| `USAGE`          |    2 | Command-line input could not be parsed                    |
+| `INTERNAL`       |   70 | An unexpected Interfacy/backend invariant failed          |
+| `CONFIGURATION`  |   78 | Command schema, setup, or plugin configuration is invalid |
+| `INTERRUPTED`    |  130 | The command was interrupted with Ctrl-C                   |
 
 Let Interfacy manage process exits. Do not pass the result of `run()` to `SystemExit` or
 otherwise treat an integer result as an exit code.
@@ -56,7 +56,6 @@ loop is already running. `run()` is the CLI boundary: it renders configured outp
 errors, maps failures to `ExitCode`, and always raises `SystemExit`.
 
 For traceback locations during CLI development, set `full_error_traceback=True`.
-
 
 ## User-facing command failures
 

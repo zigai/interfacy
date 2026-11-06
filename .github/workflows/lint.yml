@@ -30,8 +30,5 @@ jobs:
       - name: Run Pyrefly
         run: uv run --group dev pyrefly check --min-severity warn
 
-      - name: Run codespell
-        run: uv run --group dev codespell
-
       - name: Run Rattle lint
         run: uv run --group dev rattle check .

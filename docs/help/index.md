@@ -4,7 +4,7 @@ Generated help text, layouts, colors, command grouping, and sorting.
 
 ## Sections
 
-```{toctree}
+```text {toctree}
 :maxdepth: 1
 
 docstrings
