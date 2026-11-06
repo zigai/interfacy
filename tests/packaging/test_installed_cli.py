@@ -111,7 +111,7 @@ def installed_distributions(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> tuple[InstalledDistribution, ...]:
     if os.environ.get("INTERFACY_TEST_ARTIFACTS") != "1":
-        pytest.skip("artifact verification runs through `just build`")
+        pytest.skip("artifact verification runs through `just package-test`")
 
     wheel = DIST_DIRECTORY / f"interfacy-{PROJECT_VERSION}-py3-none-any.whl"
     sdist = DIST_DIRECTORY / f"interfacy-{PROJECT_VERSION}.tar.gz"
