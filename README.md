@@ -1,10 +1,11 @@
 # Interfacy
 
-[![Tests](https://github.com/zigai/interfacy/actions/workflows/tests.yml/badge.svg)](https://github.com/zigai/interfacy/actions/workflows/tests.yml)
-[![PyPI version](https://badge.fury.io/py/interfacy.svg)](https://badge.fury.io/py/interfacy)
-![Supported versions](https://img.shields.io/badge/python-3.11+-blue.svg)
-[![Downloads](https://static.pepy.tech/badge/interfacy)](https://pepy.tech/project/interfacy)
-[![license](https://img.shields.io/github/license/zigai/interfacy.svg)](https://github.com/zigai/interfacy/blob/master/LICENSE)
+[![tests](https://img.shields.io/github/actions/workflow/status/zigai/interfacy/tests.yml?branch=master&label=tests&labelColor=30363d)](https://github.com/zigai/interfacy/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/interfacy?label=PyPI&color=blue&logo=pypi&logoColor=white&labelColor=30363d)](https://pypi.org/project/interfacy/)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white&labelColor=30363d)](pyproject.toml)
+[![downloads](https://img.shields.io/pypi/dm/interfacy?label=downloads&color=blue&labelColor=30363d)](https://pepy.tech/projects/interfacy)
+[![downloads](https://img.shields.io/pepy/dt/interfacy?label=downloads&color=blue&labelColor=30363d)](https://pepy.tech/projects/interfacy)
+[![license](https://img.shields.io/github/license/zigai/interfacy?label=license&labelColor=30363d)](LICENSE)
 
 Interfacy is a CLI framework that turns Python functions, classes, and class instances into command-line interfaces. It derives the CLI from signatures, type annotations, and docstrings instead of making you define it twice.
 
