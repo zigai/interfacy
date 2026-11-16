@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 import sys
 import textwrap
 from dataclasses import dataclass, field
 from difflib import get_close_matches
-from typing import Literal
+from typing import Literal, TextIO
 
-from stdl.st import TextStyle, with_style
+from stdl.st import TextStyle, color_enabled, with_style
 
 from interfacy.common.terminal import strip_ansi
 from interfacy.exceptions import DiagnosticKind, ParseDiagnostic
@@ -34,6 +33,23 @@ class DiagnosticResult:
     """Final diagnostic text returned by a plugin renderer."""
 
     text: str
+
+
+@dataclass(frozen=True)
+class DiagnosticOutput:
+    """
+    Rendered parse failure ready to print.
+
+    ``is_help`` marks a bare command group whose response is its help, which belongs on stdout.
+    Every other diagnostic belongs on stderr.
+    """
+
+    text: str
+    is_help: bool = False
+
+    @property
+    def stream(self) -> TextIO:
+        return sys.stdout if self.is_help else sys.stderr
 
 
 def diagnostic_message(diagnostic: ParseDiagnostic) -> str:
@@ -125,12 +141,7 @@ class DiagnosticLayout:
         if content.help_text:
             return content.help_text.rstrip() + "\n"
 
-        colored = (
-            sys.stderr.isatty()
-            and "NO_COLOR" not in os.environ
-            and "NOCOLOR" not in os.environ
-            and os.environ.get("TERM") != "dumb"
-        )
+        colored = color_enabled(sys.stderr)
         prefix = self.error_prefix
         sections: dict[DiagnosticSection, str] = {
             "message": f"{prefix} {content.message}",
@@ -166,10 +177,12 @@ class DiagnosticLayout:
                 for line in text.splitlines()
             )
             if colored and section == "message":
-                wrapped = wrapped.replace(prefix, with_style(prefix, self.error_style), 1)
+                wrapped = wrapped.replace(
+                    prefix, with_style(prefix, self.error_style, stream=sys.stderr), 1
+                )
 
             if colored and section == "help":
-                wrapped = with_style(wrapped, self.hint_style)
+                wrapped = with_style(wrapped, self.hint_style, stream=sys.stderr)
 
             if rendered:
                 rendered += self.message_spacing if previous == "message" else self.section_spacing
@@ -180,27 +193,31 @@ class DiagnosticLayout:
         return rendered.rstrip() + "\n"
 
 
-def normalize_diagnostic_text(text: str) -> str:
+def normalize_diagnostic_text(text: str, stream: TextIO) -> str:
     if not isinstance(text, str):
         raise TypeError("diagnostic renderers must return str")
 
-    if (
-        not sys.stderr.isatty()
-        or "NO_COLOR" in os.environ
-        or "NOCOLOR" in os.environ
-        or os.environ.get("TERM") == "dumb"
-    ):
+    if not color_enabled(stream):
         text = strip_ansi(text)
 
     return text.rstrip("\r\n") + "\n"
 
 
+def diagnostic_output(text: str, *, is_help: bool = False) -> DiagnosticOutput:
+    """Normalize rendered diagnostic text for the stream it will be printed on."""
+    stream = DiagnosticOutput(text, is_help).stream
+
+    return DiagnosticOutput(normalize_diagnostic_text(text, stream), is_help)
+
+
 __all__ = [
     "DiagnosticContent",
     "DiagnosticLayout",
+    "DiagnosticOutput",
     "DiagnosticResult",
     "DiagnosticSection",
     "build_diagnostic_content",
     "diagnostic_message",
+    "diagnostic_output",
     "normalize_diagnostic_text",
 ]

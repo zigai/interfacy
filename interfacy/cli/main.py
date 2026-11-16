@@ -15,7 +15,7 @@ from interfacy.common.terminal import get_terminal_width
 from interfacy.declarations.groups import CommandGroup
 from interfacy.exceptions import ConfigurationError, InterfacyExit, ParseDiagnostic, UsageError
 from interfacy.help import HelpLayout, StandardLayout
-from interfacy.help.diagnostics import build_diagnostic_content, normalize_diagnostic_text
+from interfacy.help.diagnostics import build_diagnostic_content, diagnostic_output
 from interfacy.introspection.targets import resolve_target_with_module
 from interfacy.runtime.exit_codes import ExitCode
 
@@ -198,8 +198,11 @@ def _render_usage_error(parser: ArgumentParser, exc: UsageError) -> None:
         help_flags=parser.help_flags if parser.add_help else (),
         usage=exc.usage or parser.format_usage(),
     )
-    rendered = parser.diagnostic_layout.render(content, terminal_width=get_terminal_width())
-    error(normalize_diagnostic_text(rendered).rstrip())
+    output = diagnostic_output(
+        parser.diagnostic_layout.render(content, terminal_width=get_terminal_width()),
+        is_help=bool(content.help_text),
+    )
+    print(output.text.rstrip(), file=output.stream)
 
 
 def main(argv: Sequence[str] | None = None) -> ExitCode:

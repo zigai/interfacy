@@ -11,8 +11,9 @@ from interfacy.common.terminal import get_terminal_width
 from interfacy.exceptions import ParseDiagnostic, UsageError
 from interfacy.help.diagnostics import (
     DiagnosticLayout,
+    DiagnosticOutput,
     build_diagnostic_content,
-    normalize_diagnostic_text,
+    diagnostic_output,
 )
 
 
@@ -24,7 +25,7 @@ class RuntimePolicy:
     on_interrupt: Callable[[KeyboardInterrupt], None] | None
     silent_interrupt: bool
     logger_message_tag: str = "interfacy"
-    diagnostic_renderer: Callable[[UsageError], str] | None = None
+    diagnostic_renderer: Callable[[UsageError], DiagnosticOutput] | None = None
 
     def display(self, value: Any) -> None:
         if self.display_result:
@@ -36,9 +37,9 @@ class RuntimePolicy:
 
         self.log_interrupt()
 
-    def format_diagnostic(self, failure: UsageError) -> str:
+    def format_diagnostic(self, failure: UsageError) -> DiagnosticOutput:
         if self.diagnostic_renderer is not None:
-            return normalize_diagnostic_text(self.diagnostic_renderer(failure))
+            return self.diagnostic_renderer(failure)
 
         diagnostic = failure.diagnostic or ParseDiagnostic(kind="usage", message=str(failure))
         content = build_diagnostic_content(
@@ -48,8 +49,9 @@ class RuntimePolicy:
             usage=failure.usage,
         )
 
-        return normalize_diagnostic_text(
-            DiagnosticLayout().render(content, terminal_width=get_terminal_width())
+        return diagnostic_output(
+            DiagnosticLayout().render(content, terminal_width=get_terminal_width()),
+            is_help=bool(content.help_text),
         )
 
     def log(self, message: str) -> None:

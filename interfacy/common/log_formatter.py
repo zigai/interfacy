@@ -1,4 +1,5 @@
 import logging
+import sys
 from pathlib import Path
 
 from stdl.st import colored, terminal_link
@@ -24,8 +25,14 @@ class ClickableFormatter(logging.Formatter):
         """
         filename = Path(record.pathname).name
         label = f"{filename}:{record.lineno}"
-        record.clickable_path = terminal_link(f"{record.pathname}:{record.lineno}", label)
-        colored_level = colored(record.levelname, color=LEVEL_COLORS.get(record.levelname, "white"))
+        record.clickable_path = terminal_link(
+            f"{record.pathname}:{record.lineno}", label, stream=sys.stderr
+        )
+        colored_level = colored(
+            record.levelname,
+            color=LEVEL_COLORS.get(record.levelname, "white"),
+            stream=sys.stderr,
+        )
 
         max_level_width = 8
         max_total_width = 40

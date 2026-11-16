@@ -36,7 +36,7 @@ from interfacy.help.diagnostics import (
     DiagnosticLayout,
     build_diagnostic_content,
     diagnostic_message,
-    normalize_diagnostic_text,
+    diagnostic_output,
 )
 from interfacy.help.renderer import (
     SchemaHelpRenderer,
@@ -792,8 +792,11 @@ class ArgumentParser(argparse.ArgumentParser):
             help_flags=self.help_flags if self.add_help else (),
             usage=usage,
         )
-        text = self.diagnostic_layout.render(content, terminal_width=get_terminal_width())
-        self._print_message(normalize_diagnostic_text(text), sys.stderr)
+        output = diagnostic_output(
+            self.diagnostic_layout.render(content, terminal_width=get_terminal_width()),
+            is_help=bool(content.help_text),
+        )
+        self._print_message(output.text, output.stream)
         self.exit(2)
 
     def _get_formatter(self, file: TextIO | None = None) -> argparse.HelpFormatter:  # type: ignore[override]

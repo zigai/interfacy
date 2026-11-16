@@ -54,6 +54,7 @@ from interfacy.exceptions import (
     UsageError,
 )
 from interfacy.help import DiagnosticLayout, HelpLayout, StandardLayout
+from interfacy.help.diagnostics import DiagnosticOutput
 from interfacy.introspection.static_metadata import read_static_metadata
 from interfacy.introspection.targets import ImportTarget
 from interfacy.introspection.type_parsers import build_default_type_parser
@@ -592,7 +593,7 @@ class InterfacyCore:
             program=program,
         )
 
-    def render_diagnostic(self, failure: UsageError) -> str:
+    def render_diagnostic(self, failure: UsageError) -> DiagnosticOutput:
         schema = self.last_schema or self.build_parser_schema()
         return render_diagnostic(
             failure,

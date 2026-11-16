@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import sys
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from inspect import isawaitable
 from typing import Any, NoReturn
 
-from interfacy.common.console import error, log_command_error
+from interfacy.common.console import log_command_error
 from interfacy.common.resources import ResourceStack
 from interfacy.declarations.executable_flags import ExecutableAction
 from interfacy.exceptions import (
@@ -22,6 +21,7 @@ from interfacy.exceptions import (
     UnsupportedParameterTypeError,
     UsageError,
 )
+from interfacy.help.diagnostics import DiagnosticOutput
 from interfacy.runtime.executable_flags import (
     ExecutableActionPending,
     execute_executable_flag,
@@ -88,6 +88,16 @@ def _execution_error_code(error: Exception) -> int:
     return ExitCode.COMMAND_FAILED
 
 
+def _is_interrupt(error: BaseException) -> bool:
+    if isinstance(error, KeyboardInterrupt):
+        return True
+
+    # Only a loaded asyncio can cancel a task; importing it here would slow every startup.
+    asyncio = sys.modules.get("asyncio")
+
+    return asyncio is not None and isinstance(error, asyncio.CancelledError)
+
+
 def _parse_error_code(error: Exception) -> int:
     if isinstance(error, CommandError):
         return ExitCode.COMMAND_FAILED
@@ -131,32 +141,39 @@ class InvocationRuntime:
             result = self._invoke(parse, execute, set_title=True)
         except InterfacyExit as e:
             exit_code = e.code
-        except (KeyboardInterrupt, asyncio.CancelledError) as e:
-            self._policy.handle_interrupt(e)
-            exit_code = ExitCode.INTERRUPTED
         except SystemExit:
             raise
         except InvocationError as e:
-            failure = e.error
-            exit_code = e.code
-            if isinstance(failure, UsageError):
-                try:
-                    rendered = self._render_diagnostic(failure)
-                except InvocationError as rendering_error:
-                    self._policy.log_exception(rendering_error.error)
-                    exit_code = rendering_error.code
-                else:
-                    error(rendered.rstrip())
-            elif isinstance(failure, (CommandError, PipeInputError)):
-                log_command_error(failure)
-            else:
-                self._policy.log_exception(failure)
+            exit_code = self._report_failure(e)
+        except BaseException as e:
+            if not _is_interrupt(e):
+                raise
+
+            self._policy.handle_interrupt(e)
+            exit_code = ExitCode.INTERRUPTED
         else:
             self._policy.display(result)
 
         raise SystemExit(exit_code)
 
-    def _render_diagnostic(self, failure: UsageError) -> str:
+    def _report_failure(self, invocation_error: InvocationError) -> int:
+        failure = invocation_error.error
+        if isinstance(failure, UsageError):
+            try:
+                rendered = self._render_diagnostic(failure)
+            except InvocationError as rendering_error:
+                self._policy.log_exception(rendering_error.error)
+                return rendering_error.code
+
+            print(rendered.text.rstrip(), file=rendered.stream)
+        elif isinstance(failure, (CommandError, PipeInputError)):
+            log_command_error(failure)
+        else:
+            self._policy.log_exception(failure)
+
+        return invocation_error.code
+
+    def _render_diagnostic(self, failure: UsageError) -> DiagnosticOutput:
         try:
             return self._policy.format_diagnostic(failure)
         except Exception as e:

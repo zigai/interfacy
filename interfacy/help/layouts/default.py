@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from stdl.st import ansi_len, colored, with_style
@@ -21,7 +21,7 @@ class InterfacyLayout(HelpLayout):
     format_positional: str | None = "{flag_col}{column_gap}{description}{extra}"
     include_metavar_in_flag_display: bool = False
     layout_mode: Literal["auto", "adaptive", "template"] = "template"
-    required_indicator: str = "(" + colored("*", color="red") + ")"
+    required_indicator: str = field(default_factory=lambda: "(" + colored("*", color="red") + ")")
 
     def _apply_interfacy_columns(self, values: dict[str, str]) -> dict[str, str]:
         values["column_gap"] = self.column_gap

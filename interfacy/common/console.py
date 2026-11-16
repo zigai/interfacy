@@ -25,7 +25,7 @@ def log(tag: str, message: str) -> None:
 
 
 def log_error(tag: str, message: str) -> None:
-    formatted = colored(f"[{tag}] {message}", color="red")
+    formatted = colored(f"[{tag}] {message}", color="red", stream=sys.stderr)
     error(formatted)
 
 
@@ -42,18 +42,18 @@ def log_exception(tag: str, exc: BaseException, *, full_traceback: bool) -> None
     name = type(exc).__name__
     issues = validation_issues(exc)
     detail = str(exc) if issues is None else "; ".join(map(format_validation_issue, issues))
-    error(colored(f"{name}: {detail}" if detail else name, color="red"))
+    error(colored(f"{name}: {detail}" if detail else name, color="red", stream=sys.stderr))
 
 
 def log_command_error(exc: BaseException) -> None:
-    error(colored(str(exc), color="red"))
+    error(colored(str(exc), color="red", stream=sys.stderr))
 
 
 def log_interrupt(*, silent: bool) -> None:
     if silent:
         return
 
-    message = colored("\nInterrupted", color="yellow")
+    message = colored("\nInterrupted", color="yellow", stream=sys.stderr)
     error(message)
 
 

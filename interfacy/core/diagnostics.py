@@ -15,8 +15,9 @@ from interfacy.exceptions import ParseDiagnostic, UsageError
 from interfacy.help.content import HelpRenderer
 from interfacy.help.diagnostics import (
     DiagnosticLayout,
+    DiagnosticOutput,
     build_diagnostic_content,
-    normalize_diagnostic_text,
+    diagnostic_output,
 )
 from interfacy.help.layouts import HelpLayout
 from interfacy.help.renderer import SchemaHelpRenderer
@@ -34,7 +35,7 @@ def render_diagnostic(
     layout: DiagnosticLayout,
     help_layout: HelpLayout,
     help_renderer: HelpRenderer | None,
-) -> str:
+) -> DiagnosticOutput:
     diagnostic = failure.diagnostic or ParseDiagnostic(kind="usage", message=str(failure))
     commands = subcommands_at_path(schema, diagnostic.command_path)
     if diagnostic.kind == "unknown_command":
@@ -86,9 +87,12 @@ def render_diagnostic(
         content = replace(content, choices=tuple(command.cli_name for command in commands.values()))
     transformed = plugin_manager.transform_diagnostic(context, content)
     result = plugin_manager.render_diagnostic(context, transformed)
-    text = result.text if result is not None else layout.render(transformed, terminal_width=width)
+    if result is not None:
+        return diagnostic_output(result.text)
 
-    return normalize_diagnostic_text(text)
+    return diagnostic_output(
+        layout.render(transformed, terminal_width=width), is_help=bool(transformed.help_text)
+    )
 
 
 def option_flags(schema: ParserSchema, command_path: tuple[str, ...]) -> tuple[str, ...]:
