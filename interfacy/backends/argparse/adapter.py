@@ -170,6 +170,7 @@ class ArgparseSession(BackendSession[ArgumentParser]):
         return ArgumentParser(
             prog=self._config.program_name,
             fromfile_prefix_chars="@" if self._config.allow_args_from_file else None,
+            allow_abbrev=self._config.allow_option_prefixes,
             help_layout=self._config.help_layout,
             diagnostic_layout=self._config.diagnostic_layout,
             help_flags=self._config.help_flags,

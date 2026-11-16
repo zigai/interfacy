@@ -101,6 +101,7 @@ def backend_config(
         help_flags=tuple(settings.help_flags),
         tab_completion=settings.tab_completion,
         allow_args_from_file=settings.allow_args_from_file,
+        allow_option_prefixes=settings.allow_option_prefixes,
         help_layout=help_layout,
         diagnostic_layout=settings.diagnostic_layout,
         type_parser=type_parser,

@@ -63,6 +63,7 @@ class CoreSettings:
     tab_completion: bool = field(default=False, metadata=REQUIRED)
     full_error_traceback: bool = field(default=False, metadata=REQUIRED)
     allow_args_from_file: bool = field(default=True, metadata=REQUIRED)
+    allow_option_prefixes: bool = field(default=False, metadata=REQUIRED)
     flag_strategy: FlagStrategy | None = field(default=None, metadata=RESETTABLE)
     abbreviation_gen: AbbreviationGenerator | None = field(default=None, metadata=RESETTABLE)
     abbreviation_max_generated_len: int = field(default=1, metadata=REQUIRED)
@@ -94,6 +95,7 @@ class CoreSettings:
             "tab_completion",
             "full_error_traceback",
             "allow_args_from_file",
+            "allow_option_prefixes",
             "include_inherited_methods",
             "include_protected_methods",
             "include_private_methods",

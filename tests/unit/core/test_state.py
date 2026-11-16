@@ -16,6 +16,7 @@ BOOLEAN_SETTINGS = (
     "tab_completion",
     "full_error_traceback",
     "allow_args_from_file",
+    "allow_option_prefixes",
     "include_inherited_methods",
     "include_protected_methods",
     "include_private_methods",

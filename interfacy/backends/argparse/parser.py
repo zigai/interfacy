@@ -118,6 +118,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         help (str | None): Help text for the action.
         metavar (str | None): Metavar for help output.
         help_layout (Any | None): Layout configuration passed to children.
+        allow_abbrev (bool): Whether children accept unique prefixes of long options.
         sys_exit_enabled (bool): Exit policy passed to children.
         supplied_dests (set[str] | None): Supplied-destination record shared with children.
         destination_paths (dict[str, tuple[str, ...]] | None): Shared destination paths.
@@ -137,6 +138,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         help_layout: HelpLayout | None = None,
         help_renderer: HelpRenderer | None = None,
         help_flags: Sequence[str] = ("--help",),
+        allow_abbrev: bool = False,
         sys_exit_enabled: bool = True,
         supplied_dests: set[str] | None = None,
         destination_paths: dict[str, tuple[str, ...]] | None = None,
@@ -161,6 +163,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         self._child_help_layout = help_layout
         self._child_help_renderer = help_renderer
         self._child_help_flags = tuple(help_flags)
+        self._child_allow_abbrev = allow_abbrev
         self._child_sys_exit_enabled = sys_exit_enabled
         self._child_supplied_dests = supplied_dests
         self._child_destination_paths = destination_paths
@@ -235,7 +238,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
         argument_default: Any = None,
         conflict_handler: str = "error",
         add_help: bool = True,
-        allow_abbrev: bool = True,
+        allow_abbrev: bool | None = None,
         exit_on_error: bool = True,
         nest_dir: str | None = None,
         **kwargs: Any,
@@ -257,7 +260,8 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             argument_default (Any, optional): Default value for all arguments. Defaults to None.
             conflict_handler (str, optional): How to handle conflicts. Defaults to "error".
             add_help (bool, optional): Add a --help option. Defaults to True.
-            allow_abbrev (bool, optional): Allow abbreviated long options. Defaults to True.
+            allow_abbrev (bool | None, optional): Allow abbreviated long options. Defaults to
+                the parent parser's setting.
             exit_on_error (bool, optional): Exit with error info on error. Defaults to True.
             nest_dir (str | None, optional): Custom nesting directory name. Defaults to name if not provided.
             **kwargs: Additional arguments passed to parent class.
@@ -296,7 +300,7 @@ class NestedSubParsersAction(argparse._SubParsersAction):  # type: ignore[privat
             argument_default=argument_default,
             conflict_handler=conflict_handler,
             add_help=add_help,
-            allow_abbrev=allow_abbrev,
+            allow_abbrev=self._child_allow_abbrev if allow_abbrev is None else allow_abbrev,
             nest_path=nested_components,
             nest_separator=self.nest_separator,
             exit_on_error=exit_on_error,
@@ -321,7 +325,7 @@ class ArgumentParser(argparse.ArgumentParser):
         argument_default (Any): Default value for all arguments.
         conflict_handler (str): Conflict resolution strategy.
         add_help (bool): Whether to add a help option.
-        allow_abbrev (bool): Whether to allow abbreviations of long options.
+        allow_abbrev (bool): Whether to accept unique prefixes of long options.
         nest_dir (str | None): Base nesting directory label.
         nest_separator (str): Prefix for encoded nested destinations.
         nest_path (list[str] | None): Explicit nesting path components.
@@ -350,7 +354,7 @@ class ArgumentParser(argparse.ArgumentParser):
         argument_default: Any = None,
         conflict_handler: str = "error",
         add_help: bool = True,
-        allow_abbrev: bool = True,
+        allow_abbrev: bool = False,
         nest_dir: str | None = None,
         nest_separator: str = "__",
         nest_path: list[str] | None = None,
@@ -519,6 +523,7 @@ class ArgumentParser(argparse.ArgumentParser):
                 "nest_separator": self.nest_separator,
                 "help_layout": self._interfacy_help_layout,
                 "help_flags": self.help_flags,
+                "allow_abbrev": self.allow_abbrev,
                 "help_renderer": self.help_renderer,
                 "sys_exit_enabled": self.sys_exit_enabled,
                 "supplied_dests": self.supplied_dests,

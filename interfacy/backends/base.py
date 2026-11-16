@@ -29,6 +29,7 @@ class BackendConfig:
     help_flags: tuple[str, ...] = ("--help",)
     tab_completion: bool = False
     allow_args_from_file: bool = True
+    allow_option_prefixes: bool = False
     help_layout: HelpLayout | None = None
     diagnostic_layout: DiagnosticLayout | None = None
     type_parser: StrToTypeParser | None = None

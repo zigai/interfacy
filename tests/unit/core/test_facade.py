@@ -227,6 +227,7 @@ def test_apply_setup_duplicate_plugins_is_atomic(capsys: pytest.CaptureFixture[s
         "tab_completion",
         "full_error_traceback",
         "allow_args_from_file",
+        "allow_option_prefixes",
         "abbreviation_max_generated_len",
         "abbreviation_scope",
         "include_inherited_methods",

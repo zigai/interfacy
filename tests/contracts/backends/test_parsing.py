@@ -1,7 +1,9 @@
+from typing import Any
+
 import pytest
 
-from interfacy import Interfacy
-from interfacy.exceptions import UsageError
+from interfacy import CommandGroup, Interfacy
+from interfacy.exceptions import ConfigurationError, UsageError
 from interfacy.naming import DefaultFlagStrategy
 from tests.fixtures.classes import Math
 from tests.fixtures.commands import (
@@ -44,6 +46,64 @@ def test_late_initializer_incomplete_tuple_does_not_execute(backend: str) -> Non
         parser.invoke(Tool, args=["show", "--pairs", "0"])
 
     assert executed == []
+
+
+def _prefix_app(**settings: Any) -> Interfacy:
+    def report(*, verbose: bool = False, limit: int = 1) -> tuple[bool, int]:
+        return verbose, limit
+
+    def publish(*, dry_run: bool = False) -> bool:
+        return dry_run
+
+    remote = CommandGroup("remote")
+    remote.add_command(publish)
+    parser = Interfacy(**settings)
+    parser.add_command(report)
+    parser.add_group(remote)
+
+    return parser
+
+
+@pytest.mark.parametrize("backend", ["argparse", "click"])
+@pytest.mark.parametrize(
+    ("args", "option"),
+    [
+        (["report", "--verb"], "--verb"),
+        (["report", "--lim", "3"], "--lim"),
+        (["report", "--lim=3"], "--lim"),
+        (["remote", "publish", "--dry"], "--dry"),
+    ],
+)
+def test_option_prefix_fails_as_unknown_option(
+    backend: str, args: list[str], option: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    parser = _prefix_app(backend=backend)
+
+    with pytest.raises(SystemExit) as failure:
+        parser.run(args=args)
+
+    captured = capsys.readouterr()
+    assert failure.value.code == 2
+    assert captured.out == ""
+    assert f"unknown option {option!r}" in captured.err
+
+
+def test_allow_option_prefixes_accepts_unique_prefixes_at_every_level() -> None:
+    parser = _prefix_app(allow_option_prefixes=True)
+
+    assert parser.invoke(args=["report", "--verb", "--lim", "3"]) == (True, 3)
+    assert parser.invoke(args=["remote", "publish", "--dry"]) is True
+
+
+def test_click_backend_rejects_option_prefixes() -> None:
+    pytest.importorskip("click")
+
+    with pytest.raises(ConfigurationError, match="allow_option_prefixes"):
+        Interfacy(backend="click", allow_option_prefixes=True)
+
+    parser = Interfacy(backend="click")
+    with pytest.raises(ConfigurationError, match="allow_option_prefixes"):
+        parser.apply_setup(allow_option_prefixes=True)
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])

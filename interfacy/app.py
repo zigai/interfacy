@@ -58,6 +58,9 @@ class Interfacy:
         tab_completion: Install shell completion support when the backend supports it.
         full_error_traceback: Include runtime traceback locations in diagnostics.
         allow_args_from_file: Enable ``@file`` argument expansion.
+        allow_option_prefixes: Accept a unique prefix of a long option, such as ``--verb``
+            for ``--verbose``. Off by default, so only exact names and declared aliases match.
+            Only the argparse backend supports it.
         sys_exit_enabled: Preserve the pre-0.8 embedded ``run()`` behavior when false.
         flag_strategy: Strategy for deriving option flags from Python names.
         abbreviation_gen: Generator used for short option flags.
@@ -101,6 +104,7 @@ class Interfacy:
         tab_completion: bool = False,
         full_error_traceback: bool = False,
         allow_args_from_file: bool = True,
+        allow_option_prefixes: bool = False,
         sys_exit_enabled: bool = True,
         flag_strategy: FlagStrategy | None = None,
         abbreviation_gen: AbbreviationGenerator | None = None,
@@ -182,6 +186,7 @@ class Interfacy:
         tab_completion: bool | UnsetType = UNSET,
         full_error_traceback: bool | UnsetType = UNSET,
         allow_args_from_file: bool | UnsetType = UNSET,
+        allow_option_prefixes: bool | UnsetType = UNSET,
         flag_strategy: FlagStrategy | UnsetType | None = UNSET,
         abbreviation_gen: AbbreviationGenerator | UnsetType | None = UNSET,
         abbreviation_max_generated_len: int | UnsetType = UNSET,

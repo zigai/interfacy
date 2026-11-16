@@ -148,6 +148,13 @@ def derive_components(
     )
 
 
+def _check_backend_support(backend: BackendName, settings: CoreSettings) -> None:
+    if backend == "click" and settings.allow_option_prefixes:
+        raise ConfigurationError(
+            "allow_option_prefixes requires the argparse backend; Click matches exact option names"
+        )
+
+
 class InterfacyCore:
     COMMAND_KEY = COMMAND_KEY
 
@@ -167,6 +174,7 @@ class InterfacyCore:
         self.backend: BackendName = backend
         self.metadata: dict[str, Any] = {}
         settings = settings or CoreSettings()
+        _check_backend_support(backend, settings)
         components = derive_components(
             settings,
             current_layout=StandardLayout(),
@@ -228,6 +236,7 @@ class InterfacyCore:
 
     def apply_setup(self, **changes: Any) -> None:
         prepared = prepare_settings_update(self.settings, changes)
+        _check_backend_support(self.backend, prepared.settings)
         if "flag_strategy" in prepared.changed_fields and self.registry.commands:
             raise ConfigurationError(
                 "flag_strategy cannot be changed after commands have been registered"
