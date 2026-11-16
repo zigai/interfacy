@@ -1,4 +1,3 @@
-import asyncio
 import inspect
 from collections.abc import Awaitable, Mapping
 from typing import Any
@@ -244,6 +243,9 @@ class SchemaRunner:
     def _run_awaitable(self, awaitable: Awaitable[Any]) -> Any:
         if self._async_mode:
             return awaitable
+
+        # Imported on first use: asyncio adds about 20 ms to every startup.
+        import asyncio
 
         if isinstance(awaitable, asyncio.Future):
             loop = awaitable.get_loop()

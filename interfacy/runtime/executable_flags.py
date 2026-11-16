@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -23,6 +22,9 @@ async def _await_handler_result(value: Awaitable[Any]) -> Any:
 def _resolve_handler_result(value: Any) -> Any:
     if not inspect.isawaitable(value):
         return value
+
+    # Imported on first use: asyncio adds about 20 ms to every startup.
+    import asyncio
 
     try:
         asyncio.get_running_loop()
