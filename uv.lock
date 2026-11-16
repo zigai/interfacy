@@ -414,7 +414,7 @@ requires-dist = [
     { name = "sphinx-notfound-page", marker = "extra == 'docs'" },
     { name = "sphinxcontrib-mermaid", marker = "extra == 'docs'" },
     { name = "sphinxext-opengraph", marker = "extra == 'docs'" },
-    { name = "stdl", specifier = ">=0.8.0" },
+    { name = "stdl", specifier = ">=0.9.0" },
     { name = "strto", specifier = ">=0.2.9" },
     { name = "tomlkit", specifier = ">=0.12" },
 ]
@@ -1320,16 +1320,16 @@ wheels = [
 
 [[package]]
 name = "stdl"
-version = "0.8.0"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-dateutil" },
     { name = "pyyaml" },
     { name = "toml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/b8/2453d3c5f1759955b4a0e1e5d86c0954d1ae261d8fb918ba5a60ba75264e/stdl-0.8.0.tar.gz", hash = "sha256:3b587437c8a46671a0a8a49109bcea8ecebc20eeda7852e8685d151018e57b33", size = 44048, upload-time = "2026-10-12T01:00:50.257Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/2e/ed10e55f5330726c0d28dbdf0a14f6b914464a9d1d34ff8fc9700a702679/stdl-0.9.0.tar.gz", hash = "sha256:231e988c9f1ef430ad6aa2f354c5b9f021a84eabab3a8bf93c6d72fde2a84b83", size = 44947, upload-time = "2026-11-16T15:29:50.578Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/5a/7ded87674108c789640f8975cb4979bfb8079b3b9cef414b69f982da5dbe/stdl-0.8.0-py3-none-any.whl", hash = "sha256:05f70e8aba3eb43ffb28442bc648c20d0aba7780496fc030dab2766a747de568", size = 45199, upload-time = "2026-10-12T01:00:49.238Z" },
+    { url = "https://files.pythonhosted.org/packages/92/2c/a23539a15eb0f8f0faf628d5312c93e4419de463dc9582a929d80c781abd/stdl-0.9.0-py3-none-any.whl", hash = "sha256:bb9510ee51d91d4247432a77535566f18e25ac38e4e060e2de13f64951eb7eb7", size = 46026, upload-time = "2026-11-16T15:29:49.259Z" },
 ]
 
 [[package]]

@@ -9,7 +9,7 @@ license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "stdl>=0.8.0",
+    "stdl>=0.9.0",
     "objinspect>=1.0.1",
     "strto>=0.2.9",
     "tomlkit>=0.12",

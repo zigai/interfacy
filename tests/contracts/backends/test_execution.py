@@ -411,7 +411,7 @@ class TestStressRegressionExecution:
             return déjàVu
 
         parser.add_command(command)
-        assert parser.invoke(args=["--dé-jà-vu", "D"]) == "D"
+        assert parser.invoke(args=["--déjà-vu", "D"]) == "D"
 
 
 @pytest.mark.parametrize("backend", ["argparse", "click"])
